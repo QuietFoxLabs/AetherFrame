@@ -43,7 +43,7 @@ internal sealed partial class ProfileEditorWindow
         editorSession.AutoFit = true;
         if (lastCanvasPanelSize.X > 0f)
         {
-            editorSession.ApplyFitZoom(lastCanvasPanelSize);
+            editorSession.ApplyFitZoom(lastCanvasPanelSize, renderResources.TextMeasurer);
         }
     }
 
@@ -65,7 +65,7 @@ internal sealed partial class ProfileEditorWindow
         {
             // Covers both the initial Fit-to-Window on open (lastCanvasPanelSize starts at an
             // impossible sentinel) and continuous re-fitting while the panel is being resized.
-            editorSession.ApplyFitZoom(panelSize);
+            editorSession.ApplyFitZoom(panelSize, renderResources.TextMeasurer);
         }
 
         lastCanvasPanelSize = panelSize;

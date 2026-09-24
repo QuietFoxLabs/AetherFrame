@@ -669,7 +669,7 @@ internal sealed partial class PlateLibraryWindow
         }
 
         // Fits the Plate's visual bounds: its canvas plus any intentional Component overflow.
-        var fit = PlateViewFit.Fit(available, ProfileVisualBounds.Compute(document));
+        var fit = PlateViewFit.Fit(available, ProfileVisualBounds.Compute(document, renderResources.TextMeasurer));
         if (fit.Scale <= 0f)
         {
             return;

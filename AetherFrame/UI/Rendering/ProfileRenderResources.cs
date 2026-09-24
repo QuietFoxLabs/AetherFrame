@@ -1,5 +1,6 @@
 using AetherFrame.Services;
 using AetherFrame.Services.Fonts;
+using AetherFrame.UI.Editor;
 
 namespace AetherFrame.UI.Rendering;
 
@@ -17,6 +18,7 @@ internal sealed class ProfileRenderResources
         Fonts = fonts;
         Textures = textures;
         Art = art;
+        TextMeasurer = new ProfileTextMeasurer(fonts);
     }
 
     internal ImageTextureCache Images { get; }
@@ -26,4 +28,8 @@ internal sealed class ProfileRenderResources
     internal ProceduralTextureCache Textures { get; }
 
     internal BuiltInArtTextureCache Art { get; }
+
+    /// <summary>Measures text with these fonts, as the renderer does: hand it to
+    /// <see cref="ProfileVisualBounds"/> so bounds match what is drawn.</summary>
+    internal IIdentityTextMeasurer TextMeasurer { get; }
 }

@@ -144,7 +144,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         var viewport = ImGui.GetMainViewport();
         if (presentedDocument is { } document)
         {
-            var bounds = ProfileVisualBounds.Compute(document);
+            var bounds = ProfileVisualBounds.Compute(document, renderResources.TextMeasurer);
             if (placement.Update(bounds, CanvasSize(document), viewport.WorkPos, viewport.WorkSize, ControlSize) is { } computed)
             {
                 layout = computed;

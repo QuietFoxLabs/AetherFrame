@@ -96,6 +96,7 @@ public class ComponentCatalogTests
         ("af.corner-ornament.astrolabe-pivot", PlateComponentKind.CornerOrnament),
         ("af.divider.line", PlateComponentKind.Divider),
         ("af.divider.diamond", PlateComponentKind.Divider),
+        ("af.divider.equator-line", PlateComponentKind.Divider),
         ("af.section-header.underline", PlateComponentKind.SectionHeader),
         ("af.section-header.tick", PlateComponentKind.SectionHeader),
     ];

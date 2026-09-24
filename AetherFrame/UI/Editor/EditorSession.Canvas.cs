@@ -88,14 +88,14 @@ internal sealed partial class EditorSession
     /// <paramref name="availablePanelSize"/> screen pixels, preserving aspect ratio, with a
     /// small padding margin, clamped to [<see cref="MinZoom"/>, <see cref="MaxZoom"/>], and
     /// re-centers it. Does not touch <see cref="AutoFit"/> — callers decide whether this was an
-    /// auto or manual fit.
+    /// auto or manual fit. <paramref name="measurer"/>: the renderer's, so the framed bounds match what is drawn.
     /// </summary>
-    internal void ApplyFitZoom(Vector2 availablePanelSize)
+    internal void ApplyFitZoom(Vector2 availablePanelSize, IIdentityTextMeasurer? measurer = null)
     {
         // Frames the Plate's visual bounds (canvas plus any intentional Component overflow), so Fit
         // shows oversized decorations too; with no overflow this is exactly the canvas, centered.
         var canvasSize = CurrentCanvasSize;
-        var bounds = profileService.CurrentProfile is { } profile ? ProfileVisualBounds.Compute(profile) : new CanvasBounds(Vector2.Zero, canvasSize);
+        var bounds = profileService.CurrentProfile is { } profile ? ProfileVisualBounds.Compute(profile, measurer) : new CanvasBounds(Vector2.Zero, canvasSize);
         var boundsSize = bounds.Size.X > 0f && bounds.Size.Y > 0f ? bounds.Size : canvasSize;
         var usableWidth = Math.Max(1f, availablePanelSize.X - (FitPaddingPixels * 2f));
         var usableHeight = Math.Max(1f, availablePanelSize.Y - (FitPaddingPixels * 2f));

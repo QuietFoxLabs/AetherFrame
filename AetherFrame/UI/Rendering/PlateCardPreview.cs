@@ -47,7 +47,7 @@ internal sealed class PlateCardPreviewCache
     /// when the version is unchanged, else freshly loaded through <paramref name="load"/> (null when
     /// the Plate can't be loaded — the card then shows its fallback).
     /// </summary>
-    internal Entry? Get(Guid plateId, string versionKey, Func<ProfileDocument?> load)
+    internal Entry? Get(Guid plateId, string versionKey, Func<ProfileDocument?> load, Editor.IIdentityTextMeasurer? measurer = null)
     {
         if (entries.TryGetValue(plateId, out var cached) && cached.VersionKey == versionKey)
         {
@@ -61,7 +61,7 @@ internal sealed class PlateCardPreviewCache
             return null;
         }
 
-        var entry = new Entry(versionKey, document, ProfileVisualBounds.Compute(document));
+        var entry = new Entry(versionKey, document, ProfileVisualBounds.Compute(document, measurer));
         entries[plateId] = entry;
         return entry;
     }

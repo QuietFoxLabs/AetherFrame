@@ -55,7 +55,8 @@ public class BuiltInArtTests
         Assert.Equal(CornerArtPlacement.Rotate, art.CornerPlacement);
         Assert.InRange(art.DefaultOpacity, 0.01f, 1f);
         Assert.InRange(art.SizeFactor, 1f, 4f);
-        Assert.Equal(512, art.PixelSize);
+        Assert.Equal(512, art.PixelWidth);
+        Assert.Equal(512, art.PixelHeight);
 
         var definition = Astrolabe;
         Assert.Equal(PlateComponentKind.CornerOrnament, definition.Kind);
@@ -434,7 +435,7 @@ public class BuiltInArtTests
             Assert.Equal([(false, false), (true, false), (false, true), (true, true)], steps.Select(s => (s.Placement.MirrorX, s.Placement.MirrorY)));
         }
 
-        Assert.Equal(19, BuiltInComponentCatalog.All.Count);
+        Assert.Equal(20, BuiltInComponentCatalog.All.Count);
         Assert.Equal(18, BuiltInComponentCatalog.All.Count(d => d.Art is null));
         Assert.Equal(3, BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Count());
     }
@@ -456,7 +457,7 @@ public class BuiltInArtTests
     // ---- Bundled resource integrity -------------------------------------------------------
 
     [Fact]
-    public void BundledArt_IsEmbeddedValidSquareRgbaPng_WithRealTransparency()
+    public void BundledArt_IsEmbeddedValidRgbaPng_WithRealTransparency()
     {
         foreach (var art in BuiltInArtCatalog.All)
         {
@@ -465,9 +466,10 @@ public class BuiltInArtTests
             Assert.True(bytes.Length < 512 * 1024, $"{art.Id} runtime PNG is {bytes.Length} bytes");
 
             var image = BundledArtImage.DecodePng(bytes);
-            Assert.Equal(art.PixelSize, image.Size);
+            Assert.Equal(art.PixelWidth, image.Width);
+            Assert.Equal(art.PixelHeight, image.Height);
 
-            var alpha = Enumerable.Range(0, image.Size * image.Size).Select(i => image.Rgba[(i * 4) + 3]).ToArray();
+            var alpha = Enumerable.Range(0, image.Width * image.Height).Select(i => image.Rgba[(i * 4) + 3]).ToArray();
             var transparent = alpha.Count(a => a == 0) / (double)alpha.Length;
             var soft = alpha.Count(a => a is > 0 and < 255) / (double)alpha.Length;
             Assert.InRange(transparent, 0.3, 0.95); // mostly empty space: no baked background or checkerboard
@@ -475,7 +477,7 @@ public class BuiltInArtTests
             Assert.Contains(alpha, a => a >= 200); // the line cores
 
             // Four image corners away from the drawing are fully transparent.
-            Assert.Equal(0, image.Rgba[(((image.Size - 1) * image.Size) + (image.Size - 1)) * 4 + 3]);
+            Assert.Equal(0, image.Rgba[(((image.Height - 1) * image.Width) + (image.Width - 1)) * 4 + 3]);
         }
     }
 
@@ -499,8 +501,9 @@ public class BuiltInArtTests
         var top = BundledArtImage.DecodePng(ReadResource(BuiltInArtCatalog.AstrolabePivot.ResourceName));
         var levels = BundledArtImage.BuildLevels(top);
 
-        Assert.Equal([512, 256, 128, 64, 32], levels.Select(l => l.Size));
-        var coverage = levels.Select(l => Enumerable.Range(0, l.Size * l.Size).Average(i => l.Rgba[(i * 4) + 3] / 255.0)).ToList();
+        Assert.Equal([512, 256, 128, 64, 32], levels.Select(l => l.LongSide));
+        Assert.All(levels, l => Assert.Equal(l.Width, l.Height));
+        var coverage = levels.Select(l => Enumerable.Range(0, l.Width * l.Height).Average(i => l.Rgba[(i * 4) + 3] / 255.0)).ToList();
         Assert.All(coverage, c => Assert.InRange(c, coverage[0] * 0.97, coverage[0] * 1.03)); // average coverage is conserved at every level
 
         foreach (var level in levels)
@@ -526,7 +529,8 @@ public class BuiltInArtTests
         for (var filter = 0; filter <= 4; filter++)
         {
             var decoded = BundledArtImage.DecodePng(EncodePng(4, pixels, (byte)filter));
-            Assert.Equal(4, decoded.Size);
+            Assert.Equal(4, decoded.Width);
+            Assert.Equal(4, decoded.Height);
             Assert.Equal(pixels, decoded.Rgba);
         }
     }
@@ -598,7 +602,7 @@ public class BuiltInArtTests
         Assert.DoesNotContain("AetherFrameAssets", text, StringComparison.Ordinal);
     }
 
-    private static byte[] ReadResource(string name)
+    internal static byte[] ReadResource(string name)
     {
         using var stream = typeof(BuiltInArtTests).Assembly.GetManifestResourceStream(name);
         Assert.NotNull(stream);
@@ -607,11 +611,13 @@ public class BuiltInArtTests
         return buffer.ToArray();
     }
 
-    private static byte[] EncodePng(int size, byte[] rgba, byte filter)
+    private static byte[] EncodePng(int size, byte[] rgba, byte filter) => EncodePng(size, size, rgba, filter);
+
+    internal static byte[] EncodePng(int width, int height, byte[] rgba, byte filter)
     {
-        var stride = size * 4;
-        var raw = new byte[(stride + 1) * size];
-        for (var y = 0; y < size; y++)
+        var stride = width * 4;
+        var raw = new byte[(stride + 1) * height];
+        for (var y = 0; y < height; y++)
         {
             raw[y * (stride + 1)] = filter;
             for (var i = 0; i < stride; i++)
@@ -640,8 +646,8 @@ public class BuiltInArtTests
         using var png = new MemoryStream();
         png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
         var header = new byte[13];
-        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header, size);
-        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), size);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header, width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), height);
         header[8] = 8;
         header[9] = 6;
         Chunk(png, "IHDR", header);

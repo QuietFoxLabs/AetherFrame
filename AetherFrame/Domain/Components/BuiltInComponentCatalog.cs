@@ -42,6 +42,7 @@ public static class BuiltInComponentCatalog
 
     public const string DividerLine = "af.divider.line";
     public const string DividerDiamond = "af.divider.diamond";
+    public const string DividerEquatorLine = "af.divider.equator-line";
 
     public const string SectionHeaderUnderline = "af.section-header.underline";
     public const string SectionHeaderTick = "af.section-header.tick";
@@ -70,6 +71,7 @@ public static class BuiltInComponentCatalog
 
         new(DividerLine, PlateComponentKind.Divider, "Line", "A rule under the name.", ComponentShape.Rule, ComponentColorSource.ThemeAccent, 0.7f),
         new(DividerDiamond, PlateComponentKind.Divider, "Diamond", "A rule with a center diamond under the name.", ComponentShape.DiamondRule, ComponentColorSource.ThemeAccent, 0.8f),
+        ComponentDefinition.ForArt(DividerEquatorLine, "Celestial Dream: a glowing equator line with a compass star under the name.", BuiltInArtCatalog.EquatorLine, ComponentColorSource.ThemeAccent),
 
         new(SectionHeaderUnderline, PlateComponentKind.SectionHeader, "Underline", "A fine line under each section heading.", ComponentShape.Underline, ComponentColorSource.ThemeAccent, 0.6f),
         new(SectionHeaderTick, PlateComponentKind.SectionHeader, "Accent Mark", "A short mark under each section heading.", ComponentShape.AccentTick, ComponentColorSource.ThemeAccent, 0.9f),

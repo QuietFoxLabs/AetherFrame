@@ -257,7 +257,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     {
         presentingPreview = false;
         if (editorSession.PreviewActive && profileService.CurrentProfile is { } profile && editorWindowSize is { X: > 0f, Y: > 0f }
-            && CleanPreviewLayout.Compute(editorWindowPos, editorWindowSize, ProfileVisualBounds.Compute(profile), CleanPreviewLayout.DefaultCloseButtonSize * ImGuiHelpers.GlobalScale) is { } layout)
+            && CleanPreviewLayout.Compute(editorWindowPos, editorWindowSize, ProfileVisualBounds.Compute(profile, renderResources.TextMeasurer), CleanPreviewLayout.DefaultCloseButtonSize * ImGuiHelpers.GlobalScale) is { } layout)
         {
             // Clean Preview: this same window shrinks to exactly the Plate's fitted visual bounds
             // (plus its close control) within the rectangle the editor occupied, and draws nothing
@@ -842,7 +842,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         var buttonSize = CleanPreviewLayout.DefaultCloseButtonSize * ImGuiHelpers.GlobalScale;
         if (available.X >= 1f && available.Y >= 1f)
         {
-            var fit = PlateViewFit.Fit(available, ProfileVisualBounds.Compute(profile));
+            var fit = PlateViewFit.Fit(available, ProfileVisualBounds.Compute(profile, renderResources.TextMeasurer));
             if (fit.Scale > 0f)
             {
                 ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, ImGui.GetCursorScreenPos() + fit.CanvasOffset, fit.Scale, renderResources, CleanPreviewPresentation.RenderOptions);

@@ -261,10 +261,18 @@ public static class ComponentPaintPlan
                     break;
 
                 case PlateComponentKind.Divider:
+                    // The band under the name. Artwork gets a taller band around the same center line
+                    // (and is then fitted into it at its own aspect ratio, see ComponentStep).
                     var identity = drawnIdentity ?? AdventurePlateClassicLayout.GetGroupBounds(BasicSection.Identity, orientation, profile);
                     var divider = new ElementRect(
                         new Vector2(identity.Position.X, identity.Position.Y + identity.Size.Y + (DividerGap * unit)),
                         new Vector2(identity.Size.X, DividerHeight * unit));
+                    if (definition.Art is not null)
+                    {
+                        var grow = divider.Size.Y * (ArtSizeFactor(definition) - 1f) / 2f;
+                        divider = new ElementRect(divider.Position - new Vector2(0f, grow), divider.Size + new Vector2(0f, 2f * grow));
+                    }
+
                     output.Add(ComponentStep(component, definition, divider, 0f, false, false));
                     break;
 
@@ -307,7 +315,7 @@ public static class ComponentPaintPlan
 
     private static void AddCorners(List<PaintStep> output, ProfileDocument profile, PlateComponent component, ComponentDefinition definition, float unit)
     {
-        var size = CornerSize * unit * CornerSizeFactor(definition);
+        var size = CornerSize * unit * ArtSizeFactor(definition);
         var inset = CornerInset * unit;
         var canvas = CanvasRect(profile);
         var right = canvas.Size.X - inset - size;
@@ -358,9 +366,10 @@ public static class ComponentPaintPlan
         return bounds;
     }
 
-    /// <summary>A Corner Ornament's box size relative to <see cref="CornerSize"/>: 1 for procedural
-    /// marks, the artwork's bounded <see cref="BuiltInArtAsset.SizeFactor"/> for bundled art.</summary>
-    public static float CornerSizeFactor(ComponentDefinition definition) =>
+    /// <summary>A placement box's size relative to its kind's standard procedural box (a Corner
+    /// Ornament's <see cref="CornerSize"/>, a Divider's <see cref="DividerHeight"/>): 1 for procedural
+    /// shapes, the artwork's bounded <see cref="BuiltInArtAsset.SizeFactor"/> for bundled art.</summary>
+    public static float ArtSizeFactor(ComponentDefinition definition) =>
         definition.Art is { SizeFactor: var factor } && float.IsFinite(factor) ? Math.Clamp(factor, 0.25f, 4f) : 1f;
 
     /// <summary>Applies the component's own (bounded) scale and offset to its anchored placement.</summary>
@@ -368,7 +377,9 @@ public static class ComponentPaintPlan
         ComponentStep(component, definition, anchor, anchorRotation, mirrorX, mirrorY, mirrorShape: true);
 
     /// <summary>As above; <paramref name="mirrorX"/>/<paramref name="mirrorY"/> always flip the
-    /// offset, and flip the shape only when <paramref name="mirrorShape"/>.</summary>
+    /// offset, and flip the shape only when <paramref name="mirrorShape"/>. Bundled artwork is then
+    /// fitted inside the box at its own aspect ratio, around the same center (never stretched), so
+    /// the placement — and everything derived from it, like visual bounds — is what is drawn.</summary>
     private static PaintStep ComponentStep(PlateComponent component, ComponentDefinition definition, ElementRect anchor, float anchorRotation, bool mirrorX, bool mirrorY, bool mirrorShape)
     {
         var scale = PlateComponentLimits.ClampScale(component.Scale);
@@ -385,10 +396,34 @@ public static class ComponentPaintPlan
 
         var center = anchor.Position + (anchor.Size / 2f) + offset;
         var size = anchor.Size * scale;
+        if (definition.Art is { } art)
+        {
+            size = FitAspect(size, art.AspectRatio);
+        }
+
         var rect = new ElementRect(center - (size / 2f), size);
         var rotation = anchorRotation + PlateComponentLimits.ClampRotation(component.RotationDegrees);
 
         return new PaintStep(LayerOf(component.Kind), null, component, definition, new ComponentPlacement(rect, rotation, mirrorShape && mirrorX, mirrorShape && mirrorY));
+    }
+
+    /// <summary>The largest size with width/height <paramref name="aspect"/> that fits inside
+    /// <paramref name="box"/>; <paramref name="box"/> itself when it already has that aspect.</summary>
+    internal static Vector2 FitAspect(Vector2 box, float aspect)
+    {
+        if (!(aspect > 0f) || !float.IsFinite(aspect) || !(box.X > 0f) || !(box.Y > 0f))
+        {
+            return box;
+        }
+
+        var width = box.Y * aspect;
+        if (width < box.X)
+        {
+            return new Vector2(width, box.Y);
+        }
+
+        var height = box.X / aspect;
+        return height < box.Y ? new Vector2(box.X, height) : box;
     }
 
     /// <summary>

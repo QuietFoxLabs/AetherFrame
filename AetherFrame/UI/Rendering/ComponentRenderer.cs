@@ -57,8 +57,8 @@ internal static class ComponentRenderer
                     break;
 
                 case ComponentPrimitiveKind.Art:
-                    // The level closest to (not smaller than) the on-screen size; the vertex color
-                    // tints the white/greyscale artwork and carries the opacity.
+                    // The level closest to (not smaller than) the on-screen size of the longer side;
+                    // the vertex color tints the white/greyscale artwork and carries the opacity.
                     var screenPixels = MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d));
                     if (definition.Art is { } art && resources.Art.GetWrapOrNull(art, screenPixels) is { } artWrap)
                     {

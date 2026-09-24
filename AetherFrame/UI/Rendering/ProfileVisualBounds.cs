@@ -4,6 +4,7 @@ using System.Numerics;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.UI.Editor;
 
 namespace AetherFrame.UI.Rendering;
 
@@ -28,7 +29,10 @@ internal readonly record struct CanvasBounds(Vector2 Min, Vector2 Max)
 /// <para>Component bounds come only from <see cref="ComponentPaintPlan.GetVisualBounds"/> over the
 /// same paint plan the renderer draws, so hidden, unresolvable (missing definition, unknown kind,
 /// kind mismatch, image not set) Components and unselected corners contribute nothing, while
-/// scale, offset, rotation and art sizing are all included.</para>
+/// scale, offset, rotation and art sizing are all included. Given the renderer's text measurer,
+/// the plan also places the Name Backing and Divider under the measured name exactly as drawn
+/// (without one — tests, or fonts not built yet — the name's whole box is used, like the renderer's
+/// own fallback).</para>
 /// </summary>
 internal static class ProfileVisualBounds
 {
@@ -42,6 +46,13 @@ internal static class ProfileVisualBounds
 
     [ThreadStatic]
     private static List<PaintStep>? planBuffer;
+
+    // The measurer of the Compute call in progress, behind one cached delegate (no per-call allocation).
+    [ThreadStatic]
+    private static IIdentityTextMeasurer? currentMeasurer;
+
+    private static readonly Func<TextProfileElement, float?> MeasureText = static element =>
+        currentMeasurer is { } measurer && measurer.TryMeasureNaturalWidth(element, out var width) ? width : null;
 
     /// <summary>The Plate's own canvas: (0, 0) to its saved size.</summary>
     internal static CanvasBounds Logical(ProfileDocument profile) =>
@@ -69,8 +80,9 @@ internal static class ProfileVisualBounds
         return bounds;
     }
 
-    /// <summary>Builds the paint plan exactly as <c>ProfileRenderer</c> does for <paramref name="options"/>, then <see cref="Compute(ProfileDocument, IReadOnlyList{PaintStep})"/>.</summary>
-    internal static CanvasBounds Compute(ProfileDocument profile, in ProfileRenderOptions options)
+    /// <summary>Builds the paint plan exactly as <c>ProfileRenderer</c> does for <paramref name="options"/>
+    /// (measuring identity text with <paramref name="measurer"/> when given), then <see cref="Compute(ProfileDocument, IReadOnlyList{PaintStep})"/>.</summary>
+    internal static CanvasBounds Compute(ProfileDocument profile, in ProfileRenderOptions options, IIdentityTextMeasurer? measurer = null)
     {
         if (profile.Components is not { Count: > 0 })
         {
@@ -83,19 +95,22 @@ internal static class ProfileVisualBounds
         try
         {
             FillDrawnElements(profile, options, paintOrder, drawn);
-            ComponentPaintPlan.Build(profile, drawn, BuiltInComponentCatalog.Instance, plan);
+            currentMeasurer = measurer;
+            ComponentPaintPlan.Build(profile, drawn, BuiltInComponentCatalog.Instance, plan, measurer is null ? null : MeasureText);
             return Compute(profile, plan);
         }
         finally
         {
+            currentMeasurer = null;
             paintOrder.Clear();
             drawn.Clear();
             plan.Clear();
         }
     }
 
-    /// <summary>The finished-rendering bounds (what every preview surface shows).</summary>
-    internal static CanvasBounds Compute(ProfileDocument profile) => Compute(profile, ProfileRenderOptions.Finished);
+    /// <summary>The finished-rendering bounds (what every preview surface shows); pass the renderer's
+    /// measurer (<c>ProfileRenderResources.TextMeasurer</c>) so they match what is drawn exactly.</summary>
+    internal static CanvasBounds Compute(ProfileDocument profile, IIdentityTextMeasurer? measurer = null) => Compute(profile, ProfileRenderOptions.Finished, measurer);
 
     /// <summary>
     /// The elements the renderer paints, in paint order: visible elements, minus section headings

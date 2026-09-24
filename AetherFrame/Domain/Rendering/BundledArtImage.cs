@@ -6,8 +6,12 @@ using System.IO.Compression;
 
 namespace AetherFrame.Domain.Rendering;
 
-/// <summary>One RGBA level of bundled artwork: <see cref="Size"/> x <see cref="Size"/> texels, straight (non-premultiplied) alpha.</summary>
-public sealed record ArtLevel(int Size, byte[] Rgba);
+/// <summary>One RGBA level of bundled artwork: <see cref="Width"/> x <see cref="Height"/> texels, straight (non-premultiplied) alpha.</summary>
+public sealed record ArtLevel(int Width, int Height, byte[] Rgba)
+{
+    /// <summary>The longer side, in texels: what level selection compares with the on-screen size.</summary>
+    public int LongSide => Math.Max(Width, Height);
+}
 
 /// <summary>
 /// Decodes AetherFrame's own bundled artwork PNGs and builds their downsampled levels. Pure logic
@@ -19,8 +23,10 @@ public sealed record ArtLevel(int Size, byte[] Rgba);
 /// levels once, and drawing the smallest level at least as large as the on-screen size (see
 /// <see cref="SelectLevel"/>), keeps thin lines continuous at every size from one bundled PNG.</para>
 ///
-/// <para>The decoder only accepts what the bundled art is required to be — square, power-of-two,
-/// 8-bit RGBA, non-interlaced — and rejects anything else instead of guessing. It is never used for
+/// <para>The decoder only accepts what the bundled art is required to be — 8-bit RGBA,
+/// non-interlaced, its shorter side a power of two and its longer side a whole multiple of it
+/// (square art, or wide/tall art such as a Divider's; every level then halves exactly) — and
+/// rejects anything else instead of guessing. It is never used for
 /// user images (those go through Dalamud's decoders and <c>ImageSafety</c>).</para>
 /// </summary>
 public static class BundledArtImage
@@ -28,12 +34,13 @@ public static class BundledArtImage
     /// <summary>Largest bundled art dimension accepted.</summary>
     public const int MaxSize = 2048;
 
-    /// <summary>Smallest level built (below this, a corner mark is a few pixels anyway).</summary>
+    /// <summary>Smallest level built, on the shorter side (below this, a mark is a few pixels anyway).</summary>
     public const int MinLevelSize = 32;
 
     private static ReadOnlySpan<byte> Signature => [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-    /// <summary>Decodes a square, power-of-two, 8-bit RGBA, non-interlaced PNG. Throws <see cref="InvalidDataException"/> otherwise.</summary>
+    /// <summary>Decodes an 8-bit RGBA, non-interlaced PNG whose shorter side is a power of two and whose
+    /// longer side is a whole multiple of it. Throws <see cref="InvalidDataException"/> otherwise.</summary>
     public static ArtLevel DecodePng(ReadOnlySpan<byte> png)
     {
         if (png.Length < Signature.Length || !png[..Signature.Length].SequenceEqual(Signature))
@@ -81,9 +88,9 @@ public static class BundledArtImage
                     throw new InvalidDataException("bundled art must be 8-bit RGBA, non-interlaced");
                 }
 
-                if (width != height || width < 1 || width > MaxSize || (width & (width - 1)) != 0)
+                if (!IsSupportedSize(width, height))
                 {
-                    throw new InvalidDataException("bundled art must be square with a power-of-two size");
+                    throw new InvalidDataException("bundled art must have a power-of-two shorter side and a longer side that is a whole multiple of it");
                 }
 
                 sawHeader = true;
@@ -145,11 +152,23 @@ public static class BundledArtImage
             }
         }
 
-        return new ArtLevel(width, pixels);
+        return new ArtLevel(width, height, pixels);
+    }
+
+    /// <summary>True for the sizes bundled art may have (see the type doc), up to <see cref="MaxSize"/>.</summary>
+    public static bool IsSupportedSize(int width, int height)
+    {
+        if (width < 1 || height < 1 || width > MaxSize || height > MaxSize)
+        {
+            return false;
+        }
+
+        var shorter = Math.Min(width, height);
+        return (shorter & (shorter - 1)) == 0 && Math.Max(width, height) % shorter == 0;
     }
 
     /// <summary>
-    /// <paramref name="top"/> followed by successively halved levels down to <see cref="MinLevelSize"/>.
+    /// <paramref name="top"/> followed by successively halved levels, until the shorter side reaches <see cref="MinLevelSize"/>.
     /// Each texel averages its 2x2 source texels weighted by alpha (premultiplied), so soft glows keep
     /// their brightness and never pick up the color of fully transparent texels; a texel with no
     /// coverage at all is stored as transparent white, so bilinear filtering never darkens a tint.
@@ -158,15 +177,16 @@ public static class BundledArtImage
     {
         var levels = new List<ArtLevel> { top };
         var current = top;
-        while (current.Size / 2 >= MinLevelSize)
+        while (Math.Min(current.Width, current.Height) / 2 >= MinLevelSize && current.Width % 2 == 0 && current.Height % 2 == 0)
         {
-            var size = current.Size / 2;
+            var width = current.Width / 2;
+            var height = current.Height / 2;
             var source = current.Rgba;
-            var sourceStride = current.Size * 4;
-            var pixels = new byte[size * size * 4];
-            for (var y = 0; y < size; y++)
+            var sourceStride = current.Width * 4;
+            var pixels = new byte[width * height * 4];
+            for (var y = 0; y < height; y++)
             {
-                for (var x = 0; x < size; x++)
+                for (var x = 0; x < width; x++)
                 {
                     int r = 0, g = 0, b = 0, a = 0;
                     for (var dy = 0; dy < 2; dy++)
@@ -182,7 +202,7 @@ public static class BundledArtImage
                         }
                     }
 
-                    var d = ((y * size) + x) * 4;
+                    var d = ((y * width) + x) * 4;
                     if ((a + 2) / 4 == 0)
                     {
                         pixels[d] = pixels[d + 1] = pixels[d + 2] = 255;
@@ -197,7 +217,7 @@ public static class BundledArtImage
                 }
             }
 
-            current = new ArtLevel(size, pixels);
+            current = new ArtLevel(width, height, pixels);
             levels.Add(current);
         }
 
@@ -205,8 +225,9 @@ public static class BundledArtImage
     }
 
     /// <summary>
-    /// Index into <paramref name="levelSizes"/> (largest first, as <see cref="BuildLevels"/> returns
-    /// them) of the smallest level still at least <paramref name="screenPixels"/> across, so the
+    /// Index into <paramref name="levelSizes"/> (each level's <see cref="ArtLevel.LongSide"/>, largest
+    /// first, as <see cref="BuildLevels"/> returns them) of the smallest level whose longer side is still
+    /// at least <paramref name="screenPixels"/> (the drawn longer side), so the
     /// texture is never magnified unless even the largest level is too small, and never minified by
     /// more than 2x.
     /// </summary>

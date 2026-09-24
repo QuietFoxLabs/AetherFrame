@@ -14,25 +14,34 @@ namespace AetherFrame.Domain.Components;
 /// <param name="Name">Display label only.</param>
 /// <param name="Kind">The one Component kind this artwork is drawn for.</param>
 /// <param name="ResourceName">Manifest resource name of the runtime PNG inside the plugin assembly
-/// (not a filesystem path). Always a square, 8-bit RGBA, power-of-two PNG.</param>
-/// <param name="PixelSize">The runtime PNG's width and height, in pixels.</param>
+/// (not a filesystem path). Always an 8-bit RGBA PNG whose shorter side is a power of two and whose
+/// longer side is a whole multiple of it (see <c>BundledArtImage</c>).</param>
+/// <param name="PixelWidth">The runtime PNG's width, in pixels.</param>
+/// <param name="PixelHeight">The runtime PNG's height, in pixels. The artwork is always drawn at this
+/// aspect ratio (fitted inside its placement box, never stretched).</param>
 /// <param name="Tintable">True when the artwork is white/greyscale and takes the Component's color;
 /// false draws its own colors, with only the color's alpha applied.</param>
 /// <param name="DefaultOpacity">Alpha of the definition's default color.</param>
 /// <param name="CornerPlacement">For Corner Ornaments: how the one (top-left) drawing serves the
 /// other three corners.</param>
 /// <param name="SizeFactor">Size of the artwork's placement box relative to its kind's standard
-/// procedural box, anchored at the same corner (artwork needs more room than a line mark to read).</param>
+/// procedural box (artwork needs more room than a line mark to read): a Corner Ornament's square,
+/// anchored at the same corner; a Divider's band height, around the same center line.</param>
 public sealed record BuiltInArtAsset(
     string Id,
     string Name,
     PlateComponentKind Kind,
     string ResourceName,
-    int PixelSize,
+    int PixelWidth,
+    int PixelHeight,
     bool Tintable,
     float DefaultOpacity,
     CornerArtPlacement CornerPlacement,
-    float SizeFactor);
+    float SizeFactor)
+{
+    /// <summary>Width over height of the runtime artwork (1 for square art).</summary>
+    public float AspectRatio => PixelHeight > 0 ? (float)PixelWidth / PixelHeight : 1f;
+}
 
 /// <summary>How a corner drawing, designed for the top-left corner, is placed in the other corners.</summary>
 public enum CornerArtPlacement
@@ -49,6 +58,7 @@ public enum CornerArtPlacement
 public static class BuiltInArtCatalog
 {
     public const string CelestialDreamAstrolabePivot = "af.asset.celestial-dream.corner-ornament.astrolabe-pivot";
+    public const string CelestialDreamEquatorLine = "af.asset.celestial-dream.divider.equator-line";
 
     /// <summary>Prefix of every bundled manifest resource name (see the plugin project's Assets folder).</summary>
     public const string ResourcePrefix = "AetherFrame.Assets.";
@@ -58,13 +68,29 @@ public static class BuiltInArtCatalog
         "Astrolabe Pivot",
         PlateComponentKind.CornerOrnament,
         ResourcePrefix + "Components.CelestialDream.CornerOrnaments.AstrolabePivot.png",
-        PixelSize: 512,
+        PixelWidth: 512,
+        PixelHeight: 512,
         Tintable: true,
         DefaultOpacity: 0.9f,
         CornerPlacement: CornerArtPlacement.Rotate,
         SizeFactor: 2f);
 
-    public static readonly IReadOnlyList<BuiltInArtAsset> All = [AstrolabePivot];
+    /// <summary>A 3:1 horizontal rule with a central compass star, drawn centered on the Divider's line.
+    /// The band is 4x the procedural Divider's height (the star and glow need it); the drawing is fitted
+    /// inside the band at its own aspect ratio, so it is at most as wide as the name above it.</summary>
+    public static readonly BuiltInArtAsset EquatorLine = new(
+        CelestialDreamEquatorLine,
+        "Equator Line",
+        PlateComponentKind.Divider,
+        ResourcePrefix + "Components.CelestialDream.Dividers.EquatorLine.png",
+        PixelWidth: 1536,
+        PixelHeight: 512,
+        Tintable: true,
+        DefaultOpacity: 0.9f,
+        CornerPlacement: CornerArtPlacement.Mirror, // not a Corner Ornament: unused
+        SizeFactor: 4f);
+
+    public static readonly IReadOnlyList<BuiltInArtAsset> All = [AstrolabePivot, EquatorLine];
 
     private static readonly Dictionary<string, BuiltInArtAsset> ById = BuildIndex();
 

@@ -141,7 +141,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
         // clip is the box, not the canvas, so intentional overflow shows but never spills onto the dialog.
         var previewMin = ImGui.GetCursorScreenPos();
         ImGui.Dummy(PreviewSize);
-        var fit = PlateViewFit.Fit(PreviewSize, ProfileVisualBounds.Compute(document));
+        var fit = PlateViewFit.Fit(PreviewSize, ProfileVisualBounds.Compute(document, renderResources.TextMeasurer));
         if (fit.Scale <= 0f)
         {
             return;

@@ -596,7 +596,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         // Fits the Plate's visual bounds: its canvas plus any intentional Component overflow.
-        var fit = BasicEditorView.ComputePreview(available, ProfileVisualBounds.Compute(profile), navigation.Zoom);
+        var fit = BasicEditorView.ComputePreview(available, ProfileVisualBounds.Compute(profile, renderResources.TextMeasurer), navigation.Zoom);
         var scale = fit.Scale;
         if (scale <= 0f)
         {

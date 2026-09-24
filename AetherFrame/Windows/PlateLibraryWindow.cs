@@ -451,7 +451,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
                 return; // scrolled out of view: nothing to draw this frame
             }
 
-            if (cardPreviews.Get(plate.PlateId, versionKey, () => library.GetSavedDocument(plate.PlateId)) is { } preview)
+            if (cardPreviews.Get(plate.PlateId, versionKey, () => library.GetSavedDocument(plate.PlateId), renderResources.TextMeasurer) is { } preview)
             {
                 var fit = PlateCardPreview.Fit(max - min, preview.Bounds);
                 if (fit.Scale > 0f)
