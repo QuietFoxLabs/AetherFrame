@@ -363,6 +363,10 @@ internal sealed class PlateLibraryService
         try
         {
             var result = await VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize).ConfigureAwait(false);
+            if (result.RecoveredFromBackup)
+            {
+                KeepRecoveredFile(path);
+            }
 
             if (result.IsNewerVersion)
             {
@@ -420,6 +424,11 @@ internal sealed class PlateLibraryService
             try
             {
                 var result = await VersionedJson.ReadAsync<CharacterBinding>(store, path, PersistenceSchemas.CharacterBinding).ConfigureAwait(false);
+                if (result.RecoveredFromBackup)
+                {
+                    KeepRecoveredFile(path);
+                }
+
                 if (result.IsNewerVersion)
                 {
                     log.Warning($"AetherFrame found a character binding saved by a newer version ({Path.GetFileName(path)}); it is left untouched.");
@@ -458,6 +467,11 @@ internal sealed class PlateLibraryService
         try
         {
             var result = await VersionedJson.ReadAsync<PlateLibraryState>(store, paths.LibraryFile, PersistenceSchemas.PlateLibrary).ConfigureAwait(false);
+            if (result.RecoveredFromBackup)
+            {
+                KeepRecoveredFile(paths.LibraryFile);
+            }
+
             if (result.IsNewerVersion)
             {
                 log.Warning("AetherFrame's Plate order was saved by a newer version; it is used read-only and never overwritten.");
@@ -1332,6 +1346,32 @@ internal sealed class PlateLibraryService
         var destination = paths.GetRecoveryPath(path, utcNow());
         store.CopyFile(path, destination);
         log.Warning($"AetherFrame kept a copy of damaged file {Path.GetFileName(path)} in Recovery as {Path.GetFileName(destination)}.");
+    }
+
+    /// <summary>
+    /// A file the store could only read from its backup copy: the copy on disk is damaged, and the
+    /// next write to that path would replace it. So the player learns about it once, and the
+    /// on-disk bytes go to Recovery first (a copy only — the file itself is never rewritten here,
+    /// and an existing Recovery copy is never overwritten). A failed copy is logged and ignored:
+    /// the record is used either way.
+    /// </summary>
+    private void KeepRecoveredFile(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        log.Warning($"AetherFrame found {fileName} damaged and read it from the backup copy instead; the damaged file is kept in Recovery.");
+
+        try
+        {
+            var destination = paths.GetRecoveryPath(path, utcNow());
+            if (store.FileExists(path) && !store.FileExists(destination))
+            {
+                store.CopyFile(path, destination);
+            }
+        }
+        catch (Exception ex) when (!IsLoadInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame could not keep a copy of damaged file {fileName} in Recovery.");
+        }
     }
 
     /// <summary>

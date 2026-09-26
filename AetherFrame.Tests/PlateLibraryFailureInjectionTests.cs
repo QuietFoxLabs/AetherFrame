@@ -199,6 +199,157 @@ public class UnavailableFileTests
     }
 }
 
+/// <summary>
+/// A file the store could only read from its backup copy loads normally, but the player is told
+/// once and the damaged on-disk bytes go to Recovery before any later write replaces them.
+/// </summary>
+public class BackupRecoveryObservabilityTests
+{
+    [Fact]
+    public async Task DamagedPlate_RecoveredFromBackup_IsLogged_AndTheDamagedFileIsKeptInRecovery()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        store.Backups[fixture.Paths.GetPlatePath(plateId)] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "From backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, "{ truncated");
+
+        var library = await fixture.LoadAsync();
+
+        Assert.Equal(PlateStatus.Ready, library.FindPlate(plateId)!.Status);
+        var warning = Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("backup", StringComparison.Ordinal));
+        Assert.Contains($"{plateId}.json", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain(fixture.Root, warning, StringComparison.Ordinal);
+        var preserved = Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory));
+        Assert.Equal("{ truncated", File.ReadAllText(preserved));
+        Assert.StartsWith($"{plateId}.damaged-", Path.GetFileName(preserved), StringComparison.Ordinal);
+
+        // The load itself never rewrites the file; the next save does, and the Recovery copy survives it.
+        Assert.Equal("{ truncated", fixture.ReadPlateJson(plateId));
+        await library.SavePlateDocumentAsync(library.OpenDocumentForEditing(plateId));
+        Assert.Contains("From backup", fixture.ReadPlateJson(plateId), StringComparison.Ordinal);
+        Assert.Equal("{ truncated", File.ReadAllText(preserved));
+    }
+
+    [Fact]
+    public async Task DamagedBinding_RecoveredFromBackup_LoadsIntact_AndIsKeptInRecovery()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var seeded = await fixture.LoadAsync();
+        var first = await seeded.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice);
+        var second = await seeded.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice);
+        fixture.WriteBindingJson(Characters.Alice.ContentId, "{ \"Version\": 2, \"ContentId\": 1001, \"Pro");
+        fixture.Log.Messages.Clear();
+
+        var library = await fixture.LoadAsync();
+
+        Assert.Equal(first.PlateId, library.GetActivePlateId(Characters.Alice.ContentId));
+        Assert.Equal([first.PlateId, second.PlateId], library.GetBinding(Characters.Alice.ContentId)!.PlateIds);
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("1001.json", StringComparison.Ordinal) && m.Contains("backup", StringComparison.Ordinal));
+        var preserved = Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory));
+        Assert.Equal("{ \"Version\": 2, \"ContentId\": 1001, \"Pro", File.ReadAllText(preserved));
+
+        // A write for that character replaces the damaged file with the full, intact binding.
+        await library.SetActivePlateAsync(Characters.Alice, second.PlateId);
+        Assert.Equal([first.PlateId, second.PlateId], fixture.ReadBinding(Characters.Alice.ContentId).GetProperty("ProfileIds").EnumerateArray().Select(e => e.GetGuid()));
+        Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory));
+    }
+
+    [Fact]
+    public async Task DamagedIndex_RecoveredFromBackup_KeepsTheOrder_AndIsKeptInRecovery()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var seeded = await fixture.LoadAsync();
+        var a = await seeded.CreatePlateAsync(PlateStartingLayout.Blank, null, "A");
+        fixture.Clock.Tick();
+        var b = await seeded.CreatePlateAsync(PlateStartingLayout.Blank, null, "B");
+        await seeded.MovePlateAsync(a.PlateId, b.PlateId, placeAfter: false);
+        fixture.WriteLibraryJson("{ \"Version\": 1, \"Ord");
+
+        var library = await fixture.LoadAsync();
+
+        Assert.Equal([a.PlateId, b.PlateId], library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("library.json", StringComparison.Ordinal) && m.Contains("backup", StringComparison.Ordinal));
+        Assert.Equal("{ \"Version\": 1, \"Ord", File.ReadAllText(Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory))));
+    }
+
+    [Fact]
+    public async Task HealthyPlate_NoLog_NoRecoveryCopy()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        store.Backups[fixture.Paths.GetPlatePath(plateId)] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Stale backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "On disk", fixture.Clock.Now), JsonOptions.Default));
+
+        var library = await fixture.LoadAsync();
+
+        Assert.Equal("On disk", library.FindPlate(plateId)!.DisplayName);
+        Assert.DoesNotContain(fixture.Log.Messages, m => m.Contains("backup", StringComparison.Ordinal));
+        Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
+    }
+
+    [Fact]
+    public async Task NewerVersionPlate_NoFallback_NoRecoveryCopy()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        store.Backups[fixture.Paths.GetPlatePath(plateId)] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Old backup", fixture.Clock.Now), JsonOptions.Default);
+        var newer = $$"""{ "Version": 50, "ProfileId": "{{plateId}}", "Name": "Newer" }""";
+        fixture.WritePlateJson(plateId, newer);
+
+        var library = await fixture.LoadAsync();
+
+        Assert.Equal(PlateStatus.NewerVersion, library.FindPlate(plateId)!.Status);
+        Assert.DoesNotContain(fixture.Log.Messages, m => m.Contains("backup", StringComparison.Ordinal));
+        Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
+        Assert.Equal(newer, fixture.ReadPlateJson(plateId));
+    }
+
+    [Fact]
+    public async Task RecoveryCopyFailure_IsLogged_AndThePlateStillLoads()
+    {
+        var store = new RecoveryCopyFailingBackupStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        store.Backups[fixture.Paths.GetPlatePath(plateId)] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "From backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, "{ truncated");
+
+        var library = await fixture.LoadAsync();
+
+        Assert.Equal(PlateStatus.Ready, library.FindPlate(plateId)!.Status);
+        Assert.Equal("From backup", library.FindPlate(plateId)!.DisplayName);
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("Recovery", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
+        Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
+    }
+
+    /// <summary>A backup-simulating store whose copies into Recovery fail.</summary>
+    private sealed class RecoveryCopyFailingBackupStore : IPlateFileStore
+    {
+        private readonly BackupSimulatingStore inner = new();
+
+        internal System.Collections.Generic.Dictionary<string, string> Backups => inner.Backups;
+
+        public bool FileExists(string path) => inner.FileExists(path);
+
+        public System.Collections.Generic.IReadOnlyList<string> ListFiles(string directory, string searchPattern) => inner.ListFiles(directory, searchPattern);
+
+        public Task ReadTextAsync(string path, Action<string> reader) => inner.ReadTextAsync(path, reader);
+
+        public Task WriteTextAsync(string path, string contents) => inner.WriteTextAsync(path, contents);
+
+        public void MoveFile(string sourcePath, string destinationPath) => inner.MoveFile(sourcePath, destinationPath);
+
+        public void CopyFile(string sourcePath, string destinationPath) =>
+            throw new IOException(LibraryFiles.IsRecovery(destinationPath) ? $"There is not enough space on the disk: '{destinationPath}'" : "Unexpected copy.");
+
+        public void DeleteFile(string path) => inner.DeleteFile(path);
+    }
+}
+
 /// <summary>A load that unloading stops between (or inside) two files has found nothing wrong.</summary>
 public class AbandonedLoadTests
 {
