@@ -18,13 +18,20 @@ public sealed class PlateTemplate
     /// <summary>This envelope's own schema version — independent of <see cref="Document"/>'s.</summary>
     public const int CurrentSchemaVersion = 1;
 
+    private string name = string.Empty;
+
     public int Version { get; set; } = CurrentSchemaVersion;
 
     /// <summary>The Template's identity. Stable forever; never reused as a Plate's identity.</summary>
     public Guid TemplateId { get; set; }
 
-    /// <summary>The Template's display name (see <c>TemplateNaming</c>).</summary>
-    public string Name { get; set; } = string.Empty;
+    /// <summary>The Template's display name (see <c>TemplateNaming</c>). Never null: an explicit
+    /// JSON null (which no build writes) reads as empty.</summary>
+    public string Name
+    {
+        get => name;
+        set => name = value ?? string.Empty;
+    }
 
     public DateTime CreatedAtUtc { get; set; }
 

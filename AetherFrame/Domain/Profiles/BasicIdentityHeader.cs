@@ -25,6 +25,8 @@ public sealed class BasicIdentityHeader
     public const int MaxCustomTitleLength = 64;
     public const int MaxTaglineLength = 120;
 
+    private string customTitle = string.Empty;
+
     public IdentityTitleSource TitleSource { get; set; } = IdentityTitleSource.None;
 
     /// <summary>Row id of the chosen FFXIV Title (game data), or 0 for none chosen yet.</summary>
@@ -37,8 +39,13 @@ public sealed class BasicIdentityHeader
     /// </summary>
     public bool GameTitleIsPrefix { get; set; }
 
-    /// <summary>The Custom title text. Kept while another source is active, so switching back restores it.</summary>
-    public string CustomTitle { get; set; } = string.Empty;
+    /// <summary>The Custom title text. Kept while another source is active, so switching back restores it.
+    /// Never null: an explicit JSON null (which no build writes) reads as empty.</summary>
+    public string CustomTitle
+    {
+        get => customTitle;
+        set => customTitle = value ?? string.Empty;
+    }
 
     public IdentityTitleLayout Layout { get; set; } = IdentityTitleLayout.Subtitle;
 

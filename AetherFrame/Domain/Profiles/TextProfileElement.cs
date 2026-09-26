@@ -42,17 +42,36 @@ public sealed class TextProfileElement : ProfileElement, IJsonOnDeserializing
     /// alignment.</summary>
     public const int CurrentLayoutVersion = 1;
 
-    public string Text { get; set; } = string.Empty;
+    // The text fields are never null: an explicit JSON null (which no build writes) reads as
+    // empty, so nothing that measures or draws them has to guard against it.
+    private string text = string.Empty;
+    private string prefix = string.Empty;
+    private string suffix = string.Empty;
+    private string fontFamily = ProfileFontFamilies.DalamudDefault;
+
+    public string Text
+    {
+        get => text;
+        set => text = value ?? string.Empty;
+    }
 
     /// <summary>
     /// Optional decoration drawn before <see cref="Text"/> (e.g. "✦"), stored as its own Unicode
     /// text so the text itself is never rewritten. Separated from the text by one space when
     /// both are present; not drawn at all while the text is empty. See <see cref="GetDisplayText"/>.
     /// </summary>
-    public string Prefix { get; set; } = string.Empty;
+    public string Prefix
+    {
+        get => prefix;
+        set => prefix = value ?? string.Empty;
+    }
 
     /// <summary>Optional decoration drawn after <see cref="Text"/>; see <see cref="Prefix"/>.</summary>
-    public string Suffix { get; set; } = string.Empty;
+    public string Suffix
+    {
+        get => suffix;
+        set => suffix = value ?? string.Empty;
+    }
 
     public float FontSize { get; set; } = 16f;
 
@@ -73,9 +92,13 @@ public sealed class TextProfileElement : ProfileElement, IJsonOnDeserializing
     /// field existed, which deserializes it as the default <see cref="ProfileFontFamilies.Default"/>
     /// — Dalamud's own default font, matching every legacy element's prior appearance exactly.
     /// An unrecognized id (e.g. a family removed in a later build) falls back to the default at
-    /// render time rather than failing to load.
+    /// render time rather than failing to load; so does an explicit JSON null, read as the default id.
     /// </summary>
-    public string FontFamily { get; set; } = ProfileFontFamilies.DalamudDefault;
+    public string FontFamily
+    {
+        get => fontFamily;
+        set => fontFamily = value ?? ProfileFontFamilies.DalamudDefault;
+    }
 
     public bool Bold { get; set; }
 

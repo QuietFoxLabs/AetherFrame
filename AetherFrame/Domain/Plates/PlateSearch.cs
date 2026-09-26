@@ -4,10 +4,11 @@ using System.Collections.Generic;
 namespace AetherFrame.Domain.Plates;
 
 /// <summary>Simple case-insensitive Plate search over the display name and the last-known names
-/// of characters the Plate is associated with. No tags, filters, or indexing.</summary>
+/// of characters the Plate is associated with. No tags, filters, or indexing. A missing name
+/// (null, e.g. from a damaged file) matches nothing, like an empty one.</summary>
 public static class PlateSearch
 {
-    public static bool Matches(string? query, string displayName, IEnumerable<string>? characterNames = null)
+    public static bool Matches(string? query, string? displayName, IEnumerable<string>? characterNames = null)
     {
         var needle = query?.Trim();
         if (string.IsNullOrEmpty(needle))
@@ -15,7 +16,7 @@ public static class PlateSearch
             return true;
         }
 
-        if (displayName.Contains(needle, StringComparison.OrdinalIgnoreCase))
+        if (displayName is not null && displayName.Contains(needle, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

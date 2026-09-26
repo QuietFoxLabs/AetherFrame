@@ -46,8 +46,15 @@ public sealed class ProfileDocument
     /// </summary>
     public ulong OwnerContentId { get; set; }
 
-    /// <summary>The Plate's display name (see <c>PlateNaming</c>).</summary>
-    public string Name { get; set; } = string.Empty;
+    private string name = string.Empty;
+
+    /// <summary>The Plate's display name (see <c>PlateNaming</c>). Never null: an explicit JSON
+    /// null (which no build writes) reads as empty, like every other string here.</summary>
+    public string Name
+    {
+        get => name;
+        set => name = value ?? string.Empty;
+    }
 
     public int Revision { get; set; }
 
@@ -66,7 +73,14 @@ public sealed class ProfileDocument
 
     public float CanvasHeight { get; set; }
 
-    public List<ProfileElement> Elements { get; set; } = new();
+    private List<ProfileElement> elements = new();
+
+    /// <summary>Never null: an explicit JSON null (which no build writes) reads as no elements.</summary>
+    public List<ProfileElement> Elements
+    {
+        get => elements;
+        set => elements = value ?? new List<ProfileElement>();
+    }
 
     /// <summary>
     /// The background style (see <see cref="ProfileBackground"/>). Null only transiently: for a

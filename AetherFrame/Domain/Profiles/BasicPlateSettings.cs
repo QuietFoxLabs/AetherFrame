@@ -21,6 +21,13 @@ public sealed class BasicPlateSettings
     public const int MaxPlaystyles = 6;
     public const int MaxPlaystyleLength = 24;
 
+    // The lists and the theme id are never null: an explicit JSON null (which no build writes)
+    // reads as empty, so cloning, comparing and drawing them never has to guard against it.
+    private List<BasicPlacement> placements = new();
+    private List<string> playstyles = new();
+    private List<uint> favoriteJobIds = new();
+    private string themeId = string.Empty;
+
     public AdventurePlateOrientation Orientation { get; set; } = AdventurePlateOrientation.Normal;
 
     /// <summary>Where the portrait comes from. Only <see cref="BasicPortraitSource.ImportedImage"/> works today.</summary>
@@ -34,15 +41,21 @@ public sealed class BasicPlateSettings
     /// keyed by the numeric role rather than a dictionary, so a role this build doesn't know can
     /// never make the document fail to load.
     /// </summary>
-    public List<BasicPlacement> Placements { get; set; } = new();
+    public List<BasicPlacement> Placements
+    {
+        get => placements;
+        set => placements = value ?? new List<BasicPlacement>();
+    }
 
     /// <summary>Up to <see cref="MaxPlaystyles"/> entries, in display order.</summary>
-    public List<string> Playstyles { get; set; } = new();
+    public List<string> Playstyles
+    {
+        get => playstyles;
+        set => playstyles = value ?? new List<string>();
+    }
 
     /// <summary>Structured Active Hours, or null when never set.</summary>
     public BasicActiveHours? ActiveHours { get; set; }
-
-    private List<uint> favoriteJobIds = new();
 
     /// <summary>
     /// The primary Favorite Job's row id (game data), or 0 for none. Before multiple Favorite Jobs
@@ -77,7 +90,11 @@ public sealed class BasicPlateSettings
     /// split existed).
     /// </summary>
     [JsonPropertyName("ThemeName")]
-    public string ThemeId { get; set; } = string.Empty;
+    public string ThemeId
+    {
+        get => themeId;
+        set => themeId = value ?? string.Empty;
+    }
 
     /// <summary>Properties this build doesn't know, kept through clone and save unchanged.</summary>
     [JsonExtensionData]
@@ -202,6 +219,8 @@ public sealed class BasicActiveHours
     public const int MinutesPerDay = 24 * 60;
     public const int MaxTimeZoneLength = 16;
 
+    private string timeZone = string.Empty;
+
     public BasicWeekdays Days { get; set; } = BasicWeekdays.None;
 
     /// <summary>Minutes after midnight, [0, 1440).</summary>
@@ -213,8 +232,13 @@ public sealed class BasicActiveHours
 
     public bool Use24HourClock { get; set; }
 
-    /// <summary>Free text such as "EST" or "Server Time", up to <see cref="MaxTimeZoneLength"/>.</summary>
-    public string TimeZone { get; set; } = string.Empty;
+    /// <summary>Free text such as "EST" or "Server Time", up to <see cref="MaxTimeZoneLength"/>.
+    /// Never null: an explicit JSON null (which no build writes) reads as empty.</summary>
+    public string TimeZone
+    {
+        get => timeZone;
+        set => timeZone = value ?? string.Empty;
+    }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }

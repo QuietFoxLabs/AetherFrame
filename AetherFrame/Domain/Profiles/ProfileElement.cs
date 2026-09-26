@@ -32,15 +32,22 @@ public abstract class ProfileElement
 
     public const int MaxNameLength = 64;
 
+    private string name = string.Empty;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>
     /// User-editable layer name, shown only in editor UI (Layers panel, Inspector). Never affects
     /// rendering. Empty — the default, including for every legacy element saved before this field
-    /// existed — means "use the automatic name" (see <see cref="ProfileElementNames.GetDisplayName"/>),
-    /// so opening an old profile never has to write names into it.
+    /// existed, and for an explicit JSON null no build writes — means "use the automatic name"
+    /// (see <see cref="ProfileElementNames.GetDisplayName"/>), so opening an old profile never
+    /// has to write names into it.
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name
+    {
+        get => name;
+        set => name = value ?? string.Empty;
+    }
 
     public bool Visible { get; set; } = true;
 

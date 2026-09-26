@@ -25,6 +25,8 @@ public sealed class CharacterBinding
     /// </summary>
     public const int CurrentVersion = 2;
 
+    private List<Guid> plateIds = new();
+
     public int Version { get; set; } = CurrentVersion;
 
     public ulong ContentId { get; set; }
@@ -34,9 +36,15 @@ public sealed class CharacterBinding
     [JsonPropertyName("ActiveProfileId")]
     public Guid? ActivePlateId { get; set; }
 
-    /// <summary>Plates associated with this character (including the Active one).</summary>
+    /// <summary>Plates associated with this character (including the Active one). Never null: an
+    /// explicit JSON null (which no build writes) reads as no Plates, so the binding — and its
+    /// character metadata — is kept rather than treated as damaged.</summary>
     [JsonPropertyName("ProfileIds")]
-    public List<Guid> PlateIds { get; set; } = new();
+    public List<Guid> PlateIds
+    {
+        get => plateIds;
+        set => plateIds = value ?? new List<Guid>();
+    }
 
     public string? LastKnownCharacterName { get; set; }
 
