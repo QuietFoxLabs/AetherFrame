@@ -194,6 +194,15 @@ public sealed class BasicPlateSettings
 
         return true;
     }
+
+    /// <summary>
+    /// Drops every placement whose rectangle holds a value that isn't a number (NaN or infinity,
+    /// from a hand-edited file): Basic mode then treats that element as never placed by it — as
+    /// customized — instead of comparing it against garbage. Finite values are never changed. See
+    /// <see cref="ProfileElementLimits"/>.
+    /// </summary>
+    /// <returns>True if a repair was applied.</returns>
+    internal bool NormalizeValues() => Placements.RemoveAll(placement => !ProfileElementLimits.IsFinite(placement.Rect)) > 0;
 }
 
 /// <summary>Where Basic mode last placed one section element.</summary>

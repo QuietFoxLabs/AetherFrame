@@ -218,14 +218,19 @@ internal sealed class ProfileService
     /// Mutates an existing element of the currently loaded profile. Synchronous UI mutation;
     /// safe to call directly from ImGui Draw. Throws <see cref="InvalidOperationException"/>
     /// if the profile isn't editable (busy, no character, wrong character, etc.) or if no
-    /// element with the given id exists.
+    /// element with the given id exists. Afterwards any value the edit left that isn't a number
+    /// (a typed 1e39 overflowing to infinity) is replaced by its default (see
+    /// <see cref="ProfileElementLimits"/>): every slider, undo and Basic edit passes through here,
+    /// so no edit can leave the Plate unsaveable.
     /// </summary>
     internal void UpdateElement(Guid elementId, Action<ProfileElement> update)
     {
         lock (gate)
         {
             var profile = RequireEditableProfileLocked();
-            update(FindElementLocked(profile, elementId));
+            var element = FindElementLocked(profile, elementId);
+            update(element);
+            ProfileElementLimits.Bound(element);
         }
     }
 
@@ -386,14 +391,17 @@ internal sealed class ProfileService
     /// <summary>
     /// Mutates the current profile's <see cref="ProfileBackground"/>. Kept separate from element
     /// mutation since the background isn't itself a <see cref="ProfileElement"/> (no Z order, not
-    /// hit-testable).
+    /// hit-testable). Like <see cref="UpdateElement"/>, any value the edit left that isn't a
+    /// number is replaced by its default afterwards.
     /// </summary>
     internal void UpdateBackground(Action<ProfileBackground> update)
     {
         lock (gate)
         {
             var profile = RequireEditableProfileLocked();
-            update(GetOrCreateBackgroundLocked(profile));
+            var background = GetOrCreateBackgroundLocked(profile);
+            update(background);
+            background.Bound();
         }
     }
 

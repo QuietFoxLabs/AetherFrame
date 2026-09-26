@@ -102,6 +102,78 @@ public sealed class BasicIdentityHeader
         && RegionWidth.Equals(other.RegionWidth)
         && (AppliedLayout is null ? other.AppliedLayout is null : AppliedLayout.ContentEquals(other.AppliedLayout))
         && (LayoutStyle is null ? other.LayoutStyle is null : LayoutStyle.ContentEquals(other.LayoutStyle));
+
+    /// <summary>
+    /// Replaces every value that isn't a number (NaN or infinity, from a hand-edited file) with
+    /// its default: the region falls back to the origin, and a placement snapshot or layout-style
+    /// value becomes "not recorded", so Basic mode counts the header as customized instead of
+    /// reflowing it from garbage. Finite values are never changed. See <see cref="ProfileElementLimits"/>.
+    /// </summary>
+    /// <returns>True if a repair was applied.</returns>
+    internal bool NormalizeValues()
+    {
+        var repaired = false;
+
+        if (!ProfileElementLimits.IsFinite(RegionPosition))
+        {
+            RegionPosition = default;
+            repaired = true;
+        }
+
+        if (!float.IsFinite(RegionWidth))
+        {
+            RegionWidth = 0f;
+            repaired = true;
+        }
+
+        if (AppliedLayout is { } applied)
+        {
+            if (applied.Name is { } name && !ProfileElementLimits.IsFinite(name))
+            {
+                applied.Name = null;
+                repaired = true;
+            }
+
+            if (applied.Title is { } title && !ProfileElementLimits.IsFinite(title))
+            {
+                applied.Title = null;
+                repaired = true;
+            }
+
+            if (applied.Tagline is { } tagline && !ProfileElementLimits.IsFinite(tagline))
+            {
+                applied.Tagline = null;
+                repaired = true;
+            }
+        }
+
+        if (LayoutStyle is { } style)
+        {
+            repaired |= NormalizeValues(style.Applied);
+            repaired |= NormalizeValues(style.Previous);
+        }
+
+        return repaired;
+    }
+
+    private static bool NormalizeValues(TitleStyleValues values)
+    {
+        var repaired = false;
+
+        if (values.FontSize is { } size && !float.IsFinite(size))
+        {
+            values.FontSize = null;
+            repaired = true;
+        }
+
+        if (values.LetterSpacing is { } spacing && !float.IsFinite(spacing))
+        {
+            values.LetterSpacing = null;
+            repaired = true;
+        }
+
+        return repaired;
+    }
 }
 
 /// <summary>The rectangles Basic mode last assigned to the Identity Header's elements.</summary>

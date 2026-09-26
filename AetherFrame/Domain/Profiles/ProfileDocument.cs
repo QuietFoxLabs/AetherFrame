@@ -222,6 +222,56 @@ public sealed class ProfileDocument
     }
 
     /// <summary>
+    /// Replaces every value that isn't a number (NaN or infinity — what a number beyond float's
+    /// range in a hand-edited file overflows to) with its default, in memory, like the other load
+    /// repairs: a non-finite canvas size resolves exactly as an unset one does, elements and the
+    /// background follow <see cref="ProfileElementLimits"/>, a Component gets the editor's bounds,
+    /// and the Basic layout bookkeeping forgets the affected placement. Finite values are never
+    /// changed, so a Plate any build wrote is untouched. Without this, such a Plate would load
+    /// and render but could never be saved again (JSON has no NaN or infinity).
+    /// </summary>
+    /// <returns>True if a repair was applied.</returns>
+    internal bool NormalizeValues()
+    {
+        var repaired = false;
+
+        if (!float.IsFinite(CanvasWidth) || !float.IsFinite(CanvasHeight))
+        {
+            CanvasWidth = 0f;
+            CanvasHeight = 0f;
+            NormalizeLegacyCanvasSize();
+            repaired = true;
+        }
+
+        foreach (var element in Elements)
+        {
+            repaired |= ProfileElementLimits.Bound(element);
+        }
+
+        if (Background is { } background)
+        {
+            repaired |= background.Bound();
+        }
+
+        foreach (var component in Components ?? [])
+        {
+            repaired |= ProfileElementLimits.Bound(component);
+        }
+
+        if (BasicIdentity is { } identity)
+        {
+            repaired |= identity.NormalizeValues();
+        }
+
+        if (BasicPlate is { } plate)
+        {
+            repaired |= plate.NormalizeValues();
+        }
+
+        return repaired;
+    }
+
+    /// <summary>
     /// Resolves <see cref="Background"/> for a profile saved before <see cref="ProfileBackground"/>
     /// existed, from its legacy image/fit/opacity fields — in memory only, like the other legacy
     /// repairs: the file on disk is untouched until the user explicitly saves, and the result
