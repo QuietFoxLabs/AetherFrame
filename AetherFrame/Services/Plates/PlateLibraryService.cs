@@ -75,6 +75,7 @@ internal sealed class PlateLibraryService
     private bool isLoaded;
     private int generation;
     private IReadOnlyList<PlateSummary>? orderedSummaries;
+    private (int Generation, string Query, IReadOnlyList<PlateSummary> Result)? lastSearch;
 
     internal PlateLibraryService(
         PlateStoragePaths paths,
@@ -125,13 +126,31 @@ internal sealed class PlateLibraryService
         }
     }
 
-    /// <summary>Case-insensitive search over Plate names and associated character names.</summary>
+    /// <summary>
+    /// Case-insensitive search over Plate names and associated character names. Called every
+    /// frame while a query is typed, so the last result is kept and returned again (the same
+    /// instance; summaries are immutable) until the query or the Library changes.
+    /// </summary>
     internal IReadOnlyList<PlateSummary> Search(string? query)
     {
-        var all = GetOrderedPlates();
-        return string.IsNullOrWhiteSpace(query)
-            ? all
-            : all.Where(p => PlateSearch.Matches(query, p.DisplayName, p.CharacterNames)).ToList();
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return GetOrderedPlates();
+        }
+
+        var needle = query.Trim();
+        lock (gate)
+        {
+            if (lastSearch is { } cached && cached.Generation == generation && string.Equals(cached.Query, needle, StringComparison.Ordinal))
+            {
+                return cached.Result;
+            }
+
+            var all = orderedSummaries ??= BuildOrderedSummariesLocked();
+            var result = all.Where(p => PlateSearch.Matches(needle, p.DisplayName, p.CharacterNames)).ToList();
+            lastSearch = (generation, needle, result);
+            return result;
+        }
     }
 
     internal PlateSummary? FindPlate(Guid plateId) => GetOrderedPlates().FirstOrDefault(p => p.PlateId == plateId);
