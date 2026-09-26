@@ -419,7 +419,15 @@ internal sealed class PlateLibraryService
                 raw[nameof(ProfileDocument.ProfileId)] = plateId;
             }
 
-            PlateDocuments.ApplyLegacyRepairs(document);
+            // The preview gets the same in-memory repairs an opened document gets (see
+            // PlateDocuments.Materialize); the saved JSON is kept as read, so nothing is written
+            // over the file because of them until the player saves.
+            PlateDocuments.ApplyLegacyRepairs(document, out var repairedValues);
+            repairedValues |= document.NormalizeElementIds();
+            if (repairedValues)
+            {
+                log.Warning($"AetherFrame found values in Plate {plateId} that no version writes (not a number, or a missing or repeated element id) and repaired them in memory; the file is unchanged until you save.");
+            }
 
             return new PlateRecord(plateId, PlateStatus.Ready, VersionedJson.Serialize(raw), document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc,
                 document.Revision, result.Migration.Version, null);

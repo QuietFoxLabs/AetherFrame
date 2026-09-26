@@ -658,4 +658,66 @@ public class FailureIsolationTests
         Assert.Empty(library.GetOrderedPlates());
         Assert.True(File.Exists(Path.Combine(fixture.Paths.PlatesDirectory, "notes.json")));
     }
+
+    [Fact]
+    public async Task DashlessPlateFile_IsIgnoredWithAWarning_AndLeftUntouched()
+    {
+        using var fixture = new LibraryFixture();
+        var plateId = Guid.NewGuid();
+        var dashless = Path.Combine(fixture.Paths.PlatesDirectory, plateId.ToString("N") + ".json");
+        var json = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Dashless", fixture.Clock.Now), JsonOptions.Default);
+        Directory.CreateDirectory(fixture.Paths.PlatesDirectory);
+        File.WriteAllText(dashless, json);
+
+        var library = await fixture.LoadAsync();
+        await library.CreatePlateAsync(PlateStartingLayout.Blank, null);
+
+        Assert.Null(library.FindPlate(plateId));
+        Assert.Single(library.GetOrderedPlates());
+        Assert.DoesNotContain(plateId, fixture.ReadLibraryOrder());
+        var ignored = Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("ignored a file", StringComparison.Ordinal));
+        Assert.Contains(plateId.ToString("N") + ".json", ignored, StringComparison.Ordinal);
+        Assert.DoesNotContain(fixture.Root, ignored, StringComparison.Ordinal);
+        Assert.Equal(json, File.ReadAllText(dashless));
+        Assert.False(File.Exists(fixture.Paths.GetPlatePath(plateId)));
+    }
+
+    [Fact]
+    public async Task PlateWithValuesNoVersionWrites_IsRepairedInMemory_LoggedOnce_AndTheFileIsUnchanged()
+    {
+        using var fixture = new LibraryFixture();
+        var plateId = Guid.NewGuid();
+        var sharedId = Guid.NewGuid();
+        var json = JsonNode.Parse(JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Odd", fixture.Clock.Now), JsonOptions.Default))!.AsObject();
+        json["Elements"] = new JsonArray(
+            new JsonObject { ["elementType"] = "text", ["Id"] = sharedId, ["Text"] = "a", ["FontSize"] = 1e39 },
+            new JsonObject { ["elementType"] = "text", ["Id"] = sharedId, ["Text"] = "b" });
+        var written = json.ToJsonString(JsonOptions.Default);
+        fixture.WritePlateJson(plateId, written);
+
+        var library = await fixture.LoadAsync();
+
+        var preview = library.GetSavedDocument(plateId)!;
+        Assert.Equal(2, preview.Elements.Select(e => e.Id).Distinct().Count());
+        Assert.All(preview.Elements.OfType<TextProfileElement>(), e => Assert.True(float.IsFinite(e.FontSize)));
+        Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("repaired", StringComparison.Ordinal) && m.Contains("unchanged until you save", StringComparison.Ordinal));
+        Assert.Equal(written, fixture.ReadPlateJson(plateId));
+
+        // A healthy Plate logs nothing of the sort, and another load of the same file logs it again (it is still unchanged).
+        await fixture.LoadAsync();
+        Assert.Equal(2, fixture.Log.Messages.Count(m => m.Contains("repaired", StringComparison.Ordinal)));
+        Assert.Equal(written, fixture.ReadPlateJson(plateId));
+    }
+
+    [Fact]
+    public async Task HealthyPlate_IsNotReportedAsRepaired()
+    {
+        using var fixture = new LibraryFixture();
+        var plateId = Guid.NewGuid();
+        fixture.WritePlateJson(plateId, JsonSerializer.Serialize(SampleDocuments.Rich(plateId, "Fine", fixture.Clock.Now), JsonOptions.Default));
+
+        await fixture.LoadAsync();
+
+        Assert.DoesNotContain(fixture.Log.Messages, m => m.Contains("repaired", StringComparison.Ordinal));
+    }
 }
