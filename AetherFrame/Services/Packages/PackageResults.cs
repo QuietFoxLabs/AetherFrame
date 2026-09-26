@@ -22,6 +22,9 @@ internal enum PackageErrorCode
     ImageInvalid,
     CommitFailed,
     ExportFailed,
+
+    /// <summary>AetherFrame couldn't write its own temporary files while checking the package (a full disk, an unwritable plugin folder) — nothing about the package itself.</summary>
+    StagingFailed,
 }
 
 /// <summary>Things a player should know that don't stop an import.</summary>

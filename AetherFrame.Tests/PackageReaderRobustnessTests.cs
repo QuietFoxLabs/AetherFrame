@@ -97,6 +97,138 @@ public class PackageReaderRobustnessTests
         public void Dispose() => Fixture.Dispose();
     }
 
+    // ---------------------------------------------------------------- Open never throws
+
+    [Fact]
+    public async Task StagingRootUnwritable_ReportsATemporaryFileProblem_NotADamagedPackage()
+    {
+        using var setup = await Setup.CreateAsync();
+        var stagingRoot = setup.Fixture.Paths.PackageStagingDirectory;
+        if (Directory.Exists(stagingRoot))
+        {
+            Directory.Delete(stagingRoot, recursive: false);
+        }
+
+        // A file where the staging root should be: no staging folder can be created under it.
+        File.WriteAllText(stagingRoot, "in the way");
+        try
+        {
+            var staged = setup.Packages.Inspect(setup.ValidPath);
+            using (staged)
+            {
+                Assert.Equal(PackageCompatibility.Invalid, staged.Compatibility);
+                var error = Assert.Single(staged.Diagnostics.Errors);
+                Assert.Equal(PackageErrorCode.StagingFailed, error.Code);
+                Assert.Equal(PackageReader.TemporaryFilesMessage, error.Message);
+                Assert.DoesNotContain("damaged", error.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(setup.Fixture.Paths.Root, error.Detail, StringComparison.OrdinalIgnoreCase);
+                Assert.Null(staged.Manifest);
+                Assert.Null(staged.PreparedProfile);
+                Assert.False((await setup.Packages.ImportAsync(staged)).Succeeded);
+            }
+
+            Assert.Equal("in the way", File.ReadAllText(stagingRoot));
+        }
+        finally
+        {
+            File.Delete(stagingRoot);
+        }
+
+        // With the folder writable again, the same file imports.
+        using var retried = setup.Packages.Inspect(setup.ValidPath);
+        Assert.True(retried.CanImport, retried.DescribeForLog());
+    }
+
+    [Fact]
+    public async Task Inspect_WhenTheDecoderQueryThrows_ReturnsAnInvalidVerdict_AndLeavesNoStaging()
+    {
+        var explode = false;
+        using var setup = await Setup.CreateAsync(_ => explode ? throw new InvalidProgramException("the texture provider is gone") : true);
+        var before = setup.Fixture.SnapshotInstallation();
+
+        explode = true;
+        var staged = setup.Packages.Inspect(setup.ValidPath);
+        try
+        {
+            Assert.Equal(PackageCompatibility.Invalid, staged.Compatibility);
+            var error = Assert.Single(staged.Diagnostics.Errors);
+            Assert.Equal(PackageErrorCode.InvalidArchive, error.Code);
+            Assert.Equal(nameof(InvalidProgramException), error.Detail);
+            Assert.Null(staged.PreparedProfile);
+            Assert.Empty(staged.Assets);
+            Assert.True(Directory.Exists(staged.StagingDirectory));
+            Assert.Contains(setup.Fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains(nameof(InvalidProgramException), StringComparison.Ordinal));
+            Assert.All(setup.Fixture.Log.Messages, m => Assert.DoesNotContain("texture provider is gone", m, StringComparison.Ordinal));
+            Assert.False((await setup.Packages.ImportAsync(staged)).Succeeded);
+        }
+        finally
+        {
+            staged.Dispose();
+        }
+
+        Assert.False(Directory.Exists(staged.StagingDirectory));
+        Assert.True(setup.Fixture.StagingIsEmpty);
+        Assert.Equal(before, setup.Fixture.SnapshotInstallation());
+    }
+
+    [Fact]
+    public async Task Inspect_NeverThrows_ForCraftedArchives()
+    {
+        using var setup = await Setup.CreateAsync();
+        var valid = File.ReadAllBytes(setup.ValidPath);
+        var random = new Random(9001);
+        var corpus = new List<byte[]>();
+
+        foreach (var size in new[] { 0, 1, 21, 22, 23, 100, 4096 })
+        {
+            var bytes = new byte[size];
+            random.NextBytes(bytes);
+            corpus.Add(bytes);
+        }
+
+        for (var i = 1; i < 12; i++)
+        {
+            corpus.Add(valid[..(valid.Length * i / 12)]);
+        }
+
+        corpus.Add(ZipPreflightAgreementTests.WithTwoEndRecords(valid));
+        for (var i = 0; i < 150; i++)
+        {
+            var mutated = (byte[])valid.Clone();
+            for (var flips = random.Next(1, 9); flips > 0; flips--)
+            {
+                mutated[random.Next(mutated.Length)] ^= (byte)random.Next(1, 256);
+            }
+
+            corpus.Add(mutated);
+        }
+
+        var before = setup.Fixture.SnapshotInstallation();
+        for (var i = 0; i < corpus.Count; i++)
+        {
+            var path = setup.WriteBytes(corpus[i], $"crafted-{i}.aetherframe");
+            var staged = setup.Packages.Inspect(path);
+            try
+            {
+                Assert.All(staged.Diagnostics.Errors, e => Assert.DoesNotContain(setup.Fixture.Paths.Root, e.Message + e.Detail, StringComparison.OrdinalIgnoreCase));
+                if (staged.CanImport)
+                {
+                    // A flip that landed in a comment or an unused byte: still a whole, honest package.
+                    Assert.NotNull(staged.PreviewDocument);
+                }
+            }
+            finally
+            {
+                staged.Dispose();
+            }
+
+            Assert.False(Directory.Exists(staged.StagingDirectory), $"variant {i} left its staging folder behind");
+        }
+
+        Assert.True(setup.Fixture.StagingIsEmpty);
+        Assert.Equal(before, setup.Fixture.SnapshotInstallation());
+    }
+
     // ---------------------------------------------------------------- lying central directory sizes
 
     /// <summary>

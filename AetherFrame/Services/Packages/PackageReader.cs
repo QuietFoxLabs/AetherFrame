@@ -17,7 +17,9 @@ namespace AetherFrame.Services.Packages;
 /// every package is treated as hostile. Nothing is ever extracted to a path the archive names:
 /// JSON is read into bounded memory, and images are streamed into this import's own staging
 /// folder under names chosen here ("asset-00.png"...). Validation failures are reported as data
-/// in <see cref="StagedPackage.Diagnostics"/>; this never throws for bad content.
+/// in <see cref="StagedPackage.Diagnostics"/>; <see cref="Open"/> never throws, whatever the file
+/// or the decoder query does, so the staging folder is always owned by the package it returns
+/// and a failure to write that folder (a full disk) is told apart from a bad package.
 ///
 /// <para>Order, cheapest and most fundamental first: file size → ZIP end record (entry count,
 /// directory size) →
@@ -34,6 +36,9 @@ namespace AetherFrame.Services.Packages;
 /// </summary>
 internal static class PackageReader
 {
+    /// <summary>Player-facing text for <see cref="PackageErrorCode.StagingFailed"/>.</summary>
+    internal const string TemporaryFilesMessage = "AetherFrame couldn't write its temporary files. Check free space in the plugin folder and try again.";
+
     private const int CopyBufferSize = 81920;
 
     // Unix st_mode file-type bits, as ZIP tools store them in the external attributes' high word.
@@ -60,11 +65,29 @@ internal static class PackageReader
         try
         {
             Directory.CreateDirectory(staging);
-            new Session(result, packagePath, isDecoderSupported).Run();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            result.Diagnostics.Error(PackageErrorCode.InvalidArchive, "The file couldn't be read. It may be damaged or in use.", ex.GetType().Name);
+            result.Diagnostics.Error(PackageErrorCode.StagingFailed, TemporaryFilesMessage, "staging folder: " + ex.GetType().Name);
+        }
+
+        if (!result.Diagnostics.HasErrors)
+        {
+            try
+            {
+                new Session(result, packagePath, isDecoderSupported).Run();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
+            {
+                result.Diagnostics.Error(PackageErrorCode.InvalidArchive, "The file couldn't be read. It may be damaged or in use.", ex.GetType().Name);
+            }
+            catch (Exception ex)
+            {
+                // Whatever the archive parser, the JSON, or the decoder query did: the verdict is a
+                // refusal, and the staging folder stays with the returned package for its disposal.
+                log.Error(ex, $"AetherFrame hit an unexpected {ex.GetType().Name} while checking a package; the package was refused.");
+                result.Diagnostics.Error(PackageErrorCode.InvalidArchive, "This isn't a valid AetherFrame Plate file.", ex.GetType().Name);
+            }
         }
 
         if (result.Compatibility is PackageCompatibility.Invalid or PackageCompatibility.Unsupported)
@@ -367,6 +390,11 @@ internal static class PackageReader
             if (manifest.PreviewDeclared)
             {
                 previewPath = StagePreview(previewEntry, manifest.Preview);
+                if (diagnostics.HasErrors)
+                {
+                    return;
+                }
+
                 if (previewPath is null)
                 {
                     diagnostics.Warning(PackageWarningCode.PreviewOmitted, "The file's preview picture couldn't be used, so it's left out. The Plate itself is fine.");
@@ -384,7 +412,7 @@ internal static class PackageReader
             {
                 previewDocument = PlateDocuments.Materialize((JsonObject)prepared.DeepClone());
             }
-            catch (Exception ex) when (ex is System.Text.Json.JsonException or NotSupportedException or InvalidOperationException or FormatException or ArgumentException)
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or NotSupportedException or InvalidOperationException or FormatException or ArgumentException or NullReferenceException)
             {
                 diagnostics.Error(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", "prepared document unreadable: " + ex.GetType().Name);
                 return;
@@ -499,7 +527,17 @@ internal static class PackageReader
                     }
 
                     hash?.AppendData(buffer, 0, read);
-                    destination.Write(buffer, 0, read);
+                    try
+                    {
+                        destination.Write(buffer, 0, read);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // The destination is AetherFrame's own staging file (or memory): its
+                        // failure is about the installation, not the package.
+                        sink.Error(PackageErrorCode.StagingFailed, TemporaryFilesMessage, $"{what}: {ex.GetType().Name}");
+                        return false;
+                    }
                 }
 
                 return true;
@@ -516,20 +554,57 @@ internal static class PackageReader
             }
         }
 
+        /// <summary>
+        /// Streams an entry into a new file in staging (see <see cref="CopyBounded"/>), reporting a
+        /// failure to create or finish writing AetherFrame's own file as
+        /// <see cref="PackageErrorCode.StagingFailed"/>, apart from any problem with the entry.
+        /// </summary>
+        private bool StageBounded(ZipArchiveEntry entry, string stagedPath, long limit, IncrementalHash hash, string what, PackageDiagnostics sink, out long length)
+        {
+            length = 0;
+            FileStream file;
+            try
+            {
+                file = new FileStream(stagedPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                sink.Error(PackageErrorCode.StagingFailed, TemporaryFilesMessage, $"{what}: {ex.GetType().Name}");
+                return false;
+            }
+
+            using (file)
+            {
+                if (!CopyBounded(entry, file, limit, hash, what, sink))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    // Flushed here rather than by Dispose, so a disk that fills up on the last
+                    // buffer is reported the same way as one that fills up mid-copy.
+                    file.Flush();
+                    length = file.Length;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    sink.Error(PackageErrorCode.StagingFailed, TemporaryFilesMessage, $"{what}: {ex.GetType().Name}");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         /// <summary>Streams one declared image into staging and validates it from its own bytes.</summary>
         private ImageInspection? StageAsset(ZipArchiveEntry entry, PackageAssetDeclaration declaration, string stagedPath)
         {
             using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
             {
-                long length;
-                using (var file = new FileStream(stagedPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize))
+                if (!StageBounded(entry, stagedPath, Math.Min(PackagePolicy.MaxImageBytes, declaration.ByteLength), hash, "asset", diagnostics, out var length))
                 {
-                    if (!CopyBounded(entry, file, Math.Min(PackagePolicy.MaxImageBytes, declaration.ByteLength), hash, "asset"))
-                    {
-                        return null;
-                    }
-
-                    length = file.Length;
+                    return null;
                 }
 
                 if (length != declaration.ByteLength || Convert.ToHexStringLower(hash.GetHashAndReset()) != declaration.Sha256)
@@ -559,21 +634,24 @@ internal static class PackageReader
 
             var stagedPath = Path.Combine(result.StagingDirectory, "preview.png");
 
-            // Problems here only ever leave the preview out, so they go to a scratch sink rather
-            // than the package's verdict. The bytes still count toward the package's total.
+            // Problems with the preview only ever leave it out, so they go to a scratch sink rather
+            // than the package's verdict; a failure to write AetherFrame's own file is about the
+            // installation and is reported. The bytes still count toward the package's total.
             var scratch = new PackageDiagnostics();
             try
             {
                 using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-                using (var file = new FileStream(stagedPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize))
+                if (!StageBounded(entry, stagedPath, Math.Min(PackagePolicy.MaxPreviewBytes, declaration.ByteLength), hash, "preview", scratch, out var length))
                 {
-                    if (!CopyBounded(entry, file, Math.Min(PackagePolicy.MaxPreviewBytes, declaration.ByteLength), hash, "preview", scratch))
+                    if (scratch.Errors.Any(e => e.Code == PackageErrorCode.StagingFailed))
                     {
-                        return Discard(stagedPath);
+                        diagnostics.Error(PackageErrorCode.StagingFailed, TemporaryFilesMessage, "preview");
                     }
+
+                    return Discard(stagedPath);
                 }
 
-                if (new FileInfo(stagedPath).Length != declaration.ByteLength || Convert.ToHexStringLower(hash.GetHashAndReset()) != declaration.Sha256)
+                if (length != declaration.ByteLength || Convert.ToHexStringLower(hash.GetHashAndReset()) != declaration.Sha256)
                 {
                     return Discard(stagedPath);
                 }

@@ -34,6 +34,18 @@ internal sealed class StagedPackage : IDisposable
         this.log = log;
     }
 
+    /// <summary>
+    /// A package refused before it was even opened: Invalid with <paramref name="code"/> and
+    /// <paramref name="message"/>, nothing staged. Its staging folder is a name under
+    /// <paramref name="stagingRoot"/> that is never created, so disposing it does nothing.
+    /// </summary>
+    internal static StagedPackage Refused(string sourceFileName, string stagingRoot, IAetherFrameLog log, PackageErrorCode code, string message)
+    {
+        var refused = new StagedPackage(sourceFileName, Path.Combine(stagingRoot, Guid.NewGuid().ToString("N")), log);
+        refused.Diagnostics.Error(code, message);
+        return refused;
+    }
+
     /// <summary>The package's file name (no directory), for display.</summary>
     internal string SourceFileName { get; }
 
