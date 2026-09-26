@@ -92,17 +92,37 @@ internal sealed class PlateStoragePaths
     internal string GetRecoveryPath(string originalPath, DateTime nowUtc) =>
         Path.Combine(RecoveryDirectory, $"{Path.GetFileNameWithoutExtension(originalPath)}.damaged-{nowUtc:yyyyMMdd-HHmmss-fff}{Path.GetExtension(originalPath)}");
 
+    /// <summary>
+    /// The Plate a file in the Plates folder is named for — only when the name is the exact
+    /// spelling <see cref="GetPlatePath"/> writes (hex with dashes; letter case is ignored, as
+    /// Windows file names ignore it). Any other spelling of a Guid (no dashes, braces, padding)
+    /// is not a Plate file: it would claim an id every write targets under the canonical name.
+    /// </summary>
     internal static bool TryParsePlateFileName(string path, out Guid plateId) =>
-        Guid.TryParse(Path.GetFileNameWithoutExtension(path), out plateId) && plateId != Guid.Empty;
+        TryParseCanonicalGuid(Path.GetFileNameWithoutExtension(path), out plateId);
 
-    internal static bool TryParseBindingFileName(string path, out ulong contentId) =>
-        ulong.TryParse(Path.GetFileNameWithoutExtension(path), NumberStyles.None, CultureInfo.InvariantCulture, out contentId) && contentId != 0;
+    /// <summary>The character a binding file is named for — only when the name is the exact
+    /// spelling <see cref="GetBindingPath"/> writes (decimal digits, no leading zeros).</summary>
+    internal static bool TryParseBindingFileName(string path, out ulong contentId)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        return ulong.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out contentId)
+            && contentId != 0
+            && contentId.ToString(CultureInfo.InvariantCulture) == name;
+    }
 
     internal string GetTemplatePath(Guid templateId) => Path.Combine(TemplatesDirectory, $"{templateId}.json");
 
     internal string GetTrashTemplatePath(Guid templateId, DateTime deletedUtc) =>
         Path.Combine(TemplateTrashDirectory, $"{templateId}.deleted-{deletedUtc:yyyyMMdd-HHmmss-fff}.json");
 
+    /// <summary>The Template a file in the Templates folder is named for; see <see cref="TryParsePlateFileName"/>.</summary>
     internal static bool TryParseTemplateFileName(string path, out Guid templateId) =>
-        Guid.TryParse(Path.GetFileNameWithoutExtension(path), out templateId) && templateId != Guid.Empty;
+        TryParseCanonicalGuid(Path.GetFileNameWithoutExtension(path), out templateId);
+
+    // "D" is the dashed spelling; the comparison rejects what Guid parsing still tolerates around it (whitespace).
+    private static bool TryParseCanonicalGuid(string name, out Guid id) =>
+        Guid.TryParseExact(name, "D", out id)
+        && id != Guid.Empty
+        && string.Equals(id.ToString("D"), name, StringComparison.OrdinalIgnoreCase);
 }
