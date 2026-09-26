@@ -228,13 +228,15 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // Temporary files from an import interrupted by the game closing; only AetherFrame's own.
         packageService.SweepStaging();
 
+        // The Library loads on a framework tick (its reads and any migration write are dispatched
+        // there, like every Library operation); this task is what that tick's work completes.
         try
         {
             await plateLibrary.InitializeAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            ThrowIfLoadStopped(ex, cancellationToken);
+            await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
 
             // Nothing on disk is touched by a failed load; My Plates says it couldn't load.
             Log.Error(ex, "AetherFrame could not load the Plate Library.");
@@ -247,7 +249,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            ThrowIfLoadStopped(ex, cancellationToken);
+            await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
 
             // Nothing on disk is touched by a failed load; Templates says the saved ones couldn't
             // load, and built-in Templates stay usable, so Create Plate still works.
@@ -256,16 +258,32 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     }
 
     /// <summary>
-    /// A load canceled by Dalamud, or cut short because the plugin is already unloading, isn't a
-    /// load failure: per <see cref="IAsyncDalamudPlugin.LoadAsync"/>, it ends the load with
-    /// <see cref="OperationCanceledException"/>.
+    /// A load canceled by Dalamud, cut short because the plugin is already unloading, or
+    /// interrupted by the game closing (the framework stops running dispatched work, which ends the
+    /// load with a cancellation of its own) isn't a load failure: per
+    /// <see cref="IAsyncDalamudPlugin.LoadAsync"/>, it ends the load with
+    /// <see cref="OperationCanceledException"/>. Dalamud never disposes an instance whose LoadAsync
+    /// threw (it disposes only the service scope), so the plugin's own teardown — the draw and
+    /// login hooks, windows, textures, fonts and the shutdown of any operation already started — runs
+    /// here first.
     /// </summary>
-    private void ThrowIfLoadStopped(Exception exception, CancellationToken cancellationToken)
+    private async Task ThrowIfLoadStoppedAsync(Exception exception, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested || ownedOperations.IsShuttingDown)
+        if (exception is not OperationCanceledException && !cancellationToken.IsCancellationRequested && !ownedOperations.IsShuttingDown)
         {
-            throw new OperationCanceledException("AetherFrame stopped loading because it is unloading.", exception, cancellationToken);
+            return;
         }
+
+        try
+        {
+            await DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "AetherFrame could not clean up after its load was stopped.");
+        }
+
+        throw new OperationCanceledException("AetherFrame stopped loading because it is unloading.", exception, cancellationToken);
     }
 
     /// <summary>
