@@ -49,8 +49,11 @@ internal static class PackageProfileValidator
         void Invalid(string detail) => diagnostics.Error(PackageErrorCode.ProfileInvalid, Damaged, detail);
 
         // ---- structure, before any typed reading.
-        if (raw[nameof(ProfileDocument.Elements)] is { } elementsNode)
+        if (raw.TryGetPropertyValue(nameof(ProfileDocument.Elements), out var elementsNode))
         {
+            // An explicit null is refused with the rest: typed reading would make it an empty
+            // list (so a hand-edited local file still opens), but no build writes one, and a
+            // package is imported as it was made or not at all.
             if (elementsNode is not JsonArray elements)
             {
                 Invalid("Elements is not an array");
@@ -87,6 +90,21 @@ internal static class PackageProfileValidator
                 diagnostics.Error(PackageErrorCode.PackageTooLarge, $"The Plate has too many Components (the limit is {PlateComponentLimits.MaxComponentCount}).",
                     $"{components.Count} components");
                 return null;
+            }
+        }
+
+        // The Basic lists' entries, on the raw JSON: typed reading leaves a null entry out (a
+        // hand-edited local file must still open), so a package holding one — which no build ever
+        // wrote — is refused here, before that reading, rather than quietly trimmed.
+        if (raw[nameof(ProfileDocument.BasicPlate)] is JsonObject basic)
+        {
+            foreach (var list in new[] { nameof(BasicPlateSettings.Playstyles), nameof(BasicPlateSettings.Placements) })
+            {
+                if (basic[list] is JsonArray entries && HasNullEntry(entries))
+                {
+                    Invalid($"{list} holds an empty entry");
+                    return null;
+                }
             }
         }
 
@@ -140,8 +158,10 @@ internal static class PackageProfileValidator
             document = PlateDocuments.Deserialize((JsonObject)raw.DeepClone()) ?? throw new JsonException("empty document");
             PlateDocuments.ApplyLegacyRepairs(document);
         }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException or FormatException or ArgumentException or OverflowException)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException or FormatException or ArgumentException or OverflowException or NullReferenceException)
         {
+            // ArgumentNullException is an ArgumentException; NullReferenceException is what a
+            // null where the model never holds one would surface as, and it is content, not a bug.
             Invalid("unreadable content: " + ex.GetType().Name);
             return null;
         }
@@ -212,6 +232,19 @@ internal static class PackageProfileValidator
             default:
                 return null;
         }
+    }
+
+    private static bool HasNullEntry(JsonArray array)
+    {
+        foreach (var entry in array)
+        {
+            if (entry is null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string? FindNegativeSize(JsonObject raw)
@@ -505,14 +538,9 @@ internal static class PackageProfileValidator
                     Fail("too many section placements");
                 }
 
+                // A null entry never reaches here: the raw JSON was screened for one above.
                 foreach (var placement in placements)
                 {
-                    if (placement is null)
-                    {
-                        Fail("empty section placement");
-                        continue;
-                    }
-
                     Recognized(placement.Role, "section");
                     Rect(placement.Rect);
                 }
