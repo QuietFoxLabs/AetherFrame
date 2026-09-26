@@ -80,10 +80,17 @@ internal static class TemplateDocuments
     /// A fresh, independent envelope from saved JSON, with the embedded document's in-memory
     /// legacy repairs applied (never persisted by this; only an explicit save writes them).
     /// </summary>
-    internal static PlateTemplate Materialize(JsonObject raw)
+    internal static PlateTemplate Materialize(JsonObject raw) => Materialize(raw, out _);
+
+    /// <summary>
+    /// <see cref="Materialize(JsonObject)"/>, reporting whether a value that isn't a number —
+    /// something no build writes — was repaired in the embedded document, so a loader can log it
+    /// (see <see cref="PlateDocuments.ApplyLegacyRepairs(AetherFrame.Domain.Profiles.ProfileDocument, out bool)"/>).
+    /// </summary>
+    internal static PlateTemplate Materialize(JsonObject raw, out bool repairedValues)
     {
         var template = Deserialize(raw) ?? throw new JsonException("Template deserialized to null.");
-        PlateDocuments.ApplyLegacyRepairs(template.Document);
+        PlateDocuments.ApplyLegacyRepairs(template.Document, out repairedValues);
         return template;
     }
 
