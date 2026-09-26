@@ -259,3 +259,242 @@ public class AbandonedLoadTests
         Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
     }
 }
+
+/// <summary>
+/// Once a new Plate's document is written the Plate exists: a binding or index write failing
+/// afterwards is reported for what it is, never as "nothing happened" (which would invite a retry
+/// that creates "Name 2").
+/// </summary>
+public class CreateHalfFailureTests
+{
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateBindingFailure_KeepsThePlate_ListsIt_AndReportsALinkFailure(bool faultAsync)
+    {
+        var store = new FaultInjectingStore { FaultAsync = faultAsync };
+        using var fixture = new LibraryFixture(store);
+        var library = await fixture.LoadAsync();
+        var existing = await library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice);
+        var bindingBefore = fixture.ReadBindingJson(Characters.Alice.ContentId);
+        store.FailWrite = LibraryFiles.IsBinding;
+
+        var refused = await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice, "Half"));
+
+        Assert.Contains("The Plate was created", refused.Message, StringComparison.Ordinal);
+        var created = Assert.Single(library.GetOrderedPlates(), p => p.DisplayName == "Half");
+        Assert.Equal(created.PlateId, library.GetOrderedPlates()[0].PlateId);
+        Assert.True(File.Exists(fixture.Paths.GetPlatePath(created.PlateId)));
+        Assert.Equal([created.PlateId, existing.PlateId], fixture.ReadLibraryOrder());
+
+        // Nothing about the character changed, on disk or in memory.
+        Assert.Equal(bindingBefore, fixture.ReadBindingJson(Characters.Alice.ContentId));
+        Assert.DoesNotContain(created.PlateId, library.GetBinding(Characters.Alice.ContentId)!.PlateIds);
+        Assert.Equal(existing.PlateId, library.GetActivePlateId(Characters.Alice.ContentId));
+        Assert.Empty(created.CharacterNames);
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("could not associate", StringComparison.Ordinal));
+
+        // Set Active afterwards links it like any other Plate; no second copy was ever made.
+        store.FailWrite = null;
+        await library.SetActivePlateAsync(Characters.Alice, created.PlateId);
+        Assert.Equal(2, library.GetOrderedPlates().Count);
+        Assert.Equal(2, Directory.GetFiles(fixture.Paths.PlatesDirectory).Length);
+    }
+
+    [Fact]
+    public async Task CreateBindingFailure_ForACharactersFirstPlate_ReportsNotActive()
+    {
+        var store = new FaultInjectingStore { FailWrite = LibraryFiles.IsBinding };
+        using var fixture = new LibraryFixture(store);
+        var library = await fixture.LoadAsync();
+
+        await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Bob));
+
+        Assert.Single(library.GetOrderedPlates());
+        Assert.Null(library.GetActivePlateId(Characters.Bob.ContentId));
+        Assert.Null(library.GetBinding(Characters.Bob.ContentId));
+        Assert.False(File.Exists(fixture.Paths.GetBindingPath(Characters.Bob.ContentId)));
+    }
+
+    [Fact]
+    public async Task CreateFromTemplateBindingFailure_KeepsTheNewPlate()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new LibraryFixture(store);
+        var library = await fixture.LoadAsync();
+        var template = PlateDocuments.ToJson(SampleDocuments.Rich(Guid.NewGuid(), "Template", fixture.Clock.Now));
+        var templateJson = template.ToJsonString();
+        store.FailWrite = LibraryFiles.IsBinding;
+
+        await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateFromTemplateAsync(template, "From Template", Characters.Alice));
+
+        var created = Assert.Single(library.GetOrderedPlates());
+        Assert.Equal("From Template", created.DisplayName);
+        Assert.Equal(2, library.OpenDocumentForEditing(created.PlateId).Elements.Count);
+        Assert.Equal(templateJson, template.ToJsonString());
+        Assert.False(File.Exists(fixture.Paths.GetBindingPath(Characters.Alice.ContentId)));
+    }
+
+    [Fact]
+    public async Task CreateOrderWriteFailure_KeepsThePlate_AndItIsListedAfterReload()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new LibraryFixture(store);
+        var library = await fixture.LoadAsync();
+        var existing = await library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice);
+        store.FailWrite = LibraryFiles.IsLibrary;
+
+        var created = await library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice, "Unindexed");
+
+        Assert.False(created.BecameActive);
+        Assert.Equal([created.PlateId, existing.PlateId], library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.Contains(created.PlateId, library.GetBinding(Characters.Alice.ContentId)!.PlateIds);
+        Assert.Equal([existing.PlateId], fixture.ReadLibraryOrder());
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("Library order", StringComparison.Ordinal));
+
+        store.FailWrite = null;
+        var reloaded = await fixture.LoadAsync();
+        Assert.Contains(reloaded.GetOrderedPlates(), p => p.PlateId == created.PlateId && p.DisplayName == "Unindexed");
+        Assert.Contains(created.PlateId, fixture.ReadLibraryOrder());
+    }
+
+    [Fact]
+    public async Task CorruptBinding_WhoseRecoveryCopyFails_IsNeverOverwritten()
+    {
+        var store = new FaultInjectingStore { FailCopy = LibraryFiles.IsBinding };
+        using var fixture = new LibraryFixture(store);
+        fixture.WriteBindingJson(Characters.Alice.ContentId, "not json at all");
+        var library = await fixture.LoadAsync();
+
+        await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice));
+        await Assert.ThrowsAsync<IOException>(() => library.SetActivePlateAsync(Characters.Alice, library.GetOrderedPlates()[0].PlateId));
+
+        Assert.Equal("not json at all", fixture.ReadBindingJson(Characters.Alice.ContentId));
+        Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
+        var created = Assert.Single(library.GetOrderedPlates());
+        Assert.True(File.Exists(fixture.Paths.GetPlatePath(created.PlateId)));
+
+        var reloaded = await fixture.LoadAsync();
+        Assert.Equal(created.PlateId, Assert.Single(reloaded.GetOrderedPlates()).PlateId);
+        Assert.Equal("not json at all", fixture.ReadBindingJson(Characters.Alice.ContentId));
+    }
+}
+
+/// <summary>
+/// Startup writes are optional: everything was read before they begin, so a write that fails
+/// leaves the Library loaded and is retried at the next startup — without an index ever claiming a
+/// migration finished that didn't.
+/// </summary>
+public class StartupWriteFailureTests
+{
+    private const ulong Owner = 4242;
+
+    [Fact]
+    public async Task IndexWriteFailure_AtStartup_StillLoads_AndTheNextStartupWritesIt()
+    {
+        var store = new FaultInjectingStore { FailWrite = LibraryFiles.IsLibrary };
+        using var fixture = new LibraryFixture(store);
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        fixture.WritePlateJson(a, JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, a, "A", fixture.Clock.Now), JsonOptions.Default));
+        fixture.WritePlateJson(b, JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, b, "B", fixture.Clock.Now.AddDays(1)), JsonOptions.Default));
+
+        var library = await fixture.LoadAsync();
+
+        Assert.True(library.IsLoaded);
+        Assert.Equal([b, a], library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.False(File.Exists(fixture.Paths.LibraryFile));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("Plate order", StringComparison.Ordinal));
+
+        // Operations work; only the order still can't be saved while the failure persists.
+        var created = await library.CreatePlateAsync(PlateStartingLayout.Blank, null, "C");
+        Assert.Equal([created.PlateId, b, a], library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.False(File.Exists(fixture.Paths.LibraryFile));
+
+        store.FailWrite = null;
+        var reloaded = await fixture.LoadAsync();
+        Assert.Equal(3, reloaded.GetOrderedPlates().Count);
+        Assert.Equal(3, fixture.ReadLibraryOrder().Count);
+    }
+
+    [Fact]
+    public async Task FirstRunMigration_BindingWriteFailure_LoadsButNeverWritesTheIndex()
+    {
+        var store = new FaultInjectingStore { FailWrite = LibraryFiles.IsBinding };
+        using var fixture = new LibraryFixture(store);
+        var profileId = Guid.NewGuid();
+        var legacyBinding = LegacyData.VersionOneBinding(Owner, profileId, profileId);
+        fixture.WritePlateJson(profileId, LegacyData.VersionOneDocument(profileId, Owner));
+        fixture.WriteBindingJson(Owner, legacyBinding);
+
+        var library = await fixture.LoadAsync();
+
+        Assert.True(library.IsLoaded);
+        Assert.Equal(profileId, Assert.Single(library.GetOrderedPlates()).PlateId);
+        Assert.Equal(profileId, library.GetActivePlateId(Owner));
+        Assert.Equal(legacyBinding, fixture.ReadBindingJson(Owner));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains($"{Owner}.json", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
+
+        // No index this session — not even after an operation that normally writes it.
+        Assert.False(File.Exists(fixture.Paths.LibraryFile));
+        await library.CreatePlateAsync(PlateStartingLayout.Blank, null);
+        Assert.False(File.Exists(fixture.Paths.LibraryFile));
+
+        // The next startup migrates again and finishes the job.
+        store.FailWrite = null;
+        var reloaded = await fixture.LoadAsync();
+        Assert.Equal(profileId, reloaded.GetActivePlateId(Owner));
+        Assert.Equal(2, reloaded.GetOrderedPlates().Count);
+        Assert.Equal(2, fixture.ReadBinding(Owner).GetProperty("Version").GetInt32());
+        Assert.Equal(2, fixture.ReadLibraryOrder().Count);
+    }
+
+    [Fact]
+    public async Task LegacyBindingBackupCopyFailure_IsLoggedAndMigrationContinues()
+    {
+        var store = new FaultInjectingStore { FailCopy = LibraryFiles.IsBinding };
+        using var fixture = new LibraryFixture(store);
+        var profileId = Guid.NewGuid();
+        fixture.WritePlateJson(profileId, LegacyData.VersionOneDocument(profileId, Owner));
+        fixture.WriteBindingJson(Owner, LegacyData.VersionOneBinding(Owner, profileId, profileId));
+
+        var library = await fixture.LoadAsync();
+
+        Assert.True(library.IsLoaded);
+        Assert.Equal(profileId, library.GetActivePlateId(Owner));
+        Assert.Equal(2, fixture.ReadBinding(Owner).GetProperty("Version").GetInt32());
+        Assert.Equal([profileId], fixture.ReadLibraryOrder());
+        Assert.False(File.Exists(Path.Combine(fixture.Paths.MigrationBackupDirectory, "Characters", $"{Owner}.json")));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("back up", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DamagedIndex_WhoseRecoveryCopyFails_LoadsReadOnly()
+    {
+        var store = new FaultInjectingStore { FailCopy = LibraryFiles.IsLibrary };
+        using var fixture = new LibraryFixture(store);
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        fixture.WritePlateJson(a, JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, a, "A", fixture.Clock.Now), JsonOptions.Default));
+        fixture.WritePlateJson(b, JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, b, "B", fixture.Clock.Now.AddDays(1)), JsonOptions.Default));
+        fixture.WriteLibraryJson("{{{{ not an index");
+
+        var library = await fixture.LoadAsync();
+
+        Assert.True(library.IsLoaded);
+        Assert.Equal([b, a], library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("Recovery", StringComparison.Ordinal));
+
+        // Reordering works in memory and never writes over the damaged file.
+        await library.MovePlateAsync(a, b, placeAfter: false);
+        Assert.Equal([a, b], library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.Equal("{{{{ not an index", File.ReadAllText(fixture.Paths.LibraryFile));
+        Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
+
+        // Once the copy can be made, the next startup preserves and rebuilds as usual.
+        store.FailCopy = null;
+        await fixture.LoadAsync();
+        Assert.Equal([b, a], fixture.ReadLibraryOrder());
+        Assert.Equal("{{{{ not an index", File.ReadAllText(Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory))));
+    }
+}

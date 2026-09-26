@@ -212,7 +212,9 @@ internal sealed class PlateLibraryService
     /// <paramref name="cancellationToken"/> (like shutdown) only stops a load that hasn't written
     /// anything yet: it's honored while files are being read, never once migration writes begin.
     /// A canceled load throws <see cref="OperationCanceledException"/> and leaves the Library
-    /// unloaded.
+    /// unloaded. A migration write that fails does not: everything was already read, so the
+    /// Library loads and the write is retried at the next startup (a failed binding write also
+    /// keeps the index unwritten, so that startup migrates again rather than believing it done).
     /// </remarks>
     internal Task InitializeAsync(CancellationToken cancellationToken = default) => RunExclusiveAsync(() => InitializeCoreAsync(cancellationToken));
 
@@ -284,7 +286,8 @@ internal sealed class PlateLibraryService
         }
 
         // Bindings before the index: the index is written last so its existence marks a
-        // completed migration (see class doc).
+        // completed migration (see class doc). Every document is already in memory, so a failed
+        // write here never fails the load — it only decides what the next startup retries.
         foreach (var contentId in bindingsToWrite)
         {
             CharacterBinding? binding;
@@ -293,15 +296,39 @@ internal sealed class PlateLibraryService
                 bindings.TryGetValue(contentId, out binding);
             }
 
-            if (binding is not null)
+            if (binding is null)
+            {
+                continue;
+            }
+
+            try
             {
                 await WriteBindingAsync(binding).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!IsLoadInterruption(ex))
+            {
+                // Writing the index now would mark the migration complete with this character's
+                // legacy associations still only in memory, so the index stays unwritten this
+                // session and the next startup migrates again (idempotently).
+                log.Error(ex, $"AetherFrame loaded the Plate Library but could not write character binding {Path.GetFileName(paths.GetBindingPath(contentId))}; the migration will be retried at the next startup.");
+                lock (gate)
+                {
+                    libraryWritable = false;
+                }
             }
         }
 
         if (writeLibrary)
         {
-            await WriteLibraryAsync().ConfigureAwait(false);
+            try
+            {
+                await WriteLibraryAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!IsLoadInterruption(ex))
+            {
+                // Purely derived from the Plates: the next startup rebuilds and writes it again.
+                log.Error(ex, "AetherFrame loaded the Plate Library but could not save the Plate order; it will be retried at the next startup.");
+            }
         }
 
         lock (gate)
@@ -455,15 +482,28 @@ internal sealed class PlateLibraryService
         catch (Exception ex) when (IsContentDamage(ex))
         {
             log.Error(ex, "AetherFrame's Plate order is damaged; rebuilding it from the saved Plates (the damaged file is kept in Recovery).");
-            PreserveDamagedFile(paths.LibraryFile);
+
+            // Without a Recovery copy the damaged file is never written over: the rebuilt order
+            // then serves this session in memory only, like a newer-version index.
+            bool preserved;
+            try
+            {
+                PreserveDamagedFile(paths.LibraryFile);
+                preserved = true;
+            }
+            catch (Exception copyFailure) when (!IsLoadInterruption(copyFailure))
+            {
+                log.Error(copyFailure, "AetherFrame could not keep a copy of the damaged Plate order in Recovery; the file is left untouched for this session.");
+                preserved = false;
+            }
 
             lock (gate)
             {
                 library = new PlateLibraryState { OrderedPlateIds = PlateOrdering.BuildInitialOrder(ExistingPlatesLocked()) };
-                libraryWritable = true;
+                libraryWritable = preserved;
             }
 
-            return true;
+            return preserved;
         }
         catch (Exception ex) when (!IsLoadInterruption(ex))
         {
@@ -606,7 +646,10 @@ internal sealed class PlateLibraryService
     /// first in the Library, and applies the usual character-association rules — associated with
     /// <paramref name="character"/> if given, and Active only if this is that character's very
     /// first Plate (never otherwise). Callers must already hold no lock and must have resolved
-    /// <paramref name="raw"/>'s final content; this only ever writes and indexes it.
+    /// <paramref name="raw"/>'s final content; this only ever writes and indexes it. Once the
+    /// document is written the Plate exists whatever happens next: a failed binding write (or a
+    /// binding this session can't write) is reported as a <see cref="PlateLibraryException"/> that
+    /// says so, after the index was still attempted; a failed index write is only logged.
     /// </summary>
     private async Task<PlateCreationResult> InsertNewPlateAsync(Guid plateId, JsonObject raw, CharacterContext? character, DateTime now)
     {
@@ -641,7 +684,18 @@ internal sealed class PlateLibraryService
                     }
                 }
 
-                await CommitBindingAsync(binding).ConfigureAwait(false);
+                try
+                {
+                    await CommitBindingAsync(binding).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!IsLoadInterruption(ex))
+                {
+                    // The write didn't land, so memory still holds the old binding (nothing Active
+                    // changed); the Plate itself is on disk and listed.
+                    becameActive = false;
+                    log.Error(ex, $"AetherFrame created Plate {plateId} but could not associate it with a character.");
+                    linkFailure = "The Plate was created, but it couldn't be linked to your character.";
+                }
             }
             else if (refusal == BindingRefusal.Unavailable)
             {
@@ -651,7 +705,15 @@ internal sealed class PlateLibraryService
             }
         }
 
-        await WriteLibraryAsync().ConfigureAwait(false);
+        try
+        {
+            await WriteLibraryAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!IsLoadInterruption(ex))
+        {
+            // The Plate is saved and listed; only its position isn't, and startup re-lists it.
+            log.Error(ex, $"AetherFrame created Plate {plateId} but could not save the Library order.");
+        }
 
         if (linkFailure is not null)
         {
