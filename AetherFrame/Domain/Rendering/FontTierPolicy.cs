@@ -17,10 +17,12 @@ namespace AetherFrame.Domain.Rendering;
 /// a 96 px text to the editor's maximum. This policy bounds that in three ways:
 ///
 /// <list type="bullet">
-/// <item>The bundled families are built with explicit <see cref="GlyphRanges"/> (Latin, Latin
-/// Extended, General Punctuation, Cyrillic) instead of every glyph their TTF maps, which
-/// removes the box-drawing, symbol and legacy glyphs Cousine carries and nearly triples the
-/// size Mono can reach for the same surface.</item>
+/// <item>The bundled families are built with explicit <see cref="GlyphRanges"/> — the scripts
+/// and symbols a Plate's text can plausibly hold (Latin with its extensions, Greek, Cyrillic,
+/// Hebrew, punctuation, currency, arrows, mathematical and common symbols) — instead of every
+/// glyph their TTF maps, which leaves out the phonetic alphabets, combining marks, box drawing
+/// and presentation forms Cousine also carries: a third of its surface, and one tier of the
+/// size Mono can reach for the same budget.</item>
 /// <item>Each family has a largest tier (<see cref="MaxTierIndex"/>) chosen so that a single
 /// tier's <see cref="EstimatedSurfacePixels"/> stays under <see cref="SingleTierBudgetPixels"/>.
 /// A request above it uses the largest allowed tier, exactly as a request above the ladder's top
@@ -82,37 +84,54 @@ internal static class FontTierPolicy
 
     /// <summary>
     /// The glyph ranges every bundled family is built with, in ImGui's format (inclusive pairs,
-    /// zero-terminated): Basic Latin, Latin-1 Supplement, Latin Extended-A and -B, Cyrillic and
-    /// General Punctuation. Covers everything AetherFrame itself writes into a Plate (see
-    /// <c>BasicPlateText</c>, <c>IdentityHeaderRules.DecorationSymbols</c>) and the text
-    /// Latin- and Cyrillic-script players type; the bundled TTFs map nothing useful beyond it
-    /// that the fonts share (none of them carries the Dingbats such as U+2726).
+    /// zero-terminated): whole Unicode blocks, so that everything a Latin-, Greek-, Cyrillic- or
+    /// Hebrew-script player types, everything AetherFrame itself writes into a Plate (see
+    /// <c>BasicPlateText</c>, <c>IdentityHeaderRules.DecorationSymbols</c>) and the symbols 0.1.5
+    /// rendered from these faces (€, ™, №, →, ≠, ♥, the fi/fl ligatures, …) stay covered. Left
+    /// out, deliberately: IPA and phonetic extensions, combining marks, Greek Extended, box
+    /// drawing and block elements, Hebrew presentation forms and the fonts' private-use
+    /// alternates (the exclusion test lists them), none of which a Plate needs; no bundled face
+    /// carries the Dingbats such as U+2726 either.
     /// </summary>
     private static readonly ushort[] BundledGlyphRanges =
     [
-        0x0020, 0x007F,
-        0x00A0, 0x00FF,
-        0x0100, 0x017F,
-        0x0180, 0x024F,
-        0x0400, 0x04FF,
-        0x2000, 0x206F,
+        0x0020, 0x007F, // Basic Latin
+        0x00A0, 0x00FF, // Latin-1 Supplement
+        0x0100, 0x017F, // Latin Extended-A
+        0x0180, 0x024F, // Latin Extended-B
+        0x02B0, 0x02FF, // Spacing Modifier Letters (ʼ, ˆ, ˇ, …)
+        0x0370, 0x03FF, // Greek and Coptic
+        0x0400, 0x04FF, // Cyrillic
+        0x0500, 0x052F, // Cyrillic Supplement
+        0x0590, 0x05FF, // Hebrew
+        0x1E00, 0x1EFF, // Latin Extended Additional (Vietnamese, ẞ)
+        0x2000, 0x206F, // General Punctuation
+        0x2070, 0x209F, // Superscripts and Subscripts
+        0x20A0, 0x20CF, // Currency Symbols
+        0x2100, 0x218F, // Letterlike Symbols, Number Forms
+        0x2190, 0x21FF, // Arrows
+        0x2200, 0x22FF, // Mathematical Operators
+        0x25A0, 0x25FF, // Geometric Shapes
+        0x2600, 0x26FF, // Miscellaneous Symbols
+        0xFB00, 0xFB06, // Latin ligatures (ﬁ, ﬂ)
         0,
     ];
 
     /// <summary>
     /// Per-family surface model: <c>Glyphs × (Scale × size + Padding)²</c> pixels for a tier of
     /// <c>size</c> px, where Glyphs is the number of codepoints in <see cref="BundledGlyphRanges"/>
-    /// the family's TTFs map and Scale the average glyph box side per pixel of size, fitted to
-    /// the heaviest face (Bold Italic) so the estimate is never below the real surface of any
-    /// face at any ladder size.
+    /// the family's TTFs map (the most any of its faces does: PT Serif Bold carries four more
+    /// than its Regular) and Scale the average glyph box side per pixel of size, fitted to the
+    /// heaviest face (Bold Italic) so the estimate is never below the real surface of any face
+    /// at any ladder size.
     /// </summary>
     private readonly record struct SurfaceModel(int Glyphs, double Scale);
 
     private const double PaddingPixels = 2d;
 
-    private static readonly SurfaceModel SansModel = new(526, 0.476);
-    private static readonly SurfaceModel SerifModel = new(526, 0.504);
-    private static readonly SurfaceModel MonoModel = new(825, 0.558);
+    private static readonly SurfaceModel SansModel = new(608, 0.475);
+    private static readonly SurfaceModel SerifModel = new(612, 0.500);
+    private static readonly SurfaceModel MonoModel = new(1488, 0.541);
 
     /// <summary>
     /// The flat charge for one Dalamud Default tier, whose real glyph set is unknowable here
@@ -160,7 +179,8 @@ internal static class FontTierPolicy
     }
 
     /// <summary>The number of codepoints in <see cref="GlyphRanges"/> a bundled family's faces
-    /// map, i.e. how many glyphs each of its tiers rasterizes; 0 for Dalamud Default.</summary>
+    /// map (its heaviest face; the others map at most a few fewer), i.e. how many glyphs a tier
+    /// of it rasterizes; 0 for Dalamud Default.</summary>
     internal static int GlyphCount(string? familyId) => ResolveFamilyId(familyId) switch
     {
         ProfileFontFamilies.AetherFrameSans => SansModel.Glyphs,

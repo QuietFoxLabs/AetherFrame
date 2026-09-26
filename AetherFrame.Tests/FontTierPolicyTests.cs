@@ -94,8 +94,8 @@ public class FontTierPolicyTests
         // Derived from the budget and the calibrated models below; a change here is a change in
         // what zoom level starts upscaling, and should be deliberate.
         Assert.Equal(280f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameSans));
-        Assert.Equal(280f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameSerif));
-        Assert.Equal(210f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono));
+        Assert.Equal(240f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameSerif));
+        Assert.Equal(160f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono));
         Assert.Equal(TextProfileElement.MaxFontSize, FontTierPolicy.MaxTierSize(ProfileFontFamilies.DalamudDefault));
         Assert.Equal(12_000_000L, FontTierPolicy.SingleTierBudgetPixels);
         Assert.Equal(16L * 4096 * 4096, FontTierPolicy.AtlasBudgetPixels);
@@ -274,15 +274,16 @@ public class FontTierPolicyTests
     // ---- Calibration against the bundled TTFs -----------------------------------------------
 
     [Fact]
-    public void GlyphCount_IsWhatEachFaceMapsInsideTheRanges()
+    public void GlyphCount_IsWhatTheFamilysHeaviestFaceMapsInsideTheRanges()
     {
         foreach (var (family, prefix) in FamilyFiles)
         {
-            foreach (var suffix in FaceSuffixes)
-            {
-                var face = TrueTypeFace.Load(FontPath(prefix, suffix));
-                Assert.Equal(FontTierPolicy.GlyphCount(family), face.CountMapped(FontTierPolicy.CoversCodepoint));
-            }
+            var counts = FaceSuffixes.Select(suffix => TrueTypeFace.Load(FontPath(prefix, suffix)).CountMapped(FontTierPolicy.CoversCodepoint)).ToList();
+            Assert.Equal(counts.Max(), FontTierPolicy.GlyphCount(family));
+
+            // The faces of a family map the same set bar a handful (PT Serif Bold carries four
+            // more), so one count per family is an honest bound for all of them.
+            Assert.All(counts, count => Assert.InRange(count, FontTierPolicy.GlyphCount(family) - 4, FontTierPolicy.GlyphCount(family)));
         }
     }
 
@@ -309,15 +310,19 @@ public class FontTierPolicyTests
     }
 
     [Fact]
-    public void ExplicitRanges_CutMonoToWellUnderHalfOfItsFullCmap()
+    public void ExplicitRanges_LeaveOutAThirdOfMonosFullCmap()
     {
-        // The reason Mono can reach 210 px: without ranges Dalamud builds every glyph Cousine
-        // maps (over 2200), most of them box-drawing and symbols no Plate can show.
+        // The reason Mono reaches 160 px rather than 140: without ranges Dalamud builds every
+        // glyph Cousine maps (over 2200), the phonetic alphabets, combining marks and box drawing
+        // among them, and the full set would not fit the single-tier budget at the cap.
         var face = TrueTypeFace.Load(FontPath("Cousine", "Regular"));
-        var full = face.Surface(FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono), _ => true);
-        var ranged = face.Surface(FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono), FontTierPolicy.CoversCodepoint);
+        var cap = FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono);
+        var full = face.Surface(cap, _ => true);
+        var ranged = face.Surface(cap, FontTierPolicy.CoversCodepoint);
         Assert.True(face.CountMapped(_ => true) > 2000);
-        Assert.True(ranged * 2 < full, $"ranged {ranged / 1e6:F1} Mpx vs full {full / 1e6:F1} Mpx");
+        Assert.True(ranged * 4 < full * 3, $"ranged {ranged / 1e6:F1} Mpx vs full {full / 1e6:F1} Mpx");
+        Assert.True(full > FontTierPolicy.SingleTierBudgetPixels, $"the full cmap fits the budget at {cap} px ({full / 1e6:F1} Mpx)");
+        Assert.True(ranged <= FontTierPolicy.SingleTierBudgetPixels);
     }
 
     // ---- Glyph ranges -----------------------------------------------------------------------
@@ -348,6 +353,94 @@ public class FontTierPolicyTests
         Assert.True(FontTierPolicy.CoversCodepoint('…')); // ellipsis
         Assert.False(FontTierPolicy.CoversCodepoint(0x2500)); // box drawing
         Assert.False(FontTierPolicy.CoversCodepoint(0x4E2D)); // CJK
+    }
+
+    [Theory]
+    [InlineData(0x00B2, "superscript two")]
+    [InlineData(0x02BC, "modifier letter apostrophe (Ukrainian)")]
+    [InlineData(0x03A9, "Greek capital omega")]
+    [InlineData(0x0524, "Cyrillic Supplement")]
+    [InlineData(0x05D0, "Hebrew alef")]
+    [InlineData(0x1EAF, "Vietnamese a with breve and acute")]
+    [InlineData(0x1E9E, "capital sharp s")]
+    [InlineData(0x2082, "subscript two")]
+    [InlineData(0x20AC, "euro sign")]
+    [InlineData(0x2116, "numero sign")]
+    [InlineData(0x2122, "trade mark sign")]
+    [InlineData(0x2153, "vulgar fraction one third")]
+    [InlineData(0x2192, "rightwards arrow")]
+    [InlineData(0x2260, "not equal to")]
+    [InlineData(0x221E, "infinity")]
+    [InlineData(0x25CF, "black circle")]
+    [InlineData(0x2665, "black heart suit")]
+    [InlineData(0x266A, "eighth note")]
+    [InlineData(0xFB01, "fi ligature")]
+    public void GlyphRanges_KeepWhat015Rendered(int codepoint, string what)
+    {
+        // Every one of these is mapped by at least one bundled face and was rasterized by 0.1.5,
+        // which built the faces with their whole cmap; the ranges must not lose them.
+        Assert.True(FontTierPolicy.CoversCodepoint(codepoint), $"U+{codepoint:X4} ({what}) is outside the glyph ranges");
+        Assert.Contains(FamilyFiles, f => TrueTypeFace.Load(FontPath(f.FilePrefix, "Regular")).Maps(codepoint));
+    }
+
+    [Theory]
+    [InlineData(0x0259, "IPA schwa")]
+    [InlineData(0x0301, "combining acute accent")]
+    [InlineData(0x1D00, "phonetic extensions")]
+    [InlineData(0x1F00, "Greek Extended")]
+    [InlineData(0x2500, "box drawing")]
+    [InlineData(0x2588, "block elements")]
+    [InlineData(0x2726, "Dingbats (no face maps it)")]
+    [InlineData(0xF500, "private use alternates")]
+    [InlineData(0xFB1D, "Hebrew presentation forms")]
+    [InlineData(0xFEFF, "byte order mark")]
+    public void GlyphRanges_LeaveOutWhatNoPlateNeeds(int codepoint, string what)
+    {
+        Assert.False(FontTierPolicy.CoversCodepoint(codepoint), $"U+{codepoint:X4} ({what}) is inside the glyph ranges");
+    }
+
+    [Fact]
+    public void EveryGlyphAFaceMapsOutsideTheRanges_IsInADeliberatelyExcludedBlock()
+    {
+        // The ranges are whole blocks chosen by hand; this pins what they leave out, so a font
+        // swap or a block change is a visible decision rather than a silent loss of glyphs.
+        var excluded = new (int From, int To, string Block)[]
+        {
+            (0x0000, 0x001F, "C0 controls"),
+            (0x0250, 0x02AF, "IPA Extensions"),
+            (0x0300, 0x036F, "Combining Diacritical Marks"),
+            (0x1D00, 0x1DFF, "Phonetic Extensions and their supplement, Combining Diacritical Marks Supplement"),
+            (0x1F00, 0x1FFF, "Greek Extended"),
+            (0x20D0, 0x20FF, "Combining Diacritical Marks for Symbols"),
+            (0x2300, 0x23FF, "Miscellaneous Technical"),
+            (0x2500, 0x259F, "Box Drawing, Block Elements"),
+            (0x2C60, 0x2C7F, "Latin Extended-C"),
+            (0x2E00, 0x2E7F, "Supplemental Punctuation"),
+            (0xA640, 0xA69F, "Cyrillic Extended-B"),
+            (0xA700, 0xA7FF, "Modifier Tone Letters, Latin Extended-D"),
+            (0xAB30, 0xAB6F, "Latin Extended-E"),
+            (0xE000, 0xF8FF, "Private Use Area (the fonts' stylistic alternates)"),
+            (0xFB07, 0xFB4F, "Alphabetic Presentation Forms beyond the Latin ligatures"),
+            (0xFE00, 0xFE2F, "Variation Selectors, Combining Half Marks"),
+            (0xFEFF, 0xFEFF, "byte order mark"),
+        };
+
+        var outside = 0;
+        foreach (var (_, prefix) in FamilyFiles)
+        {
+            foreach (var suffix in FaceSuffixes)
+            {
+                var face = TrueTypeFace.Load(FontPath(prefix, suffix));
+                foreach (var codepoint in face.MappedCodepoints.Where(c => !FontTierPolicy.CoversCodepoint(c)))
+                {
+                    outside++;
+                    Assert.True(excluded.Any(b => codepoint >= b.From && codepoint <= b.To),
+                        $"{prefix}-{suffix} maps U+{codepoint:X4} outside the glyph ranges and outside every deliberately excluded block");
+                }
+            }
+        }
+
+        Assert.True(outside > 1000, "the exclusions are meant to cost Cousine a third of its cmap");
     }
 
     [Fact]
@@ -443,6 +536,8 @@ public class FontTierPolicyTests
         }
 
         internal bool Maps(int codepoint) => codepointToGlyph.ContainsKey(codepoint);
+
+        internal IEnumerable<int> MappedCodepoints => codepointToGlyph.Keys;
 
         internal int CountMapped(Func<int, bool> include) => codepointToGlyph.Keys.Count(include);
 
