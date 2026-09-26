@@ -371,21 +371,24 @@ internal sealed class BasicIdentitySession
             return; // Still waiting for the font; try again next frame.
         }
 
+        if (profileService.IsBusy)
+        {
+            // A save is being written (the amend would refuse it): the refinement is still owed,
+            // so try again once it is done. Decided before the amend rather than after it: a save
+            // finishing in between would otherwise read as "refused for another reason" and the
+            // owed refinement would be dropped.
+            return;
+        }
+
+        // Refused now means that layout edit is no longer the latest history entry (or the Plate
+        // stopped being editable meanwhile): nothing left to refine.
         refineNeeded = false;
-        var amended = editorSession.AmendLastDocumentEdit(() =>
+        editorSession.AmendLastDocumentEdit(() =>
         {
             var context = new EditContext(this, profile);
             context.RequestLayout(force: false);
             context.Finish();
         });
-
-        if (!amended && profileService.IsBusy)
-        {
-            // Refused because a save is being written: the refinement is still owed, so try again
-            // once it is done. Refused for any other reason, that layout edit is no longer the
-            // latest history entry and there is nothing left to refine.
-            refineNeeded = true;
-        }
     }
 
     // ---------------------------------------------------------------- internals

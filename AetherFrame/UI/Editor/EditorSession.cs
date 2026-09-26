@@ -605,6 +605,7 @@ internal sealed partial class EditorSession
 
         if (savedBaseline is not { } baseline)
         {
+            ErrorMessage = profileService.CurrentProfile is null ? "No Plate is open." : BaselineFailedMessage;
             return false;
         }
 
