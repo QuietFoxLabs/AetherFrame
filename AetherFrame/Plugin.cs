@@ -375,7 +375,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         /// <summary>Never throws: failing to remember the flag only means the suggestion may show again.</summary>
         public void Save()
         {
-            configuration.Version = PluginConfiguration.CurrentVersion;
+            // A configuration saved by a newer version keeps its version (and, through the
+            // extension data, its settings): it is still that version's file, only with this flag.
+            configuration.Version = Math.Max(configuration.Version, PluginConfiguration.CurrentVersion);
             try
             {
                 PluginInterface.SavePluginConfig(configuration);
