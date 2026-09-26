@@ -1179,9 +1179,12 @@ internal sealed class PlateLibraryService
                         problems.Add($"Trashed Plate {Path.GetFileName(path)} was saved by a newer version.");
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!IsLoadInterruption(ex))
                 {
-                    problems.Add($"Trashed Plate {Path.GetFileName(path)} is unreadable: {ex.Message}");
+                    // Problems can reach the player (a blocked cleanup quotes them), so the
+                    // failure's text — which may name a local path — stays in the log.
+                    log.Error(ex, $"AetherFrame could not read trashed Plate {Path.GetFileName(path)} while scanning image references.");
+                    problems.Add($"Trashed Plate {Path.GetFileName(path)} is unreadable ({ex.GetType().Name}).");
                 }
             }
 

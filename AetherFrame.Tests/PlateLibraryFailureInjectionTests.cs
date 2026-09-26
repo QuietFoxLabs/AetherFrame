@@ -428,6 +428,32 @@ public class ImportLateFailureTests
     }
 }
 
+/// <summary>The image reference scan's problems can be quoted to the player, so they never carry a path.</summary>
+public class AssetScanProblemTests
+{
+    [Fact]
+    public async Task LibraryScan_Problems_NeverContainLocalPaths()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new LibraryFixture(store);
+        var library = await fixture.LoadAsync();
+        var trashed = await library.CreatePlateAsync(PlateStartingLayout.Blank, null, "Trashed");
+        await library.DeletePlateAsync(trashed.PlateId);
+        store.FailRead = LibraryFiles.IsTrashedPlate;
+        store.FaultFactory = path => new IOException($"The process cannot access the file 'C:\\Users\\Someone\\AppData\\{Path.GetFileName(path)}' ({path}).");
+
+        var scan = await library.ScanAssetReferencesAsync();
+
+        Assert.False(scan.IsComplete);
+        var problem = Assert.Single(scan.Problems);
+        Assert.Contains($"{trashed.PlateId}.deleted-", problem, StringComparison.Ordinal);
+        Assert.Contains("IOException", problem, StringComparison.Ordinal);
+        Assert.All(scan.Problems, p => Assert.False(AetherFrame.Services.Diagnostics.UserFacingError.ContainsPath(p), p));
+        Assert.All(scan.Problems, p => Assert.DoesNotContain(fixture.Root, p, StringComparison.Ordinal));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("scanning", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
+    }
+}
+
 /// <summary>A load that unloading stops between (or inside) two files has found nothing wrong.</summary>
 public class AbandonedLoadTests
 {
