@@ -24,6 +24,9 @@ internal sealed class AssetStorageService
 {
     private const int CopyBufferSize = 81920;
 
+    /// <summary>The suffix of the file an import copies into while it is still unverified.</summary>
+    private const string StagingSuffix = ".importing";
+
     private readonly string directory;
     private readonly string stagingDirectory;
     private readonly AssetMetadataStore metadataStore;
@@ -98,7 +101,7 @@ internal sealed class AssetStorageService
         Directory.CreateDirectory(stagingDirectory);
 
         var assetId = Guid.NewGuid();
-        var stagingPath = Path.Combine(stagingDirectory, assetId.ToString("N") + ".importing");
+        var stagingPath = GetStagingPath(assetId);
         var destinationPath = Path.Combine(directory, assetId.ToString("N") + inspection!.Extension);
 
         try
@@ -136,6 +139,23 @@ internal sealed class AssetStorageService
     /// is stored. Never overwrites: refuses if any file for that id already exists. Returns the
     /// created file's path, which is all <see cref="RemoveImportedAsset"/> may later remove.
     /// Throws <see cref="InvalidOperationException"/> (player-facing) or an IO exception.
+    ///
+    /// There is no import-time de-duplication: identical bytes imported twice are two assets, and
+    /// every id in storage was minted by exactly one import. Anything that ever reuses an existing
+    /// asset for matching content has to keep these invariants, which the rollback path and the
+    /// asset cleanup rely on: (1) a reused id never goes into the importer's list of created
+    /// files, so a failed commit can't remove an image that existed before (and
+    /// <see cref="RemoveImportedAsset"/> refuses ids this service didn't mint); (2) a match is
+    /// proven by re-hashing the existing FILE, never by trusting its metadata sidecar; (3) the
+    /// reused id is added to <see cref="ImportedThisSession"/>, so cleanup treats it as protected
+    /// although its file timestamps are old; (4) only an id <see cref="ResolveAssetPath"/>
+    /// resolves counts — a trashed asset doesn't, and reusing one would collide with its restore;
+    /// (5) the package-id to local-id remap stays the one mapping the prepared profile, the
+    /// preview and the commit all share; (6) an older asset may sit under an extension that
+    /// doesn't match its content (".jpeg", ".JPG", or a plain mismatch), so a reuse needs the
+    /// content-derived extension to match too; (7) undo history and unsaved editor documents
+    /// already reference existing ids, and Replace Image with Undo relies on the old and the new
+    /// image being distinct files, so a rollback must never delete a reused id.
     /// </summary>
     internal string AddValidatedPackageImage(string stagedFilePath, Guid assetId, string expectedSha256, string originalFileName)
     {
@@ -147,7 +167,7 @@ internal sealed class AssetStorageService
         Directory.CreateDirectory(directory);
         Directory.CreateDirectory(stagingDirectory);
 
-        var stagingPath = Path.Combine(stagingDirectory, assetId.ToString("N") + ".importing");
+        var stagingPath = GetStagingPath(assetId);
         try
         {
             var (byteLength, sha256) = CopyAndHash(stagedFilePath, stagingPath);
@@ -182,11 +202,20 @@ internal sealed class AssetStorageService
     /// <summary>
     /// Rolls back one <see cref="AddValidatedPackageImage"/>: deletes exactly the file it created
     /// (and that asset's metadata), and nothing else. Only ever called for an id minted by the
-    /// same import, so it can never touch an image that existed before.
+    /// same import, and enforced as such: an id this service didn't import in this session is
+    /// refused with <see cref="InvalidOperationException"/>, as is a path outside managed
+    /// storage or not named after the id, so it can never touch an image that existed before.
     /// </summary>
     internal void RemoveImportedAsset(Guid assetId, string createdPath)
     {
-        if (Path.GetFileNameWithoutExtension(createdPath) != assetId.ToString("N")
+        bool mintedHere;
+        lock (gate)
+        {
+            mintedHere = importedThisSession.Contains(assetId);
+        }
+
+        if (!mintedHere
+            || Path.GetFileNameWithoutExtension(createdPath) != assetId.ToString("N")
             || !string.Equals(Path.GetDirectoryName(Path.GetFullPath(createdPath)), Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Refusing to remove a file that isn't this import's managed image.");
@@ -201,6 +230,63 @@ internal sealed class AssetStorageService
         {
             log.Warning($"AetherFrame could not remove metadata for a rolled-back image ({ex.GetType().Name}).");
         }
+    }
+
+    /// <summary>
+    /// Deletes "{guid:N}.importing" files an interrupted import left in the staging directory (the
+    /// game crashing or being killed mid-copy; a completed or failed import removes its own). Only
+    /// files with exactly that name, directly in the staging directory, are ever removed — never a
+    /// folder, never anything in managed storage — so no referenced, unsaved or in-progress asset
+    /// can be affected. Meant to run once at plugin load, beside the package staging sweep, before
+    /// any UI can start an import, so it never races a copy in progress. Failures are logged and
+    /// otherwise ignored: a leftover is only wasted disk space.
+    /// </summary>
+    internal void SweepStaging()
+    {
+        string[] files;
+        try
+        {
+            if (!Directory.Exists(stagingDirectory))
+            {
+                return;
+            }
+
+            files = Directory.GetFiles(stagingDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Warning($"AetherFrame could not look for old temporary image files ({ex.GetType().Name}).");
+            return;
+        }
+
+        foreach (var path in files)
+        {
+            if (!IsStagingFileName(Path.GetFileName(path)))
+            {
+                continue;
+            }
+
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                log.Warning($"AetherFrame could not remove an old temporary image file ({ex.GetType().Name}).");
+            }
+        }
+    }
+
+    /// <summary>Exactly what <see cref="GetStagingPath"/> produces: 32 lowercase hex digits and the suffix.</summary>
+    internal static bool IsStagingFileName(string fileName)
+    {
+        if (!fileName.EndsWith(StagingSuffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var stem = fileName[..^StagingSuffix.Length];
+        return Guid.TryParseExact(stem, "N", out var id) && id.ToString("N") == stem;
     }
 
     /// <summary>Resolves an asset id to its file on disk, or null if it's missing/unreadable.</summary>
@@ -257,9 +343,11 @@ internal sealed class AssetStorageService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Metadata is derived and can be recreated later; the import itself succeeded.
-            log.Warning($"AetherFrame imported asset {assetId} but could not store its metadata: {ex.Message}");
+            log.Warning($"AetherFrame imported asset {assetId} but could not store its metadata ({ex.GetType().Name}).");
         }
     }
+
+    private string GetStagingPath(Guid assetId) => Path.Combine(stagingDirectory, assetId.ToString("N") + StagingSuffix);
 
     /// <summary>One read of the source: copies it and hashes the copied bytes, refusing to copy
     /// more than the size limit (in case the file grew after it was inspected).</summary>
@@ -299,7 +387,7 @@ internal sealed class AssetStorageService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            log.Warning($"AetherFrame could not remove a temporary import file: {ex.Message}");
+            log.Warning($"AetherFrame could not remove a temporary import file ({ex.GetType().Name}).");
         }
     }
 }

@@ -223,6 +223,46 @@ public class AssetImportTests
         Assert.Empty(fixture.Storage.ListAssets());
     }
 
+    /// <summary>
+    /// A package image is copied before it is re-inspected, and the copy refuses to go past the
+    /// size limit, so a file that grew past it fails in the middle of the copy: the half-written
+    /// staging file must not survive, and nothing must reach managed storage.
+    /// </summary>
+    [Fact]
+    public void Import_FailingMidCopy_LeavesNoStagingFile()
+    {
+        using var fixture = new Fixture();
+        var source = TestImages.Write(fixture.SourceDirectory, "grown.png", TestImages.Png(64, 48));
+        using (var stream = new FileStream(source, FileMode.Open))
+        {
+            stream.SetLength(ImageSafety.MaxFileBytes + 1);
+        }
+
+        var assetId = Guid.NewGuid();
+        var error = Assert.Throws<InvalidOperationException>(() => fixture.Storage.AddValidatedPackageImage(source, assetId, new string('0', 64), "grown.png"));
+
+        Assert.Contains("too large", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(fixture.Paths.AssetStagingDirectory));
+        Assert.Null(fixture.Storage.ResolveAssetPath(assetId));
+        Assert.Empty(fixture.Storage.ListAssets());
+        Assert.False(File.Exists(fixture.Metadata.GetPath(assetId)));
+        Assert.DoesNotContain(assetId, fixture.Storage.ImportedThisSession);
+    }
+
+    [Fact]
+    public void Import_WhenStorageCannotBeCreated_LeavesNoStagingFile()
+    {
+        using var fixture = new Fixture();
+        var source = TestImages.Write(fixture.SourceDirectory, "fine.png", TestImages.Png(4, 4));
+        Directory.CreateDirectory(fixture.Paths.Root);
+        File.WriteAllText(fixture.Paths.AssetsDirectory, "in the way");
+
+        Assert.Throws<IOException>(() => fixture.Storage.ImportImage(source));
+
+        Assert.False(Directory.Exists(fixture.Paths.AssetStagingDirectory) && Directory.GetFiles(fixture.Paths.AssetStagingDirectory).Length > 0);
+        Assert.Empty(fixture.Storage.ImportedThisSession);
+    }
+
     [Fact]
     public void Import_RespectsTheDecoderSupportList()
     {
