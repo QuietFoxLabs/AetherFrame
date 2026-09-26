@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -43,6 +44,26 @@ public class JsonNullToleranceTests
         Assert.Null(settings.GetPlacement(ProfileElementRole.BasicPortrait));
         Assert.True(settings.ContentEquals(settings.Clone()));
         Assert.Equal("8 PM - 11 PM", BasicPlateText.TimeRange(settings.ActiveHours));
+    }
+
+    [Fact]
+    public void BasicSettings_WithNullListEntries_DropsThem_AndKeepsTheRest()
+    {
+        const string json = """{ "Playstyles": ["a", null, "b"], "Placements": [null, { "Role": 4, "Rect": { "Position": { "X": 1, "Y": 2 }, "Size": { "X": 3, "Y": 4 } } }, null] }""";
+
+        var settings = JsonSerializer.Deserialize<BasicPlateSettings>(json, JsonOptions.Default)!;
+
+        Assert.Equal(["a", "b"], settings.Playstyles);
+        var placement = Assert.Single(settings.Placements);
+        Assert.Equal(ProfileElementRole.BasicMessage, placement.Role);
+        Assert.Equal(new ElementRect(new(1f, 2f), new(3f, 4f)), settings.GetPlacement(ProfileElementRole.BasicMessage));
+        Assert.True(settings.ContentEquals(settings.Clone()));
+        Assert.Equal("a  ·  b", BasicPlateText.Playstyles(settings.Playstyles));
+
+        // A list without null entries is kept as the very instance assigned, never copied.
+        var intact = new List<string> { "x" };
+        settings.Playstyles = intact;
+        Assert.Same(intact, settings.Playstyles);
     }
 
     [Fact]
@@ -162,6 +183,33 @@ public class JsonNullToleranceTests
         var state = ProfileService.DocumentState.Capture(profiles.CurrentProfile!);
         Assert.True(state.BasicPlate!.ContentEquals(profiles.CurrentProfile!.BasicPlate));
         Assert.Null(profiles.CurrentProfile!.BasicPlate!.GetPlacement(ProfileElementRole.BasicPortrait));
+    }
+
+    [Fact]
+    public async Task LocalPlate_WithNullListEntries_LoadsReady_OpensInBasic_AndSavesWithoutThem()
+    {
+        var document = BasicDocuments.Classic(FakeCharacter.Hero);
+        var placements = document.BasicPlate!.Placements.Count;
+        Assert.True(placements > 0);
+        var json = JsonNode.Parse(JsonSerializer.Serialize(document, JsonOptions.Default))!.AsObject();
+        json["BasicPlate"]!["Playstyles"] = new JsonArray("a", null);
+        json["BasicPlate"]!["Placements"]!.AsArray().Insert(1, null);
+
+        using var harness = await BasicHarness.OpenJsonAsync(json.ToJsonString(JsonOptions.Default), document.ProfileId);
+
+        Assert.Equal(PlateStatus.Ready, harness.Library.FindPlate(harness.PlateId)!.Status);
+        harness.SimulateBasicFrame();
+        Assert.False(harness.Session.IsDirty);
+        var settings = harness.Document.BasicPlate!;
+        Assert.Equal(["a"], settings.Playstyles);
+        Assert.Equal(placements, settings.Placements.Count);
+        Assert.True(settings.ContentEquals(settings.Clone()));
+        Assert.True(await harness.Session.SaveProfileAsync(), harness.Session.ErrorMessage);
+
+        var saved = JsonNode.Parse(harness.Fixture.ReadPlateJson(harness.PlateId))!["BasicPlate"]!;
+        Assert.Equal(["a"], saved["Playstyles"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(placements, saved["Placements"]!.AsArray().Count);
+        Assert.All(saved["Placements"]!.AsArray(), p => Assert.NotNull(p));
     }
 
     [Fact]

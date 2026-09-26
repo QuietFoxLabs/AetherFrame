@@ -21,8 +21,9 @@ public sealed class BasicPlateSettings
     public const int MaxPlaystyles = 6;
     public const int MaxPlaystyleLength = 24;
 
-    // The lists and the theme id are never null: an explicit JSON null (which no build writes)
-    // reads as empty, so cloning, comparing and drawing them never has to guard against it.
+    // The lists and the theme id are never null, and the lists hold no null entry: an explicit
+    // JSON null (which no build writes) reads as empty — or, for one entry, as that entry left
+    // out — so cloning, comparing and drawing them never has to guard against it.
     private List<BasicPlacement> placements = new();
     private List<string> playstyles = new();
     private List<uint> favoriteJobIds = new();
@@ -44,14 +45,14 @@ public sealed class BasicPlateSettings
     public List<BasicPlacement> Placements
     {
         get => placements;
-        set => placements = value ?? new List<BasicPlacement>();
+        set => placements = WithoutNullEntries(value);
     }
 
     /// <summary>Up to <see cref="MaxPlaystyles"/> entries, in display order.</summary>
     public List<string> Playstyles
     {
         get => playstyles;
-        set => playstyles = value ?? new List<string>();
+        set => playstyles = WithoutNullEntries(value);
     }
 
     /// <summary>Structured Active Hours, or null when never set.</summary>
@@ -203,6 +204,19 @@ public sealed class BasicPlateSettings
     /// </summary>
     /// <returns>True if a repair was applied.</returns>
     internal bool NormalizeValues() => Placements.RemoveAll(placement => !ProfileElementLimits.IsFinite(placement.Rect)) > 0;
+
+    /// <summary>The list itself, unless it is null (then empty) or holds a null entry (then a copy
+    /// without it) — neither of which any build writes, so a list a build wrote is kept as is.</summary>
+    private static List<T> WithoutNullEntries<T>(List<T>? entries)
+        where T : class
+    {
+        if (entries is null)
+        {
+            return new List<T>();
+        }
+
+        return entries.Exists(entry => entry is null) ? entries.FindAll(entry => entry is not null) : entries;
+    }
 }
 
 /// <summary>Where Basic mode last placed one section element.</summary>
