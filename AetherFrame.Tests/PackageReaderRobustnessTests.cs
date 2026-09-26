@@ -307,4 +307,53 @@ public class PackageReaderRobustnessTests
         // Once the image is stable again, the export goes through.
         armed = false;
         Assert.True(packages.Export(plateId, destination, overwrite: false, previewPngPath: thumbnail).Succeeded);
-    }}
+    }
+
+    // ---------------------------------------------------------------- invisible names
+
+    [Theory]
+    [InlineData("​​​")]
+    [InlineData("﻿")]
+    [InlineData("⁠ ‍")]
+    [InlineData("‮")]
+    [InlineData("\U000E0041\U000E0042")]
+    [InlineData(" \t​\n ")]
+    public void NamesOfOnlyInvisibleCharacters_AreRefusedAsEmpty(string name)
+    {
+        Assert.False(PlateNaming.TryNormalizeName(name, out var normalized, out var error));
+        Assert.Equal(string.Empty, normalized);
+        Assert.Equal("A Plate needs a name.", error);
+    }
+
+    [Theory]
+    [InlineData("a‮b", "a b")]
+    [InlineData("​Plate​", "Plate")]
+    [InlineData("\U000E0041Plate", "Plate")]
+    [InlineData("Plate﻿Name", "Plate Name")]
+    [InlineData("Café ßtraße", "Café ßtraße")]
+    [InlineData("\U0001F642 Plate", "\U0001F642 Plate")]
+    [InlineData("line\nbreak", "line break")]
+    public void FormatCharacters_FoldToSpaces_AndVisibleOnesStay(string input, string expected)
+    {
+        Assert.True(PlateNaming.TryNormalizeName(input, out var normalized, out _));
+        Assert.Equal(expected, normalized);
+    }
+
+    [Fact]
+    public async Task ZeroWidthName_IsRefused()
+    {
+        using var setup = await Setup.CreateAsync();
+        const string invisible = "​​​";
+        var path = PackageFiles.Rewrite(setup.ValidPath, entries =>
+        {
+            PackageFiles.EditManifest(entries, m => m["plate"]!["name"] = invisible);
+            PackageFiles.EditProfile(entries, p => p["Name"] = invisible);
+        });
+
+        await setup.AssertRefusedAsync(path, PackageErrorCode.ManifestInvalid, PackageErrorCode.ProfileInvalid);
+
+        // A profile name that only looks like the manifest's (an invisible difference) is refused too.
+        var mismatched = PackageFiles.Rewrite(setup.ValidPath, entries => PackageFiles.EditProfile(entries, p => p["Name"] = "Small​"));
+        await setup.AssertRefusedAsync(mismatched, PackageErrorCode.ProfileInvalid);
+    }
+}
