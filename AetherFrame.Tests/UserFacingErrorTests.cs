@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
@@ -48,6 +49,27 @@ public class UserFacingErrorTests
         Assert.Equal("That Plate no longer exists.", UserFacingError.Describe(new PlateLibraryException("That Plate no longer exists."), Fallback));
         Assert.Equal("Templates are still loading.", UserFacingError.Describe(new TemplateLibraryException("Templates are still loading."), Fallback));
         Assert.Equal("The image is too large. The limit is 32 MB.", UserFacingError.Describe(new InvalidOperationException("The image is too large. The limit is 32 MB."), Fallback));
+    }
+
+    [Theory]
+    [InlineData(32)]
+    [InlineData(33)]
+    public void AWindowsSharingOrLockViolation_GetsTheSameHintAsAnIOException(int nativeError)
+    {
+        // Dalamud's reliable storage reports these as a raw Win32Exception, not an IOException.
+        var shown = UserFacingError.Describe(new Win32Exception(nativeError), Fallback);
+
+        Assert.Equal(UserFacingError.Describe(new IOException("in use"), Fallback), shown);
+        Assert.StartsWith(Fallback, shown);
+        Assert.Contains("in use by another program", shown);
+    }
+
+    [Theory]
+    [InlineData(112)]
+    [InlineData(5)]
+    public void AnyOtherWindowsError_IsJustTheFallback(int nativeError)
+    {
+        Assert.Equal(Fallback, UserFacingError.Describe(new Win32Exception(nativeError), Fallback));
     }
 
     [Fact]

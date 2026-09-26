@@ -96,9 +96,16 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         {
             var paths = new PlateStoragePaths(PluginInterface.ConfigDirectory.FullName);
 
-            // All Library persistence runs on the framework thread, as profile IO always has, and
-            // stops between files if unloading ever stops waiting for it (see OwnedOperations).
-            var fileStore = new ShutdownGuardedFileStore(new ReliablePlateFileStore(FileStorage), ownedOperations);
+            // Every Library operation starts on the framework thread, as profile IO always has:
+            // its synchronous prefix runs there, and once the first file step completes elsewhere
+            // (Dalamud writes from the thread pool) its continuations — and the Changed, PlateSaved
+            // and PlateDeleted events — run on that thread, so every subscriber is thread-safe.
+            // An operation stops between files if unloading ever stops waiting for it (see
+            // OwnedOperations), and a save whose temporary file Dalamud has left stuck open is
+            // written directly instead of failing until the game restarts (see
+            // StuckTempFallbackFileStore).
+            var fileStore = new ShutdownGuardedFileStore(
+                new StuckTempFallbackFileStore(new ReliablePlateFileStore(FileStorage), log), ownedOperations);
             plateLibrary = new PlateLibraryService(paths, fileStore, log, dispatch: work => Framework.Run(work), operations: ownedOperations);
             templateLibrary = new TemplateLibraryService(paths, fileStore, plateLibrary, log, dispatch: work => Framework.Run(work), operations: ownedOperations);
 
