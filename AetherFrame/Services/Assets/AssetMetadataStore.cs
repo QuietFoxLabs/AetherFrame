@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using AetherFrame.Domain.Assets;
 using AetherFrame.Persistence;
 using AetherFrame.Persistence.Schema;
@@ -21,6 +23,11 @@ internal sealed class AssetMetadataStore
     private readonly IAetherFrameLog log;
     private readonly Func<DateTime> utcNow;
 
+    private readonly object gate = new();
+
+    /// <summary>Assets whose newer-version sidecar was already reported, so the log says it once.</summary>
+    private readonly HashSet<Guid> newerVersionReported = new();
+
     internal AssetMetadataStore(string directory, IAetherFrameLog? log = null, Func<DateTime>? utcNow = null)
     {
         this.directory = directory;
@@ -31,25 +38,7 @@ internal sealed class AssetMetadataStore
     internal string GetPath(Guid assetId) => Path.Combine(directory, assetId.ToString("N") + ".json");
 
     /// <summary>The stored metadata, or null when missing, damaged, or from a newer version.</summary>
-    internal AssetMetadata? TryLoad(Guid assetId)
-    {
-        var path = GetPath(assetId);
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        try
-        {
-            var result = VersionedJson.Parse<AssetMetadata>(File.ReadAllText(path, Encoding.UTF8), PersistenceSchemas.AssetMetadata);
-            return result.IsUsable && result.Value!.AssetId == assetId ? result.Value : null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            log.Warning($"AetherFrame could not read metadata for asset {assetId}: {ex.Message}");
-            return null;
-        }
-    }
+    internal AssetMetadata? TryLoad(Guid assetId) => Usable(TryRead(assetId), assetId);
 
     internal void Save(AssetMetadata metadata)
     {
@@ -59,12 +48,16 @@ internal sealed class AssetMetadataStore
 
     /// <summary>
     /// Stored metadata, or — for an asset imported before metadata existed, or whose metadata was
-    /// lost — metadata computed from the asset file itself and then stored. Reads and hashes the
-    /// whole file, so never call this from ImGui Draw. Null when the asset file is unreadable.
+    /// lost or damaged — metadata computed from the asset file itself and then stored. A sidecar
+    /// written by a newer version of AetherFrame is never written over: the computed metadata is
+    /// returned for display but the file stays exactly as it is, like every other newer-version
+    /// file. Reads and hashes the whole file, so never call this from ImGui Draw. Null when the
+    /// asset file is unreadable.
     /// </summary>
     internal AssetMetadata? GetOrCreate(Guid assetId, string assetPath)
     {
-        if (TryLoad(assetId) is { } existing)
+        var stored = TryRead(assetId);
+        if (Usable(stored, assetId) is { } existing)
         {
             return existing;
         }
@@ -90,13 +83,29 @@ internal sealed class AssetMetadataStore
             CreatedAtUtc = utcNow(),
         };
 
+        if (stored is { IsNewerVersion: true })
+        {
+            bool firstTime;
+            lock (gate)
+            {
+                firstTime = newerVersionReported.Add(assetId);
+            }
+
+            if (firstTime)
+            {
+                log.Warning($"AetherFrame left the metadata for asset {assetId} untouched: it was written by a newer version of AetherFrame.");
+            }
+
+            return metadata;
+        }
+
         try
         {
             Save(metadata);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            log.Warning($"AetherFrame could not store metadata for asset {assetId}: {ex.Message}");
+            log.Warning($"AetherFrame could not store metadata for asset {assetId} ({ex.GetType().Name}).");
         }
 
         return metadata;
@@ -110,6 +119,35 @@ internal sealed class AssetMetadataStore
             File.Delete(path);
         }
     }
+
+    /// <summary>
+    /// The sidecar as read, or null when it is missing or couldn't be read at all. The result
+    /// tells a usable file, a damaged one and a newer-version one apart; content that isn't valid
+    /// JSON at all counts as damaged rather than escaping (the same set the versioned reader's
+    /// own deserialization catches).
+    /// </summary>
+    private VersionedReadResult<AssetMetadata>? TryRead(Guid assetId)
+    {
+        var path = GetPath(assetId);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return VersionedJson.Parse<AssetMetadata>(File.ReadAllText(path, Encoding.UTF8), PersistenceSchemas.AssetMetadata);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException or InvalidOperationException or FormatException or ArgumentException)
+        {
+            log.Warning($"AetherFrame could not read metadata for asset {assetId} ({ex.GetType().Name}).");
+            return null;
+        }
+    }
+
+    /// <summary>The metadata a read result holds, if it is usable and really describes <paramref name="assetId"/>.</summary>
+    private static AssetMetadata? Usable(VersionedReadResult<AssetMetadata>? result, Guid assetId) =>
+        result is { IsUsable: true } && result.Value!.AssetId == assetId ? result.Value : null;
 
     /// <summary>Lowercase hex SHA-256 of a file's bytes, streamed (never loaded whole).</summary>
     internal static string ComputeSha256(string path)
