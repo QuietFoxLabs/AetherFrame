@@ -24,10 +24,12 @@ namespace AetherFrame.Windows;
 /// applied here, in Draw. Nothing from the file is shown before it passed validation: an Invalid
 /// or Unsupported package shows only its verdict and reasons, never its content.
 ///
-/// <para>While an import runs the window can't be closed (Escape and the title bar reopen it, the
-/// button says "Importing..."): its outcome — the new Plate, or why nothing was imported — is only
-/// ever shown here. Plugin unload is the one exception (<see cref="Dispose"/>): the import finishes
-/// as an owned operation, and the staged files it uses are removed once it ends.</para>
+/// <para>While an import runs the window can't be closed (its close button and Escape are
+/// withdrawn rather than the close undone, which would replay Dalamud's close and open
+/// transitions; the button says "Importing..."): its outcome — the new Plate, or why nothing was
+/// imported — is only ever shown here. Plugin unload is the one exception (<see cref="Dispose"/>):
+/// the import finishes as an owned operation, and the staged files it uses are removed once it
+/// ends.</para>
 /// </summary>
 internal sealed class PackageImportWindow : Window, IDisposable
 {
@@ -72,7 +74,8 @@ internal sealed class PackageImportWindow : Window, IDisposable
 
     public override void OnClose()
     {
-        // A running import keeps the window open until it ends: the result is shown nowhere else.
+        // A running import keeps the window open until it ends (the result is shown nowhere else):
+        // the close button and hotkey are already withdrawn, this catches a programmatic close.
         if (importTask is not null)
         {
             IsOpen = true;
@@ -80,6 +83,22 @@ internal sealed class PackageImportWindow : Window, IDisposable
         }
 
         Abandon();
+    }
+
+    /// <summary>The import has started: nothing closes the window until it ends.</summary>
+    private void BeginImport(Task<PackageImportResult> task)
+    {
+        importTask = task;
+        ShowCloseButton = false;
+        RespectCloseHotkey = false;
+    }
+
+    /// <summary>The import has ended (or was handed off at unload): the window closes as usual again.</summary>
+    private void EndImport()
+    {
+        importTask = null;
+        ShowCloseButton = true;
+        RespectCloseHotkey = true;
     }
 
     /// <summary>Plugin unload: lets whatever is running finish on its own, and drops the preview.</summary>
@@ -103,7 +122,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
         if (importTask is { } importing && staged is { } pending)
         {
             _ = importing.ContinueWith(_ => pending.Dispose(), TaskScheduler.Default);
-            importTask = null;
+            EndImport();
             staged = null;
         }
 
@@ -233,7 +252,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
             if (ImGui.Button(importTask is null ? "Import as New Plate" : "Importing...", EditorWidgets.Scaled(new Vector2(160f, 0f))))
             {
                 importError = null;
-                importTask = packages.ImportAsync(package);
+                BeginImport(packages.ImportAsync(package));
             }
         }
 
@@ -267,7 +286,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
 
         if (importTask is { IsCompleted: true } importing)
         {
-            importTask = null;
+            EndImport();
             var result = importing.IsCompletedSuccessfully
                 ? importing.Result
                 : PackageImportResult.Failed(PackageErrorCode.CommitFailed, "The Plate couldn't be imported. Nothing was changed.");

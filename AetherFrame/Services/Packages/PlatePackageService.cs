@@ -106,7 +106,9 @@ internal sealed class PlatePackageService
     /// Imports a validated package as a new Plate. Never activates, opens, or binds it. The lease
     /// is taken on the caller's thread (so refusal once unloading has begun is immediate); the
     /// commit itself — copying and hashing every image, then the Plate write — runs on the thread
-    /// pool, never on the caller.
+    /// pool, never on the caller, and all of it under that one lease: an import already copying
+    /// its images when unloading begins is waited for and commits (or fails) as one operation,
+    /// rather than its Plate write being refused as a new one and the images rolled back.
     /// </summary>
     internal async Task<PackageImportResult> ImportAsync(StagedPackage package)
     {
@@ -118,7 +120,7 @@ internal sealed class PlatePackageService
         using (operation)
         {
             var now = utcNow();
-            return await Task.Run(() => PackageImporter.ImportAsync(package, library, assets, log, now)).ConfigureAwait(false);
+            return await Task.Run(() => PackageImporter.ImportAsync(package, library, assets, log, now, continuesOwnedOperation: true)).ConfigureAwait(false);
         }
     }
 

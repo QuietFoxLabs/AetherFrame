@@ -1034,9 +1034,12 @@ internal sealed class PlateLibraryService
     /// fails after its file landed moves that file to the trash, since the caller's rollback
     /// removes the images). Never overwrites (refuses an id that's in use or on disk), and never
     /// touches any character binding: an imported Plate belongs to no one and is Active for no
-    /// one until the player chooses.
+    /// one until the player chooses. <paramref name="continuesOwnedOperation"/>: the caller has
+    /// already registered the operation this write completes (see <c>PlatePackageService</c>,
+    /// whose import copies the images under its own lease first), so it is not refused once
+    /// shutdown began — a running operation is waited for, not rolled back by its last step.
     /// </summary>
-    internal Task ImportPlateAsync(Guid plateId, JsonObject raw) =>
+    internal Task ImportPlateAsync(Guid plateId, JsonObject raw, bool continuesOwnedOperation = false) =>
         RunExclusiveAsync(async () =>
         {
             RequireLoaded();
@@ -1090,7 +1093,7 @@ internal sealed class PlateLibraryService
             }
 
             log.Information($"AetherFrame imported a package as new Plate {plateId}.");
-        });
+        }, continuesOwnedOperation);
 
     /// <summary>Moves an imported document whose write reported failure out of the Plates folder, if it landed there.</summary>
     private void TrashHalfWrittenImport(Guid plateId)
@@ -1213,23 +1216,40 @@ internal sealed class PlateLibraryService
 
     // ---------------------------------------------------------------- internals
 
-    private async Task RunExclusiveAsync(Func<Task> work) =>
+    private async Task RunExclusiveAsync(Func<Task> work, bool continuesOwnedOperation = false) =>
         await RunExclusiveAsync<bool>(async () =>
         {
             await work().ConfigureAwait(false);
             return true;
-        }).ConfigureAwait(false);
+        }, continuesOwnedOperation).ConfigureAwait(false);
 
     /// <summary>
     /// Runs one operation at a time, as an <see cref="OwnedOperations"/> operation: once the plugin
     /// starts shutting down, an operation still waiting its turn gives up and none starts, while
     /// one already running is waited for (and, if unloading stops waiting, stops at its next file
-    /// step — see <see cref="OwnedOperations"/>). The dispatcher only starts the work: it is not
-    /// waited for there, so the work's continuations run wherever its awaits complete (see the
-    /// class remarks on threading).
+    /// step — see <see cref="OwnedOperations"/>). With <paramref name="continuesOwnedOperation"/>
+    /// the caller registered the operation already and this is its last step: it takes its turn
+    /// even once shutdown began, and only abandonment stops it. The dispatcher only starts the
+    /// work: it is not waited for there, so the work's continuations run wherever its awaits
+    /// complete (see the class remarks on threading).
     /// </summary>
-    private async Task<T> RunExclusiveAsync<T>(Func<Task<T>> work)
+    private async Task<T> RunExclusiveAsync<T>(Func<Task<T>> work, bool continuesOwnedOperation = false)
     {
+        if (continuesOwnedOperation)
+        {
+            // A running operation is waited for, so its turn comes: whoever holds the lock ends
+            // (or is abandoned and stops at its next step), whatever shutdown did meanwhile.
+            await operationLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                return await DispatchAsync(work).ConfigureAwait(false);
+            }
+            finally
+            {
+                operationLock.Release();
+            }
+        }
+
         try
         {
             await operationLock.WaitAsync(operations.Stopping).ConfigureAwait(false);
@@ -1248,20 +1268,25 @@ internal sealed class PlateLibraryService
 
             using (operation)
             {
-                T result = default!;
-                await dispatch(async () =>
-                {
-                    // Dispatched before unloading gave up on it, but not started yet: it never starts.
-                    operations.ThrowIfAbandoned();
-                    result = await work().ConfigureAwait(false);
-                }).ConfigureAwait(false);
-                return result;
+                return await DispatchAsync(work).ConfigureAwait(false);
             }
         }
         finally
         {
             operationLock.Release();
         }
+    }
+
+    private async Task<T> DispatchAsync<T>(Func<Task<T>> work)
+    {
+        T result = default!;
+        await dispatch(async () =>
+        {
+            // Dispatched before unloading gave up on it, but not started yet: it never starts.
+            operations.ThrowIfAbandoned();
+            result = await work().ConfigureAwait(false);
+        }).ConfigureAwait(false);
+        return result;
     }
 
     private static PlateLibraryException Closing() => new("AetherFrame is closing, so nothing was changed.");

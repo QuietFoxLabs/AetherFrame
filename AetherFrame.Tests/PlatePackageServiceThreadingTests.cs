@@ -140,6 +140,38 @@ public class PlatePackageServiceThreadingTests
     }
 
     [Fact]
+    public async Task ImportAlreadyCopyingImages_WhenShutdownBegins_StillCommitsAsOneOperation()
+    {
+        var gate = new DecoderGate();
+        var operations = new OwnedOperations();
+        using var fixture = new PackageFixture(decoder: gate.Query);
+        var (library, packages) = await LoadAsync(fixture, fixture.Library.Store, operations);
+        var (plateId, _, _, _) = await fixture.CreateRichPlateAsync(library);
+        using var staged = packages.Inspect(fixture.Export(packages, plateId));
+        var assetFilesBefore = Directory.GetFiles(fixture.Paths.AssetsDirectory).Length;
+
+        // The first image's check holds the import before its Plate write.
+        gate.Arm();
+        var import = packages.ImportAsync(staged);
+        gate.WaitUntilReached();
+
+        var shutdown = operations.ShutdownAsync(Generous);
+        await Task.Delay(50);
+        Assert.False(shutdown.IsCompleted);
+        Assert.Equal(1, operations.RunningCount);
+
+        // The Plate write is that same operation's last step, not a new one shutdown refuses:
+        // the import commits whole instead of rolling its images back.
+        gate.Release();
+        var result = await import.WaitAsync(Generous);
+        Assert.True(result.Succeeded, result.Error?.Message);
+        Assert.True(await shutdown);
+        Assert.Equal(0, operations.RunningCount);
+        Assert.Equal(2, library.GetOrderedPlates().Count);
+        Assert.Equal(assetFilesBefore + 3, Directory.GetFiles(fixture.Paths.AssetsDirectory).Length);
+    }
+
+    [Fact]
     public async Task OnceShutdownBegins_InspectIsRefused_AndNothingIsStaged()
     {
         var operations = new OwnedOperations();
@@ -197,47 +229,5 @@ public class PlatePackageServiceThreadingTests
         await library.InitializeAsync();
         var packages = new PlatePackageService(library, fixture.Assets, fixture.Paths, "AetherFrame Tests", fixture.Decoder, fixture.Log, () => fixture.Clock.Now, operations);
         return (library, packages);
-    }
-
-    /// <summary>Plain files whose next write can be held after it has begun and before anything reaches disk.</summary>
-    private sealed class HeldWriteStore : IPlateFileStore
-    {
-        private readonly SystemFileStore files = new();
-        private TaskCompletionSource? gate;
-        private TaskCompletionSource writeStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        internal Task WriteStarted => writeStarted.Task;
-
-        internal void Hold()
-        {
-            writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
-        internal void Release() => gate?.TrySetResult();
-
-        public bool FileExists(string path) => files.FileExists(path);
-
-        public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
-
-        public Task ReadTextAsync(string path, Action<string> reader) => files.ReadTextAsync(path, reader);
-
-        public async Task WriteTextAsync(string path, string contents)
-        {
-            if (gate is { } held)
-            {
-                writeStarted.TrySetResult();
-                await held.Task.ConfigureAwait(false);
-                gate = null;
-            }
-
-            await files.WriteTextAsync(path, contents).ConfigureAwait(false);
-        }
-
-        public void MoveFile(string sourcePath, string destinationPath) => files.MoveFile(sourcePath, destinationPath);
-
-        public void CopyFile(string sourcePath, string destinationPath) => files.CopyFile(sourcePath, destinationPath);
-
-        public void DeleteFile(string path) => files.DeleteFile(path);
     }
 }

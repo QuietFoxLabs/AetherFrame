@@ -27,8 +27,12 @@ namespace AetherFrame.Services.Packages;
 /// </summary>
 internal static class PackageImporter
 {
+    /// <param name="continuesOwnedOperation">The caller registered this import as an owned
+    /// operation already (see <c>PlatePackageService.ImportAsync</c>), so its Plate write is that
+    /// operation's last step rather than a new one shutdown could refuse.</param>
     internal static async Task<PackageImportResult> ImportAsync(
-        StagedPackage package, PlateLibraryService library, AssetStorageService assets, IAetherFrameLog? log = null, DateTime? nowUtc = null)
+        StagedPackage package, PlateLibraryService library, AssetStorageService assets, IAetherFrameLog? log = null, DateTime? nowUtc = null,
+        bool continuesOwnedOperation = false)
     {
         log ??= NullAetherFrameLog.Instance;
         if (!package.CanImport || package.Summary is not { } summary)
@@ -47,7 +51,7 @@ internal static class PackageImporter
             }
 
             var raw = WithNewIdentity(package.PreparedProfile!, plateId, nowUtc ?? DateTime.UtcNow);
-            await library.ImportPlateAsync(plateId, raw).ConfigureAwait(false);
+            await library.ImportPlateAsync(plateId, raw, continuesOwnedOperation).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
