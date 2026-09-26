@@ -149,17 +149,11 @@ public class TemplateFailureInjectionTests
         var platesBefore = FilesIn(fixture.Paths.PlatesDirectory);
         store.FailWrite = InFolder(fixture.Paths.CharactersDirectory);
 
-        // The Plate's document is written before its character link. Whether the Plate Library
-        // reports that half-succeeded creation as a failure (an exception about the link) or as a
-        // success is its own contract, not this Library's; what this Library owes either way is
-        // that the Plate exists exactly once and the Template is untouched.
-        try
-        {
-            await templates.InstantiateAsync(templateId, Characters.Alice);
-        }
-        catch (Exception ex) when (ex is IOException or PlateLibraryException)
-        {
-        }
+        // The Plate's document is written before its character link, and the Plate Library reports
+        // the half-succeeded creation as a link failure the player can read; what this Library owes
+        // is that the Plate exists exactly once and the Template is untouched.
+        var refused = await Assert.ThrowsAsync<PlateLibraryException>(() => templates.InstantiateAsync(templateId, Characters.Alice));
+        Assert.Contains("couldn't be linked", refused.Message);
 
         Assert.Equal(1, store.FailedOperations);
         var plateFiles = FilesIn(fixture.Paths.PlatesDirectory);
