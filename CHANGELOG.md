@@ -4,6 +4,37 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ## [Unreleased]
 
+Reliability, data safety and import security, the v0.1.6 milestone. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged: a file written by 0.1.0 through 0.1.5 loads and re-saves byte for byte, and the schema versions did not move.
+
+### Fixed
+
+- A `.aetherframe` file with an explicit `null` where a list or text belongs no longer passes validation and then throws inside the editor; a local Plate with the same shape opens with those fields empty.
+- A package whose ZIP end record disagrees with the one .NET reads is refused before the archive's directory is parsed, so a hostile file can no longer make the plugin allocate hundreds of megabytes on import.
+- A package whose `profile.json` is made of millions of tiny values is refused before it is parsed (new limits on JSON value count and property-name length), instead of costing over a gigabyte and several seconds to check.
+- Very large text sizes, from a package or from zooming far in, no longer make the plugin rasterize hundreds of megapixels of glyphs: each font family builds tiers only up to a bounded size and the bundled fonts carry only the Latin, Latin Extended, punctuation and Cyrillic glyphs a Plate can show. Text above that size is slightly upscaled.
+- Typing a value such as `1e39` into an editor slider, or an overflowing number in a hand-edited file, no longer leaves a Plate that can never be saved: sliders clamp typed values, values that aren't numbers are repaired in memory, and the save error names the offending value if one ever gets through.
+- Create Plate and Use Template now report a Plate that was created but could not be linked to the character, instead of a total failure that invited a duplicate.
+- A character binding whose file could not be read at startup is treated as unavailable (never replaced) rather than as damaged; the player is told to restart the game.
+- A failed index or migration write at startup, or a failed Recovery copy of a damaged index, no longer marks the whole Plate Library as unloadable.
+- A file that Dalamud served from its backup copy is now logged, and the damaged on-disk copy is kept under `Recovery` before anything writes over it.
+- A Basic editor action that fails partway (for example revealing a section when the Plate is already at its element limit) now rolls back completely instead of leaving a half-applied, un-undoable change.
+- Undoing a delete puts the element back where it was, so overlapping elements keep their paint order.
+- Saving while dragging commits the drag first; a layout refinement can no longer land while a save is being written; Discard is unavailable while a save is in flight.
+- A disk-full or locked-file failure inside Dalamud's reliable write no longer blocks every later save of that Plate until the game restarts: the plugin writes the file directly when Dalamud's temporary file is stuck open, and says so once in the log.
+- 16-bit PNGs are counted at 8 bytes per pixel against the decoded-memory limit, matching what the game's decoder allocates.
+- Importing a package commits its images on a background thread instead of inside a frame; the Import Preview stays open until the import finishes; checking a package counts as running work during unload; a package check never leaves a stray staging folder.
+- A canceled plugin load now tears the plugin down itself, since Dalamud does not dispose a plugin whose load was canceled.
+- A newer build's configuration settings and asset metadata are preserved instead of being overwritten by this build.
+- Plate names made only of invisible characters are refused; a Template file named with a built-in Template's id is ignored instead of listed twice; Use Template always instantiates from the saved file.
+- Stale temporary files from an interrupted image import or thumbnail generation are removed at load.
+
+### Changed
+
+- The Plate and Template Libraries read and parse their files on a background thread while loading, instead of inside one framework tick, and their threading contract is documented.
+- Loading a Plate whose values had to be repaired in memory logs one line per file; the file itself is unchanged until it is saved.
+- Card previews no longer draw a bar for an affix on empty text.
+- The test suite grew from 2071 to over 2600 tests, including real fixture sets written by every tagged build since 0.1.0, failure injection for every multi-step file operation, and a threading contract test against a queued dispatcher.
+
 ## [0.1.5] - 2026-09-26
 
 Distribution and submission readiness: the first version meant to reach testers. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged, and so is how the plugin behaves in game.
