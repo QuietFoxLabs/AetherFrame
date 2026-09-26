@@ -12,6 +12,7 @@ using AetherFrame.Domain.Templates;
 using AetherFrame.Persistence;
 using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Lifecycle;
+using AetherFrame.Services.Plates;
 using AetherFrame.Services.Templates;
 using Xunit;
 
@@ -34,6 +35,149 @@ public class TemplateFailureInjectionTests
         var plate = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.Blank, null, "Source");
         var templateId = await templates.SaveAsTemplateAsync(plate.PlateId, "Original");
         return (fixture, templates, templateId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SaveAsTemplate_WriteFailure_AddsNothing_AndWritesNothing(bool faultAsync)
+    {
+        var store = new FaultInjectingStore { FaultAsync = faultAsync };
+        using var fixture = new TemplateLibraryFixture(store);
+        var templates = await fixture.LoadAsync();
+        var plate = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.Blank, null, "Source");
+        var listedBefore = templates.GetOrderedTemplates().Select(t => t.TemplateId).ToList();
+        var generationBefore = templates.Generation;
+        store.FailWrite = InFolder(fixture.Paths.TemplatesDirectory);
+
+        await Assert.ThrowsAsync<IOException>(() => templates.SaveAsTemplateAsync(plate.PlateId, "Doomed"));
+
+        Assert.Equal(1, store.FailedOperations);
+        Assert.Equal(listedBefore, templates.GetOrderedTemplates().Select(t => t.TemplateId));
+        Assert.Equal(generationBefore, templates.Generation);
+        Assert.Empty(FilesIn(fixture.Paths.TemplatesDirectory));
+
+        store.FailWrite = null;
+        var saved = await templates.SaveAsTemplateAsync(plate.PlateId, "Doomed");
+        Assert.True(templates.FindTemplate(saved)!.IsReady);
+        Assert.Single(FilesIn(fixture.Paths.TemplatesDirectory));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RenameTemplate_WriteFailure_KeepsTheOldName_AndTheFile(bool faultAsync)
+    {
+        var store = new FaultInjectingStore { FaultAsync = faultAsync };
+        var (fixture, templates, templateId) = await SeedAsync(store);
+        using var _ = fixture;
+        var fileBefore = fixture.ReadTemplateJson(templateId);
+        var summaryBefore = templates.FindTemplate(templateId)!;
+        var generationBefore = templates.Generation;
+        fixture.Clock.Tick();
+        store.FailWrite = InFolder(fixture.Paths.TemplatesDirectory);
+
+        await Assert.ThrowsAsync<IOException>(() => templates.RenameTemplateAsync(templateId, "Renamed"));
+
+        Assert.Equal(1, store.FailedOperations);
+        Assert.Equal(summaryBefore, templates.FindTemplate(templateId));
+        Assert.Equal(generationBefore, templates.Generation);
+        Assert.Equal(fileBefore, fixture.ReadTemplateJson(templateId));
+
+        store.FailWrite = null;
+        await templates.RenameTemplateAsync(templateId, "Renamed");
+        Assert.Equal("Renamed", templates.FindTemplate(templateId)!.DisplayName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DuplicateTemplate_WriteFailure_AddsNothing(bool faultAsync)
+    {
+        var store = new FaultInjectingStore { FaultAsync = faultAsync };
+        var (fixture, templates, templateId) = await SeedAsync(store);
+        using var _ = fixture;
+        var fileBefore = fixture.ReadTemplateJson(templateId);
+        var generationBefore = templates.Generation;
+        store.FailWrite = InFolder(fixture.Paths.TemplatesDirectory);
+
+        await Assert.ThrowsAsync<IOException>(() => templates.DuplicateTemplateAsync(templateId));
+
+        Assert.Equal(1, store.FailedOperations);
+        Assert.Equal(templateId, Assert.Single(templates.GetOrderedTemplates(), t => t.Kind == TemplateKind.UserSaved).TemplateId);
+        Assert.Equal(generationBefore, templates.Generation);
+        Assert.Equal(fixture.Paths.GetTemplatePath(templateId), Assert.Single(FilesIn(fixture.Paths.TemplatesDirectory)));
+        Assert.Equal(fileBefore, fixture.ReadTemplateJson(templateId));
+
+        store.FailWrite = null;
+        var copy = await templates.DuplicateTemplateAsync(templateId);
+        Assert.True(templates.FindTemplate(copy)!.IsReady);
+        Assert.Equal(fileBefore, fixture.ReadTemplateJson(templateId));
+    }
+
+    [Fact]
+    public async Task DeleteTemplate_MoveFailure_KeepsTheTemplateListed_AndOutOfTheTrash()
+    {
+        var store = new FaultInjectingStore();
+        var (fixture, templates, templateId) = await SeedAsync(store);
+        using var _ = fixture;
+        var fileBefore = fixture.ReadTemplateJson(templateId);
+        var generationBefore = templates.Generation;
+        store.FailMove = InFolder(fixture.Paths.TemplatesDirectory);
+
+        await Assert.ThrowsAsync<IOException>(() => templates.DeleteTemplateAsync(templateId));
+
+        Assert.Equal(1, store.FailedOperations);
+        Assert.True(templates.FindTemplate(templateId)!.IsReady);
+        Assert.Equal(generationBefore, templates.Generation);
+        Assert.Equal(fileBefore, fixture.ReadTemplateJson(templateId));
+        Assert.Empty(FilesIn(fixture.Paths.TemplateTrashDirectory));
+
+        store.FailMove = null;
+        await templates.DeleteTemplateAsync(templateId);
+        Assert.Null(templates.FindTemplate(templateId));
+        Assert.Equal(fileBefore, File.ReadAllText(Assert.Single(FilesIn(fixture.Paths.TemplateTrashDirectory))));
+    }
+
+    [Fact]
+    public async Task InstantiateBindingFailure_KeepsTheNewPlate_AndNeverTouchesTheTemplate()
+    {
+        var store = new FaultInjectingStore();
+        var (fixture, templates, templateId) = await SeedAsync(store);
+        using var _ = fixture;
+        var templateBefore = fixture.ReadTemplateJson(templateId);
+        var platesBefore = FilesIn(fixture.Paths.PlatesDirectory);
+        store.FailWrite = InFolder(fixture.Paths.CharactersDirectory);
+
+        // The Plate's document is written before its character link. Whether the Plate Library
+        // reports that half-succeeded creation as a failure (an exception about the link) or as a
+        // success is its own contract, not this Library's; what this Library owes either way is
+        // that the Plate exists exactly once and the Template is untouched.
+        try
+        {
+            await templates.InstantiateAsync(templateId, Characters.Alice);
+        }
+        catch (Exception ex) when (ex is IOException or PlateLibraryException)
+        {
+        }
+
+        Assert.Equal(1, store.FailedOperations);
+        var plateFiles = FilesIn(fixture.Paths.PlatesDirectory);
+        Assert.Equal(platesBefore.Count + 1, plateFiles.Count);
+        var created = Assert.Single(plateFiles.Except(platesBefore));
+        Assert.True(PlateStoragePaths.TryParsePlateFileName(created, out var createdId));
+        Assert.True(fixture.PlateLibrary.FindPlate(createdId)!.IsReady);
+        Assert.Empty(FilesIn(fixture.Paths.CharactersDirectory));
+        Assert.Equal(templateBefore, fixture.ReadTemplateJson(templateId));
+        Assert.True(templates.FindTemplate(templateId)!.IsReady);
+
+        // Once the link can be written again, using the Template works as usual and still never touches it.
+        store.FailWrite = null;
+        var result = await templates.InstantiateAsync(templateId, Characters.Alice);
+        Assert.True(fixture.PlateLibrary.FindPlate(result.PlateId)!.IsReady);
+        Assert.Equal(platesBefore.Count + 2, FilesIn(fixture.Paths.PlatesDirectory).Count);
+        Assert.Single(FilesIn(fixture.Paths.CharactersDirectory));
+        Assert.Equal(templateBefore, fixture.ReadTemplateJson(templateId));
     }
 
     [Fact]
