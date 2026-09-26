@@ -18,22 +18,26 @@ namespace AetherFrame.Persistence;
 internal static class PlateDocuments
 {
     /// <summary>
-    /// A fresh, independent document from saved JSON, with the in-memory legacy repairs applied
-    /// (never persisted by this; only an explicit save writes them). Every call returns a new
-    /// instance sharing nothing with the JSON or any other document.
+    /// A fresh, independent document from saved JSON, with the in-memory repairs applied: the
+    /// legacy ones (<see cref="ApplyLegacyRepairs(ProfileDocument)"/>), and unique element ids
+    /// (<see cref="ProfileDocument.NormalizeElementIds"/> — here rather than there, because the
+    /// package validator shares the legacy repairs and must still refuse a repeated id). Never
+    /// persisted by this; only an explicit save writes them. Every call returns a new instance
+    /// sharing nothing with the JSON or any other document.
     /// </summary>
     internal static ProfileDocument Materialize(JsonObject raw) => Materialize(raw, out _);
 
     /// <summary>
-    /// <see cref="Materialize(JsonObject)"/>, reporting whether a value that isn't a number —
-    /// something no build writes (see <see cref="ProfileDocument.NormalizeValues"/>) — was
-    /// repaired, so a loader can log it.
+    /// <see cref="Materialize(JsonObject)"/>, reporting whether something no build writes — a value
+    /// that isn't a number (see <see cref="ProfileDocument.NormalizeValues"/>) or a missing or
+    /// repeated element id — was repaired, so a loader can log it.
     /// </summary>
     internal static ProfileDocument Materialize(JsonObject raw, out bool repairedValues)
     {
         var document = Deserialize(raw) ?? throw new JsonException("Plate document deserialized to null.");
 
         ApplyLegacyRepairs(document, out repairedValues);
+        repairedValues |= document.NormalizeElementIds();
         return document;
     }
 

@@ -222,6 +222,32 @@ public sealed class ProfileDocument
     }
 
     /// <summary>
+    /// Gives every element a usable, unique id: a missing (empty) or repeated id — only possible in
+    /// a hand-edited file — gets a fresh one, in memory, like the other load repairs, so the
+    /// editors' id-keyed selection, removal and undo can never act on two elements at once. Only
+    /// ids change; every other value, and the order, is left exactly as loaded. Nothing persistent
+    /// refers to an element by id (Basic keys its bookkeeping by role), so a new id is invisible
+    /// until the user saves.
+    /// </summary>
+    /// <returns>True if a repair was applied.</returns>
+    internal bool NormalizeElementIds()
+    {
+        var seen = new HashSet<Guid>();
+        var repaired = false;
+        foreach (var element in Elements)
+        {
+            if (element.Id == Guid.Empty || !seen.Add(element.Id))
+            {
+                element.Id = Guid.NewGuid();
+                seen.Add(element.Id);
+                repaired = true;
+            }
+        }
+
+        return repaired;
+    }
+
+    /// <summary>
     /// Replaces every value that isn't a number (NaN or infinity — what a number beyond float's
     /// range in a hand-edited file overflows to) with its default, in memory, like the other load
     /// repairs: a non-finite canvas size resolves exactly as an unset one does, elements and the
