@@ -484,8 +484,41 @@ public class PackageReaderRobustnessTests
 
         await setup.AssertRefusedAsync(path, PackageErrorCode.ManifestInvalid, PackageErrorCode.ProfileInvalid);
 
-        // A profile name that only looks like the manifest's (an invisible difference) is refused too.
-        var mismatched = PackageFiles.Rewrite(setup.ValidPath, entries => PackageFiles.EditProfile(entries, p => p["Name"] = "Small​"));
-        await setup.AssertRefusedAsync(mismatched, PackageErrorCode.ProfileInvalid);
+        // A profile name that differs from the manifest's only invisibly (a zero-width space an
+        // older build wrote verbatim) is the same name once folded, and imports as it.
+        var invisiblyDifferent = PackageFiles.Rewrite(setup.ValidPath, entries => PackageFiles.EditProfile(entries, p => p["Name"] = "Small\u200b"));
+        using var staged = setup.Packages.Inspect(invisiblyDifferent);
+        Assert.True(staged.CanImport, staged.DescribeForLog());
+        Assert.Equal("Small", staged.Summary!.PlateName);
+        Assert.Equal("Small", staged.PreviewDocument!.Name);
+    }
+
+    [Fact]
+    public async Task FormatCharactersInsideAName_AsOlderBuildsWroteThem_ImportUnderTheFoldedName()
+    {
+        // 0.1.0 through 0.1.5 folded only control characters, so a name with a family emoji
+        // (joined by U+200D), a soft hyphen or a word joiner went verbatim into both files of an
+        // export. It is the same Plate once folded, and must keep importing — under the folded
+        // name, exactly as renaming it in this build would spell it.
+        using var setup = await Setup.CreateAsync();
+        const string olderName = "\U0001F468\u200D\U0001F469\u200D\U0001F467 Co\u00ADop\u2060erative";
+        Assert.True(PlateNaming.TryNormalizeName(olderName, out var folded, out _));
+        Assert.NotEqual(olderName, folded);
+        var path = PackageFiles.Rewrite(setup.ValidPath, entries =>
+        {
+            PackageFiles.EditManifest(entries, m => m["plate"]!["name"] = olderName);
+            PackageFiles.EditProfile(entries, p => p["Name"] = olderName);
+        });
+
+        using var staged = setup.Packages.Inspect(path);
+        Assert.True(staged.CanImport, staged.DescribeForLog());
+        Assert.Equal(folded, staged.Summary!.PlateName);
+        Assert.Equal(folded, staged.PreviewDocument!.Name);
+
+        var result = await setup.Packages.ImportAsync(staged);
+        Assert.True(result.Succeeded, result.Error?.Message);
+        Assert.Equal(folded, result.PlateName);
+        Assert.Equal(folded, setup.Library.FindPlate(result.PlateId)!.DisplayName);
+        Assert.Equal(folded, setup.Library.OpenDocumentForEditing(result.PlateId).Name);
     }
 }

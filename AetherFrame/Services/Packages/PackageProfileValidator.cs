@@ -173,6 +173,12 @@ internal static class PackageProfileValidator
             return null;
         }
 
+        // What gets imported carries the folded name — the manifest's, which the checker proved
+        // is the document's own once folded — so a Plate from an older build's package is named
+        // by this build's rules, exactly as renaming it would.
+        raw[nameof(ProfileDocument.Name)] = manifest.PlateName;
+        document.Name = manifest.PlateName;
+
         if (document.UnrecognizedComponents is { Count: > 0 })
         {
             diagnostics.Warning(PackageWarningCode.UnsupportedElements,
@@ -287,14 +293,15 @@ internal static class PackageProfileValidator
 
         internal void CheckDocument(ProfileDocument document, PackageManifest manifest)
         {
-            if (document.Name != manifest.PlateName)
+            // Folded against folded: the manifest's name already is (see PackageManifest), and an
+            // older build wrote a name's Format characters verbatim into both files.
+            if (!PlateNaming.TryNormalizeName(document.Name, out var normalized, out _))
+            {
+                Fail("Plate name is blank or too long");
+            }
+            else if (normalized != manifest.PlateName)
             {
                 Fail("Plate name does not match the manifest");
-            }
-
-            if (!PlateNaming.TryNormalizeName(document.Name, out var normalized, out _) || normalized != document.Name)
-            {
-                Fail("Plate name is blank, too long, or untrimmed");
             }
 
             if (!InRange(document.CanvasWidth, PackagePolicy.MinCanvasDimension, PackagePolicy.MaxCanvasDimension)
