@@ -10,6 +10,13 @@ namespace AetherFrame.Services.Packages;
 /// central directory into memory up front, so a hostile file declaring millions of entries must be
 /// refused from this record first. Also refuses ZIP64 and multi-disk archives, which a package
 /// (a few dozen entries, well under 4 GB, one file) never needs.
+///
+/// <para>This reads exactly the record ZipArchive will read. ZipArchive takes the LAST record
+/// signature within the final 22 + 65535 bytes and only needs its comment to fit in the file; so
+/// the first signature found scanning backward through that window is the one validated here,
+/// nothing earlier is ever considered, and a record whose comment doesn't run exactly to the end
+/// of the file — trailing junk, or a second record placed after it — is refused rather than
+/// skipped. A limit checked against any other record would be a limit ZipArchive never sees.</para>
 /// </summary>
 internal static class ZipPreflight
 {
@@ -35,7 +42,8 @@ internal static class ZipPreflight
             return null;
         }
 
-        // The record sits at the very end, followed only by an optional comment of up to 64 KiB.
+        // The record sits at the very end, followed only by an optional comment of up to 64 KiB:
+        // the same window ZipArchive scans.
         var tailLength = (int)Math.Min(length, EndRecordSize + MaxCommentLength);
         var tail = new byte[tailLength];
         stream.Position = length - tailLength;
@@ -49,12 +57,13 @@ internal static class ZipPreflight
                 continue;
             }
 
-            // A real end record's comment runs exactly to the end of the file; a stray signature
-            // inside a comment doesn't.
+            // The last signature in the file is the record ZipArchive reads. A real one's comment
+            // runs exactly to the end of the file; anything after it is a file no packager wrote.
             var commentLength = BinaryPrimitives.ReadUInt16LittleEndian(record[20..]);
             if (i + EndRecordSize + commentLength != tailLength)
             {
-                continue;
+                error = "trailing data after the end record";
+                return null;
             }
 
             var diskNumber = BinaryPrimitives.ReadUInt16LittleEndian(record[4..]);

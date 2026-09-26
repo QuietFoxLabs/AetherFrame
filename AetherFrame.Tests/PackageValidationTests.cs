@@ -192,9 +192,11 @@ public class PackageValidationTests
         Assert.Null(ZipPreflight.ReadEntryCount(new MemoryStream(new byte[10]), out _));
         Assert.Null(ZipPreflight.ReadEntryCount(new MemoryStream(new byte[4096]), out _));
 
-        // A signature inside a comment that doesn't reach the end of the file isn't the record.
+        // A record whose comment doesn't reach the end of the file is the record ZipArchive would
+        // read all the same; it is refused, never skipped for an earlier one.
         var fake = EndRecord(1, 1);
-        Assert.Null(ZipPreflight.ReadEntryCount(new MemoryStream([.. fake, .. new byte[50]]), out _));
+        Assert.Null(ZipPreflight.ReadEntryCount(new MemoryStream([.. fake, .. new byte[50]]), out var trailing));
+        Assert.Contains("trailing data", trailing);
     }
 
     [Fact]
