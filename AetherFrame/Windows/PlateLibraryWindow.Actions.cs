@@ -408,13 +408,18 @@ internal sealed partial class PlateLibraryWindow
             }
         }
 
+        // Discard is unavailable while a save is being written, exactly like Save: the revert would
+        // be refused underneath it, and the other Plate would then open over unsaved edits.
         ImGui.SameLine();
-        if (ImGui.Button("Discard", buttonSize))
+        using (ImRaii.Disabled(profileService.IsBusy || guardSaveTask is not null))
         {
-            editorSession.DiscardChanges();
-            guardedOpen = null;
-            ImGui.CloseCurrentPopup();
-            OpenNow(open.PlateId, open.Basic);
+            if (ImGui.Button("Discard", buttonSize))
+            {
+                editorSession.DiscardChanges();
+                guardedOpen = null;
+                ImGui.CloseCurrentPopup();
+                OpenNow(open.PlateId, open.Basic);
+            }
         }
 
         ImGui.SameLine();
