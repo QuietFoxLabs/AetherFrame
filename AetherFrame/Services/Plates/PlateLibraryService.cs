@@ -54,17 +54,22 @@ internal sealed class PlateLibraryService
     private readonly Dictionary<Guid, PlateRecord> plates = new();
     private readonly Dictionary<ulong, CharacterBinding> bindings = new();
 
-    // Bindings whose file exists but couldn't be read. Never overwritten without first keeping a
-    // recovery copy (see WriteBindingAsync).
+    // Bindings whose file exists but holds damaged content. Never overwritten without first keeping
+    // a recovery copy (see WriteBindingAsync).
     private readonly HashSet<ulong> unreadableBindings = new();
+
+    // Bindings whose file couldn't be read at all this session (locked, missing between listing
+    // and reading, access denied, …): the content may be perfectly intact, so it is never written
+    // over — its character's Plate settings can't be changed until the next load reads it.
+    private readonly HashSet<ulong> unavailableBindings = new();
 
     // Bindings saved by a newer AetherFrame: never interpreted and never written by this build.
     private readonly HashSet<ulong> newerVersionBindings = new();
 
     private PlateLibraryState library = new();
 
-    // False when library.json was written by a newer build: ordering then works in memory but is
-    // never written over that file.
+    // False when library.json must not be written this session — written by a newer build, or not
+    // readable at load: ordering then works in memory but is never written over that file.
     private bool libraryWritable = true;
 
     private bool isLoaded;
@@ -216,7 +221,7 @@ internal sealed class PlateLibraryService
         ThrowIfLoadCanceled(cancellationToken);
         var loadedPlates = await LoadPlatesAsync().ConfigureAwait(false);
         ThrowIfLoadCanceled(cancellationToken);
-        var (loadedBindings, badBindings, newerBindings, migratedBindings) = await LoadBindingsAsync().ConfigureAwait(false);
+        var (loadedBindings, badBindings, missingBindings, newerBindings, migratedBindings) = await LoadBindingsAsync().ConfigureAwait(false);
         ThrowIfLoadCanceled(cancellationToken);
 
         lock (gate)
@@ -235,6 +240,8 @@ internal sealed class PlateLibraryService
 
             unreadableBindings.Clear();
             unreadableBindings.UnionWith(badBindings);
+            unavailableBindings.Clear();
+            unavailableBindings.UnionWith(missingBindings);
             newerVersionBindings.Clear();
             newerVersionBindings.UnionWith(newerBindings);
             Changed();
@@ -355,7 +362,7 @@ internal sealed class PlateLibraryService
             return new PlateRecord(plateId, PlateStatus.Ready, VersionedJson.Serialize(raw), document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc,
                 document.Revision, result.Migration.Version, null);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!IsLoadInterruption(ex))
         {
             log.Error(ex, $"AetherFrame could not read Plate {plateId}; it is listed as unreadable and its file is left untouched.");
             return new PlateRecord(plateId, PlateStatus.Unreadable, null, null, "Unreadable Plate", DateTime.MinValue, DateTime.MinValue, 0, 0,
@@ -363,10 +370,16 @@ internal sealed class PlateLibraryService
         }
     }
 
-    private async Task<(List<CharacterBinding> Loaded, List<ulong> Unreadable, List<ulong> Newer, List<ulong> Migrated)> LoadBindingsAsync()
+    /// <summary>
+    /// Reads every binding file. Damaged content (see <see cref="IsContentDamage"/>) lands in
+    /// Unreadable; any other failure — the file may be intact but locked, gone, or inaccessible —
+    /// in Unavailable, which this session never writes over.
+    /// </summary>
+    private async Task<(List<CharacterBinding> Loaded, List<ulong> Unreadable, List<ulong> Unavailable, List<ulong> Newer, List<ulong> Migrated)> LoadBindingsAsync()
     {
         var loaded = new List<CharacterBinding>();
         var unreadable = new List<ulong>();
+        var unavailable = new List<ulong>();
         var newer = new List<ulong>();
         var migrated = new List<ulong>();
 
@@ -397,14 +410,19 @@ internal sealed class PlateLibraryService
                     migrated.Add(contentId);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsContentDamage(ex))
             {
                 log.Error(ex, $"AetherFrame could not read character binding {Path.GetFileName(path)}; it is left untouched.");
                 unreadable.Add(contentId);
             }
+            catch (Exception ex) when (!IsLoadInterruption(ex))
+            {
+                log.Error(ex, $"AetherFrame could not open character binding {Path.GetFileName(path)}; this character's Plate settings are left untouched and can't be changed until the game is restarted.");
+                unavailable.Add(contentId);
+            }
         }
 
-        return (loaded, unreadable, newer, migrated);
+        return (loaded, unreadable, unavailable, newer, migrated);
     }
 
     /// <returns>True when the index needs (re)writing.</returns>
@@ -434,7 +452,7 @@ internal sealed class PlateLibraryService
 
             return result.WasMigrated;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsContentDamage(ex))
         {
             log.Error(ex, "AetherFrame's Plate order is damaged; rebuilding it from the saved Plates (the damaged file is kept in Recovery).");
             PreserveDamagedFile(paths.LibraryFile);
@@ -446,6 +464,19 @@ internal sealed class PlateLibraryService
             }
 
             return true;
+        }
+        catch (Exception ex) when (!IsLoadInterruption(ex))
+        {
+            // The file may be intact (locked, access denied, …): the order is rebuilt for this
+            // session only and the file is never written over.
+            log.Error(ex, "AetherFrame could not open its Plate order; the saved Plates are listed newest-first for this session and the file is left untouched.");
+            lock (gate)
+            {
+                library = new PlateLibraryState { OrderedPlateIds = PlateOrdering.BuildInitialOrder(ExistingPlatesLocked()) };
+                libraryWritable = false;
+            }
+
+            return false;
         }
     }
 
@@ -472,7 +503,7 @@ internal sealed class PlateLibraryService
     /// <summary>
     /// Single-profile documents recorded the character they were made for. Any such Plate not
     /// already associated with that character is associated (never made Active). A character
-    /// whose binding file exists but is unreadable is skipped rather than overwritten.
+    /// whose binding file exists but couldn't be read is skipped rather than overwritten.
     /// </summary>
     /// <returns>Characters whose bindings changed.</returns>
     private List<ulong> AssociateLegacyOwners()
@@ -485,7 +516,7 @@ internal sealed class PlateLibraryService
             foreach (var record in plates.Values.Where(r => r.Status == PlateStatus.Ready).OrderBy(r => r.CreatedUtc).ThenBy(r => r.Id))
             {
                 var owner = record.Preview!.OwnerContentId;
-                if (owner == 0 || unreadableBindings.Contains(owner) || newerVersionBindings.Contains(owner))
+                if (owner == 0 || unreadableBindings.Contains(owner) || unavailableBindings.Contains(owner) || newerVersionBindings.Contains(owner))
                 {
                     continue;
                 }
@@ -589,28 +620,45 @@ internal sealed class PlateLibraryService
         }
 
         var becameActive = false;
-        if (character is { } who && PrepareBindingForWrite(who, now) is { } binding)
+        string? linkFailure = null;
+        if (character is { } who)
         {
-            lock (gate)
+            if (PrepareBindingForWrite(who, now, out var refusal) is { } binding)
             {
-                var hadPlates = binding.PlateIds.Any(id => id != plateId && plates.ContainsKey(id));
-                if (!binding.PlateIds.Contains(plateId))
+                lock (gate)
                 {
-                    binding.PlateIds.Add(plateId);
+                    var hadPlates = binding.PlateIds.Any(id => id != plateId && plates.ContainsKey(id));
+                    if (!binding.PlateIds.Contains(plateId))
+                    {
+                        binding.PlateIds.Add(plateId);
+                    }
+
+                    // First Plate for this character: Active automatically. Never otherwise.
+                    if (!hadPlates && (binding.ActivePlateId is null || !plates.ContainsKey(binding.ActivePlateId.Value)))
+                    {
+                        binding.ActivePlateId = plateId;
+                        becameActive = true;
+                    }
                 }
 
-                // First Plate for this character: Active automatically. Never otherwise.
-                if (!hadPlates && (binding.ActivePlateId is null || !plates.ContainsKey(binding.ActivePlateId.Value)))
-                {
-                    binding.ActivePlateId = plateId;
-                    becameActive = true;
-                }
+                await CommitBindingAsync(binding).ConfigureAwait(false);
             }
-
-            await CommitBindingAsync(binding).ConfigureAwait(false);
+            else if (refusal == BindingRefusal.Unavailable)
+            {
+                // A newer-version binding is skipped quietly (the Plate is still created, as ever);
+                // an unavailable one is worth telling the player about, because a restart fixes it.
+                linkFailure = "The Plate was created, but it couldn't be linked to your character. " + DescribeRefusal(refusal);
+            }
         }
 
         await WriteLibraryAsync().ConfigureAwait(false);
+
+        if (linkFailure is not null)
+        {
+            // The Plate exists, is listed first, and is intact; only its character link is missing.
+            throw new PlateLibraryException(linkFailure);
+        }
+
         return new PlateCreationResult(plateId, becameActive);
     }
 
@@ -828,8 +876,8 @@ internal sealed class PlateLibraryService
                 RequireReadyLocked(plateId, "made Active");
             }
 
-            var binding = PrepareBindingForWrite(character, utcNow())
-                ?? throw new PlateLibraryException("This character's Plate settings were saved by a newer version of AetherFrame and can't be changed.");
+            var binding = PrepareBindingForWrite(character, utcNow(), out var refusal)
+                ?? throw new PlateLibraryException(DescribeRefusal(refusal));
 
             if (!binding.PlateIds.Contains(plateId))
             {
@@ -1103,20 +1151,30 @@ internal sealed class PlateLibraryService
     /// A working COPY of the binding to change for <paramref name="character"/> (new when there is
     /// none), with its descriptive metadata refreshed; <see cref="CommitBindingAsync"/> writes it
     /// and only then makes it live, so a failed write never leaves memory claiming otherwise. A
-    /// binding whose file is unreadable is replaced by a fresh one (WriteBindingAsync keeps a
-    /// recovery copy of the damaged file first). Null for a newer-version binding, which this
-    /// build never writes.
+    /// binding whose file holds damaged content is replaced by a fresh one (WriteBindingAsync keeps
+    /// a recovery copy of the damaged file first). Null, with <paramref name="refusal"/> saying why,
+    /// for a binding this build must not write: one saved by a newer version, or one whose file
+    /// couldn't be read this session and may well be intact.
     /// </summary>
-    private CharacterBinding? PrepareBindingForWrite(CharacterContext character, DateTime now)
+    private CharacterBinding? PrepareBindingForWrite(CharacterContext character, DateTime now, out BindingRefusal refusal)
     {
         lock (gate)
         {
             if (newerVersionBindings.Contains(character.ContentId))
             {
                 log.Warning("AetherFrame left a character's Plate settings unchanged: they were saved by a newer version.");
+                refusal = BindingRefusal.NewerVersion;
                 return null;
             }
 
+            if (unavailableBindings.Contains(character.ContentId))
+            {
+                log.Warning("AetherFrame left a character's Plate settings unchanged: they couldn't be read when the Plate Library loaded.");
+                refusal = BindingRefusal.Unavailable;
+                return null;
+            }
+
+            refusal = BindingRefusal.None;
             var binding = bindings.TryGetValue(character.ContentId, out var existing)
                 ? existing.Clone()
                 : new CharacterBinding { ContentId = character.ContentId, CreatedAtUtc = now };
@@ -1136,6 +1194,14 @@ internal sealed class PlateLibraryService
             return binding;
         }
     }
+
+    /// <summary>The player-facing reason <see cref="PrepareBindingForWrite"/> refused a binding.</summary>
+    private static string DescribeRefusal(BindingRefusal refusal) => refusal switch
+    {
+        BindingRefusal.NewerVersion => "This character's Plate settings were saved by a newer version of AetherFrame and can't be changed.",
+        BindingRefusal.Unavailable => "This character's Plate settings couldn't be read when AetherFrame started. Restart the game to try again.",
+        _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "Not a refusal."),
+    };
 
     /// <summary>Writes a binding prepared by <see cref="PrepareBindingForWrite"/>, then makes it live.</summary>
     private async Task CommitBindingAsync(CharacterBinding binding)
@@ -1203,8 +1269,18 @@ internal sealed class PlateLibraryService
 
         var destination = paths.GetRecoveryPath(path, utcNow());
         store.CopyFile(path, destination);
-        log.Warning($"AetherFrame kept a copy of damaged file {Path.GetFileName(path)} at {destination}.");
+        log.Warning($"AetherFrame kept a copy of damaged file {Path.GetFileName(path)} in Recovery as {Path.GetFileName(destination)}.");
     }
+
+    /// <summary>
+    /// The store's read contract: a file whose CONTENT is damaged fails this way (the store's
+    /// backup copy, if any, was already tried); any other failure means the file couldn't be
+    /// opened at all and may be perfectly intact, so it must never be written over as damaged.
+    /// </summary>
+    private static bool IsContentDamage(Exception ex) => ex is InvalidDataException or JsonException;
+
+    /// <summary>A load stopped by cancellation or by unloading — never a fault in a file.</summary>
+    private static bool IsLoadInterruption(Exception ex) => ex is OperationCanceledException or OperationAbandonedException;
 
     /// <summary>Must hold <see cref="gate"/>.</summary>
     private string ResolveNewName(string? requested, string fallback)
@@ -1295,6 +1371,14 @@ internal sealed class PlateLibraryService
         {
             return null;
         }
+    }
+
+    /// <summary>Why a character's binding can't be written this session (see <see cref="PrepareBindingForWrite"/>).</summary>
+    private enum BindingRefusal
+    {
+        None,
+        NewerVersion,
+        Unavailable,
     }
 
     /// <summary>

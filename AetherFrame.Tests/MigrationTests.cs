@@ -608,6 +608,11 @@ public class FailureIsolationTests
         Assert.Equal(plate.PlateId, library.GetActivePlateId(Characters.Alice.ContentId));
         var preserved = Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory));
         Assert.Equal("not json at all", File.ReadAllText(preserved));
+
+        // The log names the copy by file name only, never by its directory.
+        var kept = Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("kept a copy", StringComparison.Ordinal));
+        Assert.Contains(Path.GetFileName(preserved), kept, StringComparison.Ordinal);
+        Assert.DoesNotContain(fixture.Root, kept, StringComparison.Ordinal);
     }
 
     [Fact]
