@@ -69,8 +69,8 @@ internal sealed class AssetGarbageCollector
 
     /// <summary>
     /// Classifies every managed asset. <paramref name="additionallyInUse"/> covers references the
-    /// saved Plates can't know about — e.g. every asset the open editor document or its undo
-    /// history refers to.
+    /// saved Plates can't know about — every asset the open editor document or its undo history
+    /// refers to, which is exactly the editor session's <c>EditorSession.AssetsInUse</c>.
     /// </summary>
     internal AssetCleanupPlan Plan(AssetReferenceScan scan, IEnumerable<Guid>? additionallyInUse = null)
     {

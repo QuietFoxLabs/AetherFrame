@@ -50,6 +50,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly CharacterIdentityService characterIdentityService;
     private readonly KeyboardShortcutService keyboardShortcutService;
     private readonly ImageTextureCache imageTextureCache;
+    private readonly AssetStorageService assetStorageService;
     private readonly ProfileFontService fontService;
     private readonly ProceduralTextureCache proceduralTextureCache;
     private readonly BuiltInArtTextureCache builtInArtTextureCache;
@@ -113,7 +114,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             characterIdentityService = new CharacterIdentityService(jobCatalog);
             var profileService = new ProfileService(plateLibrary);
 
-            var assetStorageService = new AssetStorageService(
+            assetStorageService = new AssetStorageService(
                 paths.AssetsDirectory, paths.AssetStagingDirectory, new AssetMetadataStore(paths.AssetMetadataDirectory, log), ImageFormatSupport.IsSupported, log);
             imageTextureCache = new ImageTextureCache(assetStorageService);
             fontService = new ProfileFontService();
@@ -225,8 +226,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
-        // Temporary files from an import interrupted by the game closing; only AetherFrame's own.
+        // Temporary files left by an import or a thumbnail generation the game closing interrupted;
+        // only AetherFrame's own, under names only it writes, and before any UI can start another.
         packageService.SweepStaging();
+        assetStorageService.SweepStaging();
+        thumbnailService.SweepTemporaryFiles();
+        templateThumbnailService.SweepTemporaryFiles();
 
         // The Library loads on a framework tick (its reads and any migration write are dispatched
         // there, like every Library operation); this task is what that tick's work completes.

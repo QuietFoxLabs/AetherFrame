@@ -413,9 +413,10 @@ internal sealed partial class PlateLibraryWindow
         ImGui.SameLine();
         using (ImRaii.Disabled(profileService.IsBusy || guardSaveTask is not null))
         {
-            if (ImGui.Button("Discard", buttonSize))
+            if (ImGui.Button("Discard", buttonSize) && editorSession.DiscardChanges())
             {
-                editorSession.DiscardChanges();
+                // Only once the edits are really gone: a refused revert (a save landed meanwhile)
+                // keeps the question open, with the editor's own message saying why.
                 guardedOpen = null;
                 ImGui.CloseCurrentPopup();
                 OpenNow(open.PlateId, open.Basic);
