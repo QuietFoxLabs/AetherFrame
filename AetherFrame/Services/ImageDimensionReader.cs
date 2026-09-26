@@ -4,6 +4,12 @@ using System.IO;
 namespace AetherFrame.Services;
 
 /// <summary>
+/// What a PNG's IHDR chunk declares: its size, plus the bit depth and colour type that decide the
+/// pixel format the game's decoder keeps it in (and so how much memory it costs decoded).
+/// </summary>
+internal readonly record struct PngHeader(int Width, int Height, int BitDepth, int ColorType);
+
+/// <summary>
 /// Reads just the pixel width/height a supported image file declares in its own header, without
 /// decoding pixels or touching Dalamud's (async, GPU-backed) texture pipeline — so a freshly
 /// imported image's native aspect ratio is available synchronously, in time to size its new
@@ -26,9 +32,9 @@ internal static class ImageDimensionReader
             var read = stream.Read(header);
             var peeked = read < header.Length ? header[..read] : header;
 
-            if (TryReadPng(peeked, out var pngSize))
+            if (TryReadPng(peeked, out var png))
             {
-                return pngSize;
+                return (png.Width, png.Height);
             }
 
             if (TryReadWebP(peeked, out var webpSize))
@@ -51,18 +57,23 @@ internal static class ImageDimensionReader
         }
     }
 
-    private static bool TryReadPng(ReadOnlySpan<byte> header, out (int Width, int Height) size)
+    /// <summary>
+    /// Reads a PNG's IHDR from the first bytes of a file. False when the bytes aren't a PNG, the
+    /// header is truncated, or a dimension is zero or too large to be a real size (a declared
+    /// width or height past <see cref="int.MaxValue"/> is never an image, and would wrap negative).
+    /// </summary>
+    internal static bool TryReadPng(ReadOnlySpan<byte> header, out PngHeader png)
     {
-        size = default;
+        png = default;
 
         ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        if (header.Length < 24 || !header[..8].SequenceEqual(signature))
+        if (header.Length < 26 || !header[..8].SequenceEqual(signature))
         {
             return false;
         }
 
         // IHDR is always the very first chunk: 4-byte length, 4-byte type "IHDR", then width and
-        // height as 4-byte big-endian integers.
+        // height as 4-byte big-endian integers, then one byte each of bit depth and colour type.
         if (header[12] != (byte)'I' || header[13] != (byte)'H' || header[14] != (byte)'D' || header[15] != (byte)'R')
         {
             return false;
@@ -70,12 +81,12 @@ internal static class ImageDimensionReader
 
         var width = ReadUInt32BigEndian(header[16..20]);
         var height = ReadUInt32BigEndian(header[20..24]);
-        if (width == 0 || height == 0)
+        if (width == 0 || height == 0 || width > int.MaxValue || height > int.MaxValue)
         {
             return false;
         }
 
-        size = ((int)width, (int)height);
+        png = new PngHeader((int)width, (int)height, header[24], header[25]);
         return true;
     }
 
