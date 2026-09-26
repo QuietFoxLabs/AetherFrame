@@ -33,9 +33,16 @@ namespace AetherFrame.Services.Plates;
 /// matters. Deleting moves the document to the trash FIRST for the same reason: afterwards a
 /// stale reference is harmless and ignored.</para>
 ///
-/// <para><b>Threading.</b> Operations are serialized and run through the supplied dispatcher
-/// (the framework thread in game). Query members are safe from any thread, including ImGui Draw:
-/// they only read immutable snapshots under a lock.</para>
+/// <para><b>Threading.</b> Operations are serialized and STARTED through the supplied dispatcher
+/// (the framework thread in game): an operation's synchronous prefix — its checks and the JSON
+/// work before its first file step — runs there, and everything after the first incomplete await
+/// (further file steps, the in-memory updates, and the <see cref="PlateRenamed"/>,
+/// <see cref="PlateDeleted"/> and <see cref="PlateSaved"/> events) continues on whichever thread
+/// completed that step: the thread pool in game, where the store writes asynchronously. Loading
+/// moves its whole read phase to the thread pool deliberately. Nothing here may therefore assume
+/// the dispatcher's thread after an await, and event subscribers must be thread-safe. Query
+/// members are safe from any thread, including ImGui Draw: they only read immutable snapshots
+/// under a lock.</para>
 ///
 /// <para><b>Shutdown.</b> Every operation is an <see cref="OwnedOperations"/> operation, so
 /// unloading waits for the one running and none starts afterwards.</para>
@@ -93,13 +100,13 @@ internal sealed class PlateLibraryService
         this.operations = operations ?? new OwnedOperations();
     }
 
-    /// <summary>Raised (on the operation's thread) after a Plate is renamed.</summary>
+    /// <summary>Raised after a Plate is renamed, on whichever thread completed the write (see the class remarks on threading).</summary>
     internal event Action<Guid, string>? PlateRenamed;
 
-    /// <summary>Raised (on the operation's thread) after a Plate is deleted.</summary>
+    /// <summary>Raised after a Plate is deleted, on whichever thread completed its last file step (see the class remarks on threading).</summary>
     internal event Action<Guid>? PlateDeleted;
 
-    /// <summary>Raised (on the operation's thread) after a Plate's document is saved.</summary>
+    /// <summary>Raised after a Plate's document is saved, on whichever thread completed the write (see the class remarks on threading).</summary>
     internal event Action<Guid>? PlateSaved;
 
     internal bool IsLoaded
@@ -239,10 +246,15 @@ internal sealed class PlateLibraryService
 
     private async Task InitializeCoreAsync(CancellationToken cancellationToken)
     {
+        // The read phase — every document read, parsed, migrated and re-serialized — runs on the
+        // thread pool: the dispatcher (the framework thread in game) only starts the operation and
+        // is free again at the first of these awaits, however large the Library is. The store has
+        // no thread affinity, and the writes below keep their ordering on whatever thread the
+        // reads finished on.
         ThrowIfLoadCanceled(cancellationToken);
-        var loadedPlates = await LoadPlatesAsync().ConfigureAwait(false);
+        var loadedPlates = await Task.Run(LoadPlatesAsync).ConfigureAwait(false);
         ThrowIfLoadCanceled(cancellationToken);
-        var (loadedBindings, badBindings, missingBindings, newerBindings, migratedBindings) = await LoadBindingsAsync().ConfigureAwait(false);
+        var (loadedBindings, badBindings, missingBindings, newerBindings, migratedBindings) = await Task.Run(LoadBindingsAsync).ConfigureAwait(false);
         ThrowIfLoadCanceled(cancellationToken);
 
         lock (gate)
@@ -290,7 +302,7 @@ internal sealed class PlateLibraryService
         }
         else
         {
-            writeLibrary = await LoadLibraryIndexAsync().ConfigureAwait(false);
+            writeLibrary = await Task.Run(LoadLibraryIndexAsync).ConfigureAwait(false);
         }
 
         lock (gate)
@@ -1204,7 +1216,9 @@ internal sealed class PlateLibraryService
     /// Runs one operation at a time, as an <see cref="OwnedOperations"/> operation: once the plugin
     /// starts shutting down, an operation still waiting its turn gives up and none starts, while
     /// one already running is waited for (and, if unloading stops waiting, stops at its next file
-    /// step — see <see cref="OwnedOperations"/>).
+    /// step — see <see cref="OwnedOperations"/>). The dispatcher only starts the work: it is not
+    /// waited for there, so the work's continuations run wherever its awaits complete (see the
+    /// class remarks on threading).
     /// </summary>
     private async Task<T> RunExclusiveAsync<T>(Func<Task<T>> work)
     {
