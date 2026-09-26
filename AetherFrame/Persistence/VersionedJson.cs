@@ -11,11 +11,12 @@ namespace AetherFrame.Persistence;
 internal sealed class VersionedReadResult<T>
     where T : class
 {
-    internal VersionedReadResult(SchemaMigrationResult migration, JsonObject? raw, T? value)
+    internal VersionedReadResult(SchemaMigrationResult migration, JsonObject? raw, T? value, bool recoveredFromBackup = false)
     {
         Migration = migration;
         Raw = raw;
         Value = value;
+        RecoveredFromBackup = recoveredFromBackup;
     }
 
     internal SchemaMigrationResult Migration { get; }
@@ -25,6 +26,10 @@ internal sealed class VersionedReadResult<T>
 
     /// <summary>The typed object; only for usable (current or migrated) results.</summary>
     internal T? Value { get; }
+
+    /// <summary>True when the copy on disk was unusable and this came from the store's backup
+    /// copy instead (see <see cref="VersionedJson.ReadAsync{T}"/>).</summary>
+    internal bool RecoveredFromBackup { get; }
 
     internal bool IsUsable => Migration.IsUsable && Value is not null;
 
@@ -51,9 +56,12 @@ internal static class VersionedJson
                 return Invalid<T>($"{schema.Name} is not a JSON object.");
             }
 
+            // JsonNode.Parse defers detecting duplicate property names until the object is
+            // materialized, so materialize it here where that is still "not valid JSON".
+            _ = parsed.Count;
             raw = parsed;
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
         {
             return Invalid<T>($"{schema.Name} is not valid JSON: {ex.Message}");
         }
@@ -87,22 +95,26 @@ internal static class VersionedJson
     /// store's reader so a store with backups retries from its backup copy; a NEWER-version file
     /// deliberately does not, because falling back to an older backup of it would silently hand
     /// back stale data that a later save could then write over the newer file. Throws
-    /// <see cref="InvalidDataException"/> (or the IO error) when no usable copy exists.
+    /// <see cref="InvalidDataException"/> (or the IO error) when no usable copy exists. A result
+    /// the store had to retry for reports <see cref="VersionedReadResult{T}.RecoveredFromBackup"/>.
     /// </summary>
     internal static async Task<VersionedReadResult<T>> ReadAsync<T>(IPlateFileStore store, string path, SchemaDefinition schema, Func<JsonObject, T?>? deserialize = null)
         where T : class
     {
         VersionedReadResult<T>? result = null;
+        var attempts = 0;
 
         await store.ReadTextAsync(path, text =>
         {
+            attempts++;
             var parsed = Parse(text, schema, deserialize);
             if (!parsed.IsUsable && !parsed.IsNewerVersion)
             {
                 throw new InvalidDataException(parsed.Migration.Error ?? $"{schema.Name} is unreadable.");
             }
 
-            result = parsed;
+            // A second invocation is the store retrying from its backup after the first copy failed.
+            result = attempts == 1 ? parsed : new VersionedReadResult<T>(parsed.Migration, parsed.Raw, parsed.Value, recoveredFromBackup: true);
         }).ConfigureAwait(false);
 
         return result ?? throw new InvalidDataException($"{schema.Name} could not be read.");

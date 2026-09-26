@@ -70,7 +70,8 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
 {
     private readonly SystemFileStore files = new();
 
-    internal Dictionary<string, string> Backups { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Keyed by the exact path, as Dalamud keys its backup rows.</summary>
+    internal Dictionary<string, string> Backups { get; } = new(StringComparer.Ordinal);
 
     internal int ReaderInvocations { get; private set; }
 
@@ -78,6 +79,7 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
 
     public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
+    /// <summary>Throws <see cref="BackupReadFailedException"/> when the backup copy is unusable too.</summary>
     public async Task ReadTextAsync(string path, Action<string> reader)
     {
         try
@@ -88,7 +90,14 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
         catch (Exception) when (Backups.TryGetValue(path, out var backup))
         {
             ReaderInvocations++;
-            reader(backup);
+            try
+            {
+                reader(backup);
+            }
+            catch (Exception ex)
+            {
+                throw new BackupReadFailedException(path, ex);
+            }
         }
     }
 
@@ -105,11 +114,23 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
     public void DeleteFile(string path) => files.DeleteFile(path);
 }
 
+/// <summary>A file that is damaged on disk and whose backup copy is unusable too — as opposed to
+/// a plain IO error, or damage the backup did recover from.</summary>
+internal sealed class BackupReadFailedException : IOException
+{
+    internal BackupReadFailedException(string path, Exception backupFailure)
+        : base($"Neither '{Path.GetFileName(path)}' nor its backup copy could be read.", backupFailure)
+    {
+    }
+}
+
 /// <summary>Plain files with switchable failures, for fault injection. Like the operating
 /// system's own, a failure's message names the full path.</summary>
 internal sealed class FaultInjectingStore : IPlateFileStore
 {
     private readonly SystemFileStore files = new();
+
+    private int writesOnDisk;
 
     /// <summary>Writes whose path matches fail with an IOException (before anything is written).</summary>
     internal Func<string, bool>? FailWrite { get; set; }
@@ -119,6 +140,32 @@ internal sealed class FaultInjectingStore : IPlateFileStore
 
     /// <summary>Listings of a matching directory fail with an UnauthorizedAccessException.</summary>
     internal Func<string, bool>? FailList { get; set; }
+
+    /// <summary>Reads whose path matches fail before the reader is ever invoked.</summary>
+    internal Func<string, bool>? FailRead { get; set; }
+
+    /// <summary>Copies whose source path matches fail.</summary>
+    internal Func<string, bool>? FailCopy { get; set; }
+
+    /// <summary>Deletes whose path matches fail.</summary>
+    internal Func<string, bool>? FailDelete { get; set; }
+
+    /// <summary>When set, the first N writes reach the disk and every later one fails before
+    /// anything is written. Independent of <see cref="FailWrite"/>, which still applies.</summary>
+    internal int? FailWriteAfter { get; set; }
+
+    /// <summary>Writes whose path matches are performed — the file lands on disk — and THEN fail,
+    /// as Dalamud's reliable storage does when it throws after MoveFileEx already replaced the file.</summary>
+    internal Func<string, bool>? ThrowAfterWrite { get; set; }
+
+    /// <summary>Makes the failure for <see cref="FailRead"/>, <see cref="FailCopy"/>,
+    /// <see cref="FailDelete"/>, <see cref="FailWriteAfter"/> and <see cref="ThrowAfterWrite"/>;
+    /// null (the default) makes an IOException naming the path.</summary>
+    internal Func<string, Exception>? FaultFactory { get; set; }
+
+    /// <summary>When true, the async members fail through a faulted Task instead of throwing
+    /// synchronously, as Dalamud's plugin-scoped storage does (it fails from a thread-pool task).</summary>
+    internal bool FaultAsync { get; set; }
 
     internal int FailedOperations { get; private set; }
 
@@ -135,17 +182,32 @@ internal sealed class FaultInjectingStore : IPlateFileStore
         return files.ListFiles(directory, searchPattern);
     }
 
-    public Task ReadTextAsync(string path, Action<string> reader) => files.ReadTextAsync(path, reader);
+    public Task ReadTextAsync(string path, Action<string> reader)
+    {
+        if (FailRead?.Invoke(path) == true)
+        {
+            return Fail(Fault(path));
+        }
+
+        return files.ReadTextAsync(path, reader);
+    }
 
     public Task WriteTextAsync(string path, string contents)
     {
         if (FailWrite?.Invoke(path) == true)
         {
-            FailedOperations++;
-            throw new IOException($"Injected write failure: '{path}'");
+            return Fail(new IOException($"Injected write failure: '{path}'"));
         }
 
-        return files.WriteTextAsync(path, contents);
+        if (FailWriteAfter is { } allowed && writesOnDisk >= allowed)
+        {
+            return Fail(Fault(path));
+        }
+
+        // SystemFileStore writes synchronously, so the file is on disk once this returns.
+        var write = files.WriteTextAsync(path, contents);
+        writesOnDisk++;
+        return ThrowAfterWrite?.Invoke(path) == true ? Fail(Fault(path)) : write;
     }
 
     public void MoveFile(string sourcePath, string destinationPath)
@@ -159,9 +221,36 @@ internal sealed class FaultInjectingStore : IPlateFileStore
         files.MoveFile(sourcePath, destinationPath);
     }
 
-    public void CopyFile(string sourcePath, string destinationPath) => files.CopyFile(sourcePath, destinationPath);
+    public void CopyFile(string sourcePath, string destinationPath)
+    {
+        if (FailCopy?.Invoke(sourcePath) == true)
+        {
+            FailedOperations++;
+            throw Fault(sourcePath);
+        }
 
-    public void DeleteFile(string path) => files.DeleteFile(path);
+        files.CopyFile(sourcePath, destinationPath);
+    }
+
+    public void DeleteFile(string path)
+    {
+        if (FailDelete?.Invoke(path) == true)
+        {
+            FailedOperations++;
+            throw Fault(path);
+        }
+
+        files.DeleteFile(path);
+    }
+
+    private Exception Fault(string path) => FaultFactory?.Invoke(path) ?? new IOException($"Injected failure: '{path}'");
+
+    /// <summary>Counts the failure, then throws it or hands it back as a faulted Task (see <see cref="FaultAsync"/>).</summary>
+    private Task Fail(Exception failure)
+    {
+        FailedOperations++;
+        return FaultAsync ? Task.FromException(failure) : throw failure;
+    }
 }
 
 /// <summary>Builds a Plate Library over a temp directory, with helpers to seed legacy data.</summary>

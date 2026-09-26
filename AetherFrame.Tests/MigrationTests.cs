@@ -305,6 +305,16 @@ public class SchemaMigrationTests
     }
 
     [Fact]
+    public void DuplicatePropertyNames_AreInvalid_NotAnException()
+    {
+        var result = VersionedJson.Parse<ProfileDocument>("""{ "Version": 2, "Name": "a", "Name": "b" }""", PersistenceSchemas.ProfileDocument);
+
+        Assert.Equal(SchemaMigrationOutcome.Invalid, result.Migration.Outcome);
+        Assert.Contains("not valid JSON", result.Migration.Error);
+        Assert.Null(result.Value);
+    }
+
+    [Fact]
     public void StepsRunInOrder_OnePerVersion()
     {
         var applied = new System.Collections.Generic.List<int>();
@@ -442,6 +452,77 @@ public class FailureIsolationTests
 
         Assert.Equal(PlateStatus.Ready, library.FindPlate(plateId)!.Status);
         Assert.Equal("From backup", library.FindPlate(plateId)!.DisplayName);
+    }
+
+    [Fact]
+    public async Task DamagedPlate_ReadFromItsBackup_ReportsTheRecovery()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "From backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, "{ truncated");
+
+        var result = await VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+
+        Assert.True(result.IsUsable);
+        Assert.True(result.RecoveredFromBackup);
+        Assert.Equal("From backup", result.Value!.Name);
+        Assert.Equal(2, store.ReaderInvocations);
+    }
+
+    [Fact]
+    public async Task IntactPlate_IsNotReportedAsRecovered()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "From backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "On disk", fixture.Clock.Now), JsonOptions.Default));
+
+        var result = await VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+
+        Assert.True(result.IsUsable);
+        Assert.False(result.RecoveredFromBackup);
+        Assert.Equal("On disk", result.Value!.Name);
+        Assert.Equal(1, store.ReaderInvocations);
+    }
+
+    [Fact]
+    public async Task NewerVersionPlate_IsNeverReadFromItsBackup_NorReportedAsRecovered()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Old backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, $$"""{ "Version": 50, "ProfileId": "{{plateId}}", "Name": "Newer" }""");
+
+        var result = await VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+
+        Assert.True(result.IsNewerVersion);
+        Assert.False(result.RecoveredFromBackup);
+        Assert.Equal("Newer", result.Raw!["Name"]!.GetValue<string>());
+        Assert.Equal(1, store.ReaderInvocations);
+    }
+
+    [Fact]
+    public async Task DamagedPlate_WithADamagedBackup_FailsDistinctly()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = "{ also truncated";
+        fixture.WritePlateJson(plateId, "{ truncated");
+
+        var failure = await Assert.ThrowsAsync<BackupReadFailedException>(() => VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize));
+
+        Assert.Contains(Path.GetFileName(path), failure.Message);
+        Assert.DoesNotContain(fixture.Root, failure.Message);
+        Assert.IsType<InvalidDataException>(failure.InnerException);
     }
 
     [Fact]
