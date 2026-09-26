@@ -450,6 +450,63 @@ public class EditorEditAtomicityTests
         Assert.False(guard.PreOpenCheck(isOpen: false));
     }
 
+    // ---------------------------------------------------------------- assets in use
+
+    [Fact]
+    public async Task AssetsInUse_CoversHistory()
+    {
+        // Blank Canvas: no portrait yet, so Basic's Set Portrait below imports on its own.
+        using var harness = await BasicHarness.CreatePlateAsync(PlateStartingLayout.Blank, null);
+        harness.Session.AddImageElement(harness.ImportablePng("a.png", 400, 640));
+        var image = (ImageProfileElement)harness.Document.Elements[^1];
+        var imageId = image.Id;
+        var a = image.AssetId;
+        Assert.True(await harness.Session.SaveProfileAsync());
+
+        harness.Session.ReplaceImage(imageId, harness.ImportablePng("b.png", 300, 300));
+        var b = ((ImageProfileElement)harness.Document.Elements.Single(e => e.Id == imageId)).AssetId;
+        Assert.NotEqual(a, b);
+        Assert.True(await harness.Session.SaveProfileAsync());
+        harness.Session.Undo(); // A is on the canvas again, unsaved; B is one Ctrl+Y away
+
+        Assert.Contains(a, harness.Session.AssetsInUse);
+        Assert.Contains(b, harness.Session.AssetsInUse);
+        harness.Session.Redo();
+        Assert.Contains(a, harness.Session.AssetsInUse);
+        Assert.Contains(b, harness.Session.AssetsInUse);
+
+        // An image the Basic editor imported on its own is covered too.
+        harness.Basic.SetPortrait(harness.ImportablePng("p.png", 200, 320));
+        var portrait = harness.Basic.Portrait!.AssetId;
+        Assert.Contains(portrait, harness.Session.AssetsInUse);
+
+        // Fed to a cleanup whose saved-Plate scan knows none of them, every one is Referenced.
+        var collector = new AssetGarbageCollector(harness.Assets, harness.Fixture.Paths.AssetTrashDirectory, utcNow: () => DateTime.UtcNow.AddYears(1));
+        var plan = collector.Plan(new AssetReferenceScan(true, new HashSet<Guid>(), []), additionallyInUse: harness.Session.AssetsInUse);
+        var states = plan.Assets.ToDictionary(x => x.AssetId, x => x.State);
+        Assert.Equal(AssetLifecycleState.Referenced, states[a]);
+        Assert.Equal(AssetLifecycleState.Referenced, states[b]);
+        Assert.Equal(AssetLifecycleState.Referenced, states[portrait]);
+    }
+
+    [Fact]
+    public async Task AssetsInUse_IsResetToTheOpenedPlate()
+    {
+        using var harness = await BasicHarness.NewClassicAsync();
+        harness.Session.AddImageElement(harness.ImportablePng("a.png", 400, 640));
+        var a = ((ImageProfileElement)harness.Document.Elements[^1]).AssetId;
+        Assert.True(await harness.Session.SaveProfileAsync());
+        var first = harness.PlateId;
+        var other = await harness.Library.CreatePlateAsync(PlateStartingLayout.Blank, null);
+
+        harness.Profiles.OpenPlate(other.PlateId);
+        harness.Session.SyncWithCurrentProfile();
+        Assert.Empty(harness.Session.AssetsInUse);
+
+        harness.Profiles.OpenPlate(first);
+        harness.Session.SyncWithCurrentProfile();
+        Assert.Equal([a], harness.Session.AssetsInUse);
+    }
 
     /// <summary>A font wider than the editor's estimate (three quarters of the size per character), or none yet.</summary>
     private sealed class WideFont : IIdentityTextMeasurer

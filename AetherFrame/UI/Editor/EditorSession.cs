@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
+using AetherFrame.Domain.Assets;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
@@ -89,6 +90,9 @@ internal sealed partial class EditorSession
     private int dirtyMemoFrame = -1;
     private bool dirtyMemo;
 
+    // Every asset this document has referred to since it was opened (see AssetsInUse).
+    private readonly HashSet<Guid> assetsInUse = new();
+
     internal EditorSession(
         ProfileService profileService, AssetStorageService assetStorage, IEditorImageInfo imageTextureCache, IAetherFrameLog log, Func<int> frameCounter)
     {
@@ -112,6 +116,17 @@ internal sealed partial class EditorSession
     internal bool CanUndo => undoStack.Count > 0;
 
     internal bool CanRedo => redoStack.Count > 0;
+
+    /// <summary>
+    /// Every asset the open document has referred to since it was opened: what it referenced when
+    /// it was opened, every image imported through the editor since, and every state a recorded
+    /// edit left it in — so it covers everything undo or redo can bring back, not only what is on
+    /// the canvas now. This is the <c>additionallyInUse</c> feed for
+    /// <see cref="Services.Assets.AssetGarbageCollector.Plan"/>: a cleanup that ignores it could
+    /// trash an image that is one Ctrl+Z away. Reset when another Plate is opened; only ever grown
+    /// by an edit, never scanned per frame.
+    /// </summary>
+    internal IReadOnlySet<Guid> AssetsInUse => assetsInUse;
 
     /// <summary>
     /// True when the live profile differs from the last successfully loaded/saved state, or while
@@ -208,14 +223,8 @@ internal sealed partial class EditorSession
     {
         ErrorMessage = null;
 
-        Guid assetId;
-        try
+        if (ImportImage(sourceFilePath) is not { } assetId)
         {
-            assetId = assetStorage.ImportImage(sourceFilePath);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
             return;
         }
 
@@ -269,14 +278,8 @@ internal sealed partial class EditorSession
     {
         ErrorMessage = null;
 
-        Guid assetId;
-        try
+        if (ImportImage(sourceFilePath) is not { } assetId)
         {
-            assetId = assetStorage.ImportImage(sourceFilePath);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
             return;
         }
 
@@ -793,8 +796,39 @@ internal sealed partial class EditorSession
             undoStack.RemoveAt(0);
         }
 
+        // The state this action left is what its redo brings back: whatever it refers to stays in
+        // use for the rest of the session (see AssetsInUse), however the image got there.
+        NoteDocumentAssets();
         InvalidateDirtyMemo();
         return entry;
+    }
+
+    /// <summary>
+    /// Imports an image file into managed asset storage for the open document, recording it as in
+    /// use for the rest of the session. Returns null, with <see cref="ErrorMessage"/> set, when
+    /// the file can't be imported.
+    /// </summary>
+    private Guid? ImportImage(string sourceFilePath)
+    {
+        try
+        {
+            var assetId = assetStorage.ImportImage(sourceFilePath);
+            assetsInUse.Add(assetId);
+            return assetId;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
+            return null;
+        }
+    }
+
+    private void NoteDocumentAssets()
+    {
+        if (profileService.CurrentProfile is { } profile)
+        {
+            AssetReferenceScanner.Collect(profile, assetsInUse);
+        }
     }
 
     private void DropSelectionIfMissing()
@@ -808,6 +842,7 @@ internal sealed partial class EditorSession
     private void ResetTransientState()
     {
         ClearHistory();
+        assetsInUse.Clear();
         pendingEditBefore = null;
         pendingBackgroundBefore = null;
         pendingDocumentBefore = null;
@@ -834,6 +869,7 @@ internal sealed partial class EditorSession
             try
             {
                 baseline = ProfileService.DocumentState.Capture(profile);
+                AssetReferenceScanner.Collect(profile, assetsInUse);
             }
             catch (Exception ex)
             {

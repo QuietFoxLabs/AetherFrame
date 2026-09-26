@@ -32,14 +32,8 @@ internal sealed partial class EditorSession
     {
         ErrorMessage = null;
 
-        Guid assetId;
-        try
+        if (ImportImage(sourceFilePath) is not { } assetId)
         {
-            assetId = assetStorage.ImportImage(sourceFilePath);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
             return;
         }
 
