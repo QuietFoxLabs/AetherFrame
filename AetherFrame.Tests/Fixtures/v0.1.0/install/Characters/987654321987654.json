@@ -1,0 +1,16 @@
+{
+  "Version": 2,
+  "ContentId": 987654321987654,
+  "ActiveProfileId": "80f9301d-ca8c-4ec7-9e57-d229094b0e96",
+  "ProfileIds": [
+    "80f9301d-ca8c-4ec7-9e57-d229094b0e96",
+    "9560c1b4-d188-4c81-a0b1-6b16afcf08c8",
+    "d58f5a2c-a984-4283-b552-9d0f9b7cf35b",
+    "1892f27c-fd7e-4287-b0f4-48107906f6b1",
+    "1dde50c7-d1dc-49c0-aaed-803372e81752"
+  ],
+  "LastKnownCharacterName": "Secretive Binding Name",
+  "LastKnownHomeWorld": "Hiddenworld",
+  "CreatedAtUtc": "2026-09-01T12:01:00Z",
+  "UpdatedAtUtc": "2026-09-01T12:10:00Z"
+}

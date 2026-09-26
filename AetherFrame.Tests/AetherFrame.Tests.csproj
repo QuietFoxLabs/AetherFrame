@@ -57,6 +57,14 @@
     <Compile Include="..\AetherFrame\UI\Rendering\PlateCardPreview.cs" Link="Linked\UI\Rendering\PlateCardPreview.cs" />
   </ItemGroup>
 
+  <!-- Files written by the tagged releases' own persistence code (Fixtures/v0.1.x) and the
+       hand-written pre-release shapes (Fixtures/legacy), copied next to the test binaries byte for
+       byte so HistoricalFixtureTests and FixtureCompatibilityTests read exactly what those builds
+       wrote. Regenerated only on a deliberate schema change, never automatically. -->
+  <ItemGroup>
+    <None Update="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The plugin's bundled artwork under the same manifest resource names, so the resource
        integrity tests read exactly what BuiltInArtCatalog names. -->
   <ItemGroup>

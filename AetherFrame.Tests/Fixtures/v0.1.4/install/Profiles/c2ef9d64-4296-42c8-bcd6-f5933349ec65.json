@@ -1,0 +1,190 @@
+{
+  "Version": 2,
+  "ProfileId": "c2ef9d64-4296-42c8-bcd6-f5933349ec65",
+  "OwnerContentId": 0,
+  "Name": "Blank Plate",
+  "Revision": 1,
+  "CreatedAtUtc": "2026-09-01T12:00:00Z",
+  "UpdatedAtUtc": "2026-09-26T12:41:10.2251662Z",
+  "CanvasWidth": 1920,
+  "CanvasHeight": 1080,
+  "Elements": [
+    {
+      "elementType": "text",
+      "Text": "Advanced session text",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 1,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": true,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": false,
+      "AutoFitMinimumSize": 8,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "e32924cf-d51d-4e51-8408-35768eaec6a1",
+      "Name": "Text 1",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 60,
+        "Y": 60
+      },
+      "Size": {
+        "X": 330,
+        "Y": 75
+      },
+      "ZIndex": 0,
+      "Role": 0
+    },
+    {
+      "elementType": "image",
+      "AssetId": "e8ab8e8f-75ed-4fa0-9a45-1725ccff6f2f",
+      "Opacity": 1,
+      "PreserveAspectRatio": true,
+      "RotationDegrees": 0,
+      "DisplayMode": 0,
+      "FlipX": false,
+      "FlipY": false,
+      "Id": "a922db6b-d037-4996-931a-a03a2751fcf7",
+      "Name": "Image 1",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 60,
+        "Y": 60
+      },
+      "Size": {
+        "X": 96,
+        "Y": 96
+      },
+      "ZIndex": 1,
+      "Role": 0
+    }
+  ],
+  "Background": {
+    "Mode": 3,
+    "PrimaryColor": {
+      "X": 0.11,
+      "Y": 0.12,
+      "Z": 0.18,
+      "W": 1
+    },
+    "SecondaryColor": {
+      "X": 0.33,
+      "Y": 0.27,
+      "Z": 0.5,
+      "W": 1
+    },
+    "GradientAngle": 90,
+    "Opacity": 1,
+    "Texture": 9,
+    "TextureIntensity": 0.35,
+    "TextureScale": 24,
+    "TextureRotation": 30,
+    "ImageAssetId": "f3c359b5-832c-4740-96e9-891e7337978d",
+    "ImageFit": 2,
+    "ImageFlipX": false,
+    "ImageFlipY": false,
+    "HasImage": false
+  },
+  "BasicIdentity": null,
+  "BasicPlate": null,
+  "Components": [
+    {
+      "Id": "d6473362-e2b6-4522-8206-e5a13d4371d5",
+      "Kind": 4,
+      "DefinitionId": "af.name-backing.bar",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null,
+      "FixedAnchorPosition": {
+        "X": 696,
+        "Y": 57
+      },
+      "FixedAnchorSize": {
+        "X": 1188,
+        "Y": 198
+      }
+    },
+    {
+      "Id": "4b309d03-250a-458c-b83f-ad752a23762d",
+      "Kind": 6,
+      "DefinitionId": "af.divider.line",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null,
+      "FixedAnchorPosition": {
+        "X": 720,
+        "Y": 252
+      },
+      "FixedAnchorSize": {
+        "X": 1140,
+        "Y": 36
+      }
+    },
+    {
+      "Id": "e4b15e15-0c52-4075-961d-7aa5a382a8d9",
+      "Kind": 2,
+      "DefinitionId": "af.portrait-frame.line",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null
+    }
+  ]
+}
