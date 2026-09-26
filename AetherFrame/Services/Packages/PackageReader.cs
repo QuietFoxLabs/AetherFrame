@@ -302,9 +302,17 @@ internal static class PackageReader
                 return;
             }
 
-            if (!PackageJson.TryParseObject(profileBytes, out var profileRaw, out var profileError))
+            if (!PackageJson.TryParseObject(profileBytes, out var profileRaw, out var profileProblem))
             {
-                diagnostics.Error(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", profileError);
+                if (profileProblem!.Kind == PackageJsonProblemKind.TooLarge)
+                {
+                    diagnostics.Error(PackageErrorCode.PackageTooLarge, "The Plate in this file is too large to import.", profileProblem.Detail);
+                }
+                else
+                {
+                    diagnostics.Error(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", profileProblem.Detail);
+                }
+
                 return;
             }
 

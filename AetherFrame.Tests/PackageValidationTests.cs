@@ -31,6 +31,8 @@ public class PackageValidationTests
         Assert.Equal(64 * 1024, PackagePolicy.MaxManifestBytes);
         Assert.Equal(8 * 1024 * 1024, PackagePolicy.MaxProfileBytes);
         Assert.Equal(32, PackagePolicy.MaxJsonDepth);
+        Assert.Equal(200_000, PackagePolicy.MaxJsonValueCount);
+        Assert.Equal(256, PackagePolicy.MaxJsonPropertyNameLength);
         Assert.Equal(256, PackagePolicy.MaxElementCount);
         Assert.Equal(32, PackagePolicy.MaxAssetCount);
         Assert.Equal(16f, PackagePolicy.MinCanvasDimension);

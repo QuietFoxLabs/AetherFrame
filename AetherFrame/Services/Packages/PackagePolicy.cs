@@ -85,6 +85,18 @@ internal static class PackagePolicy
     /// </summary>
     internal const int MaxJsonDepth = 32;
 
+    /// <summary>
+    /// JSON values (objects, arrays, strings, numbers, booleans, nulls) in one document, counted
+    /// in a forward pass before any tree is built for it. Every later stage walks or copies the
+    /// whole tree, so a document of millions of tiny values inside the byte limit would cost
+    /// gigabytes and seconds. The largest editor-made Plate — 256 text elements with every style
+    /// field, 32 Components — is about 40 thousand values; this leaves room for newer builds' data.
+    /// </summary>
+    internal const int MaxJsonValueCount = 200_000;
+
+    /// <summary>Longest JSON property name, in characters. Real names are a few dozen.</summary>
+    internal const int MaxJsonPropertyNameLength = 256;
+
     // ---------------------------------------------------------------- Plate content
 
     /// <summary>Every element counts, including ones this build doesn't recognize. The editor's own limit.</summary>
@@ -107,7 +119,8 @@ internal static class PackagePolicy
     internal const float MaxCoordinateMagnitude = 100_000f;
 
     /// <summary>Font size ceiling. The editor's slider stops at 96 but typed values can go past it;
-    /// 1024 still keeps font building bounded.</summary>
+    /// 1024 is well past any readable size. Font building itself is bounded by the font tier
+    /// policy (the largest tier is built for any size above it), not by this limit.</summary>
     internal const float MaxFontSize = 1024f;
 
     /// <summary>Spacing, outline, and rotation values beyond this are nonsense rather than style.</summary>

@@ -170,9 +170,17 @@ internal sealed class PackageManifest
     /// </summary>
     internal static PackageManifest? Parse(ReadOnlySpan<byte> utf8Json, PackageDiagnostics diagnostics)
     {
-        if (PackageJson.TryParseObject(utf8Json, out var root, out var parseError) is false)
+        if (!PackageJson.TryParseObject(utf8Json, out var root, out var problem))
         {
-            diagnostics.Error(PackageErrorCode.ManifestInvalid, "The package's description is damaged.", parseError);
+            if (problem!.Kind == PackageJsonProblemKind.TooLarge)
+            {
+                diagnostics.Error(PackageErrorCode.PackageTooLarge, "The package's description is too large to import.", problem.Detail);
+            }
+            else
+            {
+                diagnostics.Error(PackageErrorCode.ManifestInvalid, "The package's description is damaged.", problem.Detail);
+            }
+
             return null;
         }
 
