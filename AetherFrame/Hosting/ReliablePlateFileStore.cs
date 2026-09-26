@@ -4,7 +4,6 @@ using System.IO;
 using System.Threading.Tasks;
 using AetherFrame.Persistence;
 using Dalamud.Plugin.Services;
-using Dalamud.Storage;
 
 namespace AetherFrame.Hosting;
 
@@ -15,10 +14,14 @@ namespace AetherFrame.Hosting;
 /// <see cref="IPlateFileStore"/>): the service's own Exists also reports backups of files that
 /// were intentionally moved away, such as a deleted Plate.
 ///
-/// <para>Read failures follow the contract the Libraries classify by: content damage (Dalamud found
-/// neither the file nor a backup of it that the reader accepts) is an <see cref="InvalidDataException"/>,
-/// exactly what the reader itself throws in the plain-file store; anything else (an I/O or access
-/// error, an abandoned operation) means the file is unavailable, not damaged.</para>
+/// <para>Reads go through <see cref="ReliableReads"/>: the file on disk is read here, first, and
+/// Dalamud is asked for its backup copy only when the reader rejects that content — never
+/// because the file is missing or failed to read, which Dalamud's own first chance would answer
+/// silently from a possibly older backup. So failures follow the contract the Libraries classify
+/// by: content damage (neither the file nor a backup of it that the reader accepts) is an
+/// <see cref="InvalidDataException"/>, exactly what the reader itself throws in the plain-file
+/// store; anything else (an I/O or access error, an abandoned operation) means the file is
+/// unavailable, not damaged.</para>
 /// </summary>
 internal sealed class ReliablePlateFileStore : IPlateFileStore
 {
@@ -34,19 +37,8 @@ internal sealed class ReliablePlateFileStore : IPlateFileStore
 
     public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-    public async Task ReadTextAsync(string path, Action<string> reader)
-    {
-        try
-        {
-            await storage.ReadAllTextAsync(path, reader).ConfigureAwait(false);
-        }
-        catch (FileReadException ex)
-        {
-            // Dalamud's own type for "the file and its backup both failed the reader" — the same
-            // verdict the reader gives directly when there is no backup to fall back to.
-            throw new InvalidDataException(ex.Message, ex);
-        }
-    }
+    public Task ReadTextAsync(string path, Action<string> reader) =>
+        ReliableReads.ReadTextAsync(path, reader, () => storage.ReadAllTextAsync(path, forceBackup: true));
 
     public Task WriteTextAsync(string path, string contents)
     {

@@ -21,10 +21,12 @@ namespace AetherFrame.Services.Lifecycle;
 /// passed through unchanged: another Windows error, an abandoned operation, a disposed storage.
 ///
 /// <para>Caveat: a file written this way is not journaled, so Dalamud's backup copy of it stays
-/// the one from the last successful reliable write until the next one succeeds. A read that had to
-/// fall back to that older backup is reported by the loaders (see
-/// <c>VersionedReadResult.RecoveredFromBackup</c>), which keep a Recovery copy of the newer on-disk
-/// bytes before using it, so the stale backup can never silently replace them.</para>
+/// the one from the last successful reliable write until the next one succeeds. That is safe
+/// because reads never prefer the backup (see <see cref="ReliableReads"/>): the on-disk file is
+/// read first and used when intact; only content the reader rejects falls back to the backup, and
+/// such a read is reported by the loaders (see <c>VersionedReadResult.RecoveredFromBackup</c>),
+/// which keep a Recovery copy of the newer on-disk bytes before using it; and a file that merely
+/// can't be read (locked, missing) is unavailable, not replaced.</para>
 /// </summary>
 internal sealed class StuckTempFallbackFileStore : IPlateFileStore
 {

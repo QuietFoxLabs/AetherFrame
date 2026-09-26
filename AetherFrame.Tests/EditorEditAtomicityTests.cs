@@ -525,47 +525,4 @@ public class EditorEditAtomicityTests
             return FontReady;
         }
     }
-
-    /// <summary>Plain files whose next write can be held mid-flight (after it has begun, before
-    /// anything reaches disk) and then released, so a save can be observed in progress.</summary>
-    private sealed class HeldWriteStore : IPlateFileStore
-    {
-        private readonly SystemFileStore files = new();
-        private TaskCompletionSource? gate;
-        private TaskCompletionSource writeStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        internal Task WriteStarted => writeStarted.Task;
-
-        internal void Hold()
-        {
-            writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
-        internal void Release() => gate?.TrySetResult();
-
-        public bool FileExists(string path) => files.FileExists(path);
-
-        public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
-
-        public Task ReadTextAsync(string path, Action<string> reader) => files.ReadTextAsync(path, reader);
-
-        public async Task WriteTextAsync(string path, string contents)
-        {
-            if (gate is { } held)
-            {
-                writeStarted.TrySetResult();
-                await held.Task.ConfigureAwait(false);
-                gate = null;
-            }
-
-            await files.WriteTextAsync(path, contents).ConfigureAwait(false);
-        }
-
-        public void MoveFile(string sourcePath, string destinationPath) => files.MoveFile(sourcePath, destinationPath);
-
-        public void CopyFile(string sourcePath, string destinationPath) => files.CopyFile(sourcePath, destinationPath);
-
-        public void DeleteFile(string path) => files.DeleteFile(path);
-    }
 }

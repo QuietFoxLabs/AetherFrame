@@ -79,27 +79,18 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
 
     public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-    /// <summary>Throws <see cref="BackupReadFailedException"/> when the backup copy is unusable too.</summary>
-    public async Task ReadTextAsync(string path, Action<string> reader)
-    {
-        try
-        {
-            ReaderInvocations++;
-            await files.ReadTextAsync(path, reader);
-        }
-        catch (Exception) when (Backups.TryGetValue(path, out var backup))
-        {
-            ReaderInvocations++;
-            try
+    /// <summary>Exactly as <c>ReliablePlateFileStore</c> reads in game (<see cref="ReliableReads"/>):
+    /// the file on disk first, its backup row only when the reader rejects that, and content damage
+    /// when the backup is unusable too; a file that can't be read at all is an I/O error, never the backup.</summary>
+    public Task ReadTextAsync(string path, Action<string> reader) =>
+        ReliableReads.ReadTextAsync(
+            path,
+            text =>
             {
-                reader(backup);
-            }
-            catch (Exception ex)
-            {
-                throw new BackupReadFailedException(path, ex);
-            }
-        }
-    }
+                ReaderInvocations++;
+                reader(text);
+            },
+            () => Backups.TryGetValue(path, out var backup) ? Task.FromResult(backup) : throw new FileNotFoundException("no backup row", path));
 
     public async Task WriteTextAsync(string path, string contents)
     {
@@ -114,14 +105,47 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
     public void DeleteFile(string path) => files.DeleteFile(path);
 }
 
-/// <summary>A file that is damaged on disk and whose backup copy is unusable too — as opposed to
-/// a plain IO error, or damage the backup did recover from.</summary>
-internal sealed class BackupReadFailedException : IOException
+/// <summary>Plain files whose next write can be held mid-flight (after it has begun, before
+/// anything reaches disk) and then released, so a save or an import can be observed in progress.</summary>
+internal sealed class HeldWriteStore : IPlateFileStore
 {
-    internal BackupReadFailedException(string path, Exception backupFailure)
-        : base($"Neither '{Path.GetFileName(path)}' nor its backup copy could be read.", backupFailure)
+    private readonly SystemFileStore files = new();
+    private TaskCompletionSource? gate;
+    private TaskCompletionSource writeStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    internal Task WriteStarted => writeStarted.Task;
+
+    internal void Hold()
     {
+        writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     }
+
+    internal void Release() => gate?.TrySetResult();
+
+    public bool FileExists(string path) => files.FileExists(path);
+
+    public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
+
+    public Task ReadTextAsync(string path, Action<string> reader) => files.ReadTextAsync(path, reader);
+
+    public async Task WriteTextAsync(string path, string contents)
+    {
+        if (gate is { } held)
+        {
+            writeStarted.TrySetResult();
+            await held.Task.ConfigureAwait(false);
+            gate = null;
+        }
+
+        await files.WriteTextAsync(path, contents).ConfigureAwait(false);
+    }
+
+    public void MoveFile(string sourcePath, string destinationPath) => files.MoveFile(sourcePath, destinationPath);
+
+    public void CopyFile(string sourcePath, string destinationPath) => files.CopyFile(sourcePath, destinationPath);
+
+    public void DeleteFile(string path) => files.DeleteFile(path);
 }
 
 /// <summary>Plain files with switchable failures, for fault injection. Like the operating

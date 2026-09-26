@@ -518,7 +518,7 @@ public class FailureIsolationTests
         store.Backups[path] = "{ also truncated";
         fixture.WritePlateJson(plateId, "{ truncated");
 
-        var failure = await Assert.ThrowsAsync<BackupReadFailedException>(() => VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize));
+        var failure = await Assert.ThrowsAsync<InvalidDataException>(() => VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize));
 
         Assert.Contains(Path.GetFileName(path), failure.Message);
         Assert.DoesNotContain(fixture.Root, failure.Message);

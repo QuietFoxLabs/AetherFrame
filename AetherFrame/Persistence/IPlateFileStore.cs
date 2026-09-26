@@ -23,9 +23,12 @@ internal interface IPlateFileStore
     IReadOnlyList<string> ListFiles(string directory, string searchPattern);
 
     /// <summary>
-    /// Reads a text file and passes it to <paramref name="reader"/>. If the read or the reader
-    /// fails, a store with backups retries with its backup copy (the reader throwing is the signal
-    /// that the content is unusable). Throws when no usable copy exists.
+    /// Reads a text file and passes it to <paramref name="reader"/>. If the reader throws (the
+    /// signal that the content is unusable), a store with backups retries with its backup copy,
+    /// running the reader a second time, and throws <see cref="System.IO.InvalidDataException"/>
+    /// when no usable copy exists. A failure to read the file itself (missing, locked, access
+    /// denied) is thrown as it is and never answered from a backup: the file is unavailable, not
+    /// damaged.
     /// </summary>
     Task ReadTextAsync(string path, Action<string> reader);
 
