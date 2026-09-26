@@ -113,15 +113,25 @@ internal sealed class EditorCloseGuard
         }
     }
 
-    /// <summary>Discard: restores the last saved version. Returns true: the window closes now.</summary>
+    /// <summary>
+    /// Discard: restores the last saved version. Returns true: the window closes now. False, still
+    /// asking, while a save is being written (the action bar's Save moments before the close: the
+    /// Plate can't change until it is done) or when the saved version couldn't be restored — the
+    /// window stays open, so its promise (back to the last saved version, then close) is never
+    /// broken silently.
+    /// </summary>
     internal bool Discard()
     {
-        if (!IsAsking || saveTask is not null)
+        if (!IsAsking || saveTask is not null || commands.IsSaving)
         {
             return false;
         }
 
-        editorSession.DiscardChanges();
+        if (!editorSession.DiscardChanges())
+        {
+            return false;
+        }
+
         IsAsking = false;
         closeConfirmed = true;
         return true;

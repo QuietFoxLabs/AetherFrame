@@ -224,9 +224,17 @@ internal sealed class BasicHarness : IDisposable
     internal ProfileDocument Document => Profiles.CurrentProfile!;
 
     /// <summary>A new Plate created through My Plates (optionally with starter content), opened.</summary>
-    internal static async Task<BasicHarness> CreatePlateAsync(PlateStartingLayout layout, PlateStarterContent? starter, CharacterContext? character = null)
+    internal static Task<BasicHarness> CreatePlateAsync(PlateStartingLayout layout, PlateStarterContent? starter, CharacterContext? character = null) =>
+        CreatePlateAsync(layout, starter, character, store: null);
+
+    /// <summary>
+    /// <see cref="CreatePlateAsync(PlateStartingLayout, PlateStarterContent?, CharacterContext?)"/> over
+    /// <paramref name="store"/> (a <see cref="FaultInjectingStore"/>, or one whose writes can be held),
+    /// so the editor's saves can be made to fail or to stay in flight.
+    /// </summary>
+    internal static async Task<BasicHarness> CreatePlateAsync(PlateStartingLayout layout, PlateStarterContent? starter, CharacterContext? character, IPlateFileStore? store)
     {
-        var harness = await LoadAsync(null);
+        var harness = await LoadAsync(null, store);
         var result = await harness.Library.CreatePlateAsync(layout, character, starter: starter);
         harness.Open(result.PlateId);
         return harness;
@@ -234,6 +242,10 @@ internal sealed class BasicHarness : IDisposable
 
     /// <summary>A new Adventure Plate Classic created with <see cref="FakeCharacter.Hero"/> logged in, opened.</summary>
     internal static Task<BasicHarness> NewClassicAsync() => NewClassicAsync(FakeCharacter.Hero);
+
+    /// <summary>A new Adventure Plate Classic (with <see cref="FakeCharacter.Hero"/> logged in) over <paramref name="store"/>, opened.</summary>
+    internal static Task<BasicHarness> NewClassicAsync(IPlateFileStore store) =>
+        CreatePlateAsync(PlateStartingLayout.AdventurePlateClassic, new PlateStarterContent(FakeCharacter.Hero), character: null, store);
 
     /// <summary>A new Adventure Plate Classic created with <paramref name="character"/> logged in (null: none), opened.</summary>
     internal static Task<BasicHarness> NewClassicAsync(BasicCharacterInfo? character) =>
@@ -250,9 +262,9 @@ internal sealed class BasicHarness : IDisposable
     internal static Task<BasicHarness> OpenDocumentAsync(ProfileDocument document) =>
         OpenJsonAsync(JsonSerializer.Serialize(document, JsonOptions.Default), document.ProfileId);
 
-    private static async Task<BasicHarness> LoadAsync(Action<LibraryFixture>? seed)
+    private static async Task<BasicHarness> LoadAsync(Action<LibraryFixture>? seed, IPlateFileStore? store = null)
     {
-        var fixture = new LibraryFixture();
+        var fixture = new LibraryFixture(store);
         seed?.Invoke(fixture);
         return new BasicHarness(fixture, await fixture.LoadAsync());
     }

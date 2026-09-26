@@ -296,6 +296,10 @@ internal sealed partial class EditorSession
         try
         {
             var snapshot = profileService.CloneElement(elementId);
+
+            // Where it sits in the list: undo puts it back there, among the elements it shares
+            // its ZIndex with (ties paint in list order), not on top of them at the end.
+            var index = profileService.CurrentProfile?.Elements.FindIndex(e => e.Id == elementId);
             profileService.RemoveElement(elementId);
 
             if (SelectedElementId == elementId)
@@ -306,7 +310,7 @@ internal sealed partial class EditorSession
             RecordHistory(
                 undo: () =>
                 {
-                    profileService.InsertElement(snapshot.Clone());
+                    profileService.InsertElement(snapshot.Clone(), index);
                     Select(snapshot.Id);
                 },
                 redo: () =>
@@ -545,13 +549,15 @@ internal sealed partial class EditorSession
     /// <summary>
     /// Saves the current profile. On success the saved state becomes the new clean baseline (the
     /// state captured here, on the render thread, is exactly what was written: the profile can't
-    /// be edited while the save is in flight). Returns false (with <see cref="ErrorMessage"/> set)
-    /// on failure.
+    /// be edited while the save is in flight). A drag or resize still in progress (Ctrl+S with the
+    /// mouse button held) is ended first, so it is recorded as one history entry and what is saved
+    /// is exactly what is on screen. Returns false (with <see cref="ErrorMessage"/> set) on failure.
     /// </summary>
     internal async Task<bool> SaveProfileAsync()
     {
         ErrorMessage = null;
         CommitPendingEdits();
+        EndInteraction();
 
         var profile = profileService.CurrentProfile;
         if (profile is null)
@@ -583,9 +589,11 @@ internal sealed partial class EditorSession
     /// Restores the live profile to its last loaded/saved state. As an explicit toolbar action
     /// (<paramref name="undoable"/> true) the revert itself is one undoable history entry; as the
     /// "Discard" answer to an unsaved-changes prompt, history is cleared instead, since it only
-    /// described the work being thrown away.
+    /// described the work being thrown away. Returns whether the saved state was restored: false,
+    /// with the document untouched, when there is no baseline or the Plate can't be changed right
+    /// now (a save in flight; <see cref="ErrorMessage"/> says so).
     /// </summary>
-    internal void RevertToSaved(bool undoable)
+    internal bool RevertToSaved(bool undoable)
     {
         ErrorMessage = null;
         CommitPendingEdits();
@@ -593,7 +601,7 @@ internal sealed partial class EditorSession
 
         if (savedBaseline is not { } baseline)
         {
-            return;
+            return false;
         }
 
         ProfileService.DocumentState before;
@@ -605,7 +613,7 @@ internal sealed partial class EditorSession
         catch (Exception ex)
         {
             ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
-            return;
+            return false;
         }
 
         DropSelectionIfMissing();
@@ -614,7 +622,7 @@ internal sealed partial class EditorSession
         if (!undoable)
         {
             ClearHistory();
-            return;
+            return true;
         }
 
         RecordHistory(
@@ -628,10 +636,11 @@ internal sealed partial class EditorSession
                 profileService.RestoreDocumentState(baseline);
                 DropSelectionIfMissing();
             });
+        return true;
     }
 
-    /// <summary>Discards unsaved work (see <see cref="RevertToSaved"/>) without an undo entry.</summary>
-    internal void DiscardChanges() => RevertToSaved(undoable: false);
+    /// <summary>Discards unsaved work (see <see cref="RevertToSaved"/>) without an undo entry. Returns whether it was discarded.</summary>
+    internal bool DiscardChanges() => RevertToSaved(undoable: false);
 
     // ---------------------------------------------------------------- selection / history
 

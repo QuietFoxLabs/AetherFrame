@@ -293,12 +293,25 @@ internal sealed partial class EditorSession
     /// Folds a follow-up change into the most recent document edit instead of recording a new
     /// history entry — for refinements that complete that edit (e.g. re-measuring an inline title
     /// layout once its font finishes loading). Returns false, changing nothing, if that edit is no
-    /// longer the latest history entry (something else happened since, or it was undone).
+    /// longer the latest history entry (something else happened since, or it was undone) — or,
+    /// without an error message, if the Plate can't be changed right now (a save in flight, whose
+    /// file must match the Plate it was captured from); the caller may try again later.
     /// </summary>
     internal bool AmendLastDocumentEdit(Action edit)
     {
         if (lastDocumentEdit is not { } record || undoStack.Count == 0 || !ReferenceEquals(undoStack[^1], record.Entry)
             || redoStack.Count > 0 || pendingEditBefore is not null || pendingBackgroundBefore is not null || pendingDocumentBefore is not null)
+        {
+            return false;
+        }
+
+        try
+        {
+            // The same check every other edit path makes before touching the document: this one
+            // runs unprompted (each frame, until the font is ready), so being refused is no error.
+            profileService.RequireEditableProfile();
+        }
+        catch (InvalidOperationException)
         {
             return false;
         }

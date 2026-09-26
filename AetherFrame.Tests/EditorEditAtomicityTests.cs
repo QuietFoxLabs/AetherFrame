@@ -184,9 +184,247 @@ public class EditorEditAtomicityTests
         Assert.DoesNotContain(harness.Fixture.Log.Messages, m => m.Contains(harness.Fixture.Root, StringComparison.Ordinal));
     }
 
+    // ---------------------------------------------------------------- baseline
 
+    [Fact]
+    public async Task FailedSave_DoesNotAdvanceTheBaseline()
+    {
+        var store = new FaultInjectingStore();
+        using var harness = await BasicHarness.NewClassicAsync(store);
+        harness.Session.AddTextElement("Unsaved");
 
+        store.FailWrite = _ => true;
+        Assert.False(await harness.Session.SaveProfileAsync());
+        harness.Session.SyncWithCurrentProfile();
 
+        Assert.True(harness.Session.IsDirty);
+        Assert.True(harness.Session.CanRevert);
+        Assert.DoesNotContain(harness.Library.GetSavedDocument(harness.PlateId)!.Elements, e => e is TextProfileElement { Text: "Unsaved" });
+
+        store.FailWrite = null;
+        Assert.True(await harness.Session.SaveProfileAsync());
+        harness.Session.SyncWithCurrentProfile();
+
+        Assert.False(harness.Session.IsDirty);
+        Assert.Contains(harness.Library.GetSavedDocument(harness.PlateId)!.Elements, e => e is TextProfileElement { Text: "Unsaved" });
+    }
+
+    // ---------------------------------------------------------------- undo of a delete
+
+    [Fact]
+    public async Task UndoDelete_RestoresListPosition_ForTiedZIndex()
+    {
+        // An older or hand-made file where every element shares a ZIndex: ties paint in list order.
+        var document = BasicDocuments.Blank();
+        foreach (var text in new[] { "a", "b", "c" })
+        {
+            document.Elements.Add(new TextProfileElement { Text = text, ZIndex = 0, Position = new Vector2(10, 10), Size = new Vector2(100, 40) });
+        }
+
+        using var harness = await BasicHarness.OpenDocumentAsync(document);
+        Assert.All(harness.Document.Elements, e => Assert.Equal(0, e.ZIndex));
+        var order = harness.Document.Elements.Select(e => e.Id).ToList();
+        var middle = order[1];
+
+        harness.Session.RemoveElement(middle);
+        Assert.Equal([order[0], order[2]], harness.Document.Elements.Select(e => e.Id));
+        harness.Session.Undo();
+
+        Assert.Equal(order, harness.Document.Elements.Select(e => e.Id));
+        var painted = new List<ProfileElement>();
+        ProfilePaintOrder.Fill(harness.Document, painted, includeHidden: true);
+        Assert.Equal(order, painted.Select(e => e.Id));
+        Assert.False(harness.Session.IsDirty);
+        Assert.Equal(middle, harness.Session.SelectedElementId);
+
+        harness.Session.Redo();
+        harness.Session.Undo();
+        Assert.Equal(order, harness.Document.Elements.Select(e => e.Id));
+    }
+
+    // ---------------------------------------------------------------- saving
+
+    [Fact]
+    public async Task SaveDuringDrag_CommitsTheDragAsOneEntry()
+    {
+        using var harness = await BasicHarness.NewClassicAsync();
+        var element = BasicSections.Find(harness.Document, ProfileElementRole.BasicWorld)!;
+        var original = element.Position;
+        var start = element.Position + (element.Size / 2f);
+        harness.Session.BeginDrag(element, start);
+        harness.Session.UpdateInteraction(start + new Vector2(30, 30), snap: false, snapThreshold: 0f);
+        Assert.Equal(ElementInteractionKind.Dragging, harness.Session.ActiveInteraction);
+
+        Assert.True(await harness.Session.SaveProfileAsync());
+
+        Assert.Equal(ElementInteractionKind.None, harness.Session.ActiveInteraction);
+        Assert.Null(harness.Session.ErrorMessage);
+        Assert.True(harness.Session.CanUndo);
+        var saved = BasicSections.Find(harness.Library.GetSavedDocument(harness.PlateId)!, ProfileElementRole.BasicWorld)!;
+        Assert.Equal(original + new Vector2(30, 30), saved.Position);
+        harness.Session.SyncWithCurrentProfile();
+        Assert.False(harness.Session.IsDirty);
+
+        harness.Session.Undo();
+        Assert.Equal(original, BasicSections.Find(harness.Document, ProfileElementRole.BasicWorld)!.Position);
+        Assert.True(harness.Session.IsDirty);
+        Assert.Null(harness.Session.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task AmendLastDocumentEdit_WhileSaving_IsRefusedAndRetried()
+    {
+        var store = new HeldWriteStore();
+        using var harness = await BasicHarness.NewClassicAsync(store);
+
+        // A font whose real widths differ from the editor's estimate, so a refinement is visible.
+        var font = new WideFont();
+        var identity = new BasicIdentitySession(harness.Profiles, harness.Session, harness.Character, font, new FakeTitles());
+        identity.SetCustomTitle("Hello");
+        identity.Commit();
+        harness.Session.ClearHistory();
+        var classic = BasicDocuments.Placements(harness.Document);
+        font.FontReady = false;
+        identity.SetLayout(IdentityTitleLayout.InlineBefore); // placed from estimated widths
+        var estimated = BasicDocuments.Placements(harness.Document);
+        Assert.NotEqual(classic, estimated);
+
+        store.Hold();
+        var save = harness.Session.SaveProfileAsync();
+        await store.WriteStarted;
+        Assert.True(harness.Profiles.IsBusy);
+        font.FontReady = true;
+
+        identity.RefineLayout();
+
+        Assert.Equal(estimated, BasicDocuments.Placements(harness.Document));
+        Assert.Null(harness.Session.ErrorMessage);
+
+        store.Release();
+        Assert.True(await save);
+        harness.Session.SyncWithCurrentProfile();
+        Assert.False(harness.Session.IsDirty);
+
+        identity.RefineLayout();
+
+        Assert.NotEqual(estimated, BasicDocuments.Placements(harness.Document));
+        Assert.True(harness.Session.IsDirty);
+        Assert.Null(harness.Session.ErrorMessage);
+
+        // Still folded into the layout's own undo step.
+        harness.Session.Undo();
+        Assert.Equal(classic, BasicDocuments.Placements(harness.Document));
+        Assert.False(harness.Session.CanUndo);
+    }
+
+    [Fact]
+    public async Task AmendLastDocumentEdit_WhileSaving_ReturnsFalseAndTouchesNothing()
+    {
+        var store = new HeldWriteStore();
+        using var harness = await BasicHarness.NewClassicAsync(store);
+        Assert.True(harness.Session.ApplyDocumentEdit(() => harness.Document.CanvasWidth = 900));
+        var profile = harness.Document;
+
+        store.Hold();
+        var save = harness.Session.SaveProfileAsync();
+        await store.WriteStarted;
+
+        Assert.False(harness.Session.AmendLastDocumentEdit(() => profile.CanvasWidth = 1));
+        Assert.Equal(900f, profile.CanvasWidth);
+        Assert.Null(harness.Session.ErrorMessage);
+
+        store.Release();
+        Assert.True(await save);
+        Assert.True(harness.Session.AmendLastDocumentEdit(() => profile.CanvasWidth = 950));
+        Assert.Equal(950f, profile.CanvasWidth);
+    }
+
+    // ---------------------------------------------------------------- the unsaved-changes prompt
+
+    [Fact]
+    public async Task Discard_WhileSaving_KeepsAsking()
+    {
+        var store = new HeldWriteStore();
+        using var harness = await BasicHarness.NewClassicAsync(store);
+        var (commands, guard) = OpenWindow(harness);
+        harness.Basic.SetOrientation(AdventurePlateOrientation.Mirrored);
+
+        // The action bar's Save, then the title-bar X while it is still being written.
+        store.Hold();
+        var save = harness.Session.SaveProfileAsync();
+        await store.WriteStarted;
+        Assert.True(guard.PreOpenCheck(isOpen: false));
+        Assert.True(guard.IsAsking);
+        Assert.False(guard.CanSave);
+
+        Assert.False(guard.Discard());
+
+        Assert.True(guard.IsAsking);
+        Assert.Equal(AdventurePlateOrientation.Mirrored, BasicEditorSession.GetOrientation(harness.Document));
+        Assert.True(guard.PreOpenCheck(isOpen: true)); // still open
+
+        store.Release();
+        Assert.True(await save);
+        harness.Session.SyncWithCurrentProfile(); // the next frame adopts the saved state
+
+        Assert.True(guard.Discard());
+        Assert.False(guard.IsAsking);
+        Assert.False(commands.IsDirty);
+        Assert.Equal(AdventurePlateOrientation.Mirrored, harness.Library.GetSavedDocument(harness.PlateId)!.BasicPlate!.Orientation);
+    }
+
+    [Fact]
+    public async Task RevertToSaved_WhileSaving_LeavesTheDocumentUntouched()
+    {
+        var store = new HeldWriteStore();
+        using var harness = await BasicHarness.NewClassicAsync(store);
+        harness.Basic.SetOrientation(AdventurePlateOrientation.Mirrored);
+
+        store.Hold();
+        var save = harness.Session.SaveProfileAsync();
+        await store.WriteStarted;
+
+        Assert.False(harness.Session.RevertToSaved(undoable: true));
+        Assert.Equal(AdventurePlateOrientation.Mirrored, BasicEditorSession.GetOrientation(harness.Document));
+        Assert.NotNull(harness.Session.ErrorMessage);
+
+        store.Release();
+        Assert.True(await save);
+    }
+
+    [Fact]
+    public async Task ClosePrompt_SaveFails_KeepsTheEditorOpen_AndTheDirtyState()
+    {
+        var store = new FaultInjectingStore();
+        using var harness = await BasicHarness.NewClassicAsync(store);
+        var (commands, guard) = OpenWindow(harness);
+        harness.Basic.SetOrientation(AdventurePlateOrientation.Mirrored);
+        Assert.True(guard.PreOpenCheck(isOpen: false));
+        Assert.True(guard.IsAsking);
+
+        store.FailWrite = _ => true;
+        guard.Save();
+        Assert.False(await AdvanceUntilSaveFinishesAsync(guard));
+
+        Assert.False(guard.IsAsking);
+        Assert.False(guard.IsSaving);
+        Assert.True(guard.PreOpenCheck(isOpen: true)); // the window stays open
+        Assert.True(commands.IsDirty);
+        Assert.True(commands.CanUndo);
+        Assert.Equal(AdventurePlateOrientation.Mirrored, BasicEditorSession.GetOrientation(harness.Document));
+        Assert.StartsWith(EditorSession.SaveFailedMessage, harness.Session.ErrorMessage);
+        Assert.DoesNotContain(harness.Fixture.Root, harness.Session.ErrorMessage);
+        Assert.Equal(AdventurePlateOrientation.Normal, harness.Library.GetSavedDocument(harness.PlateId)!.BasicPlate!.Orientation);
+
+        // The next close asks again, and once the disk cooperates Save closes the window.
+        Assert.True(guard.PreOpenCheck(isOpen: false));
+        Assert.True(guard.IsAsking);
+        store.FailWrite = null;
+        guard.Save();
+        Assert.True(await AdvanceUntilSaveFinishesAsync(guard));
+        Assert.False(commands.IsDirty);
+        Assert.False(guard.PreOpenCheck(isOpen: false));
+    }
 
 
     /// <summary>A font wider than the editor's estimate (three quarters of the size per character), or none yet.</summary>
