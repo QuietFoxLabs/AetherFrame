@@ -241,9 +241,12 @@ internal sealed class ProfileService
 
     /// <summary>
     /// Inserts a fully-formed element (e.g. an undo/redo snapshot, or a duplicate) into the
-    /// currently loaded profile, replacing any existing element with the same id.
+    /// currently loaded profile, replacing any existing element with the same id: at
+    /// <paramref name="index"/> in the element list (clamped to the list's bounds) when given —
+    /// so an undone delete puts the element back among the elements that share its ZIndex, where
+    /// ties paint in list order — otherwise at the end.
     /// </summary>
-    internal void InsertElement(ProfileElement element)
+    internal void InsertElement(ProfileElement element, int? index = null)
     {
         lock (gate)
         {
@@ -251,7 +254,7 @@ internal sealed class ProfileService
 
             profile.Elements.RemoveAll(e => e.Id == element.Id);
             EnsureCapacityLocked(profile);
-            profile.Elements.Add(element);
+            profile.Elements.Insert(index is { } position ? Math.Clamp(position, 0, profile.Elements.Count) : profile.Elements.Count, element);
         }
     }
 
@@ -583,9 +586,21 @@ internal sealed class ProfileService
         }
     }
 
-    /// <summary>Must be called while holding <see cref="gate"/>.</summary>
-    private static int NextZIndexLocked(ProfileDocument profile) =>
-        profile.Elements.Count == 0 ? 0 : profile.Elements.Max(e => e.ZIndex) + 1;
+    /// <summary>
+    /// One above the highest ZIndex, or that value itself when it can't be exceeded (a
+    /// hand-edited int.MaxValue): ties paint in list order, so the new element, added last, still
+    /// paints on top instead of wrapping to the very back. Must be called while holding <see cref="gate"/>.
+    /// </summary>
+    private static int NextZIndexLocked(ProfileDocument profile)
+    {
+        if (profile.Elements.Count == 0)
+        {
+            return 0;
+        }
+
+        var highest = profile.Elements.Max(e => e.ZIndex);
+        return highest == int.MaxValue ? highest : highest + 1;
+    }
 
     /// <summary>
     /// Applies a reordering operation to the elements sorted by their current ZIndex (ties
