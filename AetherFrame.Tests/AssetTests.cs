@@ -647,7 +647,9 @@ public class AssetGarbageCollectorTests
         Assert.True(fixture.Collector.Restore(unused));
         Assert.NotNull(fixture.Storage.ResolveAssetPath(unused));
 
-        fixture.Collector.MoveToTrash(fixture.Collector.Plan(Complete()));
+        // A restored asset is protected for a fresh MinimumUnreferencedAge before it can be trashed again.
+        fixture.Clock.Now = fixture.Clock.Now.Add(AssetGarbageCollector.MinimumUnreferencedAge).AddDays(1);
+        Assert.Equal(1, fixture.Collector.MoveToTrash(fixture.Collector.Plan(Complete())));
         fixture.Clock.Now = fixture.Clock.Now.Add(AssetGarbageCollector.TrashGracePeriod).AddDays(1);
 
         var wouldPurge = fixture.Collector.PurgeExpired(purgeEnabled: false);

@@ -111,12 +111,16 @@ internal sealed class AssetMetadataStore
         return metadata;
     }
 
+    /// <summary>
+    /// Removes an asset's sidecar; a missing one is fine. Throws the IO error when the sidecar
+    /// can't be removed — including when something that isn't a file sits under its name — so a
+    /// caller that keeps a retry record (the trash purge) knows to keep it.
+    /// </summary>
     internal void Delete(Guid assetId)
     {
-        var path = GetPath(assetId);
-        if (File.Exists(path))
+        if (Directory.Exists(directory))
         {
-            File.Delete(path);
+            File.Delete(GetPath(assetId));
         }
     }
 
