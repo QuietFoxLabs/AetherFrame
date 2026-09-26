@@ -991,9 +991,11 @@ internal sealed class PlateLibraryService
     /// Adds an imported Plate (see <c>PackageImporter</c>) as a brand-new Plate at the front of
     /// the Library. <paramref name="raw"/> must already carry <paramref name="plateId"/> — a fresh
     /// id — and every image it references must already be in managed storage: the document write
-    /// is the commit point, so once the Plate is visible, all it needs exists. Never overwrites
-    /// (refuses an id that's in use or on disk), and never touches any character binding: an
-    /// imported Plate belongs to no one and is Active for no one until the player chooses.
+    /// is the commit point, so once the Plate is visible, all it needs exists (and a write that
+    /// fails after its file landed moves that file to the trash, since the caller's rollback
+    /// removes the images). Never overwrites (refuses an id that's in use or on disk), and never
+    /// touches any character binding: an imported Plate belongs to no one and is Active for no
+    /// one until the player chooses.
     /// </summary>
     internal Task ImportPlateAsync(Guid plateId, JsonObject raw) =>
         RunExclusiveAsync(async () =>
@@ -1016,7 +1018,20 @@ internal sealed class PlateLibraryService
 
             // Read back before writing, so nothing after the write (the commit point) can fail on content.
             var record = ReadyRecord(plateId, raw);
-            await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+            try
+            {
+                await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!IsLoadInterruption(ex))
+            {
+                // A store can fail AFTER the file landed (Dalamud's commits its backup row after
+                // the move). The importer treats any failure as "nothing committed" and removes
+                // the images it added, so a Plate left behind would point at nothing: the file —
+                // minted for this import and verified absent a moment ago, so never someone
+                // else's — goes to the Plate trash, where nothing lists it.
+                TrashHalfWrittenImport(plateId);
+                throw;
+            }
 
             lock (gate)
             {
@@ -1037,6 +1052,24 @@ internal sealed class PlateLibraryService
 
             log.Information($"AetherFrame imported a package as new Plate {plateId}.");
         });
+
+    /// <summary>Moves an imported document whose write reported failure out of the Plates folder, if it landed there.</summary>
+    private void TrashHalfWrittenImport(Guid plateId)
+    {
+        try
+        {
+            var path = paths.GetPlatePath(plateId);
+            if (store.FileExists(path))
+            {
+                store.MoveFile(path, paths.GetTrashPlatePath(plateId, utcNow()));
+                log.Warning($"AetherFrame moved the file of a failed import ({plateId}) to the Plate trash so it isn't listed without its images.");
+            }
+        }
+        catch (Exception ex) when (!IsLoadInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame could not move the file of a failed import ({plateId}) to the Plate trash; it may be listed without its images at the next startup.");
+        }
+    }
 
     /// <summary>
     /// Writes an editor's document as the Plate's saved state. Refused when the Plate was

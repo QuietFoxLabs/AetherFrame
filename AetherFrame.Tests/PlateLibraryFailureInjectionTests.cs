@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Persistence;
 using AetherFrame.Services.Lifecycle;
+using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
 using Xunit;
 
@@ -347,6 +348,83 @@ public class BackupRecoveryObservabilityTests
             throw new IOException(LibraryFiles.IsRecovery(destinationPath) ? $"There is not enough space on the disk: '{destinationPath}'" : "Unexpected copy.");
 
         public void DeleteFile(string path) => inner.DeleteFile(path);
+    }
+}
+
+/// <summary>
+/// An import's document write is its commit point. A store can report failure after the file
+/// landed; the importer then rolls its images back, so the document must not stay behind.
+/// </summary>
+public class ImportLateFailureTests
+{
+    [Fact]
+    public async Task ImportWriteFailingAfterTheFileLanded_MovesItToTheTrash_AndListsNothing()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new LibraryFixture(store);
+        var library = await fixture.LoadAsync();
+        var existing = await library.CreatePlateAsync(PlateStartingLayout.Blank, null);
+        var plateId = Guid.NewGuid();
+        var raw = PlateDocuments.ToJson(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Imported", fixture.Clock.Now));
+        store.ThrowAfterWrite = LibraryFiles.IsPlate;
+
+        await Assert.ThrowsAsync<IOException>(() => library.ImportPlateAsync(plateId, raw));
+
+        Assert.False(File.Exists(fixture.Paths.GetPlatePath(plateId)));
+        var trashed = Assert.Single(Directory.GetFiles(fixture.Paths.PlateTrashDirectory));
+        Assert.StartsWith($"{plateId}.deleted-", Path.GetFileName(trashed), StringComparison.Ordinal);
+        Assert.Equal([existing.PlateId], library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.Equal([existing.PlateId], fixture.ReadLibraryOrder());
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("trash", StringComparison.Ordinal));
+
+        store.ThrowAfterWrite = null;
+        Assert.Equal([existing.PlateId], (await fixture.LoadAsync()).GetOrderedPlates().Select(p => p.PlateId));
+    }
+
+    [Fact]
+    public async Task ImportWriteFailingBeforeTheFileLanded_TouchesNothing()
+    {
+        var store = new FaultInjectingStore { FailWrite = LibraryFiles.IsPlate };
+        using var fixture = new LibraryFixture(store);
+        var library = await fixture.LoadAsync();
+        var plateId = Guid.NewGuid();
+
+        await Assert.ThrowsAsync<IOException>(() => library.ImportPlateAsync(plateId, PlateDocuments.ToJson(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Imported", fixture.Clock.Now))));
+
+        Assert.Empty(library.GetOrderedPlates());
+        Assert.False(Directory.Exists(fixture.Paths.PlateTrashDirectory));
+        Assert.DoesNotContain(fixture.Log.Messages, m => m.Contains("trash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CommitFailureAfterTheWriteLanded_LeavesNoHalfImportedPlate()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new PackageFixture(store: store);
+        var (library, packages) = await fixture.LoadAsync();
+        var (plateId, _, _, _) = await fixture.CreateRichPlateAsync(library);
+        var path = fixture.Export(packages, plateId);
+        var before = fixture.SnapshotInstallation();
+        var listedBefore = library.GetOrderedPlates().Select(p => p.PlateId).ToList();
+
+        store.ThrowAfterWrite = LibraryFiles.IsPlate;
+        using var staged = packages.Inspect(path);
+        var result = await packages.ImportAsync(staged);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(PackageErrorCode.CommitFailed, result.Error!.Code);
+        Assert.Equal(listedBefore, library.GetOrderedPlates().Select(p => p.PlateId));
+
+        // Images rolled back, the Plates folder as it was; the only new file is the trashed document.
+        var after = fixture.SnapshotInstallation();
+        var added = after.Keys.Except(before.Keys).ToList();
+        var trashed = Assert.Single(added);
+        Assert.StartsWith(Path.Combine("Trash", "Plates") + Path.DirectorySeparatorChar, trashed, StringComparison.Ordinal);
+        Assert.All(before, entry => Assert.Equal(entry.Value, after[entry.Key]));
+
+        store.ThrowAfterWrite = null;
+        var reloaded = await fixture.Library.LoadAsync();
+        Assert.Equal(listedBefore, reloaded.GetOrderedPlates().Select(p => p.PlateId));
     }
 }
 
