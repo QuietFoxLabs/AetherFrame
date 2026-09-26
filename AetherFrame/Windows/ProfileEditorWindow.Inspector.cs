@@ -306,7 +306,7 @@ internal sealed partial class ProfileEditorWindow
 
         var rotation = image.RotationDegrees;
         EditorWidgets.PropertyLabel("Rotation", sliderWidth);
-        if (ImGui.SliderFloat("##Rotation", ref rotation, 0f, 359.9f, "%.1f deg"))
+        if (ImGui.SliderFloat("##Rotation", ref rotation, 0f, 359.9f, "%.1f deg", ImGuiSliderFlags.AlwaysClamp))
         {
             var normalized = RotationGeometry.NormalizeDegrees(rotation);
             ContinueImageEdit(image.Id, element => element.RotationDegrees = normalized);
@@ -456,7 +456,7 @@ internal sealed partial class ProfileEditorWindow
 
         var fontSize = text.FontSize;
         EditorWidgets.PropertyLabel("Size");
-        if (ImGui.SliderFloat("##FontSize", ref fontSize, TextProfileElement.MinFontSize, TextProfileElement.MaxFontSize, "%.0f px"))
+        if (ImGui.SliderFloat("##FontSize", ref fontSize, TextProfileElement.MinFontSize, TextProfileElement.MaxFontSize, "%.0f px", ImGuiSliderFlags.AlwaysClamp))
         {
             ContinueTextEdit(text.Id, element => element.FontSize = fontSize);
         }
@@ -530,7 +530,7 @@ internal sealed partial class ProfileEditorWindow
 
         var letterSpacing = text.LetterSpacing;
         EditorWidgets.PropertyLabel("Letter Spacing");
-        if (ImGui.SliderFloat("##LetterSpacing", ref letterSpacing, TextProfileElement.MinLetterSpacing, TextProfileElement.MaxLetterSpacing, "%.1f px"))
+        if (ImGui.SliderFloat("##LetterSpacing", ref letterSpacing, TextProfileElement.MinLetterSpacing, TextProfileElement.MaxLetterSpacing, "%.1f px", ImGuiSliderFlags.AlwaysClamp))
         {
             ContinueTextEdit(text.Id, element => element.LetterSpacing = letterSpacing);
         }
@@ -542,7 +542,7 @@ internal sealed partial class ProfileEditorWindow
 
         var lineSpacing = text.LineSpacing;
         EditorWidgets.PropertyLabel("Line Spacing");
-        if (ImGui.SliderFloat("##LineSpacing", ref lineSpacing, TextProfileElement.MinLineSpacing, TextProfileElement.MaxLineSpacing, "%.2fx"))
+        if (ImGui.SliderFloat("##LineSpacing", ref lineSpacing, TextProfileElement.MinLineSpacing, TextProfileElement.MaxLineSpacing, "%.2fx", ImGuiSliderFlags.AlwaysClamp))
         {
             ContinueTextEdit(text.Id, element => element.LineSpacing = lineSpacing);
         }
@@ -575,7 +575,7 @@ internal sealed partial class ProfileEditorWindow
 
             var minimum = Math.Min(text.AutoFitMinimumSize, text.FontSize);
             EditorWidgets.PropertyLabel("Minimum");
-            if (ImGui.SliderFloat("##AutoFitMin", ref minimum, TextProfileElement.MinFontSize, Math.Max(TextProfileElement.MinFontSize, text.FontSize), "%.0f px"))
+            if (ImGui.SliderFloat("##AutoFitMin", ref minimum, TextProfileElement.MinFontSize, Math.Max(TextProfileElement.MinFontSize, text.FontSize), "%.0f px", ImGuiSliderFlags.AlwaysClamp))
             {
                 ContinueTextEdit(text.Id, element => element.AutoFitMinimumSize = minimum);
             }
@@ -648,7 +648,7 @@ internal sealed partial class ProfileEditorWindow
 
         var opacity = text.Color.W * 100f;
         EditorWidgets.PropertyLabel("Opacity");
-        if (ImGui.SliderFloat("##TextOpacity", ref opacity, 0f, 100f, "%.0f%%"))
+        if (ImGui.SliderFloat("##TextOpacity", ref opacity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
         {
             var alpha = opacity / 100f;
             ContinueTextEdit(text.Id, element => element.Color = element.Color with { W = alpha });
@@ -679,7 +679,7 @@ internal sealed partial class ProfileEditorWindow
 
             var thickness = text.OutlineThickness;
             EditorWidgets.PropertyLabel("  Thickness");
-            if (ImGui.SliderFloat("##OutlineThickness", ref thickness, 0.5f, TextProfileElement.MaxOutlineThickness, "%.1f px"))
+            if (ImGui.SliderFloat("##OutlineThickness", ref thickness, 0.5f, TextProfileElement.MaxOutlineThickness, "%.1f px", ImGuiSliderFlags.AlwaysClamp))
             {
                 ContinueTextEdit(text.Id, element => element.OutlineThickness = thickness);
             }
@@ -688,7 +688,7 @@ internal sealed partial class ProfileEditorWindow
 
             var outlineOpacity = text.OutlineOpacity * 100f;
             EditorWidgets.PropertyLabel("  Opacity");
-            if (ImGui.SliderFloat("##OutlineOpacity", ref outlineOpacity, 0f, 100f, "%.0f%%"))
+            if (ImGui.SliderFloat("##OutlineOpacity", ref outlineOpacity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
             {
                 var value = outlineOpacity / 100f;
                 ContinueTextEdit(text.Id, element => element.OutlineOpacity = value);
@@ -720,7 +720,7 @@ internal sealed partial class ProfileEditorWindow
 
             var shadowOpacity = text.ShadowOpacity * 100f;
             EditorWidgets.PropertyLabel("  Opacity");
-            if (ImGui.SliderFloat("##ShadowOpacity", ref shadowOpacity, 0f, 100f, "%.0f%%"))
+            if (ImGui.SliderFloat("##ShadowOpacity", ref shadowOpacity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
             {
                 var value = shadowOpacity / 100f;
                 ContinueTextEdit(text.Id, element => element.ShadowOpacity = value);
@@ -810,7 +810,7 @@ internal sealed partial class ProfileEditorWindow
 
         var opacity = image.Opacity * 100f;
         EditorWidgets.PropertyLabel("Opacity");
-        if (ImGui.SliderFloat("##ImageOpacity", ref opacity, 0f, 100f, "%.0f%%"))
+        if (ImGui.SliderFloat("##ImageOpacity", ref opacity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
         {
             var value = opacity / 100f;
             ContinueImageEdit(image.Id, element => element.Opacity = value);
