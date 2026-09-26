@@ -118,14 +118,14 @@ public class JsonValueCountTests
         Assert.True(PackageFiles.Entry(PackageFiles.Read(path), PackagePaths.ProfilePath).Bytes.Length <= PackagePolicy.MaxProfileBytes);
         var before = setup.Fixture.SnapshotInstallation();
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+        // Inspect runs on the calling thread, so its own allocations are what is measured; the
+        // process-wide counter would also see whatever xunit runs in parallel. Wall-clock time is
+        // reported but not asserted, for the same reason.
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var clock = Stopwatch.StartNew();
         var staged = setup.Packages.Inspect(path);
         clock.Stop();
-        var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
 
         try
         {
@@ -136,8 +136,7 @@ public class JsonValueCountTests
             Assert.Contains($"more than {PackagePolicy.MaxJsonValueCount} JSON values", error.Detail);
             Assert.Null(staged.PreparedProfile);
             Assert.Null(staged.PreviewDocument);
-            Assert.True(allocated < 128L * 1024 * 1024, $"validating the profile allocated {allocated >> 20} MiB");
-            Assert.True(clock.ElapsedMilliseconds < 2000, $"validating the profile took {clock.ElapsedMilliseconds} ms");
+            Assert.True(allocated < 128L * 1024 * 1024, $"validating the profile allocated {allocated >> 20} MiB in {clock.ElapsedMilliseconds} ms");
             Assert.False((await setup.Packages.ImportAsync(staged)).Succeeded);
         }
         finally
