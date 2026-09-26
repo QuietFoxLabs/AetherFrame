@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
@@ -331,6 +332,117 @@ public class TemplateLoadInterruptionTests
                 throw interruption;
             }
 
+            return files.ReadTextAsync(path, reader);
+        }
+
+        public Task WriteTextAsync(string path, string contents) => files.WriteTextAsync(path, contents);
+
+        public void MoveFile(string sourcePath, string destinationPath) => files.MoveFile(sourcePath, destinationPath);
+
+        public void CopyFile(string sourcePath, string destinationPath) => files.CopyFile(sourcePath, destinationPath);
+
+        public void DeleteFile(string path) => files.DeleteFile(path);
+    }
+}
+
+/// <summary>
+/// Loading reads and parses every Template file; in game the dispatcher is the framework thread
+/// and the store's reads are synchronous, so that work must leave the dispatcher's thread before
+/// the first file is touched (see the class remarks on threading in <see cref="TemplateLibraryService"/>).
+/// </summary>
+public class TemplateLibraryThreadingTests
+{
+    private static readonly TimeSpan Generous = TimeSpan.FromSeconds(10);
+
+    [Fact]
+    public async Task InitializeAsync_ReadsAndParsesOffTheDispatcherThread()
+    {
+        var recording = new ThreadRecordingStore(new SystemFileStore());
+        using var fixture = new TemplateLibraryFixture(recording);
+        var seeded = await fixture.LoadAsync();
+        var plate = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.Blank, null, "Source");
+        var first = await seeded.SaveAsTemplateAsync(plate.PlateId, "First");
+        var second = await seeded.SaveAsTemplateAsync(plate.PlateId, "Second");
+        var callsBefore = recording.Calls.Count;
+
+        using var dispatcher = new QueuedDispatcher();
+        var templates = new TemplateLibraryService(fixture.Paths, recording, fixture.PlateLibrary, fixture.Log, () => fixture.Clock.Now, dispatcher.Dispatch);
+        await templates.InitializeAsync().WaitAsync(Generous);
+
+        var loadCalls = recording.Calls.Skip(callsBefore).ToList();
+        Assert.Contains(loadCalls, c => c.Operation == nameof(IPlateFileStore.ListFiles) && c.Path == fixture.Paths.TemplatesDirectory);
+        Assert.Equal(2, loadCalls.Count(c => c.Operation == nameof(IPlateFileStore.ReadTextAsync)));
+        Assert.All(loadCalls, c => Assert.NotEqual(dispatcher.ThreadId, c.ThreadId));
+        Assert.True(templates.IsLoaded);
+        Assert.Equal(seeded.GetOrderedTemplates().Select(t => t.TemplateId), templates.GetOrderedTemplates().Select(t => t.TemplateId));
+        Assert.True(templates.FindTemplate(first)!.IsReady);
+        Assert.True(templates.FindTemplate(second)!.IsReady);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_DispatchedDelegateYieldsBeforeTheFirstRead()
+    {
+        var blocking = new BlockingReadStore();
+        using var fixture = new TemplateLibraryFixture(blocking);
+        var seeded = await fixture.LoadAsync();
+        var plate = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.Blank, null, "Source");
+        var templateId = await seeded.SaveAsTemplateAsync(plate.PlateId, "Held");
+        var generationBefore = seeded.Generation;
+
+        using var dispatcher = new QueuedDispatcher();
+        var templates = new TemplateLibraryService(fixture.Paths, blocking, fixture.PlateLibrary, fixture.Log, () => fixture.Clock.Now, dispatcher.Dispatch);
+        blocking.Hold();
+        Task loading;
+        try
+        {
+            loading = templates.InitializeAsync();
+            await blocking.ReadStarted.WaitAsync(Generous);
+
+            // The read is blocking its thread right now; the dispatcher's thread is not that thread,
+            // so it is free for the next tick's work while the load is still under way.
+            await dispatcher.Dispatch(() => Task.CompletedTask).WaitAsync(Generous);
+            Assert.False(loading.IsCompleted);
+            Assert.False(templates.IsLoaded);
+        }
+        finally
+        {
+            blocking.Release();
+        }
+
+        await loading.WaitAsync(Generous);
+        Assert.True(templates.IsLoaded);
+        Assert.True(templates.FindTemplate(templateId)!.IsReady);
+        Assert.Equal(seeded.GetOrderedTemplates().Select(t => t.TemplateId), templates.GetOrderedTemplates().Select(t => t.TemplateId));
+        Assert.True(templates.Generation > 0);
+        Assert.Equal(generationBefore, seeded.Generation);
+    }
+
+    /// <summary>Plain files whose next read BLOCKS its calling thread until released, the way
+    /// Dalamud's reliable storage reads do (they never yield).</summary>
+    private sealed class BlockingReadStore : IPlateFileStore
+    {
+        private readonly SystemFileStore files = new();
+        private readonly ManualResetEventSlim gate = new(initialState: true);
+        private TaskCompletionSource readStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal Task ReadStarted => readStarted.Task;
+
+        internal void Hold()
+        {
+            readStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            gate.Reset();
+        }
+
+        internal void Release() => gate.Set();
+
+        public bool FileExists(string path) => files.FileExists(path);
+
+        public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
+
+        public Task ReadTextAsync(string path, Action<string> reader)
+        {
+            readStarted.TrySetResult();
+            gate.Wait();
             return files.ReadTextAsync(path, reader);
         }
 

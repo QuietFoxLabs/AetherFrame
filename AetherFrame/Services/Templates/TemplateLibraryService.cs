@@ -29,8 +29,12 @@ namespace AetherFrame.Services.Templates;
 /// document keeps <c>ProfileDocument</c>'s own schema/migration exactly as a Plate's does; this
 /// envelope versions itself independently (see <c>TemplateDocuments</c>).</para>
 ///
-/// <para><b>Threading.</b> Operations are serialized and run through the supplied dispatcher, like
-/// <see cref="PlateLibraryService"/>. Query members are safe from any thread.</para>
+/// <para><b>Threading.</b> Operations are serialized and started through the supplied dispatcher,
+/// like <see cref="PlateLibraryService"/>: only an operation's synchronous prefix runs on the
+/// dispatcher's thread (the framework thread in game). The load's read/parse phase runs on the
+/// thread pool, and everything after an operation's first file step — including
+/// <see cref="Generation"/> changing — runs on whichever thread completes that step (the thread
+/// pool in game). Query members are safe from any thread.</para>
 /// </summary>
 internal sealed class TemplateLibraryService
 {
@@ -151,31 +155,12 @@ internal sealed class TemplateLibraryService
 
     private async Task InitializeCoreAsync(CancellationToken cancellationToken)
     {
-        var loaded = new List<TemplateRecord>();
+        List<TemplateRecord> loaded;
         try
         {
-            foreach (var path in store.ListFiles(paths.TemplatesDirectory, "*.json"))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                operations.Stopping.ThrowIfCancellationRequested();
-
-                if (!PlateStoragePaths.TryParseTemplateFileName(path, out var templateId))
-                {
-                    log.Warning($"AetherFrame ignored a file in the Templates folder that isn't a Template: {Path.GetFileName(path)}");
-                    continue;
-                }
-
-                // A built-in Template is never a file (see BuiltInTemplateCatalog): a file using one of
-                // their ids would be listed as a second, unremovable copy of the built-in, so it's
-                // ignored like any other file that isn't a Template, and left untouched.
-                if (BuiltInTemplateCatalog.IsBuiltIn(templateId))
-                {
-                    log.Warning($"AetherFrame ignored a file in the Templates folder that uses a built-in Template's id: {Path.GetFileName(path)}");
-                    continue;
-                }
-
-                loaded.Add(await LoadTemplateAsync(path, templateId).ConfigureAwait(false));
-            }
+            // Reading and parsing every file is the whole cost of a load, so it runs on the thread
+            // pool rather than inside the dispatcher's tick (see the class remarks on threading).
+            loaded = await Task.Run(() => LoadTemplatesAsync(cancellationToken)).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
         {
@@ -202,6 +187,36 @@ internal sealed class TemplateLibraryService
         }
 
         log.Information($"AetherFrame Template Library loaded: {loaded.Count} Template(s).");
+    }
+
+    private async Task<List<TemplateRecord>> LoadTemplatesAsync(CancellationToken cancellationToken)
+    {
+        var loaded = new List<TemplateRecord>();
+
+        foreach (var path in store.ListFiles(paths.TemplatesDirectory, "*.json"))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            operations.Stopping.ThrowIfCancellationRequested();
+
+            if (!PlateStoragePaths.TryParseTemplateFileName(path, out var templateId))
+            {
+                log.Warning($"AetherFrame ignored a file in the Templates folder that isn't a Template: {Path.GetFileName(path)}");
+                continue;
+            }
+
+            // A built-in Template is never a file (see BuiltInTemplateCatalog): a file using one of
+            // their ids would be listed as a second, unremovable copy of the built-in, so it's
+            // ignored like any other file that isn't a Template, and left untouched.
+            if (BuiltInTemplateCatalog.IsBuiltIn(templateId))
+            {
+                log.Warning($"AetherFrame ignored a file in the Templates folder that uses a built-in Template's id: {Path.GetFileName(path)}");
+                continue;
+            }
+
+            loaded.Add(await LoadTemplateAsync(path, templateId).ConfigureAwait(false));
+        }
+
+        return loaded;
     }
 
     /// <summary>
