@@ -11,5 +11,10 @@ internal static class JsonOptions
         // System.Numerics.Vector4 (used for TextProfileElement.Color) exposes X/Y/Z/W as
         // public fields, not properties, so they're silently dropped without this.
         IncludeFields = true,
+
+        // An element's "elementType" is recognized wherever it appears in the object, not only
+        // first: a file rewritten by a tool that sorts keys still loads. Reading only — every
+        // element is still written with its discriminator first, exactly as before.
+        AllowOutOfOrderMetadataProperties = true,
     };
 }
