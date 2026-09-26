@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Domain.Rendering;
 using Dalamud.Interface.ManagedFontAtlas;
 
 namespace AetherFrame.Services.Fonts;
@@ -17,8 +18,8 @@ namespace AetherFrame.Services.Fonts;
 ///
 /// Every distinct (family, size, bold, italic) combination is only ever built once and reused
 /// after — see <see cref="GetHandle"/> — but "size" is not the raw requested pixel size: it's
-/// snapped to the nearest tier AT OR ABOVE the request in <see cref="SizeLadder"/>, a fixed,
-/// fairly fine-grained set of sizes. This is what makes the whole strategy work:
+/// snapped to the nearest tier AT OR ABOVE the request in <see cref="FontTierPolicy.SizeLadder"/>,
+/// a fixed, fairly fine-grained set of sizes. This is what makes the whole strategy work:
 ///
 /// <list type="bullet">
 /// <item>The set of fonts a continuous zoom drag can ever cause to be built is bounded by the
@@ -37,14 +38,14 @@ namespace AetherFrame.Services.Fonts;
 /// gets built EAGERLY is deliberately small:
 ///
 /// <list type="bullet">
-/// <item>At construction: only <see cref="CommonEditorSizes"/> (a handful of sizes, not the
-/// whole ladder) for AetherFrame's own default family — the one new text actually uses. Dalamud
-/// Default (which can carry a much larger CJK/game-symbol/icon glyph set) is never built until
-/// something actually needs it.</item>
+/// <item>At construction: only <see cref="FontTierPolicy.CommonEditorSizes"/> (a handful of
+/// sizes, not the whole ladder) for AetherFrame's own default family — the one new text actually
+/// uses. Dalamud Default (which can carry a much larger CJK/game-symbol/icon glyph set) is never
+/// built until something actually needs it.</item>
 /// <item>When a profile loads: for each distinct (family, bold, italic) combo its text elements
 /// actually use, only the ladder tier matching that element's OWN nominal size, plus
-/// <see cref="CommonEditorSizes"/> for that combo — not all 26 tiers regardless of whether
-/// they're ever requested.</item>
+/// <see cref="FontTierPolicy.CommonEditorSizes"/> for that combo — not all 26 tiers regardless
+/// of whether they're ever requested.</item>
 /// </list>
 ///
 /// Everything else — an unusual zoom level, a size nobody anticipated — is built lazily, once,
@@ -53,29 +54,16 @@ namespace AetherFrame.Services.Fonts;
 /// wrapped in <see cref="IFontAtlas.SuppressAutoRebuild"/> so it costs one atlas rebuild instead
 /// of one per handle — see that method's own doc, which recommends exactly this for "creating
 /// multiple new handles."
+///
+/// What any of this costs is bounded by <see cref="FontTierPolicy"/>: every handle in the atlas
+/// is re-rasterized on every rebuild, so each family only builds tiers up to the size its glyph
+/// set can afford (a request above that uses the largest allowed tier, as a request above the
+/// ladder's top always has), the bundled families are built with explicit glyph ranges rather
+/// than every glyph their TTF maps, and the cache evicts by estimated surface as well as by
+/// handle count — see <see cref="EvictExcess"/>.
 /// </summary>
 internal sealed class ProfileFontService : IDisposable
 {
-    /// <summary>
-    /// Fixed set of pixel sizes every cached font handle is snapped to. Deliberately fine-grained
-    /// (~20-25% steps) so any actual request — prewarmed or lazily built on first demand — is
-    /// close to its ideal size; includes AetherFrame's documented test sizes (24/48/72/120/180)
-    /// exactly. Being in this list does NOT mean a tier is built ahead of time — see
-    /// <see cref="CommonEditorSizes"/> for the much smaller eager subset.
-    /// </summary>
-    private static readonly float[] SizeLadder =
-    [
-        10f, 12f, 14f, 16f, 20f, 24f, 28f, 32f, 40f, 48f, 56f, 64f, 72f, 84f, 96f,
-        110f, 120f, 140f, 160f, 180f, 210f, 240f, 280f, 330f, 390f, 460f,
-    ];
-
-    /// <summary>
-    /// The small subset of <see cref="SizeLadder"/> eagerly warmed for a family/style combo
-    /// ("a sensible set of common editor sizes") — everything else in the ladder is only ever
-    /// built lazily, on first actual demand, via <see cref="GetHandle"/>.
-    /// </summary>
-    private static readonly float[] CommonEditorSizes = [16f, 24f, 32f, 48f, 64f, 96f];
-
     // Bounds how many distinct (family, tier, bold, italic) font handles are kept alive at once.
     // Steady-state usage (CommonEditorSizes for a handful of combos, plus whatever a session
     // actually zooms/views) sits well below this. Eviction is LRU (see accessOrder) so it's the
@@ -87,6 +75,10 @@ internal sealed class ProfileFontService : IDisposable
     private readonly LinkedList<FontKey> accessOrder = new();
     private readonly Dictionary<FontKey, LinkedListNode<FontKey>> accessNodes = new();
     private readonly Dictionary<string, byte[]> embeddedFontBytesCache = new();
+
+    // The summed FontTierPolicy.EstimatedSurfacePixels of every cached handle, kept in step with
+    // `handles` so EvictExcess can bound the atlas by surface without walking the cache.
+    private long cachedSurfacePixels;
 
     private static readonly object PrewarmedMarker = new();
 
@@ -108,7 +100,7 @@ internal sealed class ProfileFontService : IDisposable
         // pays for it at all.
         using (atlas.SuppressAutoRebuild())
         {
-            WarmSizes(ProfileFontFamilies.AetherFrameSans, bold: false, italic: false, CommonEditorSizes);
+            WarmSizes(ProfileFontFamilies.AetherFrameSans, bold: false, italic: false, FontTierPolicy.CommonEditorSizes);
         }
     }
 
@@ -141,9 +133,9 @@ internal sealed class ProfileFontService : IDisposable
         var effectiveBold = bold && descriptor.SupportsBold;
         var effectiveItalic = italic && descriptor.SupportsItalic;
 
-        var tierIndex = FindTierIndex(requestedPixelSize);
+        var tierIndex = FontTierPolicy.FindTierIndex(descriptor.Id, requestedPixelSize);
 
-        var idealKey = new FontKey(descriptor.Id, SizeLadder[tierIndex], effectiveBold, effectiveItalic);
+        var idealKey = new FontKey(descriptor.Id, FontTierPolicy.SizeLadder[tierIndex], effectiveBold, effectiveItalic);
         var idealHandle = GetOrCreateHandle(idealKey, descriptor);
         if (idealHandle.Available)
         {
@@ -157,10 +149,12 @@ internal sealed class ProfileFontService : IDisposable
         // family/style. Only ever searches upward (never a smaller tier): drawing at the
         // requested size from a bigger-than-needed raster is a downscale, not the upscale that
         // causes visible blur. Only considers tiers already built — never builds more just to
-        // search, since that would defeat the point of building lazily.
-        for (var i = tierIndex + 1; i < SizeLadder.Length; i++)
+        // search, since that would defeat the point of building lazily — and only up to the
+        // family's largest allowed tier, above which nothing is ever built.
+        var maxTierIndex = FontTierPolicy.MaxTierIndex(descriptor.Id);
+        for (var i = tierIndex + 1; i <= maxTierIndex; i++)
         {
-            var fallbackKey = new FontKey(descriptor.Id, SizeLadder[i], effectiveBold, effectiveItalic);
+            var fallbackKey = new FontKey(descriptor.Id, FontTierPolicy.SizeLadder[i], effectiveBold, effectiveItalic);
             if (handles.TryGetValue(fallbackKey, out var fallback))
             {
                 TouchAccess(fallbackKey);
@@ -213,12 +207,13 @@ internal sealed class ProfileFontService : IDisposable
             if (warmedCombos.Add((descriptor.Id, effectiveBold, effectiveItalic)))
             {
                 // The common baseline (covers most zoom/view-scale variations of this combo)...
-                WarmSizes(descriptor.Id, effectiveBold, effectiveItalic, CommonEditorSizes);
+                WarmSizes(descriptor.Id, effectiveBold, effectiveItalic, FontTierPolicy.CommonEditorSizes);
             }
 
-            // ...plus this specific element's own nominal size exactly, so what the profile
-            // actually contains is never left to the lazy/on-demand path alone.
-            var ownTier = SizeLadder[FindTierIndex(text.FontSize)];
+            // ...plus this specific element's own nominal size exactly (or the family's largest
+            // allowed tier, for a size beyond it), so what the profile actually contains is never
+            // left to the lazy/on-demand path alone.
+            var ownTier = FontTierPolicy.SizeLadder[FontTierPolicy.FindTierIndex(descriptor.Id, text.FontSize)];
             GetOrCreateHandle(new FontKey(descriptor.Id, ownTier, effectiveBold, effectiveItalic), descriptor);
         }
     }
@@ -233,6 +228,7 @@ internal sealed class ProfileFontService : IDisposable
         handles.Clear();
         accessOrder.Clear();
         accessNodes.Clear();
+        cachedSurfacePixels = 0;
         embeddedFontBytesCache.Clear();
 
         atlas.Dispose();
@@ -241,7 +237,7 @@ internal sealed class ProfileFontService : IDisposable
     /// <summary>Kicks off building the given sizes for one (family, bold, italic) combo. Safe to
     /// call repeatedly — <see cref="GetOrCreateHandle"/> is itself a no-op for an already-cached
     /// key.</summary>
-    private void WarmSizes(string familyId, bool bold, bool italic, float[] sizes)
+    private void WarmSizes(string familyId, bool bold, bool italic, IReadOnlyList<float> sizes)
     {
         var descriptor = ProfileFontCatalog.Resolve(familyId);
         var effectiveBold = bold && descriptor.SupportsBold;
@@ -251,22 +247,6 @@ internal sealed class ProfileFontService : IDisposable
         {
             GetOrCreateHandle(new FontKey(descriptor.Id, size, effectiveBold, effectiveItalic), descriptor);
         }
-    }
-
-    private static int FindTierIndex(float requestedPixelSize)
-    {
-        for (var i = 0; i < SizeLadder.Length; i++)
-        {
-            if (SizeLadder[i] >= requestedPixelSize)
-            {
-                return i;
-            }
-        }
-
-        // Requested size exceeds every tier: use the largest available (an upscale in this one
-        // extreme-zoom case is unavoidable, but still far less severe than the old default-font-
-        // stretched-5x scenario this service replaces).
-        return SizeLadder.Length - 1;
     }
 
     private IFontHandle GetOrCreateHandle(FontKey key, ProfileFontFamilyDescriptor descriptor)
@@ -280,6 +260,7 @@ internal sealed class ProfileFontService : IDisposable
         var handle = BuildHandle(descriptor, key.SizePx, key.Bold, key.Italic);
         handles[key] = handle;
         accessNodes[key] = accessOrder.AddLast(key);
+        cachedSurfacePixels += FontTierPolicy.EstimatedSurfacePixels(key.FamilyId, key.SizePx);
 
         EvictExcess();
 
@@ -301,7 +282,10 @@ internal sealed class ProfileFontService : IDisposable
     private IFontHandle BuildHandle(ProfileFontFamilyDescriptor descriptor, float sizePx, bool bold, bool italic) =>
         atlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
         {
-            var config = new SafeFontConfig { SizePx = sizePx };
+            // Explicit ranges for the bundled faces (see FontTierPolicy.GlyphRanges); without
+            // them Dalamud builds every glyph the TTF maps, which for Cousine is nearly three
+            // times the surface for glyphs no Plate can show.
+            var config = new SafeFontConfig { SizePx = sizePx, GlyphRanges = FontTierPolicy.GlyphRanges(descriptor.Id) };
             var resourceName = GetEmbeddedResourceName(descriptor.Id, bold, italic);
 
             toolkit.Font = resourceName is not null
@@ -354,12 +338,16 @@ internal sealed class ProfileFontService : IDisposable
         return bytes;
     }
 
-    /// <summary>LRU eviction once the cache exceeds <see cref="MaxCachedHandles"/>: the least-
-    /// recently-used entry goes, not simply the oldest-built one, so a heavily-reused common tier
-    /// is never evicted just because it happened to be built early.</summary>
+    /// <summary>LRU eviction once the cache exceeds <see cref="MaxCachedHandles"/> or its
+    /// estimated glyph surface exceeds <see cref="FontTierPolicy.AtlasBudgetPixels"/>: the
+    /// least-recently-used entry goes, not simply the oldest-built one, so a heavily-reused
+    /// common tier is never evicted just because it happened to be built early. The entry just
+    /// added (the most recent) is never evicted, whatever it costs.</summary>
     private void EvictExcess()
     {
-        while (accessOrder.Count > MaxCachedHandles && accessOrder.First is { } lruNode)
+        while (accessOrder.Count > 1
+            && (accessOrder.Count > MaxCachedHandles || cachedSurfacePixels > FontTierPolicy.AtlasBudgetPixels)
+            && accessOrder.First is { } lruNode)
         {
             var lruKey = lruNode.Value;
             accessOrder.RemoveFirst();
@@ -367,6 +355,7 @@ internal sealed class ProfileFontService : IDisposable
 
             if (handles.Remove(lruKey, out var evicted))
             {
+                cachedSurfacePixels -= FontTierPolicy.EstimatedSurfacePixels(lruKey.FamilyId, lruKey.SizePx);
                 evicted.Dispose();
             }
         }
