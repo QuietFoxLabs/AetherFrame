@@ -267,7 +267,9 @@ internal sealed class ProfileFontService : IDisposable
         return handle;
     }
 
-    /// <summary>Moves a key to the most-recently-used end, for LRU eviction.</summary>
+    /// <summary>Moves a key to the most-recently-used end, for LRU eviction. Re-links the key's
+    /// existing node rather than allocating a new one: this runs once or twice per visible text
+    /// element per frame.</summary>
     private void TouchAccess(FontKey key)
     {
         if (!accessNodes.TryGetValue(key, out var node))
@@ -276,7 +278,7 @@ internal sealed class ProfileFontService : IDisposable
         }
 
         accessOrder.Remove(node);
-        accessNodes[key] = accessOrder.AddLast(key);
+        accessOrder.AddLast(node);
     }
 
     private IFontHandle BuildHandle(ProfileFontFamilyDescriptor descriptor, float sizePx, bool bold, bool italic) =>

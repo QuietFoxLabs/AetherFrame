@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using System.Linq;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Domain.Rendering;
 
 namespace AetherFrame.Services.Fonts;
 
@@ -24,9 +24,10 @@ internal sealed record ProfileFontFamilyDescriptor(string Id, string DisplayName
 ///
 /// Deliberately just a static list rather than anything pluggable: adding a family later is a
 /// matter of embedding its four TTFs (see the AetherFrame.csproj Fonts glob) and adding one
-/// descriptor plus one switch arm in <see cref="ProfileFontService"/> — no architecture changes
-/// needed. Real font importing (arbitrary user-supplied files) is intentionally out of scope for
-/// now.
+/// descriptor here (plus its <see cref="Resolve"/> arm), one switch arm in
+/// <see cref="ProfileFontService"/>, and its calibrated surface model in
+/// <see cref="FontTierPolicy"/> — no architecture changes needed. Real font importing
+/// (arbitrary user-supplied files) is intentionally out of scope for now.
 /// </summary>
 internal static class ProfileFontCatalog
 {
@@ -55,7 +56,15 @@ internal static class ProfileFontCatalog
 
     /// <summary>Resolves a persisted family id to its descriptor, falling back to
     /// <see cref="DalamudDefault"/> for null/unrecognized ids (e.g. a legacy element, or one
-    /// saved by a newer build with a family this one doesn't know).</summary>
-    internal static ProfileFontFamilyDescriptor Resolve(string? familyId) =>
-        All.FirstOrDefault(f => f.Id == familyId) ?? DalamudDefault;
+    /// saved by a newer build with a family this one doesn't know). A plain switch rather than
+    /// a search over <see cref="All"/>: the font cache calls this for every text element it
+    /// measures or draws, every frame, and it must not allocate. The same rule as
+    /// <see cref="FontTierPolicy.ResolveFamilyId"/>.</summary>
+    internal static ProfileFontFamilyDescriptor Resolve(string? familyId) => familyId switch
+    {
+        ProfileFontFamilies.AetherFrameSans => AetherFrameSans,
+        ProfileFontFamilies.AetherFrameSerif => AetherFrameSerif,
+        ProfileFontFamilies.AetherFrameMono => AetherFrameMono,
+        _ => DalamudDefault,
+    };
 }

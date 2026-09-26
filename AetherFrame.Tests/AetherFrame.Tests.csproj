@@ -42,6 +42,9 @@
     <Compile Include="..\AetherFrame\Services\ProfileService.cs" Link="Linked\Services\ProfileService.cs" />
     <Compile Include="..\AetherFrame\Services\CharacterInfoCache.cs" Link="Linked\Services\CharacterInfoCache.cs" />
     <Compile Include="..\AetherFrame\Services\EditorShortcutInterpreter.cs" Link="Linked\Services\EditorShortcutInterpreter.cs" />
+    <!-- The font catalog is a static table with no Dalamud dependency; the font service that
+         consumes it (and the atlas) stays out. -->
+    <Compile Include="..\AetherFrame\Services\Fonts\ProfileFontCatalog.cs" Link="Linked\Services\Fonts\ProfileFontCatalog.cs" />
     <!-- The editor sessions (history, dirty state, Basic mode) reach the game and the renderer only
          through the narrow interfaces in UI/Editor/EditorServices.cs, so they build here too. -->
     <Compile Include="..\AetherFrame\UI\Editor\*.cs" Link="Linked\UI\Editor\%(Filename)%(Extension)" />
