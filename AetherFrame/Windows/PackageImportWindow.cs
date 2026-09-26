@@ -17,9 +17,17 @@ namespace AetherFrame.Windows;
 /// it, and exactly what would be imported, rendered by the shared Plate renderer — and imports it
 /// as a new Plate only when the player says so.
 ///
-/// Validation and import run off the draw thread (file IO and hashing); their results are only
-/// ever applied here, in Draw. Nothing from the file is shown before it passed validation: an
-/// Invalid or Unsupported package shows only its verdict and reasons, never its content.
+/// Validation runs off the draw thread (<see cref="PlatePackageService.Inspect"/> in a
+/// <see cref="Task.Run(Action)"/>), and so does the import's copying and hashing of images
+/// (<see cref="PlatePackageService.ImportAsync"/> moves it off the caller's thread itself, and the
+/// Plate write that follows runs as every Library write does); their results are only ever
+/// applied here, in Draw. Nothing from the file is shown before it passed validation: an Invalid
+/// or Unsupported package shows only its verdict and reasons, never its content.
+///
+/// <para>While an import runs the window can't be closed (Escape and the title bar reopen it, the
+/// button says "Importing..."): its outcome — the new Plate, or why nothing was imported — is only
+/// ever shown here. Plugin unload is the one exception (<see cref="Dispose"/>): the import finishes
+/// as an owned operation, and the staged files it uses are removed once it ends.</para>
 /// </summary>
 internal sealed class PackageImportWindow : Window, IDisposable
 {
@@ -64,7 +72,22 @@ internal sealed class PackageImportWindow : Window, IDisposable
 
     public override void OnClose()
     {
-        // Anything still running cleans up after itself when it finishes.
+        // A running import keeps the window open until it ends: the result is shown nowhere else.
+        if (importTask is not null)
+        {
+            IsOpen = true;
+            return;
+        }
+
+        Abandon();
+    }
+
+    /// <summary>Plugin unload: lets whatever is running finish on its own, and drops the preview.</summary>
+    public void Dispose() => Abandon();
+
+    /// <summary>Drops everything: work still running cleans up after itself when it finishes.</summary>
+    private void Abandon()
+    {
         if (inspectTask is { } inspecting)
         {
             _ = inspecting.ContinueWith(t =>
@@ -86,8 +109,6 @@ internal sealed class PackageImportWindow : Window, IDisposable
 
         Release();
     }
-
-    public void Dispose() => OnClose();
 
     public override void Draw()
     {
