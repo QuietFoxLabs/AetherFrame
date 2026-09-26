@@ -158,7 +158,7 @@ public class BuiltInArtLoaderTests
     }
 
     [Fact]
-    public void Dispose_InTheSameFrameAsTheFirstRequest_NeverLeaksOrDraws()
+    public async Task Dispose_InTheSameFrameAsTheFirstRequest_NeverLeaksOrDraws()
     {
         // The load is either cancelled while still queued (nothing is made) or runs and has what it
         // made released as it finishes: either way nothing leaks and nothing is drawn.
@@ -176,7 +176,7 @@ public class BuiltInArtLoaderTests
 
         Assert.Null(loader.GetLevelOrNull(Frame, 10f));
         loader.Dispose();
-        Thread.Sleep(100);
+        await loader.ReleasesAfterDispose.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Null(loader.GetLevelOrNull(Frame, 10f));
         lock (made)
