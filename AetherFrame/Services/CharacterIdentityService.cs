@@ -1,5 +1,6 @@
 using System;
 using AetherFrame.Domain.Basic;
+using AetherFrame.Services.Caching;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Editor;
 
@@ -9,38 +10,24 @@ internal sealed class CharacterIdentityService : ICharacterInfoSource
 {
     private readonly JobCatalog jobs;
     private readonly CharacterInfoCache infoCache;
+    private readonly CharacterContextCache contextCache;
     private bool loggedReadFailure;
 
     internal CharacterIdentityService(JobCatalog jobs)
     {
         this.jobs = jobs;
         infoCache = new CharacterInfoCache(ReadInfo, () => Environment.TickCount64);
+        contextCache = new CharacterContextCache(ReadContext, () => Environment.TickCount64);
     }
 
     /// <summary>
     /// The logged-in character for the Plate Library, or null when none is logged in (never a
     /// fabricated stand-in). The ContentId is only the local binding key; the name and home
-    /// World are descriptive.
+    /// World are descriptive. Asked for several times per frame while My Plates or the viewer is
+    /// open, so it is read from the game every half second (see <see cref="CharacterContextCache"/>)
+    /// and immediately after a login or logout, never per call.
     /// </summary>
-    internal CharacterContext? CurrentCharacter
-    {
-        get
-        {
-            var player = DalamudServices.PlayerState;
-            if (!player.IsLoaded || player.ContentId == 0)
-            {
-                return null;
-            }
-
-            string? homeWorld = null;
-            if (player.HomeWorld.ValueNullable is { } world)
-            {
-                homeWorld = world.Name.ExtractText();
-            }
-
-            return new CharacterContext(player.ContentId, player.CharacterName, string.IsNullOrWhiteSpace(homeWorld) ? null : homeWorld);
-        }
-    }
+    internal CharacterContext? CurrentCharacter => contextCache.Current;
 
     /// <summary>
     /// What Basic mode can fill in from the logged-in character — name, Home World and Data
@@ -53,8 +40,30 @@ internal sealed class CharacterIdentityService : ICharacterInfoSource
     /// </summary>
     public BasicCharacterInfo? CurrentInfo => infoCache.Current;
 
-    /// <summary>Forces the next <see cref="CurrentInfo"/> to read fresh (login, logout).</summary>
-    internal void InvalidateCharacterInfo() => infoCache.Invalidate();
+    /// <summary>Forces the next <see cref="CurrentCharacter"/> and <see cref="CurrentInfo"/> to
+    /// read fresh (login, logout).</summary>
+    internal void InvalidateCharacterInfo()
+    {
+        contextCache.Invalidate();
+        infoCache.Invalidate();
+    }
+
+    private static CharacterContext? ReadContext()
+    {
+        var player = DalamudServices.PlayerState;
+        if (!player.IsLoaded || player.ContentId == 0)
+        {
+            return null;
+        }
+
+        string? homeWorld = null;
+        if (player.HomeWorld.ValueNullable is { } world)
+        {
+            homeWorld = world.Name.ExtractText();
+        }
+
+        return new CharacterContext(player.ContentId, player.CharacterName, string.IsNullOrWhiteSpace(homeWorld) ? null : homeWorld);
+    }
 
     private BasicCharacterInfo? ReadInfo()
     {
