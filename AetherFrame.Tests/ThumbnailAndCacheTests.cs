@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
@@ -20,26 +21,70 @@ public class ThumbnailTests
     {
         internal TaskCompletionSource Gate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        /// <summary>Completes once a generation has been entered.</summary>
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes once a generation has returned (or thrown).</summary>
+        internal TaskCompletionSource Completed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         internal bool Fail { get; init; }
 
+        /// <summary>Writes the output file first, then throws: the failure a compositor hits after its write.</summary>
+        internal bool FailAfterWrite { get; init; }
+
         internal bool Wait { get; init; }
+
+        /// <summary>Like a compositor that never checks its token: waits for the gate and writes regardless of cancellation.</summary>
+        internal bool IgnoresCancellation { get; init; }
+
+        internal List<string> OutputPaths { get; } = new();
 
         internal int Calls;
 
         public async Task GenerateAsync(ProfileDocument document, string outputPngPath, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref Calls);
-            if (Wait)
+            lock (OutputPaths)
             {
-                await Gate.Task.WaitAsync(cancellationToken);
+                OutputPaths.Add(outputPngPath);
             }
 
-            if (Fail)
+            Started.TrySetResult();
+            try
             {
-                throw new InvalidOperationException("compositor exploded");
-            }
+                if (Wait)
+                {
+                    await (IgnoresCancellation ? Gate.Task : Gate.Task.WaitAsync(cancellationToken));
+                }
 
-            await File.WriteAllBytesAsync(outputPngPath, TestImages.Png(16, 9), cancellationToken);
+                if (Fail)
+                {
+                    throw new InvalidOperationException("compositor exploded");
+                }
+
+                await File.WriteAllBytesAsync(outputPngPath, TestImages.Png(16, 9), IgnoresCancellation ? CancellationToken.None : cancellationToken);
+
+                if (FailAfterWrite)
+                {
+                    throw new InvalidOperationException("compositor exploded after writing");
+                }
+            }
+            finally
+            {
+                Completed.TrySetResult();
+            }
+        }
+    }
+
+    private static string[] TemporaryFilesIn(string directory) =>
+        Directory.Exists(directory) ? Directory.GetFiles(directory, "*.tmp") : [];
+
+    private static void WaitUntilNoTemporaryFiles(string directory)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (TemporaryFilesIn(directory).Length > 0 && stopwatch.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            Thread.Sleep(10);
         }
     }
 
@@ -179,6 +224,249 @@ public class ThumbnailTests
         Assert.False(File.Exists(Path.Combine(dir.Path, $"{plateId}.png")));
         Assert.False(File.Exists(Path.Combine(dir.Path, $"{plateId}.key")));
         Assert.Equal(PlateThumbnailState.Missing, service.Get(plateId, "r1", () => Document).State);
+    }
+
+    [Fact]
+    public void Generation_WritesToAUniqueTemporaryFile_BesideTheThumbnail()
+    {
+        using var dir = new TempDirectory();
+        var generator = new FakeGenerator();
+        var service = new PlateThumbnailService(dir.Path, generator);
+        var plateId = Guid.NewGuid();
+
+        service.Get(plateId, "r1", () => Document);
+        WaitFor(() => service.Get(plateId, "r1", () => Document), PlateThumbnailState.Ready);
+        service.Invalidate(plateId);
+        service.Get(plateId, "r2", () => Document);
+        WaitFor(() => service.Get(plateId, "r2", () => Document), PlateThumbnailState.Ready);
+
+        Assert.Equal(2, generator.OutputPaths.Count);
+        Assert.NotEqual(generator.OutputPaths[0], generator.OutputPaths[1]);
+        foreach (var outputPath in generator.OutputPaths)
+        {
+            Assert.Equal(dir.Path, Path.GetDirectoryName(outputPath));
+            var name = Path.GetFileName(outputPath);
+            Assert.StartsWith($".{plateId}.png.", name, StringComparison.Ordinal);
+            Assert.EndsWith(".tmp", name, StringComparison.Ordinal);
+            Assert.False(File.Exists(outputPath));
+        }
+
+        Assert.True(File.Exists(service.GetImagePath(plateId)));
+        Assert.Empty(TemporaryFilesIn(dir.Path));
+    }
+
+    [Fact]
+    public void GeneratorFailure_AfterWritingItsOutput_LeavesNoTemporaryFile()
+    {
+        using var dir = new TempDirectory();
+        var generator = new FakeGenerator { FailAfterWrite = true };
+        var log = new TestLog();
+        var service = new PlateThumbnailService(dir.Path, generator, log);
+        var plateId = Guid.NewGuid();
+
+        service.Get(plateId, "r1", () => Document);
+        WaitFor(() => service.Get(plateId, "r1", () => Document), PlateThumbnailState.Failed);
+
+        Assert.Empty(TemporaryFilesIn(dir.Path));
+        Assert.False(File.Exists(service.GetImagePath(plateId)));
+        Assert.False(File.Exists(Path.Combine(dir.Path, $"{plateId}.key")));
+        var warning = Assert.Single(log.Messages);
+        Assert.StartsWith("W ", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain(dir.Path, warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Remove_DeletesLeftoverTemporaryFiles_ForThatPlateOnly()
+    {
+        using var dir = new TempDirectory();
+        var plateId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var mine = new[]
+        {
+            Path.Combine(dir.Path, $".{plateId}.png.{Guid.NewGuid():N}.tmp"),
+            Path.Combine(dir.Path, $".{plateId}.png.{Guid.NewGuid():N}.tmp"),
+            Path.Combine(dir.Path, $".{plateId}.key.{Guid.NewGuid():N}.tmp"),
+            Path.Combine(dir.Path, $"{plateId}.png.tmp"),
+        };
+        var theirs = new[]
+        {
+            Path.Combine(dir.Path, $".{otherId}.png.{Guid.NewGuid():N}.tmp"),
+            Path.Combine(dir.Path, $"{otherId}.png"),
+            Path.Combine(dir.Path, $"{otherId}.key"),
+            Path.Combine(dir.Path, "notes.tmp"),
+        };
+        foreach (var path in mine.Concat(theirs))
+        {
+            File.WriteAllText(path, "leftover");
+        }
+
+        var service = new PlateThumbnailService(dir.Path);
+        service.Remove(plateId);
+
+        Assert.All(mine, path => Assert.False(File.Exists(path)));
+        Assert.All(theirs, path => Assert.True(File.Exists(path)));
+    }
+
+    [Fact]
+    public void SweepTemporaryFiles_DeletesOnlyTheServicesOwnLeftovers()
+    {
+        using var dir = new TempDirectory();
+        var plateId = Guid.NewGuid();
+        var leftovers = new[]
+        {
+            Path.Combine(dir.Path, $".{plateId}.png.{Guid.NewGuid():N}.tmp"),
+            Path.Combine(dir.Path, $".{Guid.NewGuid()}.key.{Guid.NewGuid():N}.tmp"),
+            Path.Combine(dir.Path, $"{Guid.NewGuid()}.png.tmp"),
+        };
+        var kept = new[]
+        {
+            Path.Combine(dir.Path, $"{plateId}.png"),
+            Path.Combine(dir.Path, $"{plateId}.key"),
+            Path.Combine(dir.Path, "notes.tmp"),
+            Path.Combine(dir.Path, ".hidden.tmp"),
+            Path.Combine(dir.Path, $"{plateId}.pngx.tmp"),
+        };
+        foreach (var path in leftovers.Concat(kept))
+        {
+            File.WriteAllText(path, "x");
+        }
+
+        var log = new TestLog();
+        var service = new PlateThumbnailService(dir.Path, log: log);
+        service.SweepTemporaryFiles();
+
+        Assert.All(leftovers, path => Assert.False(File.Exists(path)));
+        Assert.All(kept, path => Assert.True(File.Exists(path)));
+        Assert.Empty(log.Messages);
+    }
+
+    [Fact]
+    public void SweepTemporaryFiles_WithoutADirectory_IsSilent()
+    {
+        using var dir = new TempDirectory();
+        var log = new TestLog();
+        var service = new PlateThumbnailService(Path.Combine(dir.Path, "never-created"), log: log);
+
+        service.SweepTemporaryFiles();
+        service.Remove(Guid.NewGuid());
+
+        Assert.False(Directory.Exists(Path.Combine(dir.Path, "never-created")));
+        Assert.Empty(log.Messages);
+    }
+
+    [Fact]
+    public void FirstGeneration_SweepsLeftoverTemporaryFiles()
+    {
+        using var dir = new TempDirectory();
+        var leftover = Path.Combine(dir.Path, $".{Guid.NewGuid()}.png.{Guid.NewGuid():N}.tmp");
+        File.WriteAllText(leftover, "leftover");
+        var service = new PlateThumbnailService(dir.Path, new FakeGenerator());
+        var plateId = Guid.NewGuid();
+
+        service.Get(plateId, "r1", () => Document);
+        WaitFor(() => service.Get(plateId, "r1", () => Document), PlateThumbnailState.Ready);
+
+        Assert.False(File.Exists(leftover));
+        Assert.True(File.Exists(service.GetImagePath(plateId)));
+    }
+
+    [Fact]
+    public void Remove_WhenDeleteFails_LogsAndDoesNotThrow()
+    {
+        using var dir = new TempDirectory();
+        var plateId = Guid.NewGuid();
+        // A directory in the way of the image file: File.Delete refuses it on every platform.
+        Directory.CreateDirectory(Path.Combine(dir.Path, $"{plateId}.png"));
+        File.WriteAllText(Path.Combine(dir.Path, $"{plateId}.key"), "r1");
+        var log = new TestLog();
+        var service = new PlateThumbnailService(dir.Path, log: log);
+
+        service.Remove(plateId);
+
+        Assert.True(Directory.Exists(Path.Combine(dir.Path, $"{plateId}.png")));
+        Assert.False(File.Exists(Path.Combine(dir.Path, $"{plateId}.key")));
+        var warning = Assert.Single(log.Messages);
+        Assert.StartsWith("W ", warning, StringComparison.Ordinal);
+        Assert.Contains($"{plateId}.png", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain(dir.Path, warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dispose_WhileGenerating_ReturnsPromptly_AndNeverPromotesToReady()
+    {
+        using var dir = new TempDirectory();
+        var generator = new FakeGenerator { Wait = true };
+        var service = new PlateThumbnailService(dir.Path, generator);
+        var plateId = Guid.NewGuid();
+        Assert.Equal(PlateThumbnailState.Generating, service.Get(plateId, "r1", () => Document).State);
+        await generator.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var stopwatch = Stopwatch.StartNew();
+        service.Dispose();
+
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5));
+        await generator.Completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        generator.Gate.SetResult();
+        Assert.NotEqual(PlateThumbnailState.Ready, service.Get(plateId, "r1", () => Document).State);
+        Assert.False(File.Exists(service.GetImagePath(plateId)));
+        Assert.Empty(TemporaryFilesIn(dir.Path));
+        Assert.Equal(PlateThumbnailState.Missing, service.Get(Guid.NewGuid(), "r1", () => Document).State);
+    }
+
+    [Fact]
+    public async Task Dispose_WaitsForARunningGeneration_ToFinish()
+    {
+        using var dir = new TempDirectory();
+        var generator = new FakeGenerator { Wait = true, IgnoresCancellation = true };
+        var service = new PlateThumbnailService(dir.Path, generator);
+        service.Get(Guid.NewGuid(), "r1", () => Document);
+        await generator.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(200);
+            generator.Gate.SetResult();
+        });
+
+        service.Dispose();
+
+        Assert.True(generator.Completed.Task.IsCompleted);
+        Assert.Empty(TemporaryFilesIn(dir.Path));
+        await release.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task GeneratorIgnoringCancellation_CompletingAfterDispose_WritesNothing()
+    {
+        using var dir = new TempDirectory();
+        var generator = new FakeGenerator { Wait = true, IgnoresCancellation = true };
+        var service = new PlateThumbnailService(dir.Path, generator, disposeWait: TimeSpan.FromMilliseconds(50));
+        var plateId = Guid.NewGuid();
+        service.Get(plateId, "r1", () => Document);
+        await generator.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var stopwatch = Stopwatch.StartNew();
+        service.Dispose();
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5));
+        Assert.False(generator.Completed.Task.IsCompleted);
+
+        generator.Gate.SetResult();
+        await generator.Completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        WaitUntilNoTemporaryFiles(dir.Path);
+
+        Assert.Empty(TemporaryFilesIn(dir.Path));
+        Assert.False(File.Exists(service.GetImagePath(plateId)));
+        Assert.False(File.Exists(Path.Combine(dir.Path, $"{plateId}.key")));
+        Assert.Equal(1, generator.Calls);
+    }
+
+    [Fact]
+    public void Dispose_Twice_IsHarmless()
+    {
+        using var dir = new TempDirectory();
+        var service = new PlateThumbnailService(dir.Path, new FakeGenerator());
+
+        service.Dispose();
+        service.Dispose();
     }
 
     [Fact]
