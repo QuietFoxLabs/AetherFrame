@@ -105,6 +105,7 @@ internal sealed partial class EditorSession
     internal const string EditFailedMessage = "That change couldn't be made.";
     internal const string ImageImportFailedMessage = "The image couldn't be added.";
     internal const string SaveFailedMessage = "The Plate couldn't be saved.";
+    internal const string BaselineFailedMessage = "The Plate's saved state couldn't be read, so Revert to Saved isn't available.";
 
     internal Guid? SelectedElementId { get; private set; }
 
@@ -155,8 +156,8 @@ internal sealed partial class EditorSession
             // history, selection, or in-progress edit — those all refer to the old document.
             imageTextureCache.Clear();
             ResetTransientState();
-            CaptureBaseline(profile);
             completedSave = null;
+            CaptureBaseline(profile);
             return;
         }
 
@@ -819,10 +820,30 @@ internal sealed partial class EditorSession
 
     private void InvalidateDirtyMemo() => dirtyMemoFrame = -1;
 
+    /// <summary>
+    /// Makes <paramref name="profile"/> the baselined document. The capture comes first and the
+    /// two fields are assigned together: a capture that fails must leave this document with no
+    /// baseline at all (it reads as unsaved, and Revert to Saved is unavailable), never with the
+    /// previous Plate's — reverting would then put another Plate's content into this one.
+    /// </summary>
     private void CaptureBaseline(ProfileDocument? profile)
     {
+        ProfileService.DocumentState? baseline = null;
+        if (profile is not null)
+        {
+            try
+            {
+                baseline = ProfileService.DocumentState.Capture(profile);
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = BaselineFailedMessage;
+                log.Error(ex, "AetherFrame couldn't capture the open Plate's saved state; Revert to Saved is unavailable until it is reopened.");
+            }
+        }
+
         baselineSourceProfile = profile;
-        savedBaseline = profile is null ? null : ProfileService.DocumentState.Capture(profile);
+        savedBaseline = baseline;
         InvalidateDirtyMemo();
     }
 

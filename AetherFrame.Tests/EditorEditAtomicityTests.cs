@@ -187,6 +187,30 @@ public class EditorEditAtomicityTests
     // ---------------------------------------------------------------- baseline
 
     [Fact]
+    public async Task CaptureBaseline_FailedCapture_NeverKeepsAStaleBaseline()
+    {
+        using var harness = await BasicHarness.NewClassicAsync();
+        Assert.True(harness.Session.CanRevert);
+        var other = await harness.Library.CreatePlateAsync(PlateStartingLayout.Blank, null);
+        harness.Profiles.OpenPlate(other.PlateId);
+
+        // A document whose state can't be snapshotted (a corrupted in-memory list).
+        harness.Document.Elements.Add(null!);
+        harness.Session.SyncWithCurrentProfile();
+
+        Assert.True(harness.Session.IsDirty); // no known clean state: never "Saved"
+        Assert.False(harness.Session.CanRevert);
+        Assert.Equal(EditorSession.BaselineFailedMessage, harness.Session.ErrorMessage);
+        Assert.Contains(harness.Fixture.Log.Messages, m => m.StartsWith("E AetherFrame couldn't capture", StringComparison.Ordinal));
+
+        // Reverting must never apply the previous Plate's content to this one.
+        Assert.False(harness.Session.RevertToSaved(undoable: false));
+        Assert.Single(harness.Document.Elements);
+        harness.Session.SyncWithCurrentProfile(); // the next frame doesn't retry (or throw)
+        Assert.False(harness.Session.CanRevert);
+    }
+
+    [Fact]
     public async Task FailedSave_DoesNotAdvanceTheBaseline()
     {
         var store = new FaultInjectingStore();
