@@ -163,6 +163,15 @@ internal sealed class TemplateLibraryService
                     continue;
                 }
 
+                // A built-in Template is never a file (see BuiltInTemplateCatalog): a file using one of
+                // their ids would be listed as a second, unremovable copy of the built-in, so it's
+                // ignored like any other file that isn't a Template, and left untouched.
+                if (BuiltInTemplateCatalog.IsBuiltIn(templateId))
+                {
+                    log.Warning($"AetherFrame ignored a file in the Templates folder that uses a built-in Template's id: {Path.GetFileName(path)}");
+                    continue;
+                }
+
                 loaded.Add(await LoadTemplateAsync(path, templateId).ConfigureAwait(false));
             }
         }
@@ -193,6 +202,10 @@ internal sealed class TemplateLibraryService
         log.Information($"AetherFrame Template Library loaded: {loaded.Count} Template(s).");
     }
 
+    /// <summary>
+    /// One Template's record from its file. A read that unloading abandoned or canceled is not a
+    /// damaged file, so it propagates instead of being recorded as unreadable.
+    /// </summary>
     private async Task<TemplateRecord> LoadTemplateAsync(string path, Guid templateId)
     {
         try
@@ -220,7 +233,7 @@ internal sealed class TemplateLibraryService
             var rawJson = VersionedJson.Serialize(result.Raw!);
             return new TemplateRecord(templateId, TemplateStatus.Ready, rawJson, template, template.Name, template.CreatedAtUtc, template.UpdatedAtUtc, null);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
         {
             log.Error(ex, $"AetherFrame could not read Template {templateId}; it is listed as unreadable and its file is left untouched.");
             return new TemplateRecord(templateId, TemplateStatus.Unreadable, null, null, "Unreadable Template", DateTime.MinValue, DateTime.MinValue,
@@ -455,8 +468,10 @@ internal sealed class TemplateLibraryService
 
     /// <summary>
     /// Use Template: creates a brand-new, independent Plate from a Template's saved content (a
-    /// built-in's is regenerated fresh; a user Template's is exactly what was last saved). The
-    /// Template itself — built-in or user — is only ever read here, never mutated. See
+    /// built-in's is regenerated fresh; a user Template's is exactly what was last saved — taken
+    /// from the saved JSON like every other Library copy, so unknown data is kept by construction
+    /// and the shared document <see cref="GetSavedDocument"/> hands out for display plays no part).
+    /// The Template itself — built-in or user — is only ever read here, never mutated. See
     /// <see cref="PlateLibraryService.CreatePlateFromTemplateAsync"/> for the guarantees this
     /// relies on (fresh Plate Guid, no character binding copied, existing Active-Plate rules
     /// unchanged, shared asset ids with no bytes duplicated).
@@ -482,7 +497,7 @@ internal sealed class TemplateLibraryService
                 lock (gate)
                 {
                     var record = RequireReadyLocked(templateId, "used");
-                    rawDocument = PlateDocuments.ToJson(record.Template!.Document);
+                    rawDocument = EmbeddedDocument(ParseObject(record.RawJson!));
                     name = record.Name;
                 }
             }
@@ -542,9 +557,12 @@ internal sealed class TemplateLibraryService
                         problems.Add($"Trashed Template {Path.GetFileName(path)} was saved by a newer version.");
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
                 {
-                    problems.Add($"Trashed Template {Path.GetFileName(path)} is unreadable: {ex.Message}");
+                    // Only the failure's kind goes into the problem (it may reach the player); the
+                    // exception itself, whose message may name the file's path, goes to the log.
+                    log.Error(ex, $"AetherFrame could not read trashed Template {Path.GetFileName(path)} while scanning for image references.");
+                    problems.Add($"Trashed Template {Path.GetFileName(path)} is unreadable ({ex.GetType().Name}).");
                 }
             }
 
@@ -664,6 +682,10 @@ internal sealed class TemplateLibraryService
 
     private static JsonObject ParseObject(string json) =>
         JsonNode.Parse(json) as JsonObject ?? throw new JsonException("Template JSON is not an object.");
+
+    /// <summary>The embedded document of a saved (so already validated) Template envelope.</summary>
+    private static JsonObject EmbeddedDocument(JsonObject envelope) =>
+        envelope[nameof(PlateTemplate.Document)] as JsonObject ?? throw new JsonException("Template JSON has no embedded document.");
 
     private readonly record struct TemplateFileReadResult(JsonObject? Raw, PlateTemplate? Template, TemplateStatus Status, string? Problem);
 

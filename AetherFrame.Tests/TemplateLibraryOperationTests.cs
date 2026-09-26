@@ -10,6 +10,7 @@ using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Templates;
 using AetherFrame.Persistence;
 using AetherFrame.Services.Assets;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Plates;
 using AetherFrame.Services.Templates;
 using AetherFrame.UI.Editor;
@@ -383,6 +384,29 @@ public class TemplatePersistenceTests
 
         Assert.Equal(before, fixture.ReadTemplateJson(templateId));
     }
+
+    [Fact]
+    public async Task FileNamedWithABuiltInId_IsIgnored_AndNeverListedAsAUserTemplate()
+    {
+        using var fixture = new TemplateLibraryFixture();
+        var document = PlateDocuments.ToJson(BuiltInTemplateCatalog.CreateDocument(BuiltInTemplateCatalog.BlankCanvasId, fixture.Clock.Now, null)).ToJsonString(JsonOptions.Default);
+        var json = TemplateSamples.Envelope(BuiltInTemplateCatalog.BlankCanvasId, "Impostor", document);
+        fixture.WriteTemplateJson(BuiltInTemplateCatalog.BlankCanvasId, json);
+
+        var templates = await fixture.LoadAsync();
+
+        // Exactly the built-ins, once each, under their own names; the file is neither used nor touched.
+        Assert.True(templates.IsLoaded);
+        Assert.Equal(BuiltInTemplateCatalog.All.Select(d => d.TemplateId), templates.GetOrderedTemplates().Select(t => t.TemplateId));
+        Assert.DoesNotContain(templates.GetOrderedTemplates(), t => t.Kind == TemplateKind.UserSaved);
+        Assert.Equal("Blank Canvas", templates.FindTemplate(BuiltInTemplateCatalog.BlankCanvasId)!.DisplayName);
+        Assert.Empty(templates.GetSavedDocument(BuiltInTemplateCatalog.BlankCanvasId)!.Elements);
+        Assert.Equal(json, fixture.ReadTemplateJson(BuiltInTemplateCatalog.BlankCanvasId));
+        var warning = Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal));
+        Assert.Contains("built-in", warning);
+        Assert.Contains(BuiltInTemplateCatalog.BlankCanvasId.ToString(), warning);
+        Assert.False(UserFacingError.ContainsPath(warning));
+    }
 }
 
 public class TemplateRenameDuplicateDeleteTests
@@ -678,6 +702,45 @@ public class TemplateInstantiateTests
         await templates.InstantiateAsync(templateId, null);
 
         Assert.Equal(before, fixture.ReadTemplateJson(templateId));
+    }
+
+    [Fact]
+    public async Task MutatingTheSavedDocumentView_NeverChangesWhatUseTemplateCreates()
+    {
+        using var fixture = new TemplateLibraryFixture();
+        var templates = await fixture.LoadAsync();
+        var source = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.Blank, null, "Source");
+        var templateId = await templates.SaveAsTemplateAsync(source.PlateId, "My Template");
+        var savedWidth = templates.GetSavedDocument(templateId)!.CanvasWidth;
+
+        // The display document is shared and documented as read-only; a caller breaking that rule
+        // must still never leak into a Plate made from the Template, which comes from the saved JSON.
+        var view = templates.GetSavedDocument(templateId)!;
+        view.CanvasWidth = 12345f;
+        view.Elements.Add(new TextProfileElement { Text = "Leaked" });
+
+        var result = await templates.InstantiateAsync(templateId, null);
+
+        var created = fixture.PlateLibrary.OpenDocumentForEditing(result.PlateId);
+        Assert.Equal(savedWidth, created.CanvasWidth);
+        Assert.Empty(created.Elements);
+        Assert.DoesNotContain("Leaked", fixture.PlateLibrary.GetSavedJsonForExport(result.PlateId).Json);
+    }
+
+    [Fact]
+    public async Task UnknownData_SurvivesSaveAsTemplateAndInstantiate()
+    {
+        using var fixture = new TemplateLibraryFixture();
+        var plateId = Guid.NewGuid();
+        fixture.WritePlateJson(plateId, FutureData.Document(plateId));
+        var templates = await fixture.LoadAsync();
+
+        var templateId = await templates.SaveAsTemplateAsync(plateId, "Future Template");
+        var result = await templates.InstantiateAsync(templateId, null);
+
+        FutureData.AssertAllPreserved(JsonNode.Parse(fixture.ReadTemplateJson(templateId))!["Document"]!.ToJsonString());
+        FutureData.AssertAllPreserved(fixture.PlateLibrary.GetSavedJsonForExport(result.PlateId).Json);
+        FutureData.AssertAllPreserved(File.ReadAllText(fixture.Paths.GetPlatePath(result.PlateId)));
     }
 
     [Fact]
