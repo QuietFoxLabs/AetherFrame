@@ -336,7 +336,7 @@ internal sealed class PlateLibraryService
             {
                 await WriteBindingAsync(binding).ConfigureAwait(false);
             }
-            catch (Exception ex) when (!IsLoadInterruption(ex))
+            catch (Exception ex) when (!IsInterruption(ex))
             {
                 // Writing the index now would mark the migration complete with this character's
                 // legacy associations still only in memory, so the index stays unwritten this
@@ -355,7 +355,7 @@ internal sealed class PlateLibraryService
             {
                 await WriteLibraryAsync().ConfigureAwait(false);
             }
-            catch (Exception ex) when (!IsLoadInterruption(ex))
+            catch (Exception ex) when (!IsInterruption(ex))
             {
                 // Purely derived from the Plates: the next startup rebuilds and writes it again.
                 log.Error(ex, "AetherFrame loaded the Plate Library but could not save the Plate order; it will be retried at the next startup.");
@@ -426,13 +426,13 @@ internal sealed class PlateLibraryService
             repairedValues |= document.NormalizeElementIds();
             if (repairedValues)
             {
-                log.Warning($"AetherFrame found values in Plate {plateId} that no version writes (not a number, or a missing or repeated element id) and repaired them in memory; the file is unchanged until you save.");
+                log.Warning($"AetherFrame repaired values in Plate {plateId} in memory (a value that isn't a number, or a missing or repeated element id); the file is unchanged until you save.");
             }
 
             return new PlateRecord(plateId, PlateStatus.Ready, VersionedJson.Serialize(raw), document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc,
                 document.Revision, result.Migration.Version, null);
         }
-        catch (Exception ex) when (!IsLoadInterruption(ex))
+        catch (Exception ex) when (!IsInterruption(ex))
         {
             log.Error(ex, $"AetherFrame could not read Plate {plateId}; it is listed as unreadable and its file is left untouched.");
             return new PlateRecord(plateId, PlateStatus.Unreadable, null, null, "Unreadable Plate", DateTime.MinValue, DateTime.MinValue, 0, 0,
@@ -490,7 +490,7 @@ internal sealed class PlateLibraryService
                 log.Error(ex, $"AetherFrame could not read character binding {Path.GetFileName(path)}; it is left untouched.");
                 unreadable.Add(contentId);
             }
-            catch (Exception ex) when (!IsLoadInterruption(ex))
+            catch (Exception ex) when (!IsInterruption(ex))
             {
                 log.Error(ex, $"AetherFrame could not open character binding {Path.GetFileName(path)}; this character's Plate settings are left untouched and can't be changed until the game is restarted.");
                 unavailable.Add(contentId);
@@ -544,7 +544,7 @@ internal sealed class PlateLibraryService
                 PreserveDamagedFile(paths.LibraryFile);
                 preserved = true;
             }
-            catch (Exception copyFailure) when (!IsLoadInterruption(copyFailure))
+            catch (Exception copyFailure) when (!IsInterruption(copyFailure))
             {
                 log.Error(copyFailure, "AetherFrame could not keep a copy of the damaged Plate order in Recovery; the file is left untouched for this session.");
                 preserved = false;
@@ -558,7 +558,7 @@ internal sealed class PlateLibraryService
 
             return preserved;
         }
-        catch (Exception ex) when (!IsLoadInterruption(ex))
+        catch (Exception ex) when (!IsInterruption(ex))
         {
             // The file may be intact (locked, access denied, …): the order is rebuilt for this
             // session only and the file is never written over.
@@ -741,7 +741,7 @@ internal sealed class PlateLibraryService
                 {
                     await CommitBindingAsync(binding).ConfigureAwait(false);
                 }
-                catch (Exception ex) when (!IsLoadInterruption(ex))
+                catch (Exception ex) when (!IsInterruption(ex))
                 {
                     // The write didn't land, so memory still holds the old binding (nothing Active
                     // changed); the Plate itself is on disk and listed.
@@ -762,7 +762,7 @@ internal sealed class PlateLibraryService
         {
             await WriteLibraryAsync().ConfigureAwait(false);
         }
-        catch (Exception ex) when (!IsLoadInterruption(ex))
+        catch (Exception ex) when (!IsInterruption(ex))
         {
             // The Plate is saved and listed; only its position isn't, and startup re-lists it.
             log.Error(ex, $"AetherFrame created Plate {plateId} but could not save the Library order.");
@@ -1061,7 +1061,7 @@ internal sealed class PlateLibraryService
             {
                 await WritePlateAsync(plateId, raw).ConfigureAwait(false);
             }
-            catch (Exception ex) when (!IsLoadInterruption(ex))
+            catch (Exception ex) when (!IsInterruption(ex))
             {
                 // A store can fail AFTER the file landed (Dalamud's commits its backup row after
                 // the move). The importer treats any failure as "nothing committed" and removes
@@ -1104,7 +1104,7 @@ internal sealed class PlateLibraryService
                 log.Warning($"AetherFrame moved the file of a failed import ({plateId}) to the Plate trash so it isn't listed without its images.");
             }
         }
-        catch (Exception ex) when (!IsLoadInterruption(ex))
+        catch (Exception ex) when (!IsInterruption(ex))
         {
             log.Error(ex, $"AetherFrame could not move the file of a failed import ({plateId}) to the Plate trash; it may be listed without its images at the next startup.");
         }
@@ -1199,7 +1199,7 @@ internal sealed class PlateLibraryService
                         problems.Add($"Trashed Plate {Path.GetFileName(path)} was saved by a newer version.");
                     }
                 }
-                catch (Exception ex) when (!IsLoadInterruption(ex))
+                catch (Exception ex) when (!IsInterruption(ex))
                 {
                     // Problems can reach the player (a blocked cleanup quotes them), so the
                     // failure's text — which may name a local path — stays in the log.
@@ -1445,7 +1445,7 @@ internal sealed class PlateLibraryService
                 store.CopyFile(path, destination);
             }
         }
-        catch (Exception ex) when (!IsLoadInterruption(ex))
+        catch (Exception ex) when (!IsInterruption(ex))
         {
             log.Error(ex, $"AetherFrame could not keep a copy of damaged file {fileName} in Recovery.");
         }
@@ -1458,8 +1458,8 @@ internal sealed class PlateLibraryService
     /// </summary>
     private static bool IsContentDamage(Exception ex) => ex is InvalidDataException or JsonException;
 
-    /// <summary>A load stopped by cancellation or by unloading — never a fault in a file.</summary>
-    private static bool IsLoadInterruption(Exception ex) => ex is OperationCanceledException or OperationAbandonedException;
+    /// <summary>An operation stopped by cancellation or by unloading — never a fault in a file, so never handled as one.</summary>
+    private static bool IsInterruption(Exception ex) => ex is OperationCanceledException or OperationAbandonedException;
 
     /// <summary>Must hold <see cref="gate"/>.</summary>
     private string ResolveNewName(string? requested, string fallback)

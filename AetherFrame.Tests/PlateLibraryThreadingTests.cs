@@ -53,11 +53,11 @@ public class PlateLibraryThreadingTests
         await store.ReadStarted.WaitAsync(Generous);
 
         // The first read is held, yet the dispatcher already returned from the operation's delegate
-        // and is free to run the next item.
+        // (the next queued item runs to completion) and that delegate's Task is still pending.
+        await dispatcher.Dispatch(() => Task.CompletedTask).WaitAsync(Generous);
         Assert.NotNull(started);
         Assert.False(started!.IsCompleted);
         Assert.False(loading.IsCompleted);
-        await dispatcher.Dispatch(() => Task.CompletedTask).WaitAsync(Generous);
         Assert.NotEqual(dispatcher.ThreadId, store.ReadThreadId);
         Assert.False(library.IsLoaded);
 
