@@ -166,6 +166,9 @@ internal sealed partial class EditorSession
     /// history itself) as ONE undoable history entry, via whole-document before/after snapshots.
     /// Nothing is recorded if the edit changed nothing. Used by the Basic editor, whose single
     /// actions (e.g. choosing a title layout) routinely touch several elements at once.
+    /// All or nothing: an edit that throws partway (a section's heading created, then its value
+    /// refused at the element limit) is rolled back, so nothing of it stays on the Plate outside
+    /// the history.
     /// </summary>
     internal bool ApplyDocumentEdit(Action edit)
     {
@@ -176,11 +179,21 @@ internal sealed partial class EditorSession
         try
         {
             before = profileService.CaptureDocumentState();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            return false;
+        }
+
+        try
+        {
             edit();
         }
         catch (Exception ex)
         {
             ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            RollBackFailedEdit(before);
             return false;
         }
 
@@ -191,7 +204,8 @@ internal sealed partial class EditorSession
     /// <summary>
     /// Continuous counterpart of <see cref="ApplyDocumentEdit"/> (slider drags, typing): applies
     /// live, and records a single entry for the whole run once <see cref="CommitPendingDocumentEdit"/>
-    /// is called (e.g. when the widget is released).
+    /// is called (e.g. when the widget is released). A step that throws ends the run and rolls the
+    /// whole run back to where it began (nothing is recorded), like <see cref="ApplyDocumentEdit"/>.
     /// </summary>
     internal void BeginOrContinueDocumentEdit(Action edit)
     {
@@ -220,7 +234,32 @@ internal sealed partial class EditorSession
         catch (Exception ex)
         {
             ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            if (pendingDocumentBefore is { } before)
+            {
+                pendingDocumentBefore = null;
+                RollBackFailedEdit(before);
+            }
         }
+    }
+
+    /// <summary>
+    /// Best-effort return to <paramref name="before"/> after a document edit threw partway. Restoring
+    /// replaces the element instances, so a selection of an element that is gone is dropped, as
+    /// after an undo. A restore that fails itself is logged: the Plate then holds part of the edit.
+    /// </summary>
+    private void RollBackFailedEdit(ProfileService.DocumentState before)
+    {
+        try
+        {
+            profileService.RestoreDocumentState(before);
+            DropSelectionIfMissing();
+        }
+        catch (Exception restoreEx)
+        {
+            log.Error(restoreEx, "AetherFrame couldn't roll back a document edit that failed partway; the open Plate may hold part of it.");
+        }
+
+        InvalidateDirtyMemo();
     }
 
     /// <summary>Finalizes a pending edit started by <see cref="BeginOrContinueDocumentEdit"/>.</summary>
