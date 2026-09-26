@@ -145,7 +145,13 @@ internal static class PackageExporter
             log.Information($"AetherFrame exported a Plate ({planned.Count} images, preview: {previewPath is not null}).");
             return new PackageExportResult(true, request.DestinationPath, planned.Count, previewPath is not null, []);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        catch (InvalidDataException ex)
+        {
+            // Only WritePackage throws this: an image's bytes changed between planning and writing.
+            log.Warning($"AetherFrame could not export a Plate because an image changed meanwhile ({ex.GetType().Name}).");
+            return PackageExportResult.Failed(PackageErrorCode.ExportFailed, "The Plate's images changed while exporting. Try again.", ex.GetType().Name);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.Warning($"AetherFrame could not write an exported Plate ({ex.GetType().Name}).");
             return PackageExportResult.Failed(PackageErrorCode.ExportFailed,
