@@ -20,8 +20,8 @@ Testers follow [Testing](Testing.md).
 4. Tag and push the tag:
 
    ```bash
-   git tag -a v0.1.5 -m "AetherFrame 0.1.5"
-   git push origin v0.1.5
+   git tag -a v0.1.6 -m "AetherFrame 0.1.6"
+   git push origin v0.1.6
    ```
 
 5. The **Release** workflow runs. When it succeeds, a draft pre-release is waiting under **Releases**.
@@ -49,7 +49,7 @@ The workflow only runs for tags pushed after it exists, so the existing tags `v0
 To run the package check locally after a Release build (PowerShell 7 or Windows PowerShell 5.1):
 
 ```powershell
-./.github/scripts/New-ReleasePackage.ps1 -Version 0.1.5 -Destination dist
+./.github/scripts/New-ReleasePackage.ps1 -Version 0.1.6 -Destination dist
 ```
 
 ## Official Dalamud repository

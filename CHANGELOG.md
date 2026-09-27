@@ -4,6 +4,8 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-27
+
 Reliability, data safety and import security, the v0.1.6 milestone. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged: a file written by 0.1.0 through 0.1.5 loads and re-saves byte for byte, and the schema versions did not move.
 
 ### Fixed
@@ -114,7 +116,8 @@ The first versioned alpha.
 - **Plate Viewer** and the commands `/aetherframe` (`/af`), `/af view` and `/af version`.
 - Builds and tests on Windows and Linux in CI.
 
-[Unreleased]: https://github.com/richhiiee/AetherFrame/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/richhiiee/AetherFrame/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/richhiiee/AetherFrame/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/richhiiee/AetherFrame/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/richhiiee/AetherFrame/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/richhiiee/AetherFrame/compare/v0.1.2...v0.1.3
