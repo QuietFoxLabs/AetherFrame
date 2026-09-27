@@ -458,9 +458,11 @@ internal sealed partial class ProfileEditorWindow
 
         var fontSize = text.FontSize;
         EditorWidgets.PropertyLabel("Size");
-        if (ImGui.SliderFloat("##FontSize", ref fontSize, TextProfileElement.MinFontSize, TextProfileElement.MaxFontSize, "%.0f px", ImGuiSliderFlags.AlwaysClamp))
+        // A typed size may go past the slider (see TypedSliderValues).
+        if (ImGui.SliderFloat("##FontSize", ref fontSize, TextProfileElement.MinFontSize, TextProfileElement.MaxFontSize, "%.0f px"))
         {
-            ContinueTextEdit(text.Id, element => element.FontSize = fontSize);
+            var value = TypedSliderValues.FontSize(fontSize, text.FontSize);
+            ContinueTextEdit(text.Id, element => element.FontSize = value);
         }
 
         if (ImGui.IsItemDeactivatedAfterEdit())
@@ -532,9 +534,10 @@ internal sealed partial class ProfileEditorWindow
 
         var letterSpacing = text.LetterSpacing;
         EditorWidgets.PropertyLabel("Letter Spacing");
-        if (ImGui.SliderFloat("##LetterSpacing", ref letterSpacing, TextProfileElement.MinLetterSpacing, TextProfileElement.MaxLetterSpacing, "%.1f px", ImGuiSliderFlags.AlwaysClamp))
+        if (ImGui.SliderFloat("##LetterSpacing", ref letterSpacing, TextProfileElement.MinLetterSpacing, TextProfileElement.MaxLetterSpacing, "%.1f px"))
         {
-            ContinueTextEdit(text.Id, element => element.LetterSpacing = letterSpacing);
+            var value = TypedSliderValues.Spacing(letterSpacing, text.LetterSpacing);
+            ContinueTextEdit(text.Id, element => element.LetterSpacing = value);
         }
 
         if (ImGui.IsItemDeactivatedAfterEdit())
@@ -544,9 +547,10 @@ internal sealed partial class ProfileEditorWindow
 
         var lineSpacing = text.LineSpacing;
         EditorWidgets.PropertyLabel("Line Spacing");
-        if (ImGui.SliderFloat("##LineSpacing", ref lineSpacing, TextProfileElement.MinLineSpacing, TextProfileElement.MaxLineSpacing, "%.2fx", ImGuiSliderFlags.AlwaysClamp))
+        if (ImGui.SliderFloat("##LineSpacing", ref lineSpacing, TextProfileElement.MinLineSpacing, TextProfileElement.MaxLineSpacing, "%.2fx"))
         {
-            ContinueTextEdit(text.Id, element => element.LineSpacing = lineSpacing);
+            var value = TypedSliderValues.Spacing(lineSpacing, text.LineSpacing);
+            ContinueTextEdit(text.Id, element => element.LineSpacing = value);
         }
 
         if (ImGui.IsItemDeactivatedAfterEdit())
@@ -577,9 +581,10 @@ internal sealed partial class ProfileEditorWindow
 
             var minimum = Math.Min(text.AutoFitMinimumSize, text.FontSize);
             EditorWidgets.PropertyLabel("Minimum");
-            if (ImGui.SliderFloat("##AutoFitMin", ref minimum, TextProfileElement.MinFontSize, Math.Max(TextProfileElement.MinFontSize, text.FontSize), "%.0f px", ImGuiSliderFlags.AlwaysClamp))
+            if (ImGui.SliderFloat("##AutoFitMin", ref minimum, TextProfileElement.MinFontSize, Math.Max(TextProfileElement.MinFontSize, text.FontSize), "%.0f px"))
             {
-                ContinueTextEdit(text.Id, element => element.AutoFitMinimumSize = minimum);
+                var value = TypedSliderValues.AutoFitMinimum(minimum, text.AutoFitMinimumSize);
+                ContinueTextEdit(text.Id, element => element.AutoFitMinimumSize = value);
             }
 
             if (ImGui.IsItemDeactivatedAfterEdit())

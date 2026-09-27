@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services.Fonts;
+using AetherFrame.UI.Editor;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 
@@ -135,9 +136,10 @@ internal sealed partial class BasicProfileEditorWindow
 
         var size = element.FontSize;
         StyleLabel("Size");
-        if (ImGui.SliderFloat("##Size", ref size, TextProfileElement.MinFontSize, TextProfileElement.MaxFontSize, "%.0f px", ImGuiSliderFlags.AlwaysClamp))
+        // A typed size may go past the slider (see TypedSliderValues).
+        if (ImGui.SliderFloat("##Size", ref size, TextProfileElement.MinFontSize, TextProfileElement.MaxFontSize, "%.0f px"))
         {
-            var value = size;
+            var value = TypedSliderValues.FontSize(size, element.FontSize);
             target.Edit(e => e.FontSize = value, true);
         }
 

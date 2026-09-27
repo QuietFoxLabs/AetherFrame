@@ -460,9 +460,10 @@ internal sealed class BackgroundStylePanel
         var angle = background.GradientAngle;
         var buttonSize = ImGui.GetFrameHeight();
         EditorWidgets.PropertyLabel("Angle", ImGui.GetContentRegionAvail().X - EditorWidgets.LabelColumnWidth - ((buttonSize + 2f) * 2f) - 2f);
-        if (ImGui.SliderFloat("##GradientAngle", ref angle, 0f, 360f, "%.0f deg", ImGuiSliderFlags.AlwaysClamp))
+        // A typed angle outside 0-360 wraps into it (see TypedSliderValues).
+        if (ImGui.SliderFloat("##GradientAngle", ref angle, 0f, 360f, "%.0f deg"))
         {
-            var value = angle;
+            var value = TypedSliderValues.Angle(angle, background.GradientAngle);
             editorSession.BeginOrContinueBackgroundEdit(style => style.GradientAngle = value);
         }
 
@@ -655,9 +656,9 @@ internal sealed class BackgroundStylePanel
         {
             var rotation = background.TextureRotation;
             EditorWidgets.PropertyLabel("Rotation");
-            if (ImGui.SliderFloat("##TextureRotation", ref rotation, 0f, 360f, "%.0f deg", ImGuiSliderFlags.AlwaysClamp))
+            if (ImGui.SliderFloat("##TextureRotation", ref rotation, 0f, 360f, "%.0f deg"))
             {
-                var value = rotation;
+                var value = TypedSliderValues.Angle(rotation, background.TextureRotation);
                 editorSession.BeginOrContinueBackgroundEdit(style => style.TextureRotation = value);
             }
 
