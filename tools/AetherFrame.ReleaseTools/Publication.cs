@@ -289,6 +289,7 @@ public static class Publication
                 ReleaseUrl = r.Release.HtmlUrl,
                 PublishedAt = r.PublishedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
                 Prerelease = r.Release.Prerelease,
+                Immutable = r.Release.Immutable,
                 Package = new Program.FileSummary { Name = r.Package.Package.FileName, Size = r.Package.Package.Size, Sha256 = r.Package.Package.Sha256 },
                 ChecksumsSha256 = r.ChecksumsSha256,
             }).ToList(),
@@ -345,7 +346,7 @@ public static class Publication
             builder.Append("| ").Append(release.Slot)
                 .Append(" | [").Append(release.Tag).Append("](").Append(release.ReleaseUrl).Append(") (id ").Append(release.ReleaseId.ToString(CultureInfo.InvariantCulture)).Append(')')
                 .Append(" | ").Append(release.PublishedAt)
-                .Append(" | ").Append(release.Prerelease ? "pre-release" : "full release")
+                .Append(" | ").Append(release.Prerelease ? "pre-release" : "full release").Append(Immutability(release.Immutable))
                 .Append(" | `").Append(release.Commit).Append('`')
                 .Append(" | `").Append(release.Package!.Name).Append("`, ").Append(release.Package.Size.ToString(CultureInfo.InvariantCulture)).Append(" bytes, `sha256:").Append(release.Package.Sha256).Append("` |\n");
         }
@@ -373,7 +374,7 @@ public static class Publication
         foreach (var release in summary.Releases!)
         {
             builder.Append('\n').Append("Release ").Append(release.Tag).Append(" (").Append(release.Slot).Append("): ").Append(release.ReleaseUrl).Append('\n');
-            builder.Append("  release id ").Append(release.ReleaseId.ToString(CultureInfo.InvariantCulture)).Append(", published ").Append(release.PublishedAt).Append(", ").Append(release.Prerelease ? "pre-release" : "full release").Append('\n');
+            builder.Append("  release id ").Append(release.ReleaseId.ToString(CultureInfo.InvariantCulture)).Append(", published ").Append(release.PublishedAt).Append(", ").Append(release.Prerelease ? "pre-release" : "full release").Append(Immutability(release.Immutable)).Append('\n');
             builder.Append("  tagged commit ").Append(release.Commit).Append('\n');
             builder.Append("  ").Append(release.Package!.Name).Append(": ").Append(release.Package.Size.ToString(CultureInfo.InvariantCulture)).Append(" bytes, sha256 ").Append(release.Package.Sha256).Append('\n');
         }
@@ -385,6 +386,13 @@ public static class Publication
 
         return builder.ToString();
     }
+
+    private static string Immutability(bool? immutable) => immutable switch
+    {
+        true => ", immutable",
+        false => ", not immutable",
+        null => string.Empty,
+    };
 
     /// <summary>The branch contents, keyed by file name: exactly what the publication commit's tree holds.</summary>
     public static IReadOnlyList<(string Name, byte[] Content)> BranchFiles(PreparedPublication prepared) =>
@@ -487,9 +495,13 @@ public sealed class ReleaseSummary
     [JsonPropertyName("prerelease"), JsonPropertyOrder(7)]
     public bool Prerelease { get; set; }
 
-    [JsonPropertyName("package"), JsonPropertyOrder(8)]
+    /// <summary>Whether GitHub locks the release's assets and tag; null when the API did not say.</summary>
+    [JsonPropertyName("immutable"), JsonPropertyOrder(8)]
+    public bool? Immutable { get; set; }
+
+    [JsonPropertyName("package"), JsonPropertyOrder(9)]
     public Program.FileSummary? Package { get; set; }
 
-    [JsonPropertyName("checksumsSha256"), JsonPropertyOrder(9)]
+    [JsonPropertyName("checksumsSha256"), JsonPropertyOrder(10)]
     public string? ChecksumsSha256 { get; set; }
 }

@@ -29,6 +29,34 @@ public class ReleaseVerifierTests
         Assert.All(checks.Checks, c => Assert.StartsWith("v0.1.6: ", c.Name));
     }
 
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("null", null)]
+    [InlineData(null, null)]
+    public void Immutability_IsRecordedAsGitHubReportsIt(string? json, bool? expected)
+    {
+        // Not a requirement (the repository setting is the owner's choice), but part of the record: an
+        // immutable release's assets and tag can no longer change after it was published.
+        using var directory = new TempDirectory();
+        var release = TestReleases.Create(directory.Path, "0.1.6", new ReleaseOptions
+        {
+            Release = r =>
+            {
+                r.Remove("immutable");
+                if (json is not null)
+                {
+                    r["immutable"] = JsonNode.Parse(json);
+                }
+            },
+        });
+
+        var (checks, verified) = Verify(release);
+
+        TestPackages.AllPassed(checks);
+        Assert.Equal(expected, verified!.Release.Immutable);
+    }
+
     [Fact]
     public void ADraft_IsRefused()
     {

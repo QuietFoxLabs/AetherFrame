@@ -16,7 +16,7 @@ public sealed record GitHubAsset(long Id, string Name, string State, long Size, 
 /// more fields and adds new ones over time, so unknown keys are ignored here; every field that is used
 /// must be present with the right type.
 /// </summary>
-public sealed record GitHubRelease(long Id, string TagName, bool Draft, bool Prerelease, string? PublishedAt, string HtmlUrl, IReadOnlyList<GitHubAsset> Assets)
+public sealed record GitHubRelease(long Id, string TagName, bool Draft, bool Prerelease, string? PublishedAt, string HtmlUrl, IReadOnlyList<GitHubAsset> Assets, bool? Immutable)
 {
     public const long MaxBytes = 4 * 1024 * 1024;
 
@@ -61,7 +61,10 @@ public sealed record GitHubRelease(long Id, string TagName, bool Draft, bool Pre
             Boolean(root, "prerelease", what),
             NullableString(root, "published_at", what),
             String(root, "html_url", what),
-            assets);
+            assets,
+            // Whether GitHub locks the release's assets and tag (repository setting "Enable release
+            // immutability"). Recorded, not required; absent from older API responses.
+            root.TryGetProperty("immutable", out var immutable) && immutable.ValueKind != JsonValueKind.Null ? Boolean(root, "immutable", what) : null);
     }
 
     private static JsonElement Property(JsonElement element, string name, JsonValueKind kind, string what)

@@ -60,12 +60,13 @@ public class PublicationTests
         Assert.Equal("testing-exclusive", recorded.GetProperty("slot").GetString());
         Assert.Equal(TestPackages.Commit, recorded.GetProperty("commit").GetString());
         Assert.Equal(TestReleases.ReleaseId, recorded.GetProperty("releaseId").GetInt64());
+        Assert.False(recorded.GetProperty("immutable").GetBoolean());
         Assert.Equal(Checksums.Sha256Hex(Path.Combine(release, "AetherFrame-0.1.6.zip")), recorded.GetProperty("package").GetProperty("sha256").GetString());
 
         var message = File.ReadAllText(Path.Combine(publication, "commit-message.txt"));
         Assert.StartsWith("Publish 0.1.6 to testing\n\nAetherFrame custom repository: testing-exclusive 0.1.6 (was: nothing published).\n", message);
         Assert.Contains("Release v0.1.6 (testing-exclusive): https://github.com/richhiiee/AetherFrame/releases/tag/v0.1.6\n", message);
-        Assert.Contains($"  release id {TestReleases.ReleaseId}, published 2026-09-28T12:00:00Z, pre-release\n", message);
+        Assert.Contains($"  release id {TestReleases.ReleaseId}, published 2026-09-28T12:00:00Z, pre-release, not immutable\n", message);
         Assert.Contains($"  tagged commit {TestPackages.Commit}\n", message);
         Assert.Contains($"pluginmaster.json: sha256 {Checksums.Sha256Hex(document)}", message);
         Assert.Contains("Workflow run: https://github.com/richhiiee/AetherFrame/actions/runs/123456789\n", message);
