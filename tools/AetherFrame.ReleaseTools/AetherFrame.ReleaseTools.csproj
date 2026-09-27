@@ -8,10 +8,13 @@
       validate-repository   checks a pluginmaster.json against the configuration and the packages
       checksums             writes a SHA256SUMS.txt in `sha256sum -c` format
       verify-checksums      checks files against a SHA256SUMS.txt
+      plan-publication      decides what a custom repository publication changes, and which releases it needs
+      prepare-publication   verifies those releases and prepares the files the publication commits
 
     Plain .NET with no NuGet packages, no Dalamud reference and no network access, so it behaves the
     same on a developer machine and in CI. It never reads the user's AppData and never touches the
-    plugin's runtime data.
+    plugin's runtime data. The publication workflow fetches releases with git and the GitHub CLI
+    (.github/scripts/custom-repository.sh); the tool only reads what was fetched.
   -->
 
   <!-- The tool reports the product version it belongs to; nothing sets a version anywhere else. -->
