@@ -1,0 +1,8 @@
+{
+  "$comment": "AetherFrame's custom Dalamud repository: the explicit, reviewed facts that pluginmaster.json is generated from (docs/CustomRepository.md). internalName and dalamudApiLevel must match the plugin project; sourceRepositoryUrl must equal the csproj RepoUrl. pluginMasterUrl is the address players add to Dalamud, and Dalamud only ever updates a plugin from the exact address it was installed from, so it must never change once anyone uses it. downloadUrlTemplate names each release's ZIP on GitHub Releases; {version} is MAJOR.MINOR.PATCH and {package} is AetherFrame-<version>.zip.",
+  "internalName": "AetherFrame",
+  "dalamudApiLevel": 15,
+  "sourceRepositoryUrl": "https://github.com/richhiiee/AetherFrame",
+  "pluginMasterUrl": "https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json",
+  "downloadUrlTemplate": "https://github.com/richhiiee/AetherFrame/releases/download/v{version}/{package}"
+}

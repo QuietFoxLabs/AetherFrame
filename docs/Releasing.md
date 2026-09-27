@@ -6,9 +6,9 @@ Nothing described here happens on its own. The release workflow only ever create
 
 ## Distribution plan
 
-1. **Official Dalamud repository, testing track.** The intended route for testers: reviewed by the Dalamud plugin approval team, installed from `/xlplugins`, updated automatically. New plugins must start here.
-2. **GitHub Release ZIPs**, loaded as dev plugins, for a few testers before the testing track is live. Optional.
-3. **No custom plugin repository.** The testing track does everything a custom repository would for testers, and the Dalamud project gives custom repositories minimal support. Revisit only if there's a concrete need the official repository can't meet.
+1. **A public custom Dalamud repository, hosted from GitHub.** The intended route for players: one URL added in `/xlsettings`, then install and updates from `/xlplugins` like any other plugin. The releases stay GitHub Releases; the repository is one generated `pluginmaster.json` that points at them. How it works, how it is validated and how publishing will run: [CustomRepository](CustomRepository.md). Nothing is published there yet.
+2. **GitHub Release ZIPs**, loaded as dev plugins, for testers until the repository is live.
+3. **Official Dalamud repository.** Welcome, and prepared for below, but not required for distribution. If AetherFrame is accepted there at a higher version, Dalamud moves players over from the custom repository automatically.
 
 Testers follow [Testing](Testing.md).
 
@@ -16,17 +16,18 @@ Testers follow [Testing](Testing.md).
 
 1. Finish the milestone on `master` as [Versioning](Versioning.md) describes, with `Version.props` set to the new version.
 2. Move the `## [Unreleased]` notes in [CHANGELOG.md](../CHANGELOG.md) under `## [<version>] - <date>` and add its compare link. The release fails without that section.
-3. Optional dry run: **Actions → Release → Run workflow** on `master`. It builds, tests and checks the package and keeps it as a workflow artifact, without creating a release.
-4. Tag and push the tag:
+3. Regenerate the dry-run repository fixture for the new version and commit it with steps 1 and 2 ([command](../distribution/dry-run/README.md#regenerating)). The tooling tests fail while `distribution/dry-run/pluginmaster.json` describes another version or another CHANGELOG text, so the Build workflow and a tagged Release would fail without it, and a tag is never moved.
+4. Optional dry run: **Actions → Release → Run workflow** on `master`. It builds, tests and checks the package and keeps it as a workflow artifact, without creating a release.
+5. Tag and push the tag (only after the Build workflow passed on that commit):
 
    ```bash
    git tag -a v0.1.6 -m "AetherFrame 0.1.6"
    git push origin v0.1.6
    ```
 
-5. The **Release** workflow runs. When it succeeds, a draft pre-release is waiting under **Releases**.
-6. Download the ZIP from the draft and load it in game as a dev plugin ([Testing](Testing.md#from-a-github-release-zip-dev-plugin)). `/af version` should print the new version and the tag's commit.
-7. Publish the draft by hand when you're happy with it, or delete it.
+6. The **Release** workflow runs. When it succeeds, a draft pre-release is waiting under **Releases**.
+7. Download the ZIP from the draft and load it in game as a dev plugin ([Testing](Testing.md#from-a-github-release-zip-dev-plugin)). `/af version` should print the new version and the tag's commit.
+8. Publish the draft by hand when you're happy with it, or delete it.
 
 ### What the workflow checks
 
@@ -38,9 +39,11 @@ Testers follow [Testing](Testing.md).
 | Restore | `packages.lock.json` is out of date (`--locked-mode`, as the official build would) |
 | Build and test | the Release build or any test fails, including the checks on the built DLL and its manifest |
 | Package check ([`New-ReleasePackage.ps1`](../.github/scripts/New-ReleasePackage.ps1)) | `latest.zip` holds anything other than `AetherFrame.dll`, `AetherFrame.json` and `AetherFrame.deps.json`; the manifest isn't `AetherFrame` at `<version>.0` with its installer fields; the DLL isn't `<version>.0`; or the CHANGELOG has no section for the version |
+| Release tooling tests and staged package check (`AetherFrame.ReleaseTools validate-package`) | any rule in [CustomRepository](CustomRepository.md#release-validation-rules) fails: the DLL isn't x64 and built from the commit being released, a version or the Dalamud API level disagrees anywhere, the csproj no longer matches the packaged manifest, an entry name is unsafe, or `SHA256SUMS.txt` doesn't match |
+| Repository metadata (`generate-repository`, `validate-repository`) | the custom repository entry can't be generated from the package, or doesn't validate. The result is kept in the artifact as `pluginmaster.json`; nothing is published |
 | Draft release | a release for the tag already exists, draft or published. Nothing is ever replaced |
 
-The draft gets the ZIP as `AetherFrame-<version>.zip`, a `SHA256SUMS.txt`, and the CHANGELOG section as its notes. The ZIP is exactly what DalamudPackager built.
+The draft gets the ZIP as `AetherFrame-<version>.zip`, a `SHA256SUMS.txt`, and the CHANGELOG section as its notes. The ZIP is exactly what DalamudPackager built. The workflow artifact also holds `package-summary.json` and the generated `pluginmaster.json` (stable and testing-exclusive shapes) for inspection.
 
 Only the draft job can write to the repository (`contents: write`), and it runs in the `release` environment. Adding yourself as a required reviewer of that environment (**Settings → Environments → release**) makes every draft wait for your approval too.
 
@@ -51,6 +54,14 @@ To run the package check locally after a Release build (PowerShell 7 or Windows 
 ```powershell
 ./.github/scripts/New-ReleasePackage.ps1 -Version 0.1.6 -Destination dist
 ```
+
+Then the full rule set and the repository metadata, with the release tooling:
+
+```bash
+dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- validate-package --package dist/AetherFrame-0.1.6.zip --config distribution/repository.json --version-props Version.props --csproj AetherFrame/AetherFrame.csproj --changelog CHANGELOG.md --checksums dist/SHA256SUMS.txt --commit "$(git rev-parse HEAD)"
+```
+
+[CustomRepository](CustomRepository.md#building-and-validating-a-release-locally) has the rest of the commands.
 
 ## Official Dalamud repository
 

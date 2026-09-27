@@ -47,6 +47,29 @@ jobs:
         AETHERFRAME_PLUGIN_ASSEMBLY: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame.dll
       run: dotnet test AetherFrame.Tests/AetherFrame.Tests.csproj --configuration Release --no-build
 
+    # The release tooling's own tests, including the check that the package this build produced is a
+    # valid release package and regenerates the committed dry-run repository fixture.
+    - name: Test the release tooling
+      env:
+        AETHERFRAME_RELEASE_PACKAGE: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame/latest.zip
+      run: dotnet test tools/AetherFrame.ReleaseTools.Tests/AetherFrame.ReleaseTools.Tests.csproj --configuration Release --no-build
+
+    # Every rule a release must pass, applied to every build (docs/CustomRepository.md): the DLL is
+    # x64, built from this commit, at the Version.props version and the configured Dalamud API level,
+    # and the package holds exactly the three plugin files.
+    - name: Check the plugin package
+      shell: bash
+      env:
+        COMMIT: ${{ github.sha }}
+      run: >
+        dotnet tools/AetherFrame.ReleaseTools/bin/Release/net10.0/AetherFrame.ReleaseTools.dll validate-package
+        --package AetherFrame/bin/x64/Release/AetherFrame/latest.zip
+        --config distribution/repository.json
+        --version-props Version.props
+        --csproj AetherFrame/AetherFrame.csproj
+        --changelog CHANGELOG.md
+        --commit "$COMMIT"
+
     - name: Store artifacts
       if: runner.os == 'Windows'
       uses: actions/upload-artifact@v4

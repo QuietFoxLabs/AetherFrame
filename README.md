@@ -131,7 +131,7 @@ I would also like to add a small amount of optional character information for pe
 
 ### Dalamud release
 
-There is still performance work, UI polish, accessibility work, and general cleanup to do before I submit AetherFrame to the official Dalamud plugin repository.
+There is still performance work, UI polish, accessibility work, and general cleanup to do before AetherFrame is ready for a wider release.
 
 The finished idea is simple: start with something that feels familiar to anyone who has made an FFXIV Adventure Plate, then give people the freedom to take it much further.
 
@@ -164,7 +164,7 @@ AetherFrame is not in the Dalamud plugin installer yet.
 
 To test it now, download a test build from [GitHub Releases](https://github.com/richhiiee/AetherFrame/releases), starting with 0.1.5, and load it as a Dalamud dev plugin. The [tester guide](docs/Testing.md) has the steps, what to look at, and how to report problems. Test builds from GitHub don't update themselves, so check the Releases page for newer ones.
 
-The plan is to submit AetherFrame to the official Dalamud plugin repository's testing track, so testers can install it from `/xlplugins` with **Get plugin testing builds** turned on and receive updates automatically. There won't be a separate custom plugin repository.
+The plan is a public custom Dalamud repository hosted from GitHub: one URL to add under **Custom Plugin Repositories** in `/xlsettings`, after which AetherFrame installs and updates from `/xlplugins` like any other plugin. The URL will be announced here when the first release is published there. The releases themselves stay on GitHub Releases, and the plugin still never connects to anything: Dalamud does the downloading. Submission to the official Dalamud repository is welcome but not required for this.
 
 Developers can also build it from source and load it as a dev plugin (see below).
 
