@@ -84,10 +84,10 @@ read_branch() {
 
 # Fetches release $1 (a version) of plugin $2 into directory $3, laid out as ReleaseVerifier reads it.
 fetch_release() {
-  local version="$1" internal_name="$2" dest="$3" tag object_type commit on_default=false
-  [[ $version =~ $version_pattern ]] || fail "'$version' is not a MAJOR.MINOR.PATCH version."
+  local release_version="$1" internal_name="$2" dest="$3" tag object_type commit on_default=false
+  [[ $release_version =~ $version_pattern ]] || fail "'$release_version' is not a MAJOR.MINOR.PATCH version."
   [[ $internal_name =~ $name_pattern ]] || fail "'$internal_name' is not a plugin internal name."
-  tag="v$version"
+  tag="v$release_version"
   mkdir -p "$dest/source"
 
   # The release, from the endpoint that serves only published releases: a draft is never found here.
@@ -96,7 +96,7 @@ fetch_release() {
     fail "GitHub has no published release for $tag, or the request failed (see above). A draft release is never eligible: publish it on GitHub first."
   fi
 
-  gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$dest" --pattern "$internal_name-$version.zip" --pattern SHA256SUMS.txt \
+  gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$dest" --pattern "$internal_name-$release_version.zip" --pattern SHA256SUMS.txt \
     || fail "could not download the assets of $tag."
 
   # The tag as it is on origin: annotated or not, the commit it points at, and whether the default
@@ -121,16 +121,16 @@ fetch_release() {
 }
 
 prepare() {
-  local work="$1" base releases internal_name version
+  local work="$1" base releases internal_name release_version
   require_env RELEASE_TOOLS PUBLICATION_BRANCH DEFAULT_BRANCH VERSION CHANNEL ROLLBACK GITHUB_REPOSITORY
   [[ $PUBLICATION_BRANCH =~ $branch_pattern ]] || fail "PUBLICATION_BRANCH '$PUBLICATION_BRANCH' is not a publication branch name."
   [[ $DEFAULT_BRANCH =~ $branch_pattern ]] || fail "DEFAULT_BRANCH '$DEFAULT_BRANCH' is not a branch name this script accepts."
   [ ! -e "$work" ] || fail "$work already exists; give a new work directory."
   mkdir -p "$work/releases"
 
-  local plan_current=(--no-current) prepare_current=(--no-current) rollback=() run=()
+  local plan_current=(--no-current) prepare_current=(--no-current) rollback_option=() run=()
   case "$ROLLBACK" in
-    true) rollback=(--rollback) ;;
+    true) rollback_option=(--rollback) ;;
     false) ;;
     *) fail "ROLLBACK is '$ROLLBACK', not true or false." ;;
   esac
@@ -148,21 +148,21 @@ prepare() {
 
   echo "Publication branch: origin/$PUBLICATION_BRANCH is at $base."
   dotnet "$RELEASE_TOOLS" plan-publication --config distribution/repository.json --branch "$PUBLICATION_BRANCH" \
-    "${plan_current[@]}" --version "$VERSION" --channel "$CHANNEL" "${rollback[@]}" --github-output "$work/plan"
+    "${plan_current[@]}" --version "$VERSION" --channel "$CHANNEL" "${rollback_option[@]}" --github-output "$work/plan"
   releases="$(output_value releases "$work/plan")"
   internal_name="$(output_value internal-name "$work/plan")"
   local release_list=()
   read -r -a release_list <<< "$releases"
   [ "${#release_list[@]}" -gt 0 ] || fail "plan-publication named no releases."
 
-  for version in "${release_list[@]}"; do
-    echo "Fetching v$version."
-    fetch_release "$version" "$internal_name" "$work/releases/v$version"
+  for release_version in "${release_list[@]}"; do
+    echo "Fetching v$release_version."
+    fetch_release "$release_version" "$internal_name" "$work/releases/v$release_version"
   done
 
   echo "base=$base" > "$work/outputs"
   dotnet "$RELEASE_TOOLS" prepare-publication --config distribution/repository.json --branch "$PUBLICATION_BRANCH" \
-    "${prepare_current[@]}" --version "$VERSION" --channel "$CHANNEL" "${rollback[@]}" \
+    "${prepare_current[@]}" --version "$VERSION" --channel "$CHANNEL" "${rollback_option[@]}" \
     --releases "$work/releases" --branch-readme distribution/plugin-repository/README.md \
     --output "$work/publication" "${run[@]}" --github-output "$work/outputs"
 }
