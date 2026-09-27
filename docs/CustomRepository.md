@@ -30,9 +30,9 @@ Verified against the Dalamud source at the version installed on the development 
 - To install, Dalamud downloads `DownloadLinkInstall` (or `DownloadLinkTesting` for the testing version), extracts the ZIP, and requires `<InternalName>.dll` and `<InternalName>.json` in it. The packaged manifest's `InternalName` and `AssemblyVersion` must equal the entry's, and the package must not carry a `WorkingPluginId`. Otherwise the install fails.
 - An entry is shown only when its API level is at least the current one minus one (the previous level is listed as outdated), and it can only be installed or updated at exactly the current API level (`DalamudApiLevel`, or `TestingDalamudApiLevel` for the testing version).
 - Updates are offered for an installed plugin only from entries with the same `InternalName` **from the same repository URL the plugin was installed from** (`InstalledFromUrl`), or from the official repository, and only when the candidate version is greater than the installed one. Dalamud never downgrades.
-- A third-party repository may not carry an `InternalName` that exists in the official repository: such entries are dropped with a warning. If AetherFrame is one day accepted into the official repository at a higher version, players who installed from the custom repository are updated from the official one automatically, and the custom entry becomes inert.
-- Testing: the testing version is used only when the player has **Get plugin testing builds** on and has opted into this plugin's testing, `TestingDalamudApiLevel` is present and current, and `TestingAssemblyVersion` is greater than `AssemblyVersion`. An `IsTestingExclusive` entry is invisible to everyone else.
-- `DownloadLinkUpdate` exists in the format and is set to the install link; Dalamud 15.0.3.5 downloads installs and updates from `DownloadLinkInstall`.
+- A third-party repository may not carry an `InternalName` that exists in the official repository (compared ignoring case): such entries are dropped with a warning. If AetherFrame is one day accepted into the official repository at a higher version, players who installed from the custom repository are updated from the official one automatically, and the custom entry becomes inert. Dalamud makes that comparison on every reload, and while the official repository fails to load it marks every custom repository as failed too, so AetherFrame can be missing from `/xlplugins` for reasons unrelated to this repository.
+- Testing: the testing version is used only when the player has **Get plugin testing builds** on and has opted into this plugin's testing, `TestingDalamudApiLevel` is present and current, and `TestingAssemblyVersion` is greater than `AssemblyVersion`. An `IsTestingExclusive` entry is invisible to players without **Get plugin testing builds**; installing it downloads the testing slot and opts the player into AetherFrame's testing automatically, and its updates are offered only while **Get plugin testing builds** stays on.
+- `DownloadLinkUpdate` exists in the format and is set to the install link; Dalamud 15.0.3.5 downloads installs and updates from `DownloadLinkInstall`, or `DownloadLinkTesting` for a testing version.
 
 ### The entry AetherFrame publishes
 
@@ -60,7 +60,7 @@ Dalamud's model is one entry per plugin with a stable slot and an optional testi
 |---|---|---|
 | Stable only | `--stable-package <zip>` | Everyone sees and installs the stable version. |
 | Stable plus testing | `--stable-package <zip> --testing-package <newer zip>` | Everyone sees the stable version. Players with testing builds on who opt into AetherFrame get the testing version instead. The testing version must be newer, or Dalamud ignores it. |
-| Testing-exclusive | `--testing-exclusive --testing-package <zip>` | Only players with testing builds on who opt in see the plugin at all. Both slots carry the same version. |
+| Testing-exclusive | `--testing-exclusive --testing-package <zip>` | Only players with **Get plugin testing builds** on see the plugin at all; installing it opts them into its testing. Both slots carry the same version, and both are needed: an exclusive install downloads the testing slot. |
 
 Proposed use, pending the owner's decision: a GitHub Release published as a **pre-release** fills the testing slot and keeps the current stable version; a release published as a full release becomes the new stable version and clears the testing slot. Until publishing is automated, the operator picks the shape by hand.
 
@@ -112,7 +112,7 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 `validate-package` refuses a package when any of these fail. All failures are reported, not just the first.
 
 **The file**
-- Exists, is not empty, and is a ZIP archive.
+- Exists, is not empty, and is a ZIP archive whose directory and entries .NET can read; a damaged archive or an unsupported compression method is a failed check.
 - Is named `latest.zip` (DalamudPackager's output) or `AetherFrame-MAJOR.MINOR.PATCH.zip`; a versioned name must match the DLL's version.
 
 **The entries**
@@ -144,10 +144,10 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 
 **The repository document** (`validate-repository`, also run on everything `generate-repository` writes)
 - A JSON array with exactly one object, with known keys only.
-- The entry's identity, API level, source URL and `ApplicableVersion` equal the configuration; versions are `MAJOR.MINOR.PATCH.0`; `LastUpdate` is Unix seconds between 2020 and 2100; `IsHide` is false; load and feedback flags are present.
-- Every download link is exactly what the configured template gives for that version (https, default port, no query, no user information, ending in the package file name).
-- The testing slot is coherent: absent entirely, a newer version with `TestingDalamudApiLevel` and its own link, or a testing-exclusive entry with one version and one link.
-- With the packages at hand: the entry describes exactly them, field by field. With `--changelog`: its changelog fields are the current sections.
+- The entry's identity, API level, source URL and `ApplicableVersion` equal the configuration; versions are canonical `MAJOR.MINOR.PATCH.0` text; `LastUpdate` is Unix seconds between 2020 and 2100; `IsHide` is false; load and feedback flags are present.
+- Every download link is exactly what the configured template gives for that version (https on a dotted host name, default port, no query, no user information, written in canonical form, ending in the package file name).
+- The testing slot is coherent: absent entirely, a newer version with `TestingDalamudApiLevel` and its own link, or a testing-exclusive entry with one version, one link and one changelog.
+- With the packages at hand: the entry describes exactly them, field by field (a testing-exclusive entry is compared with its package whether it is given as the stable or the testing package). With `--changelog`: its changelog fields are the current sections.
 
 What is not enforced: byte-identical ZIPs across builds. The DLL itself is reproducible (`DotNet.ReproducibleBuilds`), but DalamudPackager stamps each ZIP entry with the build time, so two builds of one commit differ in the ZIP bytes. The repository metadata is independent of that: it is byte-identical across builds of one version.
 
@@ -205,7 +205,7 @@ When the publish workflow does not exist yet, or GitHub Actions is unavailable, 
 
 1. Download `AetherFrame-<version>.zip` and `SHA256SUMS.txt` from the published GitHub Release, and check the hash (`Get-FileHash` or `sha256sum -c`).
 2. Check out the release's tag and build the tool: `git checkout v<version>` and `dotnet build tools/AetherFrame.ReleaseTools --configuration Release`.
-3. `validate-package --package <zip> --config distribution/repository.json --version-props Version.props --csproj AetherFrame/AetherFrame.csproj --changelog CHANGELOG.md --checksums SHA256SUMS.txt --tag v<version>`.
+3. `validate-package --package <zip> --config distribution/repository.json --version-props Version.props --csproj AetherFrame/AetherFrame.csproj --changelog CHANGELOG.md --checksums SHA256SUMS.txt --commit "$(git rev-parse HEAD)" --tag v<version>`. `--commit` is what ties the downloaded DLL to the tag you checked out; without it any build of the same version passes.
 4. `generate-repository --config distribution/repository.json --changelog CHANGELOG.md --last-update <the release's publish time, ISO 8601 with a zone> --stable-package <zip> --output pluginmaster.json` (add `--testing-package` or `--testing-exclusive` for the other shapes).
 5. `validate-repository --repository pluginmaster.json --config distribution/repository.json --stable-package <zip> --changelog CHANGELOG.md`.
 6. Check out `plugin-repository`, replace `pluginmaster.json`, commit with the version in the message, and push. Never force-push that branch.
@@ -228,8 +228,8 @@ The infrastructure was reviewed as though an attacker or an accidental bad relea
 - **Version confusion.** The version must agree between the DLL, the file version, the informational version, the manifest, `deps.json`, the ZIP file name, `Version.props`, the tag and the repository entry. Any disagreement fails.
 - **API level drift.** The configured API level must match the manifest, the DLL's Dalamud reference and the `Dalamud.NET.Sdk` major version.
 - **Stale or substituted artifacts.** The DLL's embedded commit must equal the commit being released (`--commit $GITHUB_SHA`), the project file must match the packaged manifest, and the future publish flow validates the *published* asset by digest rather than trusting a workflow artifact.
-- **URL manipulation.** Download links come only from the reviewed template plus the version; every URL must be absolute https on the default port with no user information, query or fragment, and end in the package file name. Templates without a per-version part are refused.
-- **JSON injection.** Text from the csproj (description, punchline) is serialized by System.Text.Json; a description containing quotes, braces, control characters or field-like text round-trips as text (tested). The reader rejects unknown and duplicate keys.
+- **URL manipulation.** Download links come only from the reviewed template plus the version; every URL must be absolute https on a dotted host name and the default port, with no user information, query or fragment, and written in canonical form: its text is the address a client requests, so no `.` or `..` segment can make a link that reads as `github.com/richhiiee/AetherFrame/...` fetch from another repository. A download link must end in the package file name. Templates without a per-version part are refused.
+- **JSON injection.** Text from the csproj (description, punchline) is serialized by System.Text.Json; a description containing quotes, braces, control characters or field-like text round-trips as text (tested). The reader rejects unknown and duplicate keys in the manifest, the configuration and each repository entry; `deps.json` is only searched for the project's own entries.
 - **Accidental local path publication.** The manifest and `deps.json` may not contain local paths; the summary contains file names only; `dist/` is ignored.
 - **Secrets.** No workflow step uses a secret; the tool reads no environment variables and never reads `%AppData%`.
 - **GitHub Actions scope.** Both workflows default to `contents: read`; only the draft-release job (tags only, `release` environment) has `contents: write`. Pull requests run read-only with no secrets. All inputs to `run` steps come from GitHub-controlled values (`github.sha`, `github.ref_name`) or from `Version.props` after a regex check, and are passed through environment variables, not interpolated into scripts.
