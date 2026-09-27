@@ -58,9 +58,8 @@ namespace AetherFrame.Services.Fonts;
 /// What any of this costs is bounded by <see cref="FontTierPolicy"/>: every handle in the atlas
 /// is re-rasterized on every rebuild, so each family only builds tiers up to the size its glyph
 /// set can afford (a request above that uses the largest allowed tier, as a request above the
-/// ladder's top always has), the bundled families are built with explicit glyph ranges rather
-/// than every glyph their TTF maps, and the cache evicts by estimated surface as well as by
-/// handle count — see <see cref="EvictExcess"/>.
+/// ladder's top always has), and the cache evicts by estimated surface as well as by handle
+/// count — see <see cref="EvictExcess"/>. The bundled families keep every glyph their TTFs map.
 /// </summary>
 internal sealed class ProfileFontService : IDisposable
 {
@@ -284,9 +283,8 @@ internal sealed class ProfileFontService : IDisposable
     private IFontHandle BuildHandle(ProfileFontFamilyDescriptor descriptor, float sizePx, bool bold, bool italic) =>
         atlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
         {
-            // Explicit ranges for the bundled faces (see FontTierPolicy.GlyphRanges); without
-            // them Dalamud builds every glyph the TTF maps, which for Cousine is about 1.4 times
-            // the surface, the extra all glyphs no Plate needs.
+            // The bundled faces keep every glyph their TTF maps, as 0.1.5 built them (see
+            // FontTierPolicy.GlyphRanges); what bounds a tier is its size cap, not its glyphs.
             var config = new SafeFontConfig { SizePx = sizePx, GlyphRanges = FontTierPolicy.GlyphRanges(descriptor.Id) };
             var resourceName = GetEmbeddedResourceName(descriptor.Id, bold, italic);
 

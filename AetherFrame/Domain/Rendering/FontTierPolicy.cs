@@ -14,21 +14,17 @@ namespace AetherFrame.Domain.Rendering;
 /// whole on every rebuild, so the cost of a tier is the surface of its glyph bitmaps, not the
 /// handle itself. Left unbounded, a Mono tier at the top of the ladder alone rasterizes over
 /// 100 Mpx (seven 4096² textures), reachable from a package with a large FontSize or by zooming
-/// a 96 px text to the editor's maximum. This policy bounds that in three ways:
+/// a 96 px text to the editor's maximum. This policy bounds that by size, never by glyph:
 ///
 /// <list type="bullet">
-/// <item>The bundled families are built with explicit <see cref="GlyphRanges"/> — the scripts
-/// and symbols a Plate's text can plausibly hold (Latin with its extensions, Greek, Cyrillic,
-/// Hebrew, punctuation, currency, arrows, mathematical and common symbols, and the box drawing
-/// and block characters of decorative text) — instead of every glyph their TTF maps, which
-/// leaves out the phonetic alphabets, combining marks, polytonic Greek and presentation forms
-/// Cousine also carries: almost a third of its surface, and one tier of the size Mono can reach
-/// for the same budget.</item>
+/// <item>The bundled families keep every glyph their TTFs map (<see cref="GlyphRanges"/>), as
+/// 0.1.5 built them, so a Plate's text renders exactly as it did there: combining marks,
+/// polytonic Greek, IPA, box drawing and all.</item>
 /// <item>Each family has a largest tier (<see cref="MaxTierIndex"/>) chosen so that a single
-/// tier's <see cref="EstimatedSurfacePixels"/> stays under <see cref="SingleTierBudgetPixels"/>.
-/// A request above it uses the largest allowed tier, exactly as a request above the ladder's top
-/// always has: the raster is upscaled a little at extreme zoom, and nothing below the cap
-/// changes.</item>
+/// tier's <see cref="EstimatedSurfacePixels"/> stays under <see cref="SingleTierBudgetPixels"/>,
+/// which one atlas texture holds. A request above it uses the largest allowed tier, exactly as
+/// a request above the ladder's top always has: the raster is upscaled a little at extreme
+/// zoom, and nothing below the cap changes.</item>
 /// <item>The service also evicts least-recently-used handles once their summed estimate
 /// exceeds <see cref="AtlasBudgetPixels"/>, in addition to its handle count.</item>
 /// </list>
@@ -66,67 +62,42 @@ internal static class FontTierPolicy
     internal static readonly IReadOnlyList<float> CommonEditorSizes = [16f, 24f, 32f, 48f, 64f, 96f];
 
     /// <summary>
-    /// The most glyph surface one tier may be expected to rasterize: comfortably inside a single
-    /// 4096×4096 atlas texture (16.8 Mpx) once the packer's slack is allowed for, so no tier ever
-    /// needs a second texture of its own.
+    /// The most glyph surface one tier may be expected to rasterize, so that no tier ever needs a
+    /// second texture of its own: a 4096×4096 atlas texture is 16.8 Mpx, and ImGui's packer
+    /// (stb_rect_pack's skyline, which fills a tier's near-uniform glyph boxes almost solid) puts
+    /// the heaviest tier this allows, any family's heaviest face at its cap, into at most about
+    /// 3,400 of the texture's 4,096 rows. The packing test measures exactly that.
     /// </summary>
-    internal const long SingleTierBudgetPixels = 12_000_000;
+    internal const long SingleTierBudgetPixels = 14_000_000;
 
     /// <summary>
-    /// The most estimated glyph surface the cache keeps alive at once: sixteen 4096×4096 atlas
+    /// The most estimated glyph surface the cache keeps alive at once: eighteen 4096×4096 atlas
     /// textures. Large on purpose — it must exceed what one Plate can legitimately need at the
     /// same time (every family/style combo at its common sizes plus one maximal tier each is
-    /// about 220 Mpx), because evicting a handle that is still drawn every frame would rebuild
+    /// about 270 Mpx), because evicting a handle that is still drawn every frame would rebuild
     /// the atlas continuously, which is far worse than a large atlas. It exists to stop a
     /// pathological session (many Plates, many families, every zoom level) from growing without
     /// bound, not to make the steady state small.
     /// </summary>
-    internal const long AtlasBudgetPixels = 16L * 4096 * 4096;
+    internal const long AtlasBudgetPixels = 18L * 4096 * 4096;
 
     /// <summary>
     /// The glyph ranges every bundled family is built with, in ImGui's format (inclusive pairs,
-    /// zero-terminated): whole Unicode blocks, so that everything a Latin-, Greek-, Cyrillic- or
-    /// Hebrew-script player types, everything AetherFrame itself writes into a Plate (see
-    /// <c>BasicPlateText</c>, <c>IdentityHeaderRules.DecorationSymbols</c>) and the symbols 0.1.5
-    /// rendered from these faces (€, ™, №, →, ≠, ♥, the fi/fl ligatures, the box drawing and
-    /// block characters Mono carries for decorative text such as ═══ or ░▒▓, …) stay covered.
-    /// Left out, deliberately: IPA and phonetic extensions, combining marks, Greek Extended,
-    /// Hebrew presentation forms and the fonts' private-use alternates (the exclusion test lists
-    /// them), none of which a Plate needs; no bundled face carries the Dingbats such as U+2726
-    /// either.
+    /// zero-terminated): the whole Basic Multilingual Plane, which is exactly what Dalamud builds
+    /// for a font given no ranges, and so exactly what 0.1.5 built. Whatever a face maps is
+    /// rasterized — a Plate's combining marks, polytonic Greek, IPA, box drawing, block elements,
+    /// ligatures and even the PT faces' private-use alternates (U+F401–F6D4, Adobe's legacy
+    /// codepoints, clear of the game's icon codepoints) render as they did — and what no face
+    /// maps (CJK, the Dingbats such as U+2726) falls back, as it did. The atlas is bounded by the
+    /// tier caps, never by dropping glyphs.
     /// </summary>
-    private static readonly ushort[] BundledGlyphRanges =
-    [
-        0x0020, 0x007F, // Basic Latin
-        0x00A0, 0x00FF, // Latin-1 Supplement
-        0x0100, 0x017F, // Latin Extended-A
-        0x0180, 0x024F, // Latin Extended-B
-        0x02B0, 0x02FF, // Spacing Modifier Letters (ʼ, ˆ, ˇ, …)
-        0x0370, 0x03FF, // Greek and Coptic
-        0x0400, 0x04FF, // Cyrillic
-        0x0500, 0x052F, // Cyrillic Supplement
-        0x0590, 0x05FF, // Hebrew
-        0x1E00, 0x1EFF, // Latin Extended Additional (Vietnamese, ẞ)
-        0x2000, 0x206F, // General Punctuation
-        0x2070, 0x209F, // Superscripts and Subscripts
-        0x20A0, 0x20CF, // Currency Symbols
-        0x2100, 0x218F, // Letterlike Symbols, Number Forms
-        0x2190, 0x21FF, // Arrows
-        0x2200, 0x22FF, // Mathematical Operators
-        0x2300, 0x23FF, // Miscellaneous Technical (⌂, ⌐, ⌠, ⌡)
-        0x2500, 0x257F, // Box Drawing (─, │, ═, ║, ╔, ╬, …)
-        0x2580, 0x259F, // Block Elements (▀, ▄, █, ░, ▒, ▓, …)
-        0x25A0, 0x25FF, // Geometric Shapes
-        0x2600, 0x26FF, // Miscellaneous Symbols
-        0xFB00, 0xFB06, // Latin ligatures (ﬁ, ﬂ)
-        0,
-    ];
+    private static readonly ushort[] BundledGlyphRanges = [0x0001, 0xFFFE, 0];
 
     /// <summary>
     /// Per-family surface model: <c>Glyphs × (Scale × size + Padding)²</c> pixels for a tier of
     /// <c>size</c> px, where Glyphs is the number of codepoints in <see cref="BundledGlyphRanges"/>
-    /// the family's TTFs map (the most any of its faces does: PT Serif Bold carries four more
-    /// than its Regular) and Scale the average glyph box side per pixel of size, fitted to the
+    /// the family's TTFs map (the most any of its faces does: PT Serif's bold faces carry six
+    /// more than its Regular) and Scale the average glyph box side per pixel of size, fitted to the
     /// heaviest face (Bold Italic) so the estimate is never below the real surface of any face
     /// at any ladder size.
     /// </summary>
@@ -134,14 +105,14 @@ internal static class FontTierPolicy
 
     private const double PaddingPixels = 2d;
 
-    private static readonly SurfaceModel SansModel = new(608, 0.475);
-    private static readonly SurfaceModel SerifModel = new(612, 0.500);
-    private static readonly SurfaceModel MonoModel = new(1540, 0.541);
+    private static readonly SurfaceModel SansModel = new(717, 0.472);
+    private static readonly SurfaceModel SerifModel = new(723, 0.497);
+    private static readonly SurfaceModel MonoModel = new(2281, 0.527);
 
     /// <summary>
     /// The flat charge for one Dalamud Default tier, whose real glyph set is unknowable here
-    /// (see the type doc): two thirds of a single-tier budget, so a legacy Plate's common sizes
-    /// cost a few atlas textures in the estimate rather than nothing.
+    /// (see the type doc): a stand-in of about half a single-tier budget, so a legacy Plate's
+    /// common sizes cost a few atlas textures in the estimate rather than nothing.
     /// </summary>
     private const long DalamudDefaultTierSurfacePixels = 8_000_000;
 

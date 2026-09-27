@@ -97,8 +97,8 @@ public class FontTierPolicyTests
         Assert.Equal(240f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameSerif));
         Assert.Equal(140f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono));
         Assert.Equal(TextProfileElement.MaxFontSize, FontTierPolicy.MaxTierSize(ProfileFontFamilies.DalamudDefault));
-        Assert.Equal(12_000_000L, FontTierPolicy.SingleTierBudgetPixels);
-        Assert.Equal(16L * 4096 * 4096, FontTierPolicy.AtlasBudgetPixels);
+        Assert.Equal(14_000_000L, FontTierPolicy.SingleTierBudgetPixels);
+        Assert.Equal(18L * 4096 * 4096, FontTierPolicy.AtlasBudgetPixels);
     }
 
     [Fact]
@@ -281,9 +281,9 @@ public class FontTierPolicyTests
             var counts = FaceSuffixes.Select(suffix => TrueTypeFace.Load(FontPath(prefix, suffix)).CountMapped(FontTierPolicy.CoversCodepoint)).ToList();
             Assert.Equal(counts.Max(), FontTierPolicy.GlyphCount(family));
 
-            // The faces of a family map the same set bar a handful (PT Serif Bold carries four
-            // more), so one count per family is an honest bound for all of them.
-            Assert.All(counts, count => Assert.InRange(count, FontTierPolicy.GlyphCount(family) - 4, FontTierPolicy.GlyphCount(family)));
+            // The faces of a family map the same set bar a handful (PT Serif's bold faces carry six
+            // more than its Regular), so one count per family is an honest bound for all of them.
+            Assert.All(counts, count => Assert.InRange(count, FontTierPolicy.GlyphCount(family) - 6, FontTierPolicy.GlyphCount(family)));
         }
     }
 
@@ -310,20 +310,33 @@ public class FontTierPolicyTests
     }
 
     [Fact]
-    public void ExplicitRanges_LeaveOutAThirdOfMonosFullCmap()
+    public void EveryFamilysHeaviestTierAtItsCap_PacksIntoOneAtlasTexture()
     {
-        // The reason Mono reaches 140 px rather than 120: without ranges Dalamud builds every
-        // glyph Cousine maps (over 2200), the phonetic alphabets, combining marks and polytonic
-        // Greek among them, and in its heaviest face the full set would not fit the single-tier
-        // budget at the cap.
-        var faces = FaceSuffixes.Select(suffix => TrueTypeFace.Load(FontPath("Cousine", suffix))).ToList();
-        var cap = FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono);
-        var full = faces.Max(face => face.Surface(cap, _ => true));
-        var ranged = faces.Max(face => face.Surface(cap, FontTierPolicy.CoversCodepoint));
-        Assert.All(faces, face => Assert.True(face.CountMapped(_ => true) > 2000));
-        Assert.True(ranged * 4 < full * 3, $"ranged {ranged / 1e6:F1} Mpx vs full {full / 1e6:F1} Mpx");
-        Assert.True(full > FontTierPolicy.SingleTierBudgetPixels, $"the full cmap fits the budget at {cap} px ({full / 1e6:F1} Mpx)");
-        Assert.True(ranged <= FontTierPolicy.SingleTierBudgetPixels);
+        // What the single-tier budget is for: no tier needs a second 4096x4096 texture of its
+        // own. Packed the way ImGui packs a font (stb_rect_pack's skyline, bottom-left, rects
+        // sorted by height), the heaviest face of every family at its cap fits one texture with
+        // room to spare, every glyph it maps included.
+        foreach (var (family, prefix) in FamilyFiles)
+        {
+            var cap = FontTierPolicy.MaxTierSize(family);
+            var heaviest = FaceSuffixes.Select(suffix => TrueTypeFace.Load(FontPath(prefix, suffix)))
+                .MaxBy(face => face.Surface(cap, FontTierPolicy.CoversCodepoint))!;
+            var rows = PackedHeight(heaviest.Rects(cap, FontTierPolicy.CoversCodepoint), AtlasTextureSide);
+            Assert.True(rows <= AtlasTextureSide * 85 / 100, $"{prefix} at its {cap} px cap needs {rows} of a texture's {AtlasTextureSide} rows");
+        }
+    }
+
+    [Fact]
+    public void TheCapsKeepEveryGlyph_AndStillBoundMono_AGlyphSetOfThe015Size()
+    {
+        // The whole cmap is kept (see EveryGlyphABundledFaceMaps_IsInTheRanges_As015BuiltThem),
+        // and the cap is what bounds a tier: Mono's top ladder tier alone would be over 100 Mpx.
+        var cousine = TrueTypeFace.Load(FontPath("Cousine", "BoldItalic"));
+        Assert.True(cousine.CountMapped(_ => true) > 2200);
+        var top = FontTierPolicy.SizeLadder[^1];
+        Assert.True(cousine.Surface(top, FontTierPolicy.CoversCodepoint) > 100_000_000);
+        Assert.True(FontTierPolicy.EstimatedSurfacePixels(ProfileFontFamilies.AetherFrameMono, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono))
+            <= FontTierPolicy.SingleTierBudgetPixels);
     }
 
     // ---- Glyph ranges -----------------------------------------------------------------------
@@ -353,8 +366,16 @@ public class FontTierPolicyTests
         Assert.True(FontTierPolicy.CoversCodepoint('Ж')); // Cyrillic
         Assert.True(FontTierPolicy.CoversCodepoint('…')); // ellipsis
         Assert.True(FontTierPolicy.CoversCodepoint(0x2550)); // box drawing, decorative text in Mono
-        Assert.False(FontTierPolicy.CoversCodepoint(0x0301)); // combining mark
-        Assert.False(FontTierPolicy.CoversCodepoint(0x4E2D)); // CJK
+        Assert.True(FontTierPolicy.CoversCodepoint(0x0301)); // combining mark
+        Assert.True(FontTierPolicy.CoversCodepoint(0xFFFE));
+        Assert.False(FontTierPolicy.CoversCodepoint(0x0000));
+        Assert.False(FontTierPolicy.CoversCodepoint(0xFFFF));
+
+        // Exactly what Dalamud builds for a font given no ranges, as 0.1.5 did.
+        Assert.Equal(new ushort[] { 0x0001, 0xFFFE, 0 }, ranges);
+
+        // Covered is not mapped: no bundled face has CJK, which falls back as it did in 0.1.5.
+        Assert.All(FamilyFiles, f => Assert.False(TrueTypeFace.Load(FontPath(f.FilePrefix, "Regular")).Maps(0x4E2D)));
     }
 
     [Theory]
@@ -387,6 +408,13 @@ public class FontTierPolicyTests
     [InlineData(0x2588, "full block (Mono)")]
     [InlineData(0x2591, "light shade (Mono)")]
     [InlineData(0x2593, "dark shade (Mono)")]
+    [InlineData(0x0301, "combining acute accent")]
+    [InlineData(0x1F00, "Greek small alpha with psili, polytonic (Mono)")]
+    [InlineData(0x0259, "IPA schwa (Mono)")]
+    [InlineData(0x1D00, "phonetic small capital A (Mono)")]
+    [InlineData(0xFB2A, "Hebrew shin with shin dot (Mono)")]
+    [InlineData(0x2C67, "Latin Extended-C")]
+    [InlineData(0xF6C3, "private-use alternate (Sans, Serif)")]
     public void GlyphRanges_KeepWhat015Rendered(int codepoint, string what)
     {
         // Every one of these is mapped by at least one bundled face and was rasterized by 0.1.5,
@@ -395,60 +423,22 @@ public class FontTierPolicyTests
         Assert.Contains(FamilyFiles, f => TrueTypeFace.Load(FontPath(f.FilePrefix, "Regular")).Maps(codepoint));
     }
 
-    [Theory]
-    [InlineData(0x0259, "IPA schwa")]
-    [InlineData(0x0301, "combining acute accent")]
-    [InlineData(0x1D00, "phonetic extensions")]
-    [InlineData(0x1F00, "Greek Extended")]
-    [InlineData(0x2726, "Dingbats (no face maps it)")]
-    [InlineData(0xF500, "private use alternates")]
-    [InlineData(0xFB1D, "Hebrew presentation forms")]
-    [InlineData(0xFEFF, "byte order mark")]
-    public void GlyphRanges_LeaveOutWhatNoPlateNeeds(int codepoint, string what)
-    {
-        Assert.False(FontTierPolicy.CoversCodepoint(codepoint), $"U+{codepoint:X4} ({what}) is inside the glyph ranges");
-    }
-
     [Fact]
-    public void EveryGlyphAFaceMapsOutsideTheRanges_IsInADeliberatelyExcludedBlock()
+    public void EveryGlyphABundledFaceMaps_IsInTheRanges_As015BuiltThem()
     {
-        // The ranges are whole blocks chosen by hand; this pins what they leave out, so a font
-        // swap or a block change is a visible decision rather than a silent loss of glyphs.
-        var excluded = new (int From, int To, string Block)[]
-        {
-            (0x0000, 0x001F, "C0 controls"),
-            (0x0250, 0x02AF, "IPA Extensions"),
-            (0x0300, 0x036F, "Combining Diacritical Marks"),
-            (0x1D00, 0x1DFF, "Phonetic Extensions and their supplement, Combining Diacritical Marks Supplement"),
-            (0x1F00, 0x1FFF, "Greek Extended"),
-            (0x20D0, 0x20FF, "Combining Diacritical Marks for Symbols"),
-            (0x2C60, 0x2C7F, "Latin Extended-C"),
-            (0x2E00, 0x2E7F, "Supplemental Punctuation"),
-            (0xA640, 0xA69F, "Cyrillic Extended-B"),
-            (0xA700, 0xA7FF, "Modifier Tone Letters, Latin Extended-D"),
-            (0xAB30, 0xAB6F, "Latin Extended-E"),
-            (0xE000, 0xF8FF, "Private Use Area (the fonts' stylistic alternates)"),
-            (0xFB07, 0xFB4F, "Alphabetic Presentation Forms beyond the Latin ligatures"),
-            (0xFE00, 0xFE2F, "Variation Selectors, Combining Half Marks"),
-            (0xFEFF, 0xFEFF, "byte order mark"),
-        };
-
-        var outside = 0;
+        // 0.1.5 built the bundled faces with no ranges, which Dalamud turns into [1, 0xFFFE]:
+        // every glyph the TTF maps. A glyph left out renders as the fallback in a Plate that
+        // showed it before, so none is: combining marks, polytonic Greek, IPA, box drawing and
+        // the rest all stay. Only U+0000 is outside, as it was.
         foreach (var (_, prefix) in FamilyFiles)
         {
             foreach (var suffix in FaceSuffixes)
             {
                 var face = TrueTypeFace.Load(FontPath(prefix, suffix));
-                foreach (var codepoint in face.MappedCodepoints.Where(c => !FontTierPolicy.CoversCodepoint(c)))
-                {
-                    outside++;
-                    Assert.True(excluded.Any(b => codepoint >= b.From && codepoint <= b.To),
-                        $"{prefix}-{suffix} maps U+{codepoint:X4} outside the glyph ranges and outside every deliberately excluded block");
-                }
+                var missing = face.MappedCodepoints.Where(c => c != 0 && !FontTierPolicy.CoversCodepoint(c)).Order().ToList();
+                Assert.True(missing.Count == 0, $"{prefix}-{suffix} maps {missing.Count} glyph(s) outside the ranges, e.g. {string.Join(" ", missing.Take(8).Select(c => $"U+{c:X4}"))}");
             }
         }
-
-        Assert.True(outside > 1000, "the exclusions are meant to cost Cousine a third of its cmap");
     }
 
     [Fact]
@@ -495,16 +485,17 @@ public class FontTierPolicyTests
     }
 
     [Fact]
-    public void NoBundledFace_CarriesTheDingbatDecoration_SoTheRangesLeaveItOut()
+    public void NoBundledFace_CarriesTheDingbatDecoration()
     {
-        // IdentityHeaderRules.IsDrawableDecoration rejects "✦" because the fonts lack it; the
-        // ranges are consistent with that rather than paying for an empty block.
+        // IdentityHeaderRules.IsDrawableDecoration rejects "✦" because the fonts lack it: the
+        // ranges cover every codepoint, but a glyph no face maps still falls back.
         foreach (var (_, prefix) in FamilyFiles)
         {
-            Assert.False(TrueTypeFace.Load(FontPath(prefix, "Regular")).Maps(0x2726));
+            foreach (var suffix in FaceSuffixes)
+            {
+                Assert.False(TrueTypeFace.Load(FontPath(prefix, suffix)).Maps(0x2726));
+            }
         }
-
-        Assert.False(FontTierPolicy.CoversCodepoint(0x2726));
     }
 
     private static void Collect(ProfileDocument document, StringBuilder into)
@@ -517,6 +508,59 @@ public class FontTierPolicyTests
                 into.Append(EditorPlaceholders.GetPlaceholder(text));
             }
         }
+    }
+
+    private const int AtlasTextureSide = 4096;
+
+    /// <summary>
+    /// The rows stb_rect_pack needs to pack <paramref name="rects"/> into a texture
+    /// <paramref name="width"/> wide, with the heuristic ImGui's builder uses (the default,
+    /// skyline bottom-left with the rects sorted by height, then width, both descending): each
+    /// rect goes where it sits lowest, the leftmost such place on a tie.
+    /// </summary>
+    private static int PackedHeight(IReadOnlyList<(int Width, int Height)> rects, int width)
+    {
+        // The skyline: (x, y) steps, each running to the next one's x (the last to the width).
+        var skyline = new List<(int X, int Y)> { (0, 0) };
+        var rows = 0;
+        foreach (var (w, h) in rects.OrderByDescending(r => r.Height).ThenByDescending(r => r.Width))
+        {
+            var bestX = -1;
+            var bestY = int.MaxValue;
+            for (var i = 0; i < skyline.Count && skyline[i].X + w <= width; i++)
+            {
+                var x = skyline[i].X;
+                var y = 0;
+                for (var j = i; j < skyline.Count && skyline[j].X < x + w; j++)
+                {
+                    y = Math.Max(y, skyline[j].Y);
+                }
+
+                if (y < bestY)
+                {
+                    bestX = x;
+                    bestY = y;
+                }
+            }
+
+            Assert.True(bestX >= 0, $"a {w} px wide glyph box is wider than the texture");
+            var top = bestY + h;
+            var right = bestX + w;
+            rows = Math.Max(rows, top);
+
+            var yAtRight = skyline.Last(step => step.X <= right).Y;
+            var updated = skyline.Where(step => step.X < bestX).ToList();
+            updated.Add((bestX, top));
+            if (right < width)
+            {
+                updated.Add((right, yAtRight));
+            }
+
+            updated.AddRange(skyline.Where(step => step.X > right));
+            skyline = updated.Where((step, index) => index == 0 || step.Y != updated[index - 1].Y).ToList();
+        }
+
+        return rows;
     }
 
     private static string FontPath(string prefix, string suffix) =>
@@ -548,6 +592,33 @@ public class FontTierPolicyTests
         internal IEnumerable<int> MappedCodepoints => codepointToGlyph.Keys;
 
         internal int CountMapped(Func<int, bool> include) => codepointToGlyph.Keys.Count(include);
+
+        /// <summary>The glyph boxes <see cref="Surface"/> adds up, as ImGui packs them.</summary>
+        internal List<(int Width, int Height)> Rects(float sizePx, Func<int, bool> include)
+        {
+            var scale = sizePx / ascentMinusDescent;
+            var rects = new List<(int Width, int Height)>();
+            foreach (var (codepoint, glyph) in codepointToGlyph)
+            {
+                if (!include(codepoint))
+                {
+                    continue;
+                }
+
+                int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+                if (boxes[glyph] is { } b)
+                {
+                    x0 = (int)Math.Floor(b.X0 * scale);
+                    y0 = (int)Math.Floor(-b.Y1 * scale);
+                    x1 = (int)Math.Ceiling(b.X1 * scale);
+                    y1 = (int)Math.Ceiling(-b.Y0 * scale);
+                }
+
+                rects.Add((x1 - x0 + 1, y1 - y0 + 1));
+            }
+
+            return rects;
+        }
 
         internal long Surface(float sizePx, Func<int, bool> include)
         {
