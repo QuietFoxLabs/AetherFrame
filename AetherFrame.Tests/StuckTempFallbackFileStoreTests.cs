@@ -15,24 +15,48 @@ namespace AetherFrame.Tests;
 
 /// <summary>
 /// Dalamud's reliable storage leaks the handle of "{path}.tmp" when a write fails inside it, after
-/// which every later write of that file fails with a sharing violation until the game restarts.
-/// The fallback store writes such a file itself — and only such a file.
+/// which every later write of that file fails until the game restarts. The fallback store writes
+/// such a file itself — and only such a file.
+///
+/// <para>The failures are shaped exactly as Dalamud 15.0.3.5 produces them (checked by calling its
+/// FilesystemUtil.WriteAllBytesSafe with the temporary file held open): the write that leaks the
+/// handle fails with its own error (a full disk: ERROR_DISK_FULL, 112), and every later one with
+/// ERROR_INVALID_HANDLE (6), because the sharing violation of its CreateFile is lost when it
+/// writes through the invalid handle anyway. What marks the leak is the temporary file held open
+/// with no sharing, which these tests reproduce with a <see cref="FileStream"/> opened with
+/// <see cref="FileShare.None"/>.</para>
 /// </summary>
 public class StuckTempFallbackFileStoreTests
 {
     private const string Contents = "{\"Version\":1}";
 
+    /// <summary>ERROR_INVALID_HANDLE: what every write after the leak throws.</summary>
+    private const int InvalidHandle = 6;
+
+    /// <summary>ERROR_DISK_FULL: the write that leaked the handle.</summary>
+    private const int DiskFull = 112;
+
+    /// <summary>The temporary file as the failed write leaves it: created, part-written, and still
+    /// open with no sharing at all.</summary>
+    private static FileStream HoldLikeTheLeakedHandle(string temporaryPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(temporaryPath)!);
+        var leaked = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        leaked.Write(Encoding.UTF8.GetBytes("half-written"));
+        leaked.Flush();
+        return leaked;
+    }
+
     [Theory]
-    [InlineData(StuckTempFallbackFileStore.SharingViolation, false)]
-    [InlineData(StuckTempFallbackFileStore.LockViolation, false)]
-    [InlineData(StuckTempFallbackFileStore.SharingViolation, true)]
-    public async Task SharingOrLockViolation_WithTheTemporaryFilePresent_WritesTheFileDirectly(int nativeError, bool faultAsync)
+    [InlineData(InvalidHandle, false)]
+    [InlineData(InvalidHandle, true)]
+    [InlineData(DiskFull, true)]
+    public async Task DalamudsRealStuckFailure_WhileTheTemporaryFileIsHeldOpen_WritesTheFileDirectly(int nativeError, bool faultAsync)
     {
         using var directory = new TempDirectory();
         var path = Path.Combine(directory.Path, "Profiles", "plate.json");
         var stuck = StuckTempFallbackFileStore.TemporaryPathFor(path);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(stuck, "half-written");
+        using var leaked = HoldLikeTheLeakedHandle(stuck);
 
         var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultAsync = faultAsync, FaultFactory = _ => new Win32Exception(nativeError) };
         var log = new TestLog();
@@ -43,11 +67,12 @@ public class StuckTempFallbackFileStoreTests
         Assert.Equal(Contents, File.ReadAllText(path, Encoding.UTF8));
         Assert.Equal(Encoding.UTF8.GetBytes(Contents), File.ReadAllBytes(path));
 
-        // The stuck temporary file belongs to the storage that still holds it open: left alone.
-        Assert.Equal("half-written", File.ReadAllText(stuck));
-
-        // No temporary file of the fallback's own is left behind either.
+        // No temporary file of the fallback's own is left behind.
         Assert.Equal(new[] { "plate.json", "plate.json.tmp" }, Directory.GetFiles(Path.GetDirectoryName(path)!).Select(Path.GetFileName).Order());
+
+        // The stuck temporary file belongs to the storage that still holds it open: left alone.
+        leaked.Dispose();
+        Assert.Equal("half-written", File.ReadAllText(stuck));
 
         var warning = Assert.Single(log.Messages);
         Assert.StartsWith("W ", warning);
@@ -57,16 +82,16 @@ public class StuckTempFallbackFileStoreTests
     }
 
     [Fact]
-    public async Task IOExceptionCarryingASharingViolation_FallsBackTheSameWay()
+    public async Task AnIOExceptionWhileTheTemporaryFileIsHeldOpen_FallsBackTheSameWay()
     {
         using var directory = new TempDirectory();
         var path = Path.Combine(directory.Path, "plate.json");
-        File.WriteAllText(StuckTempFallbackFileStore.TemporaryPathFor(path), "half-written");
+        using var leaked = HoldLikeTheLeakedHandle(StuckTempFallbackFileStore.TemporaryPathFor(path));
 
         var inner = new FaultInjectingStore
         {
             FailWriteAfter = 0,
-            FaultFactory = p => new IOException($"The process cannot access the file '{p}'") { HResult = StuckTempFallbackFileStore.SharingViolationHResult },
+            FaultFactory = p => new IOException($"The process cannot access the file '{p}'") { HResult = unchecked((int)0x80070020) },
         };
         var store = new StuckTempFallbackFileStore(inner, new TestLog());
 
@@ -81,10 +106,10 @@ public class StuckTempFallbackFileStoreTests
         using var directory = new TempDirectory();
         var path = Path.Combine(directory.Path, "plate.json");
         var other = Path.Combine(directory.Path, "other.json");
-        File.WriteAllText(StuckTempFallbackFileStore.TemporaryPathFor(path), string.Empty);
-        File.WriteAllText(StuckTempFallbackFileStore.TemporaryPathFor(other), string.Empty);
+        using var leaked = HoldLikeTheLeakedHandle(StuckTempFallbackFileStore.TemporaryPathFor(path));
+        using var otherLeaked = HoldLikeTheLeakedHandle(StuckTempFallbackFileStore.TemporaryPathFor(other));
 
-        var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultFactory = _ => new Win32Exception(StuckTempFallbackFileStore.SharingViolation) };
+        var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultFactory = _ => new Win32Exception(InvalidHandle) };
         var log = new TestLog();
         var store = new StuckTempFallbackFileStore(inner, log);
 
@@ -99,40 +124,46 @@ public class StuckTempFallbackFileStoreTests
         Assert.Single(log.Messages, m => m.Contains("\"other.json\""));
     }
 
-    [Fact]
-    public async Task SharingViolation_WithoutTheTemporaryFile_IsNotTheLeak_AndPropagates()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheSameFailure_WithTheTemporaryFileNotHeldOpen_IsNotTheLeak_AndPropagates(bool leftoverOnDisk)
     {
         using var directory = new TempDirectory();
         var path = Path.Combine(directory.Path, "plate.json");
+        if (leftoverOnDisk)
+        {
+            // A crash's leftover: on disk, but nobody holds it open, so the next write can replace it.
+            File.WriteAllText(StuckTempFallbackFileStore.TemporaryPathFor(path), "half-written");
+        }
 
-        var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultFactory = _ => new Win32Exception(StuckTempFallbackFileStore.SharingViolation) };
+        var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultFactory = _ => new Win32Exception(InvalidHandle) };
         var log = new TestLog();
         var store = new StuckTempFallbackFileStore(inner, log);
 
         var failure = await Assert.ThrowsAsync<Win32Exception>(() => store.WriteTextAsync(path, Contents));
 
-        Assert.Equal(StuckTempFallbackFileStore.SharingViolation, failure.NativeErrorCode);
+        Assert.Equal(InvalidHandle, failure.NativeErrorCode);
         Assert.False(File.Exists(path));
         Assert.Empty(log.Messages);
     }
 
-    public static TheoryData<Exception> OtherFailures => new()
+    public static TheoryData<Exception> OtherKindsOfFailure => new()
     {
-        new Win32Exception(112),
-        new IOException("disk full") { HResult = unchecked((int)0x80070070) },
-        new IOException("plain"),
         new UnauthorizedAccessException("denied"),
         new OperationAbandonedException(),
         new ObjectDisposedException("ReliableFileStorage"),
+        new OperationCanceledException(),
+        new Exception("Could not write all bytes to temp file (3 of 12)"),
     };
 
     [Theory]
-    [MemberData(nameof(OtherFailures))]
-    public async Task AnyOtherFailure_PropagatesUnchanged_EvenWithTheTemporaryFilePresent(Exception failure)
+    [MemberData(nameof(OtherKindsOfFailure))]
+    public async Task AnyOtherKindOfFailure_PropagatesUnchanged_EvenWhileTheTemporaryFileIsHeldOpen(Exception failure)
     {
         using var directory = new TempDirectory();
         var path = Path.Combine(directory.Path, "plate.json");
-        File.WriteAllText(StuckTempFallbackFileStore.TemporaryPathFor(path), "half-written");
+        using var leaked = HoldLikeTheLeakedHandle(StuckTempFallbackFileStore.TemporaryPathFor(path));
 
         var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultAsync = true, FaultFactory = _ => failure };
         var log = new TestLog();
@@ -146,19 +177,29 @@ public class StuckTempFallbackFileStoreTests
     }
 
     [Fact]
-    public void OnlySharingAndLockViolations_Qualify()
+    public void IsHeldOpenWithoutSharing_OnlyWhileAHandleDeniesAllSharing()
     {
-        Assert.True(StuckTempFallbackFileStore.IsSharingOrLockViolation(new Win32Exception(32)));
-        Assert.True(StuckTempFallbackFileStore.IsSharingOrLockViolation(new Win32Exception(33)));
-        Assert.True(StuckTempFallbackFileStore.IsSharingOrLockViolation(new IOException("x") { HResult = unchecked((int)0x80070020) }));
-        Assert.True(StuckTempFallbackFileStore.IsSharingOrLockViolation(new IOException("x") { HResult = unchecked((int)0x80070021) }));
+        using var directory = new TempDirectory();
+        var path = Path.Combine(directory.Path, "plate.json.tmp");
 
-        Assert.False(StuckTempFallbackFileStore.IsSharingOrLockViolation(new Win32Exception(112)));
-        Assert.False(StuckTempFallbackFileStore.IsSharingOrLockViolation(new Win32Exception(5)));
-        Assert.False(StuckTempFallbackFileStore.IsSharingOrLockViolation(new IOException("x") { HResult = 32 }));
-        Assert.False(StuckTempFallbackFileStore.IsSharingOrLockViolation(new IOException("x")));
-        Assert.False(StuckTempFallbackFileStore.IsSharingOrLockViolation(new OperationAbandonedException()));
-        Assert.False(StuckTempFallbackFileStore.IsSharingOrLockViolation(new ObjectDisposedException("x")));
+        Assert.False(StuckTempFallbackFileStore.IsHeldOpenWithoutSharing(path));
+        Assert.False(StuckTempFallbackFileStore.IsHeldOpenWithoutSharing(Path.Combine(directory.Path, "missing", "plate.json.tmp")));
+
+        using (HoldLikeTheLeakedHandle(path))
+        {
+            Assert.True(StuckTempFallbackFileStore.IsHeldOpenWithoutSharing(path));
+        }
+
+        // Released (or never held: a leftover from a crash) — the next reliable write can replace it.
+        Assert.False(StuckTempFallbackFileStore.IsHeldOpenWithoutSharing(path));
+
+        // A handle that shares, such as a scanner reading the file, is not the leak.
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            Assert.False(StuckTempFallbackFileStore.IsHeldOpenWithoutSharing(path));
+        }
+
+        Assert.True(File.Exists(path));
     }
 
     [Fact]
@@ -166,10 +207,10 @@ public class StuckTempFallbackFileStoreTests
     {
         using var directory = new TempDirectory();
         var path = Path.Combine(directory.Path, "plate.json");
-        File.WriteAllText(StuckTempFallbackFileStore.TemporaryPathFor(path), "half-written");
+        using var leaked = HoldLikeTheLeakedHandle(StuckTempFallbackFileStore.TemporaryPathFor(path));
 
         // The plugin's composition: abandonment is checked outside the fallback.
-        var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultFactory = _ => new Win32Exception(StuckTempFallbackFileStore.SharingViolation) };
+        var inner = new FaultInjectingStore { FailWriteAfter = 0, FaultFactory = _ => new Win32Exception(InvalidHandle) };
         var operations = new OwnedOperations();
         var store = new ShutdownGuardedFileStore(new StuckTempFallbackFileStore(inner, new TestLog()), operations);
 
@@ -219,12 +260,13 @@ public class StuckTempFallbackFileStoreTests
         var session = OpenSession(fixture, library, created.PlateId);
         session.AddTextElement("Saved past the leak");
 
-        // Dalamud's first, failed write left "{path}.tmp" open; every later write of it fails the same way.
+        // Dalamud's first, failed write left "{path}.tmp" open; every later write of it fails with
+        // an invalid handle, from a faulted thread-pool task.
         var platePath = fixture.Paths.GetPlatePath(created.PlateId);
-        File.WriteAllText(StuckTempFallbackFileStore.TemporaryPathFor(platePath), "half-written");
+        using var leaked = HoldLikeTheLeakedHandle(StuckTempFallbackFileStore.TemporaryPathFor(platePath));
         faulting.FailWriteAfter = 0;
         faulting.FaultAsync = true;
-        faulting.FaultFactory = _ => new Win32Exception(StuckTempFallbackFileStore.SharingViolation);
+        faulting.FaultFactory = _ => new Win32Exception(InvalidHandle);
 
         Assert.True(await session.SaveProfileAsync());
 
@@ -246,10 +288,11 @@ public class StuckTempFallbackFileStoreTests
         var session = OpenSession(fixture, library, created.PlateId);
         session.AddTextElement("Unsaved");
 
-        // Disk full, reported as Dalamud does: a Win32Exception from a faulted thread-pool task.
+        // Disk full with no handle leaked, reported as Dalamud does: a Win32Exception from a
+        // faulted thread-pool task.
         faulting.FailWriteAfter = 0;
         faulting.FaultAsync = true;
-        faulting.FaultFactory = _ => new Win32Exception(112);
+        faulting.FaultFactory = _ => new Win32Exception(DiskFull);
 
         Assert.False(await session.SaveProfileAsync());
 
