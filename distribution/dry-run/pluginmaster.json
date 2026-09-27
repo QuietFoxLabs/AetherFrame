@@ -1,0 +1,33 @@
+[
+  {
+    "Author": "richhiiee",
+    "Name": "AetherFrame",
+    "Punchline": "Design character Plates in a familiar Basic Editor or a freeform Advanced Editor.",
+    "Description": "Design character Plates: start from an Adventure Plate-style layout in the Basic Editor, or build freeform layouts with text, images and decorative Components in the Advanced Editor. The plugin icon is AI-generated, and the bundled Celestial Dream and Celestial Sakura Components use AI-assisted artwork.",
+    "Changelog": "Distribution and submission readiness: the first version meant to reach testers. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged, and so is how the plugin behaves in game.\n\n### Added\n\n- This changelog.\n- Issue templates for bug reports and feature requests, with guidance on keeping personal details out of public reports.\n- A guide for testers ([docs/Testing.md](docs/Testing.md)): installing through Dalamud's testing builds or a GitHub Release ZIP, what to test, and how to report problems.\n- A tag-based release workflow that builds, tests and checks the plugin package and prepares a **draft** GitHub Release for review ([docs/Releasing.md](docs/Releasing.md)).\n- Preparation notes and a draft `manifest.toml` for submitting AetherFrame to the official Dalamud plugin repository's testing track.\n\n### Changed\n\n- The plugin description in the Dalamud plugin installer now says that the plugin icon is AI-generated and that the bundled Celestial Dream and Celestial Sakura Components use AI-assisted artwork.\n- The README describes the installation plan, where to get support, and AetherFrame's AI use at the Dalamud policy's *Copilot* level.",
+    "Tags": [
+      "aetherframe",
+      "plates",
+      "adventure-plate",
+      "profile",
+      "customization"
+    ],
+    "IsHide": false,
+    "InternalName": "AetherFrame",
+    "AssemblyVersion": "0.1.5.0",
+    "RepoUrl": "https://github.com/richhiiee/AetherFrame",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "LastUpdate": 1790412092,
+    "DownloadLinkInstall": "https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
+    "DownloadLinkUpdate": "https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
+    "DownloadLinkTesting": "https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
+    "LoadRequiredState": 0,
+    "LoadSync": false,
+    "LoadPriority": 0,
+    "CanUnloadAsync": false,
+    "IconUrl": "https://raw.githubusercontent.com/richhiiee/AetherFrameAssets/master/images/icon.png",
+    "AcceptsFeedback": true,
+    "IsTestingExclusive": false
+  }
+]
