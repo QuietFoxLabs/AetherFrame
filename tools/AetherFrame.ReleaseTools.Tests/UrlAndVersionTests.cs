@@ -40,6 +40,9 @@ public class DownloadUrlTemplateTests
     [InlineData("https://github.com/o/r/releases/download/v{{version}}/{package}", "characters that do not belong")]
     [InlineData("github.com/o/r/releases/download/v{version}/{package}", "not an absolute URL")]
     [InlineData("file:///C:/releases/v{version}/{package}", "must use https")]
+    [InlineData("https://github.com/richhiiee/AetherFrame/releases/download/../../../../someone-else/AetherFrame/releases/download/v{version}/{package}", "not written in canonical form")]
+    [InlineData("https://github.com/richhiiee/AetherFrame/releases/download/%2e%2e/%2e%2e/%2e%2e/%2e%2e/someone-else/v{version}/{package}", "not written in canonical form")]
+    [InlineData("https://localhost/releases/v{version}/{package}", "dotted domain name")]
     public void BadTemplate_IsRefused(string template, string message)
     {
         var e = Assert.Throws<ReleaseCheckException>(() => DownloadUrlTemplate.Parse(template));
@@ -68,6 +71,14 @@ public class UrlsTests
     [InlineData("github.com/x", "not an absolute URL")]
     [InlineData("", "empty")]
     [InlineData("javascript:alert(1)", "must use https")]
+    [InlineData("https://localhost/x", "dotted domain name")]
+    [InlineData("https://intranet/x", "dotted domain name")]
+    [InlineData("https://github.com./x", "dotted domain name")]
+    [InlineData("https://GitHub.com/x", "a client would request 'https://github.com/x'")]
+    [InlineData("https://github.com:443/x", "a client would request 'https://github.com/x'")]
+    [InlineData("https://github.com/a/../x", "a client would request 'https://github.com/x'")]
+    [InlineData("https://github.com/a/./x", "a client would request 'https://github.com/a/x'")]
+    [InlineData("https://github.com/a/%2e%2e/x", "not written in canonical form")]
     public void OtherUrls_AreRefused(string url, string message)
     {
         Assert.Contains(message, Assert.Throws<ReleaseCheckException>(() => Urls.ValidateHttps(url, "test")).Message);
@@ -123,6 +134,12 @@ public class ProductVersionTests
     [InlineData("0.1", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
+    [InlineData("00.1.5.0", false)]
+    [InlineData("0.01.5.0", false)]
+    [InlineData("0.1.5.00", false)]
+    [InlineData("+0.1.5.0", false)]
+    [InlineData(" 0.1.5.0", false)]
+    [InlineData("0.1.5.0 ", false)]
     public void FromAssemblyVersion_NeedsFourPartsEndingInZero(string? text, bool accepted)
     {
         if (accepted)
