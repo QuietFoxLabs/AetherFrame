@@ -1,0 +1,161 @@
+name: Publish custom repository
+
+# Publishes AetherFrame's custom Dalamud repository: the pluginmaster.json Dalamud reads from the address
+# in distribution/repository.json, kept alone on its own branch. Manual only (Actions > Publish custom
+# repository > Run workflow): no push, pull request, release or schedule ever starts it.
+#
+# The prepare job, read-only, verifies every GitHub Release the new file will describe (published, not a
+# draft; assets, digests and SHA256SUMS.txt agree; annotated tag on master; the DLL built from the tagged
+# commit; every package rule), generates the file, validates it, and shows the change in the run summary.
+# Unless "publish" is ticked, that is all: a dry run writes nothing. With it ticked, the publish job waits
+# for approval in the custom-repository environment, derives the file again from scratch, requires it to
+# be byte-identical to what prepare showed, and pushes one fast-forward commit holding only
+# pluginmaster.json and README.md.
+#
+# Channels, rollback, the first publication and the GitHub settings it needs: docs/CustomRepository.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, MAJOR.MINOR.PATCH (for example 0.1.6). Its GitHub Release must be published; a draft is always refused.'
+        required: true
+        type: string
+      channel:
+        description: 'Channel: testing (players with testing builds) or stable (everyone; full releases only).'
+        required: true
+        type: choice
+        options:
+        - testing
+        - stable
+        default: testing
+      rollback:
+        description: 'Rollback: allow moving the channel to an older version than it serves now.'
+        required: false
+        type: boolean
+        default: false
+      publish:
+        description: 'Publish: after approval, write the result to the publication branch. Unticked is a dry run that writes nothing.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One publication at a time, never cancelled halfway. A run waiting for approval holds the group, so
+# reject or cancel one you don't want.
+concurrency:
+  group: publish-custom-repository
+  cancel-in-progress: false
+
+env:
+  # The branch that pluginMasterUrl in distribution/repository.json serves. The tool refuses any other
+  # and a test checks that the two agree: change both together, and only before the first publication.
+  PUBLICATION_BRANCH: plugin-repository
+  RELEASE_TOOLS: tools/AetherFrame.ReleaseTools/bin/Release/net10.0/AetherFrame.ReleaseTools.dll
+
+jobs:
+
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      base: ${{ steps.prepare.outputs.base }}
+      changed: ${{ steps.prepare.outputs.changed }}
+      sha256: ${{ steps.prepare.outputs.sha256 }}
+
+    steps:
+    - name: Check where the run comes from
+      env:
+        PUBLISH: ${{ inputs.publish }}
+        REF: ${{ github.ref }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        if [ "$PUBLISH" = true ] && [ "$REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+          echo "::error::Publishing runs only from $DEFAULT_BRANCH, and this run is from $REF. Run it from $DEFAULT_BRANCH, or untick publish for a dry run."
+          exit 1
+        fi
+
+    - name: Checkout
+      uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      with:
+        # History and tags, to check where each release tag points.
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Install .NET
+      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Build the release tooling
+      run: |
+        dotnet restore tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj --locked-mode
+        dotnet build tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj --configuration Release --no-restore
+
+    - name: Verify the releases and prepare the publication
+      id: prepare
+      env:
+        GH_TOKEN: ${{ github.token }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        VERSION: ${{ inputs.version }}
+        CHANNEL: ${{ inputs.channel }}
+        ROLLBACK: ${{ inputs.rollback }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: bash .github/scripts/custom-repository.sh prepare "$RUNNER_TEMP/work"
+
+    - name: Keep the prepared files
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: custom-repository-${{ github.run_id }}
+        path: ${{ runner.temp }}/work/publication
+        if-no-files-found: error
+        retention-days: 30
+
+  publish:
+    needs: prepare
+    if: inputs.publish && needs.prepare.outputs.changed == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Set up before the first publication (docs/CustomRepository.md): the owner as required reviewer,
+    # and master as the only deployment branch. GitHub creates a missing environment without protection.
+    environment: custom-repository
+    # The only write permission anywhere in this workflow: pushing the publication commit.
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Install .NET
+      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Build the release tooling
+      run: |
+        dotnet restore tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj --locked-mode
+        dotnet build tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj --configuration Release --no-restore
+
+    # Everything prepare did, again, just before the push: the file must be byte-identical to the one the
+    # reviewer approved, and the branch must not have moved.
+    - name: Verify again and publish
+      env:
+        GH_TOKEN: ${{ github.token }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        VERSION: ${{ inputs.version }}
+        CHANNEL: ${{ inputs.channel }}
+        ROLLBACK: ${{ inputs.rollback }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        EXPECTED_BASE: ${{ needs.prepare.outputs.base }}
+        EXPECTED_SHA256: ${{ needs.prepare.outputs.sha256 }}
+        GIT_AUTHOR_NAME: github-actions[bot]
+        GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        GIT_COMMITTER_NAME: github-actions[bot]
+        GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+      run: bash .github/scripts/custom-repository.sh publish "$RUNNER_TEMP/work"

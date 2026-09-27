@@ -1,0 +1,3 @@
+# README.md is copied byte for byte onto the publication branch: git must never convert its line endings
+# on checkout, as a Windows checkout with core.autocrlf would.
+README.md -text
