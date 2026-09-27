@@ -46,7 +46,7 @@ Hash the data folder before step 1 (for example `Get-ChildItem -Recurse | Get-Fi
 
 22. **Ctrl+S during a drag.** Drag an element and press Ctrl+S while the mouse button is held: the saved file holds the on-screen position, no "being saved" flash, and one Ctrl+Z restores the pre-drag position.
 23. **Title layout during a save.** In Basic, pick an inline title layout right after opening the Plate and press Ctrl+S at once: no error, the layout refines after the save, the editor shows unsaved changes once, Undo reverts the layout as one step.
-24. **Controller.** Navigate My Plates, the Import Preview and the prompts with a gamepad: unchanged from 0.1.5.
+24. **Controller.** Navigate My Plates, the Import Preview and the prompts with a gamepad: unchanged from 0.1.5. Dalamud starts every session with ImGui gamepad navigation off: hold L1 and press L3 (the left stick) to switch it on, which Dalamud confirms with a gamepad-mode notice and allows only while its gamepad navigation setting is enabled. AetherFrame sets no navigation flags of its own, so without that toggle its windows ignore a controller, exactly as 0.1.5's did.
 
 ## G. Real import and export
 
