@@ -655,6 +655,36 @@ public class PlateOrderingAndSearchTests
     }
 
     [Fact]
+    public async Task Search_ReturnsTheSameInstance_WhileGenerationIsUnchanged()
+    {
+        using var fixture = new LibraryFixture();
+        var library = await fixture.LoadAsync();
+        var showcase = await library.CreatePlateAsync(PlateStartingLayout.Blank, null, "Gpose Showcase");
+        await library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice, "Roleplay");
+
+        // The same query (surrounding whitespace aside) is answered from the last result.
+        var first = library.Search("show");
+        Assert.Same(first, library.Search("show"));
+        Assert.Same(first, library.Search("  show "));
+        Assert.Equal([showcase.PlateId], first.Select(p => p.PlateId));
+
+        // A different query is a new result; the earlier one is answered fresh again afterwards.
+        var alice = library.Search("alice");
+        Assert.NotSame(first, alice);
+        Assert.Single(alice);
+        Assert.NotSame(first, library.Search("show"));
+
+        // A blank query is the ordered list itself, and every change invalidates the last result.
+        Assert.Same(library.GetOrderedPlates(), library.Search(" "));
+        var cached = library.Search("show");
+        await library.RenamePlateAsync(showcase.PlateId, "Renamed");
+        var afterRename = library.Search("show");
+        Assert.NotSame(cached, afterRename);
+        Assert.Empty(afterRename);
+        Assert.Single(library.Search("renamed"));
+    }
+
+    [Fact]
     public async Task MissingIdsInOrder_AreSkipped_NotFatal_AndKept()
     {
         using var fixture = new LibraryFixture();

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services.Fonts;
+using AetherFrame.UI.Editor;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 
@@ -135,9 +136,10 @@ internal sealed partial class BasicProfileEditorWindow
 
         var size = element.FontSize;
         StyleLabel("Size");
+        // A typed size may go past the slider (see TypedSliderValues).
         if (ImGui.SliderFloat("##Size", ref size, TextProfileElement.MinFontSize, TextProfileElement.MaxFontSize, "%.0f px"))
         {
-            var value = size;
+            var value = TypedSliderValues.FontSize(size, element.FontSize);
             target.Edit(e => e.FontSize = value, true);
         }
 
@@ -155,7 +157,7 @@ internal sealed partial class BasicProfileEditorWindow
 
         var opacity = element.Color.W * 100f;
         StyleLabel("Opacity");
-        if (ImGui.SliderFloat("##Opacity", ref opacity, 0f, 100f, "%.0f%%"))
+        if (ImGui.SliderFloat("##Opacity", ref opacity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
         {
             var alpha = opacity / 100f;
             target.Edit(e => e.Color = e.Color with { W = alpha }, true);
@@ -217,7 +219,7 @@ internal sealed partial class BasicProfileEditorWindow
                 ImGui.SameLine();
                 ImGui.SetNextItemWidth(-1);
                 var thickness = element.OutlineThickness;
-                if (ImGui.SliderFloat("##OutlineThickness", ref thickness, 0.5f, TextProfileElement.MaxOutlineThickness, "%.1f px"))
+                if (ImGui.SliderFloat("##OutlineThickness", ref thickness, 0.5f, TextProfileElement.MaxOutlineThickness, "%.1f px", ImGuiSliderFlags.AlwaysClamp))
                 {
                     var value = thickness;
                     target.Edit(e => e.OutlineThickness = value, true);
@@ -247,7 +249,7 @@ internal sealed partial class BasicProfileEditorWindow
                 ImGui.SameLine();
                 ImGui.SetNextItemWidth(-1);
                 var shadowOpacity = element.ShadowOpacity * 100f;
-                if (ImGui.SliderFloat("##ShadowOpacity", ref shadowOpacity, 0f, 100f, "%.0f%%"))
+                if (ImGui.SliderFloat("##ShadowOpacity", ref shadowOpacity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
                 {
                     var value = shadowOpacity / 100f;
                     target.Edit(e => e.ShadowOpacity = value, true);

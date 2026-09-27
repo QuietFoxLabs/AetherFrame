@@ -1,0 +1,12 @@
+{
+  "Version": 2,
+  "ContentId": 2002,
+  "ActiveProfileId": "5ec93624-4b86-4224-943f-e1a536ffd65d",
+  "ProfileIds": [
+    "5ec93624-4b86-4224-943f-e1a536ffd65d"
+  ],
+  "LastKnownCharacterName": "Bob Sample",
+  "LastKnownHomeWorld": "Phoenix",
+  "CreatedAtUtc": "2026-09-01T12:10:00Z",
+  "UpdatedAtUtc": "2026-09-01T12:10:00Z"
+}

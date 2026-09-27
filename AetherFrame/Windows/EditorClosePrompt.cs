@@ -52,12 +52,17 @@ internal static class EditorClosePrompt
 
         EditorWidgets.Tooltip("Save, then close.");
 
+        // Discard is unavailable exactly while Save is: a save still being written (the question's
+        // own, or one started from the action bar just before closing) can't have the document
+        // reverted underneath it — the guard refuses that. A refusal (that, or no saved version to
+        // go back to) keeps the question open and is explained below it, instead of closing the
+        // window with the edits still in place.
         ImGui.SameLine();
-        if (ImGui.Button("Discard", buttonSize))
+        using (ImRaii.Disabled(!guard.CanSave))
         {
-            ImGui.CloseCurrentPopup();
-            if (guard.Discard())
+            if (ImGui.Button("Discard", buttonSize) && guard.Discard())
             {
+                ImGui.CloseCurrentPopup();
                 close();
             }
         }
@@ -72,5 +77,11 @@ internal static class EditorClosePrompt
         }
 
         EditorWidgets.Tooltip("Keep editing. Nothing is lost.");
+
+        if (guard.DiscardRefusal is { } refusal)
+        {
+            ImGui.Spacing();
+            ImGui.TextColored(EditorWidgets.ErrorColor, refusal);
+        }
     }
 }

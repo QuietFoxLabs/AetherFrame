@@ -1,0 +1,35 @@
+{
+  "tag": "v0.1.2",
+  "owner": 987654321987654,
+  "bob": 2002,
+  "plates": {
+    "rich": "f85a92d4-7dd2-4f51-9475-0879dc679a24",
+    "blank": "c823a0ff-5382-438c-8da6-ba4868fb05f9",
+    "classic": "89b9acc6-0822-42c5-af95-fa82ea6599d2",
+    "builtin:Adventure Plate Classic": "92a096f1-e9e6-414f-b080-15a2465b6a29",
+    "builtin:Blank Canvas": "ab392344-33ea-43a0-8ac0-caef763258c9",
+    "basic-session": "6c8574fd-d346-4838-85a9-9e4d805a38c8",
+    "advanced-session": "ea4879a8-b5e6-4ad5-9075-2827d6fe1d9e",
+    "duplicate-of-rich": "8f2a9a97-33b0-46fe-9477-d06f0cd26d8f",
+    "from-user-template": "ac3ec82a-b0ce-4ea4-8604-79c8585b2595"
+  },
+  "assets": [
+    "ce57256d-f5ad-4b67-9b31-f8f935fd6303",
+    "9f346fc9-9900-4053-a8e3-295f04a5f400",
+    "05249f04-6b06-401d-806a-7cae39b7dde0",
+    "0dec71da-c6fa-487d-aeda-4946b9b0b21f",
+    "ca45e982-7650-4270-8296-01e70ed98dc2",
+    "1bcc96bb-d586-47ee-b25c-02ab52ce0d32"
+  ],
+  "componentCount": 26,
+  "deleted": "ab392344-33ea-43a0-8ac0-caef763258c9",
+  "expectedActiveOwner": "f85a92d4-7dd2-4f51-9475-0879dc679a24",
+  "expectedActiveBob": "89b9acc6-0822-42c5-af95-fa82ea6599d2",
+  "template": "f1b9fa16-9de9-400d-a971-9de89a61cd46",
+  "deletedTemplate": "feafa235-4755-4d6e-adb1-7a782ff7ce3e",
+  "exports": {
+    "rich": "rich.aetherframe",
+    "advanced-limits": "advanced-limits.aetherframe",
+    "classic-basic": "classic-basic.aetherframe"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "Version": 2,
+  "ProfileId": "c653ee1f-7abf-4d69-bf7f-6562b4a29860",
+  "OwnerContentId": 0,
+  "Name": "Blank Canvas",
+  "Revision": 0,
+  "CreatedAtUtc": "2026-09-01T12:05:00Z",
+  "UpdatedAtUtc": "2026-09-01T12:05:00Z",
+  "CanvasWidth": 1280,
+  "CanvasHeight": 720,
+  "Elements": [],
+  "Background": {
+    "Mode": 0,
+    "PrimaryColor": {
+      "X": 0.11,
+      "Y": 0.12,
+      "Z": 0.18,
+      "W": 1
+    },
+    "SecondaryColor": {
+      "X": 0.33,
+      "Y": 0.27,
+      "Z": 0.5,
+      "W": 1
+    },
+    "GradientAngle": 90,
+    "Opacity": 1,
+    "Texture": 1,
+    "TextureIntensity": 0.35,
+    "TextureScale": 24,
+    "TextureRotation": 0,
+    "ImageAssetId": null,
+    "ImageFit": 2,
+    "ImageFlipX": false,
+    "ImageFlipY": false,
+    "HasImage": false
+  },
+  "BasicIdentity": null,
+  "BasicPlate": null
+}

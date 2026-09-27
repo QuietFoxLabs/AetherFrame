@@ -106,8 +106,10 @@ internal static class ProfileRenderer
     /// <summary>Miniature text: soft bars in the text's own color, shaped like its lines (see <see cref="TextBars"/>).</summary>
     private static void DrawTextBars(ImDrawListPtr drawList, TextProfileElement text, Vector2 canvasOrigin, float scale)
     {
-        var content = string.Concat(text.Prefix, text.Text, text.Suffix);
-        TextBars.Compute(text.Position, text.Size, content, text.FontSize, text.Wrap, text.Alignment, text.VerticalAlignment, TextProfileElement.LayoutPadding, TextBarBuffer);
+        // The element's own cached display text (what the full renderer draws, affixes included)
+        // rather than a fresh concatenation: this runs for every text element of every visible
+        // card, every frame, and only its length matters.
+        TextBars.Compute(text.Position, text.Size, text.GetDisplayText(), text.FontSize, text.Wrap, text.Alignment, text.VerticalAlignment, TextProfileElement.LayoutPadding, TextBarBuffer);
         var color = ImGui.GetColorU32(text.Color with { W = text.Color.W * 0.6f });
         foreach (var (min, max) in TextBarBuffer)
         {

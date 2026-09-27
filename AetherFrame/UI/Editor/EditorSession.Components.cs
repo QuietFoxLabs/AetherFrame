@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
-using AetherFrame.Services.Diagnostics;
 using AetherFrame.UI.Rendering;
 
 namespace AetherFrame.UI.Editor;
@@ -115,20 +114,15 @@ internal sealed partial class EditorSession
 
     /// <summary>
     /// Imports an image into managed assets and makes it this Component's image (for image
-    /// definitions). Like replacing an element's image, the previous asset stays on disk for undo.
+    /// definitions). Like replacing an element's image, the previous asset stays on disk for undo
+    /// (both are in <see cref="AssetsInUse"/>).
     /// </summary>
     internal void SetComponentImage(Guid componentId, string sourceFilePath)
     {
         ErrorMessage = null;
 
-        Guid assetId;
-        try
+        if (ImportImage(sourceFilePath) is not { } assetId)
         {
-            assetId = assetStorage.ImportImage(sourceFilePath);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
             return;
         }
 

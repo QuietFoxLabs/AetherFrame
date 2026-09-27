@@ -1,0 +1,3 @@
+# Historical fixtures are compared byte for byte with what the current build writes: git must
+# never normalize their line endings or otherwise rewrite them on checkout.
+* -text

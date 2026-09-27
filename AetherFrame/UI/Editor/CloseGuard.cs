@@ -54,6 +54,10 @@ internal sealed class EditorCloseGuard
     /// <summary>Whether the question's Save can be chosen now.</summary>
     internal bool CanSave => IsAsking && saveTask is null && commands.CanSave;
 
+    /// <summary>Why the last Discard was refused, shown by the question, which stays open; null
+    /// once the question is answered or asked again.</summary>
+    internal string? DiscardRefusal { get; private set; }
+
     /// <summary>
     /// Every frame, before Dalamud checks whether the window is open: returns what the window's
     /// open state must be. A close that would lose unsaved work is turned back into "still open"
@@ -109,19 +113,38 @@ internal sealed class EditorCloseGuard
     {
         if (CanSave)
         {
+            DiscardRefusal = null;
             saveTask = commands.SaveAsync();
         }
     }
 
-    /// <summary>Discard: restores the last saved version. Returns true: the window closes now.</summary>
+    /// <summary>
+    /// Discard: restores the last saved version. Returns true: the window closes now. False, still
+    /// asking, while a save is being written (the action bar's Save moments before the close: the
+    /// Plate can't change until it is done) or when the saved version couldn't be restored — the
+    /// window stays open, so its promise (back to the last saved version, then close) is never
+    /// broken silently.
+    /// </summary>
     internal bool Discard()
     {
-        if (!IsAsking || saveTask is not null)
+        if (!IsAsking)
         {
             return false;
         }
 
-        editorSession.DiscardChanges();
+        if (saveTask is not null || commands.IsSaving)
+        {
+            DiscardRefusal = "The Plate is still being saved. Once that's done, choose Discard again.";
+            return false;
+        }
+
+        if (!editorSession.DiscardChanges())
+        {
+            DiscardRefusal = editorSession.ErrorMessage ?? EditorSession.BaselineFailedMessage;
+            return false;
+        }
+
+        DiscardRefusal = null;
         IsAsking = false;
         closeConfirmed = true;
         return true;
@@ -133,6 +156,7 @@ internal sealed class EditorCloseGuard
         if (saveTask is null)
         {
             IsAsking = false;
+            DiscardRefusal = null;
         }
     }
 
@@ -163,6 +187,7 @@ internal sealed class EditorCloseGuard
     private void Ask()
     {
         IsAsking = true;
+        DiscardRefusal = null;
 
         // Closing again while the chosen save is still being written just keeps the window open:
         // it closes once that save succeeds.

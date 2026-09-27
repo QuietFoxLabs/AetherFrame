@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using AetherFrame.Services;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Packages;
 using AetherFrame.UI.Rendering;
 using Dalamud.Bindings.ImGui;
@@ -17,9 +18,19 @@ namespace AetherFrame.Windows;
 /// it, and exactly what would be imported, rendered by the shared Plate renderer — and imports it
 /// as a new Plate only when the player says so.
 ///
-/// Validation and import run off the draw thread (file IO and hashing); their results are only
-/// ever applied here, in Draw. Nothing from the file is shown before it passed validation: an
-/// Invalid or Unsupported package shows only its verdict and reasons, never its content.
+/// Validation runs off the draw thread (<see cref="PlatePackageService.Inspect"/> in a
+/// <see cref="Task.Run(Action)"/>), and so does the import's copying and hashing of images
+/// (<see cref="PlatePackageService.ImportAsync"/> moves it off the caller's thread itself, and the
+/// Plate write that follows runs as every Library write does); their results are only ever
+/// applied here, in Draw. Nothing from the file is shown before it passed validation: an Invalid
+/// or Unsupported package shows only its verdict and reasons, never its content.
+///
+/// <para>While an import runs the window can't be closed (its close button and Escape are
+/// withdrawn rather than the close undone, which would replay Dalamud's close and open
+/// transitions; the button says "Importing..."): its outcome — the new Plate, or why nothing was
+/// imported — is only ever shown here. Plugin unload is the one exception (<see cref="Dispose"/>):
+/// the import finishes as an owned operation, and the staged files it uses are removed once it
+/// ends.</para>
 /// </summary>
 internal sealed class PackageImportWindow : Window, IDisposable
 {
@@ -64,7 +75,39 @@ internal sealed class PackageImportWindow : Window, IDisposable
 
     public override void OnClose()
     {
-        // Anything still running cleans up after itself when it finishes.
+        // A running import keeps the window open until it ends (the result is shown nowhere else):
+        // the close button and hotkey are already withdrawn, this catches a programmatic close.
+        if (importTask is not null)
+        {
+            IsOpen = true;
+            return;
+        }
+
+        Abandon();
+    }
+
+    /// <summary>The import has started: nothing closes the window until it ends.</summary>
+    private void BeginImport(Task<PackageImportResult> task)
+    {
+        importTask = task;
+        ShowCloseButton = false;
+        RespectCloseHotkey = false;
+    }
+
+    /// <summary>The import has ended (or was handed off at unload): the window closes as usual again.</summary>
+    private void EndImport()
+    {
+        importTask = null;
+        ShowCloseButton = true;
+        RespectCloseHotkey = true;
+    }
+
+    /// <summary>Plugin unload: lets whatever is running finish on its own, and drops the preview.</summary>
+    public void Dispose() => Abandon();
+
+    /// <summary>Drops everything: work still running cleans up after itself when it finishes.</summary>
+    private void Abandon()
+    {
         if (inspectTask is { } inspecting)
         {
             _ = inspecting.ContinueWith(t =>
@@ -80,14 +123,12 @@ internal sealed class PackageImportWindow : Window, IDisposable
         if (importTask is { } importing && staged is { } pending)
         {
             _ = importing.ContinueWith(_ => pending.Dispose(), TaskScheduler.Default);
-            importTask = null;
+            EndImport();
             staged = null;
         }
 
         Release();
     }
-
-    public void Dispose() => OnClose();
 
     public override void Draw()
     {
@@ -212,7 +253,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
             if (ImGui.Button(importTask is null ? "Import as New Plate" : "Importing...", EditorWidgets.Scaled(new Vector2(160f, 0f))))
             {
                 importError = null;
-                importTask = packages.ImportAsync(package);
+                BeginImport(packages.ImportAsync(package));
             }
         }
 
@@ -240,20 +281,20 @@ internal sealed class PackageImportWindow : Window, IDisposable
             else
             {
                 importError = "The file couldn't be checked. See the Dalamud log for details.";
-                DalamudServices.Log.Error(inspecting.Exception?.GetBaseException(), "AetherFrame failed to check a Plate file.");
+                DalamudServices.Log.Error(LogPrivacy.ForLog(inspecting.Exception?.GetBaseException()), "AetherFrame failed to check a Plate file.");
             }
         }
 
         if (importTask is { IsCompleted: true } importing)
         {
-            importTask = null;
+            EndImport();
             var result = importing.IsCompletedSuccessfully
                 ? importing.Result
                 : PackageImportResult.Failed(PackageErrorCode.CommitFailed, "The Plate couldn't be imported. Nothing was changed.");
 
             if (!importing.IsCompletedSuccessfully)
             {
-                DalamudServices.Log.Error(importing.Exception?.GetBaseException(), "AetherFrame failed to import a Plate file.");
+                DalamudServices.Log.Error(LogPrivacy.ForLog(importing.Exception?.GetBaseException()), "AetherFrame failed to import a Plate file.");
             }
 
             if (result.Succeeded)

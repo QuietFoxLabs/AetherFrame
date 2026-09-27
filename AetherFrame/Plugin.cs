@@ -50,6 +50,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly CharacterIdentityService characterIdentityService;
     private readonly KeyboardShortcutService keyboardShortcutService;
     private readonly ImageTextureCache imageTextureCache;
+    private readonly AssetStorageService assetStorageService;
     private readonly ProfileFontService fontService;
     private readonly ProceduralTextureCache proceduralTextureCache;
     private readonly BuiltInArtTextureCache builtInArtTextureCache;
@@ -66,7 +67,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly PlatePackageService packageService;
     private readonly BasicGuidance basicGuidance;
     private readonly AetherFrameCommandRegistration commands;
-    private readonly DalamudAetherFrameLog log;
+    private readonly IAetherFrameLog log;
 
     // Every file-writing operation the plugin owns (Library, Templates, package import/export),
     // so unloading can let running ones finish before disposing what they use.
@@ -75,7 +76,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     public Plugin()
     {
         DalamudServices.Initialize(PluginInterface, PlayerState, Framework, Log, KeyState, TextureProvider, DataManager, UnlockState, ObjectTable);
-        log = new DalamudAetherFrameLog(Log);
+        // Every message and exception passes LogPrivacy first: no character binding file (named by
+        // the character's Content ID) is ever named in the log.
+        log = new RedactingAetherFrameLog(new DalamudAetherFrameLog(Log));
 
         // A damaged configuration file never stops AetherFrame from loading: it starts from the
         // defaults instead (the file holds only the guidance flag below, and is rewritten readable).
@@ -96,9 +99,16 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         {
             var paths = new PlateStoragePaths(PluginInterface.ConfigDirectory.FullName);
 
-            // All Library persistence runs on the framework thread, as profile IO always has, and
-            // stops between files if unloading ever stops waiting for it (see OwnedOperations).
-            var fileStore = new ShutdownGuardedFileStore(new ReliablePlateFileStore(FileStorage), ownedOperations);
+            // Every Library operation starts on the framework thread, as profile IO always has:
+            // its synchronous prefix runs there, and once the first file step completes elsewhere
+            // (Dalamud writes from the thread pool) its continuations — and the Changed, PlateSaved
+            // and PlateDeleted events — run on that thread, so every subscriber is thread-safe.
+            // An operation stops between files if unloading ever stops waiting for it (see
+            // OwnedOperations), and a save whose temporary file Dalamud has left stuck open is
+            // written directly instead of failing until the game restarts (see
+            // StuckTempFallbackFileStore).
+            var fileStore = new ShutdownGuardedFileStore(
+                new StuckTempFallbackFileStore(new ReliablePlateFileStore(FileStorage), log), ownedOperations);
             plateLibrary = new PlateLibraryService(paths, fileStore, log, dispatch: work => Framework.Run(work), operations: ownedOperations);
             templateLibrary = new TemplateLibraryService(paths, fileStore, plateLibrary, log, dispatch: work => Framework.Run(work), operations: ownedOperations);
 
@@ -106,7 +116,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             characterIdentityService = new CharacterIdentityService(jobCatalog);
             var profileService = new ProfileService(plateLibrary);
 
-            var assetStorageService = new AssetStorageService(
+            assetStorageService = new AssetStorageService(
                 paths.AssetsDirectory, paths.AssetStagingDirectory, new AssetMetadataStore(paths.AssetMetadataDirectory, log), ImageFormatSupport.IsSupported, log);
             imageTextureCache = new ImageTextureCache(assetStorageService);
             fontService = new ProfileFontService();
@@ -218,19 +228,25 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
-        // Temporary files from an import interrupted by the game closing; only AetherFrame's own.
+        // Temporary files left by an import or a thumbnail generation the game closing interrupted;
+        // only AetherFrame's own, under names only it writes, and before any UI can start another.
         packageService.SweepStaging();
+        assetStorageService.SweepStaging();
+        thumbnailService.SweepTemporaryFiles();
+        templateThumbnailService.SweepTemporaryFiles();
 
+        // The Library loads on a framework tick (its reads and any migration write are dispatched
+        // there, like every Library operation); this task is what that tick's work completes.
         try
         {
             await plateLibrary.InitializeAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            ThrowIfLoadStopped(ex, cancellationToken);
+            await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
 
             // Nothing on disk is touched by a failed load; My Plates says it couldn't load.
-            Log.Error(ex, "AetherFrame could not load the Plate Library.");
+            Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not load the Plate Library.");
             plateLibraryWindow.MarkLoadFailed();
         }
 
@@ -240,25 +256,41 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            ThrowIfLoadStopped(ex, cancellationToken);
+            await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
 
             // Nothing on disk is touched by a failed load; Templates says the saved ones couldn't
             // load, and built-in Templates stay usable, so Create Plate still works.
-            Log.Error(ex, "AetherFrame could not load the Template Library.");
+            Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not load the Template Library.");
         }
     }
 
     /// <summary>
-    /// A load canceled by Dalamud, or cut short because the plugin is already unloading, isn't a
-    /// load failure: per <see cref="IAsyncDalamudPlugin.LoadAsync"/>, it ends the load with
-    /// <see cref="OperationCanceledException"/>.
+    /// A load canceled by Dalamud, cut short because the plugin is already unloading, or
+    /// interrupted by the game closing (the framework stops running dispatched work, which ends the
+    /// load with a cancellation of its own) isn't a load failure: per
+    /// <see cref="IAsyncDalamudPlugin.LoadAsync"/>, it ends the load with
+    /// <see cref="OperationCanceledException"/>. Dalamud never disposes an instance whose LoadAsync
+    /// threw (it disposes only the service scope), so the plugin's own teardown — the draw and
+    /// login hooks, windows, textures, fonts and the shutdown of any operation already started — runs
+    /// here first.
     /// </summary>
-    private void ThrowIfLoadStopped(Exception exception, CancellationToken cancellationToken)
+    private async Task ThrowIfLoadStoppedAsync(Exception exception, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested || ownedOperations.IsShuttingDown)
+        if (exception is not OperationCanceledException && !cancellationToken.IsCancellationRequested && !ownedOperations.IsShuttingDown)
         {
-            throw new OperationCanceledException("AetherFrame stopped loading because it is unloading.", exception, cancellationToken);
+            return;
         }
+
+        try
+        {
+            await DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not clean up after its load was stopped.");
+        }
+
+        throw new OperationCanceledException("AetherFrame stopped loading because it is unloading.", exception, cancellationToken);
     }
 
     /// <summary>
@@ -368,7 +400,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         /// <summary>Never throws: failing to remember the flag only means the suggestion may show again.</summary>
         public void Save()
         {
-            configuration.Version = PluginConfiguration.CurrentVersion;
+            // A configuration saved by a newer version keeps its version (and, through the
+            // extension data, its settings): it is still that version's file, only with this flag.
+            configuration.Version = Math.Max(configuration.Version, PluginConfiguration.CurrentVersion);
             try
             {
                 PluginInterface.SavePluginConfig(configuration);

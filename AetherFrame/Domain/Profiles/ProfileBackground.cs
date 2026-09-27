@@ -117,6 +117,13 @@ public sealed class ProfileBackground
         && ImageFlipY == other.ImageFlipY;
 
     /// <summary>
+    /// Replaces every value that isn't a number (NaN or infinity) with its default, so the style
+    /// can always be saved; finite values are never changed. See <see cref="ProfileElementLimits"/>.
+    /// </summary>
+    /// <returns>True if anything was replaced.</returns>
+    public bool Bound() => ProfileElementLimits.Bound(this);
+
+    /// <summary>
     /// Builds the equivalent style for a profile saved before this model existed, from its three
     /// legacy fields: an image (if one was set) at its old fit mode and opacity, or no background.
     /// </summary>

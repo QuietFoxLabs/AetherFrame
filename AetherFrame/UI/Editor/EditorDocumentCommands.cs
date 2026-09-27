@@ -85,7 +85,6 @@ internal sealed class EditorDocumentCommands
             return false;
         }
 
-        editorSession.RevertToSaved(undoable: true);
-        return true;
+        return editorSession.RevertToSaved(undoable: true);
     }
 }

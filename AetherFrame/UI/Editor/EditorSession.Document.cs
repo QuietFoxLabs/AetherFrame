@@ -32,14 +32,8 @@ internal sealed partial class EditorSession
     {
         ErrorMessage = null;
 
-        Guid assetId;
-        try
+        if (ImportImage(sourceFilePath) is not { } assetId)
         {
-            assetId = assetStorage.ImportImage(sourceFilePath);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
             return;
         }
 
@@ -129,6 +123,17 @@ internal sealed partial class EditorSession
         }
     }
 
+    /// <summary>
+    /// One frame of a background angle slider (the gradient's, the Pattern's) as a continuous
+    /// background edit, the value going through <see cref="TypedSliderValues.Angle"/>. ImGui applies
+    /// a value typed with Ctrl+Click on every keystroke, so by the last one the background already
+    /// holds what the earlier ones made of it (typing 1e39 passes 1e3, which wraps to 280). An
+    /// angle that changes nothing therefore leaves the one the background held before this edit
+    /// began, not the previous keystroke's.
+    /// </summary>
+    internal void ContinueBackgroundAngleEdit(float sliderValue, Func<ProfileBackground, float> read, Action<ProfileBackground, float> write) =>
+        BeginOrContinueBackgroundEdit(style => write(style, TypedSliderValues.Angle(sliderValue, read(pendingBackgroundBefore ?? style))));
+
     /// <summary>Finalizes a pending background edit started by <see cref="BeginOrContinueBackgroundEdit"/>.</summary>
     internal void CommitPendingBackgroundEdit()
     {
@@ -166,6 +171,9 @@ internal sealed partial class EditorSession
     /// history itself) as ONE undoable history entry, via whole-document before/after snapshots.
     /// Nothing is recorded if the edit changed nothing. Used by the Basic editor, whose single
     /// actions (e.g. choosing a title layout) routinely touch several elements at once.
+    /// All or nothing: an edit that throws partway (a section's heading created, then its value
+    /// refused at the element limit) is rolled back, so nothing of it stays on the Plate outside
+    /// the history.
     /// </summary>
     internal bool ApplyDocumentEdit(Action edit)
     {
@@ -176,11 +184,21 @@ internal sealed partial class EditorSession
         try
         {
             before = profileService.CaptureDocumentState();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            return false;
+        }
+
+        try
+        {
             edit();
         }
         catch (Exception ex)
         {
             ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            RollBackFailedEdit(before);
             return false;
         }
 
@@ -191,7 +209,8 @@ internal sealed partial class EditorSession
     /// <summary>
     /// Continuous counterpart of <see cref="ApplyDocumentEdit"/> (slider drags, typing): applies
     /// live, and records a single entry for the whole run once <see cref="CommitPendingDocumentEdit"/>
-    /// is called (e.g. when the widget is released).
+    /// is called (e.g. when the widget is released). A step that throws ends the run and rolls the
+    /// whole run back to where it began (nothing is recorded), like <see cref="ApplyDocumentEdit"/>.
     /// </summary>
     internal void BeginOrContinueDocumentEdit(Action edit)
     {
@@ -220,7 +239,32 @@ internal sealed partial class EditorSession
         catch (Exception ex)
         {
             ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            if (pendingDocumentBefore is { } before)
+            {
+                pendingDocumentBefore = null;
+                RollBackFailedEdit(before);
+            }
         }
+    }
+
+    /// <summary>
+    /// Best-effort return to <paramref name="before"/> after a document edit threw partway. Restoring
+    /// replaces the element instances, so a selection of an element that is gone is dropped, as
+    /// after an undo. A restore that fails itself is logged: the Plate then holds part of the edit.
+    /// </summary>
+    private void RollBackFailedEdit(ProfileService.DocumentState before)
+    {
+        try
+        {
+            profileService.RestoreDocumentState(before);
+            DropSelectionIfMissing();
+        }
+        catch (Exception restoreEx)
+        {
+            log.Error(restoreEx, "AetherFrame couldn't roll back a document edit that failed partway; the open Plate may hold part of it.");
+        }
+
+        InvalidateDirtyMemo();
     }
 
     /// <summary>Finalizes a pending edit started by <see cref="BeginOrContinueDocumentEdit"/>.</summary>
@@ -254,12 +298,25 @@ internal sealed partial class EditorSession
     /// Folds a follow-up change into the most recent document edit instead of recording a new
     /// history entry — for refinements that complete that edit (e.g. re-measuring an inline title
     /// layout once its font finishes loading). Returns false, changing nothing, if that edit is no
-    /// longer the latest history entry (something else happened since, or it was undone).
+    /// longer the latest history entry (something else happened since, or it was undone) — or,
+    /// without an error message, if the Plate can't be changed right now (a save in flight, whose
+    /// file must match the Plate it was captured from); the caller may try again later.
     /// </summary>
     internal bool AmendLastDocumentEdit(Action edit)
     {
         if (lastDocumentEdit is not { } record || undoStack.Count == 0 || !ReferenceEquals(undoStack[^1], record.Entry)
             || redoStack.Count > 0 || pendingEditBefore is not null || pendingBackgroundBefore is not null || pendingDocumentBefore is not null)
+        {
+            return false;
+        }
+
+        try
+        {
+            // The same check every other edit path makes before touching the document: this one
+            // runs unprompted (each frame, until the font is ready), so being refused is no error.
+            profileService.RequireEditableProfile();
+        }
+        catch (InvalidOperationException)
         {
             return false;
         }

@@ -15,10 +15,17 @@ public sealed class PlateLibraryState
 {
     public const int CurrentVersion = 1;
 
+    private List<Guid> orderedPlateIds = new();
+
     public int Version { get; set; } = CurrentVersion;
 
-    /// <summary>Manual order, first shown first.</summary>
-    public List<Guid> OrderedPlateIds { get; set; } = new();
+    /// <summary>Manual order, first shown first. Never null: an explicit JSON null (which no build
+    /// writes) reads as no order, which is rebuilt like a missing index.</summary>
+    public List<Guid> OrderedPlateIds
+    {
+        get => orderedPlateIds;
+        set => orderedPlateIds = value ?? new List<Guid>();
+    }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }

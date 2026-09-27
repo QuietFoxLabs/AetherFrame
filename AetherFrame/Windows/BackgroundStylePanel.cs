@@ -114,7 +114,7 @@ internal sealed class BackgroundStylePanel
             ImGui.Spacing();
             var opacity = background.Opacity * 100f;
             EditorWidgets.PropertyLabel("Opacity");
-            if (ImGui.SliderFloat("##BgOpacity", ref opacity, 0f, 100f, "%.0f%%"))
+            if (ImGui.SliderFloat("##BgOpacity", ref opacity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
             {
                 var value = opacity / 100f;
                 editorSession.BeginOrContinueBackgroundEdit(style => style.Opacity = value);
@@ -460,10 +460,10 @@ internal sealed class BackgroundStylePanel
         var angle = background.GradientAngle;
         var buttonSize = ImGui.GetFrameHeight();
         EditorWidgets.PropertyLabel("Angle", ImGui.GetContentRegionAvail().X - EditorWidgets.LabelColumnWidth - ((buttonSize + 2f) * 2f) - 2f);
+        // A typed angle outside 0-360 wraps into it (see TypedSliderValues).
         if (ImGui.SliderFloat("##GradientAngle", ref angle, 0f, 360f, "%.0f deg"))
         {
-            var value = angle;
-            editorSession.BeginOrContinueBackgroundEdit(style => style.GradientAngle = value);
+            editorSession.ContinueBackgroundAngleEdit(angle, style => style.GradientAngle, (style, value) => style.GradientAngle = value);
         }
 
         CommitBackgroundOnRelease();
@@ -633,7 +633,7 @@ internal sealed class BackgroundStylePanel
 
         var intensity = background.TextureIntensity * 100f;
         EditorWidgets.PropertyLabel("Intensity");
-        if (ImGui.SliderFloat("##TextureIntensity", ref intensity, 0f, 100f, "%.0f%%"))
+        if (ImGui.SliderFloat("##TextureIntensity", ref intensity, 0f, 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
         {
             var value = intensity / 100f;
             editorSession.BeginOrContinueBackgroundEdit(style => style.TextureIntensity = value);
@@ -657,8 +657,7 @@ internal sealed class BackgroundStylePanel
             EditorWidgets.PropertyLabel("Rotation");
             if (ImGui.SliderFloat("##TextureRotation", ref rotation, 0f, 360f, "%.0f deg"))
             {
-                var value = rotation;
-                editorSession.BeginOrContinueBackgroundEdit(style => style.TextureRotation = value);
+                editorSession.ContinueBackgroundAngleEdit(rotation, style => style.TextureRotation, (style, value) => style.TextureRotation = value);
             }
 
             CommitBackgroundOnRelease();

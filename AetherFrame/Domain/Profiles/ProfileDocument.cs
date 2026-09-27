@@ -46,8 +46,15 @@ public sealed class ProfileDocument
     /// </summary>
     public ulong OwnerContentId { get; set; }
 
-    /// <summary>The Plate's display name (see <c>PlateNaming</c>).</summary>
-    public string Name { get; set; } = string.Empty;
+    private string name = string.Empty;
+
+    /// <summary>The Plate's display name (see <c>PlateNaming</c>). Never null: an explicit JSON
+    /// null (which no build writes) reads as empty, like every other string here.</summary>
+    public string Name
+    {
+        get => name;
+        set => name = value ?? string.Empty;
+    }
 
     public int Revision { get; set; }
 
@@ -66,7 +73,14 @@ public sealed class ProfileDocument
 
     public float CanvasHeight { get; set; }
 
-    public List<ProfileElement> Elements { get; set; } = new();
+    private List<ProfileElement> elements = new();
+
+    /// <summary>Never null: an explicit JSON null (which no build writes) reads as no elements.</summary>
+    public List<ProfileElement> Elements
+    {
+        get => elements;
+        set => elements = value ?? new List<ProfileElement>();
+    }
 
     /// <summary>
     /// The background style (see <see cref="ProfileBackground"/>). Null only transiently: for a
@@ -202,6 +216,82 @@ public sealed class ProfileDocument
                 seen.Add(component.Id);
                 repaired = true;
             }
+        }
+
+        return repaired;
+    }
+
+    /// <summary>
+    /// Gives every element a usable, unique id: a missing (empty) or repeated id — only possible in
+    /// a hand-edited file — gets a fresh one, in memory, like the other load repairs, so the
+    /// editors' id-keyed selection, removal and undo can never act on two elements at once. Only
+    /// ids change; every other value, and the order, is left exactly as loaded. Nothing persistent
+    /// refers to an element by id (Basic keys its bookkeeping by role), so a new id is invisible
+    /// until the user saves.
+    /// </summary>
+    /// <returns>True if a repair was applied.</returns>
+    internal bool NormalizeElementIds()
+    {
+        var seen = new HashSet<Guid>();
+        var repaired = false;
+        foreach (var element in Elements)
+        {
+            if (element.Id == Guid.Empty || !seen.Add(element.Id))
+            {
+                element.Id = Guid.NewGuid();
+                seen.Add(element.Id);
+                repaired = true;
+            }
+        }
+
+        return repaired;
+    }
+
+    /// <summary>
+    /// Replaces every value that isn't a number (NaN or infinity — what a number beyond float's
+    /// range in a hand-edited file overflows to) with its default, in memory, like the other load
+    /// repairs: a non-finite canvas size resolves exactly as an unset one does, elements and the
+    /// background follow <see cref="ProfileElementLimits"/>, a Component gets the editor's bounds,
+    /// and the Basic layout bookkeeping forgets the affected placement. Finite values are never
+    /// changed, so a Plate any build wrote is untouched. Without this, such a Plate would load
+    /// and render but could never be saved again (JSON has no NaN or infinity).
+    /// </summary>
+    /// <returns>True if a repair was applied.</returns>
+    internal bool NormalizeValues()
+    {
+        var repaired = false;
+
+        if (!float.IsFinite(CanvasWidth) || !float.IsFinite(CanvasHeight))
+        {
+            CanvasWidth = 0f;
+            CanvasHeight = 0f;
+            NormalizeLegacyCanvasSize();
+            repaired = true;
+        }
+
+        foreach (var element in Elements)
+        {
+            repaired |= ProfileElementLimits.Bound(element);
+        }
+
+        if (Background is { } background)
+        {
+            repaired |= background.Bound();
+        }
+
+        foreach (var component in Components ?? [])
+        {
+            repaired |= ProfileElementLimits.Bound(component);
+        }
+
+        if (BasicIdentity is { } identity)
+        {
+            repaired |= identity.NormalizeValues();
+        }
+
+        if (BasicPlate is { } plate)
+        {
+            repaired |= plate.NormalizeValues();
         }
 
         return repaired;

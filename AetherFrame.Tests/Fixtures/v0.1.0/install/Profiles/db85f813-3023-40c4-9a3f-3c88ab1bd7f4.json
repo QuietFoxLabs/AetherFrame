@@ -1,0 +1,174 @@
+{
+  "Version": 2,
+  "ProfileId": "db85f813-3023-40c4-9a3f-3c88ab1bd7f4",
+  "OwnerContentId": 0,
+  "Name": "Blank Plate",
+  "Revision": 1,
+  "CreatedAtUtc": "2026-09-01T12:00:00Z",
+  "UpdatedAtUtc": "2026-09-26T12:40:49.1585294Z",
+  "CanvasWidth": 1920,
+  "CanvasHeight": 1080,
+  "Elements": [
+    {
+      "elementType": "text",
+      "Text": "Advanced session text",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 1,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": true,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": false,
+      "AutoFitMinimumSize": 8,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "35b93637-3d94-48c7-9b0c-9a3f142e7d71",
+      "Name": "Text 1",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 60,
+        "Y": 60
+      },
+      "Size": {
+        "X": 330,
+        "Y": 75
+      },
+      "ZIndex": 0,
+      "Role": 0
+    },
+    {
+      "elementType": "image",
+      "AssetId": "436633ad-25ad-456f-a794-65a62a31cd7f",
+      "Opacity": 1,
+      "PreserveAspectRatio": true,
+      "RotationDegrees": 0,
+      "DisplayMode": 0,
+      "FlipX": false,
+      "FlipY": false,
+      "Id": "82ccde1e-9435-4644-a1a3-722b43949b22",
+      "Name": "Image 1",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 60,
+        "Y": 60
+      },
+      "Size": {
+        "X": 96,
+        "Y": 96
+      },
+      "ZIndex": 1,
+      "Role": 0
+    }
+  ],
+  "Background": {
+    "Mode": 3,
+    "PrimaryColor": {
+      "X": 0.11,
+      "Y": 0.12,
+      "Z": 0.18,
+      "W": 1
+    },
+    "SecondaryColor": {
+      "X": 0.33,
+      "Y": 0.27,
+      "Z": 0.5,
+      "W": 1
+    },
+    "GradientAngle": 90,
+    "Opacity": 1,
+    "Texture": 9,
+    "TextureIntensity": 0.35,
+    "TextureScale": 24,
+    "TextureRotation": 30,
+    "ImageAssetId": "494c7535-626c-4666-a5f7-b1fdcfce7b92",
+    "ImageFit": 2,
+    "ImageFlipX": false,
+    "ImageFlipY": false,
+    "HasImage": false
+  },
+  "BasicIdentity": null,
+  "BasicPlate": null,
+  "Components": [
+    {
+      "Id": "881cd1fe-abd9-4a0f-ab72-ab9f0ba81c63",
+      "Kind": 4,
+      "DefinitionId": "af.name-backing.bar",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null
+    },
+    {
+      "Id": "7fd446c0-1145-4b06-a637-8ac2ee52b2c1",
+      "Kind": 6,
+      "DefinitionId": "af.divider.line",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null
+    },
+    {
+      "Id": "61eb791a-2927-4784-b016-fd3408c4d6ed",
+      "Kind": 2,
+      "DefinitionId": "af.portrait-frame.line",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null
+    }
+  ]
+}

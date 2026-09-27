@@ -10,6 +10,7 @@ using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Persistence;
 using AetherFrame.Persistence.Schema;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Plates;
 using Xunit;
 
@@ -305,6 +306,16 @@ public class SchemaMigrationTests
     }
 
     [Fact]
+    public void DuplicatePropertyNames_AreInvalid_NotAnException()
+    {
+        var result = VersionedJson.Parse<ProfileDocument>("""{ "Version": 2, "Name": "a", "Name": "b" }""", PersistenceSchemas.ProfileDocument);
+
+        Assert.Equal(SchemaMigrationOutcome.Invalid, result.Migration.Outcome);
+        Assert.Contains("not valid JSON", result.Migration.Error);
+        Assert.Null(result.Value);
+    }
+
+    [Fact]
     public void StepsRunInOrder_OnePerVersion()
     {
         var applied = new System.Collections.Generic.List<int>();
@@ -445,6 +456,77 @@ public class FailureIsolationTests
     }
 
     [Fact]
+    public async Task DamagedPlate_ReadFromItsBackup_ReportsTheRecovery()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "From backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, "{ truncated");
+
+        var result = await VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+
+        Assert.True(result.IsUsable);
+        Assert.True(result.RecoveredFromBackup);
+        Assert.Equal("From backup", result.Value!.Name);
+        Assert.Equal(2, store.ReaderInvocations);
+    }
+
+    [Fact]
+    public async Task IntactPlate_IsNotReportedAsRecovered()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "From backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "On disk", fixture.Clock.Now), JsonOptions.Default));
+
+        var result = await VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+
+        Assert.True(result.IsUsable);
+        Assert.False(result.RecoveredFromBackup);
+        Assert.Equal("On disk", result.Value!.Name);
+        Assert.Equal(1, store.ReaderInvocations);
+    }
+
+    [Fact]
+    public async Task NewerVersionPlate_IsNeverReadFromItsBackup_NorReportedAsRecovered()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Old backup", fixture.Clock.Now), JsonOptions.Default);
+        fixture.WritePlateJson(plateId, $$"""{ "Version": 50, "ProfileId": "{{plateId}}", "Name": "Newer" }""");
+
+        var result = await VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+
+        Assert.True(result.IsNewerVersion);
+        Assert.False(result.RecoveredFromBackup);
+        Assert.Equal("Newer", result.Raw!["Name"]!.GetValue<string>());
+        Assert.Equal(1, store.ReaderInvocations);
+    }
+
+    [Fact]
+    public async Task DamagedPlate_WithADamagedBackup_FailsDistinctly()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        var path = fixture.Paths.GetPlatePath(plateId);
+        store.Backups[path] = "{ also truncated";
+        fixture.WritePlateJson(plateId, "{ truncated");
+
+        var failure = await Assert.ThrowsAsync<InvalidDataException>(() => VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize));
+
+        Assert.Contains(Path.GetFileName(path), failure.Message);
+        Assert.DoesNotContain(fixture.Root, failure.Message);
+        Assert.IsType<InvalidDataException>(failure.InnerException);
+    }
+
+    [Fact]
     public async Task CorruptLibraryIndex_IsRebuiltFromPlates_AndKeptInRecovery()
     {
         using var fixture = new LibraryFixture();
@@ -527,6 +609,14 @@ public class FailureIsolationTests
         Assert.Equal(plate.PlateId, library.GetActivePlateId(Characters.Alice.ContentId));
         var preserved = Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory));
         Assert.Equal("not json at all", File.ReadAllText(preserved));
+
+        // The log never names the copy's directory, nor a binding's file: its name is the
+        // character's Content ID, so the log says "character binding file" instead.
+        var kept = Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("kept a copy", StringComparison.Ordinal));
+        Assert.StartsWith($"{Characters.Alice.ContentId}.damaged-", Path.GetFileName(preserved), StringComparison.Ordinal);
+        Assert.Contains(LogPrivacy.CharacterBindingFile, kept, StringComparison.Ordinal);
+        Assert.DoesNotContain(Characters.Alice.ContentId.ToString(), kept, StringComparison.Ordinal);
+        Assert.DoesNotContain(fixture.Root, kept, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -571,5 +661,67 @@ public class FailureIsolationTests
 
         Assert.Empty(library.GetOrderedPlates());
         Assert.True(File.Exists(Path.Combine(fixture.Paths.PlatesDirectory, "notes.json")));
+    }
+
+    [Fact]
+    public async Task DashlessPlateFile_IsIgnoredWithAWarning_AndLeftUntouched()
+    {
+        using var fixture = new LibraryFixture();
+        var plateId = Guid.NewGuid();
+        var dashless = Path.Combine(fixture.Paths.PlatesDirectory, plateId.ToString("N") + ".json");
+        var json = JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Dashless", fixture.Clock.Now), JsonOptions.Default);
+        Directory.CreateDirectory(fixture.Paths.PlatesDirectory);
+        File.WriteAllText(dashless, json);
+
+        var library = await fixture.LoadAsync();
+        await library.CreatePlateAsync(PlateStartingLayout.Blank, null);
+
+        Assert.Null(library.FindPlate(plateId));
+        Assert.Single(library.GetOrderedPlates());
+        Assert.DoesNotContain(plateId, fixture.ReadLibraryOrder());
+        var ignored = Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("ignored a file", StringComparison.Ordinal));
+        Assert.Contains(plateId.ToString("N") + ".json", ignored, StringComparison.Ordinal);
+        Assert.DoesNotContain(fixture.Root, ignored, StringComparison.Ordinal);
+        Assert.Equal(json, File.ReadAllText(dashless));
+        Assert.False(File.Exists(fixture.Paths.GetPlatePath(plateId)));
+    }
+
+    [Fact]
+    public async Task PlateWithValuesNoVersionWrites_IsRepairedInMemory_LoggedOnce_AndTheFileIsUnchanged()
+    {
+        using var fixture = new LibraryFixture();
+        var plateId = Guid.NewGuid();
+        var sharedId = Guid.NewGuid();
+        var json = JsonNode.Parse(JsonSerializer.Serialize(PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Odd", fixture.Clock.Now), JsonOptions.Default))!.AsObject();
+        json["Elements"] = new JsonArray(
+            new JsonObject { ["elementType"] = "text", ["Id"] = sharedId, ["Text"] = "a", ["FontSize"] = 1e39 },
+            new JsonObject { ["elementType"] = "text", ["Id"] = sharedId, ["Text"] = "b" });
+        var written = json.ToJsonString(JsonOptions.Default);
+        fixture.WritePlateJson(plateId, written);
+
+        var library = await fixture.LoadAsync();
+
+        var preview = library.GetSavedDocument(plateId)!;
+        Assert.Equal(2, preview.Elements.Select(e => e.Id).Distinct().Count());
+        Assert.All(preview.Elements.OfType<TextProfileElement>(), e => Assert.True(float.IsFinite(e.FontSize)));
+        Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("repaired", StringComparison.Ordinal) && m.Contains("unchanged until you save", StringComparison.Ordinal));
+        Assert.Equal(written, fixture.ReadPlateJson(plateId));
+
+        // A healthy Plate logs nothing of the sort, and another load of the same file logs it again (it is still unchanged).
+        await fixture.LoadAsync();
+        Assert.Equal(2, fixture.Log.Messages.Count(m => m.Contains("repaired", StringComparison.Ordinal)));
+        Assert.Equal(written, fixture.ReadPlateJson(plateId));
+    }
+
+    [Fact]
+    public async Task HealthyPlate_IsNotReportedAsRepaired()
+    {
+        using var fixture = new LibraryFixture();
+        var plateId = Guid.NewGuid();
+        fixture.WritePlateJson(plateId, JsonSerializer.Serialize(SampleDocuments.Rich(plateId, "Fine", fixture.Clock.Now), JsonOptions.Default));
+
+        await fixture.LoadAsync();
+
+        Assert.DoesNotContain(fixture.Log.Messages, m => m.Contains("repaired", StringComparison.Ordinal));
     }
 }

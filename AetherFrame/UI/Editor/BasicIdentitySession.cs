@@ -349,7 +349,8 @@ internal sealed class BasicIdentitySession
     /// <summary>
     /// Call once per frame from the Basic editor. If an inline layout had to be placed from
     /// estimated widths (a font face wasn't built yet), re-measures once the font is ready and
-    /// folds the exact placement into that same undo step. Changes nothing otherwise.
+    /// folds the exact placement into that same undo step. Changes nothing otherwise, and nothing
+    /// while the Plate is being saved (the refinement waits for the save to finish).
     /// </summary>
     internal void RefineLayout()
     {
@@ -370,6 +371,17 @@ internal sealed class BasicIdentitySession
             return; // Still waiting for the font; try again next frame.
         }
 
+        if (profileService.IsBusy)
+        {
+            // A save is being written (the amend would refuse it): the refinement is still owed,
+            // so try again once it is done. Decided before the amend rather than after it: a save
+            // finishing in between would otherwise read as "refused for another reason" and the
+            // owed refinement would be dropped.
+            return;
+        }
+
+        // Refused now means that layout edit is no longer the latest history entry (or the Plate
+        // stopped being editable meanwhile): nothing left to refine.
         refineNeeded = false;
         editorSession.AmendLastDocumentEdit(() =>
         {

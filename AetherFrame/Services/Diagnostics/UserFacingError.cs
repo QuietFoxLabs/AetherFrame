@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Text.RegularExpressions;
 using AetherFrame.Services.Plates;
@@ -30,6 +31,10 @@ internal static partial class UserFacingError
             UnauthorizedAccessException => $"{fallback} AetherFrame wasn't allowed to access the file.",
             PathTooLongException => $"{fallback} The file's location is too long.",
             IOException => $"{fallback} The file may be in use by another program.",
+
+            // Dalamud's reliable storage reports a Windows sharing or lock violation as a raw
+            // Win32Exception rather than an IOException.
+            Win32Exception { NativeErrorCode: 32 or 33 } => $"{fallback} The file may be in use by another program.",
             _ => fallback,
         };
 

@@ -1,0 +1,1170 @@
+{
+  "Version": 2,
+  "ProfileId": "6c8574fd-d346-4838-85a9-9e4d805a38c8",
+  "OwnerContentId": 0,
+  "Name": "Adventure Plate",
+  "Revision": 1,
+  "CreatedAtUtc": "2026-09-01T12:00:00Z",
+  "UpdatedAtUtc": "2026-09-26T12:40:59.6692942Z",
+  "CanvasWidth": 1280,
+  "CanvasHeight": 720,
+  "Elements": [
+    {
+      "elementType": "text",
+      "Text": "Hero Example",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 43,
+      "Color": {
+        "X": 1,
+        "Y": 0.8156863,
+        "Z": 0.41568628,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": true,
+      "OutlineColor": {
+        "X": 0.22745098,
+        "Y": 0.078431375,
+        "Z": 0.023529412,
+        "W": 1
+      },
+      "OutlineThickness": 1.78,
+      "OutlineOpacity": 0.685,
+      "ShadowEnabled": true,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.45,
+      "ShadowOffsetX": 2,
+      "ShadowOffsetY": 2,
+      "LayoutVersion": 1,
+      "Id": "26bcacf7-1e80-4fdc-89db-393f2ed8ac69",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 88
+      },
+      "Size": {
+        "X": 760,
+        "Y": 60
+      },
+      "ZIndex": 0,
+      "Role": 2
+    },
+    {
+      "elementType": "text",
+      "Text": "HOME WORLD",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 0.8235294,
+        "Z": 0.47843137,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "b8f0963c-49ec-4ca3-9380-40f6634dda2d",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 196
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 1,
+      "Role": 7
+    },
+    {
+      "elementType": "text",
+      "Text": "Phoenix",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 1,
+        "Y": 0.9647059,
+        "Z": 0.9098039,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "03d8e628-e0fe-47b9-9d6c-4510423e6fbe",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 220
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 2,
+      "Role": 6
+    },
+    {
+      "elementType": "text",
+      "Text": "FREE COMPANY",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 0.8235294,
+        "Z": 0.47843137,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "61179c67-2dcb-40bb-8299-0296092f2bac",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 440,
+        "Y": 196
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 3,
+      "Role": 12
+    },
+    {
+      "elementType": "text",
+      "Text": "\u00ABABC\u00BB",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 1,
+        "Y": 0.9647059,
+        "Z": 0.9098039,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "e1997745-56f1-453e-9924-f9f1910a5c30",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 440,
+        "Y": 220
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 4,
+      "Role": 11
+    },
+    {
+      "elementType": "text",
+      "Text": "FAVORITE JOBS",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 0.8235294,
+        "Z": 0.47843137,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "f7ed9161-b3c1-477b-9117-c108fc838e80",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 276
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 5,
+      "Role": 9
+    },
+    {
+      "elementType": "text",
+      "Text": "Paladin, White Mage, Dancer",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 1,
+        "Y": 0.9647059,
+        "Z": 0.9098039,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "9951e6ea-c50d-40de-b882-604dd07e85db",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 300
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 6,
+      "Role": 8
+    },
+    {
+      "elementType": "text",
+      "Text": "ACTIVE HOURS",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 0.8235294,
+        "Z": 0.47843137,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "21d3cc36-de72-4614-a608-8615f4be0325",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 440,
+        "Y": 276
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 7,
+      "Role": 16
+    },
+    {
+      "elementType": "text",
+      "Text": "Weekdays  \u00B7  6 PM - 11 PM",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 1,
+        "Y": 0.9647059,
+        "Z": 0.9098039,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "01ba9cea-4d19-42d9-8ea0-e16ebf4a2aac",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 440,
+        "Y": 300
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 8,
+      "Role": 15
+    },
+    {
+      "elementType": "text",
+      "Text": "PLAYSTYLE",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 0.8235294,
+        "Z": 0.47843137,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "38fc71cd-d1e2-464b-b8ef-0e6652a8ec08",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 356
+      },
+      "Size": {
+        "X": 760,
+        "Y": 24
+      },
+      "ZIndex": 9,
+      "Role": 14
+    },
+    {
+      "elementType": "text",
+      "Text": "Casual  \u00B7  Raiding",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 18,
+      "Color": {
+        "X": 1,
+        "Y": 0.9647059,
+        "Z": 0.9098039,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": true,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "15731336-a425-468a-a455-06c15b7cf2e3",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 380
+      },
+      "Size": {
+        "X": 760,
+        "Y": 58
+      },
+      "ZIndex": 10,
+      "Role": 13
+    },
+    {
+      "elementType": "text",
+      "Text": "MESSAGE",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 1,
+        "Y": 0.8235294,
+        "Z": 0.47843137,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "341cb510-2888-4cfb-a3b3-f1d0cad0138a",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 460
+      },
+      "Size": {
+        "X": 760,
+        "Y": 24
+      },
+      "ZIndex": 11,
+      "Role": 17
+    },
+    {
+      "elementType": "text",
+      "Text": "Session message \u2726 \u65E5\u672C\u8A9E",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 18,
+      "Color": {
+        "X": 1,
+        "Y": 0.9647059,
+        "Z": 0.9098039,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": true,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "c0ce079b-0e8d-4dea-a6fc-adea7b29ca4e",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 484
+      },
+      "Size": {
+        "X": 760,
+        "Y": 196
+      },
+      "ZIndex": 12,
+      "Role": 4
+    },
+    {
+      "elementType": "image",
+      "AssetId": "0dec71da-c6fa-487d-aeda-4946b9b0b21f",
+      "Opacity": 1,
+      "PreserveAspectRatio": true,
+      "RotationDegrees": 0,
+      "DisplayMode": 2,
+      "FlipX": false,
+      "FlipY": false,
+      "Id": "1e3ebbed-132b-4ff9-a951-66790fd20873",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 840,
+        "Y": 40
+      },
+      "Size": {
+        "X": 400,
+        "Y": 640
+      },
+      "ZIndex": 13,
+      "Role": 1
+    },
+    {
+      "elementType": "text",
+      "Text": "the Brave",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 22,
+      "Color": {
+        "X": 1,
+        "Y": 0.8235294,
+        "Z": 0.47843137,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "792aa909-83dd-4b7d-acfa-8572067bcf60",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 40,
+        "Y": 44
+      },
+      "Size": {
+        "X": 760,
+        "Y": 35
+      },
+      "ZIndex": 14,
+      "Role": 3
+    }
+  ],
+  "Background": {
+    "Mode": 2,
+    "PrimaryColor": {
+      "X": 0.47843137,
+      "Y": 0.16470589,
+      "Z": 0.07058824,
+      "W": 1
+    },
+    "SecondaryColor": {
+      "X": 0.9490196,
+      "Y": 0.63529414,
+      "Z": 0.22745098,
+      "W": 1
+    },
+    "GradientAngle": 45,
+    "Opacity": 1,
+    "Texture": 6,
+    "TextureIntensity": 0.25,
+    "TextureScale": 24,
+    "TextureRotation": 0,
+    "ImageAssetId": null,
+    "ImageFit": 2,
+    "ImageFlipX": false,
+    "ImageFlipY": false,
+    "HasImage": false
+  },
+  "BasicIdentity": {
+    "TitleSource": 1,
+    "GameTitleId": 7,
+    "GameTitleIsPrefix": true,
+    "CustomTitle": "",
+    "Layout": 0,
+    "RegionPosition": {
+      "X": 40,
+      "Y": 44
+    },
+    "RegionWidth": 760,
+    "AppliedLayout": {
+      "Name": {
+        "Position": {
+          "X": 40,
+          "Y": 88
+        },
+        "Size": {
+          "X": 760,
+          "Y": 60
+        }
+      },
+      "Title": {
+        "Position": {
+          "X": 40,
+          "Y": 44
+        },
+        "Size": {
+          "X": 760,
+          "Y": 35
+        }
+      },
+      "Tagline": null
+    },
+    "LayoutStyle": null
+  },
+  "BasicPlate": {
+    "Orientation": 1,
+    "PortraitSource": 0,
+    "Placements": [
+      {
+        "Role": 7,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 196
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 6,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 220
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 12,
+        "Rect": {
+          "Position": {
+            "X": 440,
+            "Y": 196
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 11,
+        "Rect": {
+          "Position": {
+            "X": 440,
+            "Y": 220
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 9,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 276
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 8,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 300
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 16,
+        "Rect": {
+          "Position": {
+            "X": 440,
+            "Y": 276
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 15,
+        "Rect": {
+          "Position": {
+            "X": 440,
+            "Y": 300
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 14,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 356
+          },
+          "Size": {
+            "X": 760,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 13,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 380
+          },
+          "Size": {
+            "X": 760,
+            "Y": 58
+          }
+        }
+      },
+      {
+        "Role": 17,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 460
+          },
+          "Size": {
+            "X": 760,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 4,
+        "Rect": {
+          "Position": {
+            "X": 40,
+            "Y": 484
+          },
+          "Size": {
+            "X": 760,
+            "Y": 196
+          }
+        }
+      },
+      {
+        "Role": 1,
+        "Rect": {
+          "Position": {
+            "X": 840,
+            "Y": 40
+          },
+          "Size": {
+            "X": 400,
+            "Y": 640
+          }
+        }
+      }
+    ],
+    "Playstyles": [
+      "Casual",
+      "Raiding"
+    ],
+    "ActiveHours": {
+      "Days": 31,
+      "StartMinutes": 1080,
+      "EndMinutes": 1380,
+      "Use24HourClock": false,
+      "TimeZone": ""
+    },
+    "FavoriteJobId": 19,
+    "FavoriteJobIds": [
+      19,
+      24,
+      38
+    ],
+    "Level": 0,
+    "ThemeName": "Warm"
+  },
+  "Components": [
+    {
+      "Id": "8d6e8275-2cf9-4381-b857-c19d7f01224f",
+      "Kind": 1,
+      "DefinitionId": "af.plate-frame.line",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null
+    },
+    {
+      "Id": "4970c0f9-eb04-468d-9084-2407b791fd32",
+      "Kind": 5,
+      "DefinitionId": "af.corner-ornament.bracket",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null,
+      "Corners": 14
+    },
+    {
+      "Id": "4cc0681d-bafa-47cd-8e38-dc1280a8eb46",
+      "Kind": 4,
+      "DefinitionId": "af.name-backing.bar",
+      "Visible": true,
+      "Color": null,
+      "Opacity": 1,
+      "Offset": {
+        "X": 0,
+        "Y": 0
+      },
+      "Scale": 1,
+      "RotationDegrees": 0,
+      "LayerOrder": 0,
+      "AssetId": null
+    }
+  ]
+}

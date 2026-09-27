@@ -193,6 +193,42 @@ public class EditorOpenAndCloseTests
     }
 
     [Fact]
+    public async Task Discard_WhileASaveIsBeingWritten_IsRefusedWithAReason_AndKeepsAsking()
+    {
+        var store = new HeldWriteStore();
+        using var harness = await BasicHarness.NewClassicAsync(store);
+        var (commands, guard) = OpenWindow(harness);
+        harness.Basic.SetOrientation(AdventurePlateOrientation.Mirrored);
+
+        // Save from the action bar, then close while it is still being written: the Plate is
+        // still dirty against its baseline, so the question is asked.
+        store.Hold();
+        var save = commands.SaveAsync();
+        await store.WriteStarted;
+        Assert.True(commands.IsSaving);
+        Assert.True(guard.PreOpenCheck(isOpen: false));
+        Assert.True(guard.IsAsking);
+        Assert.Null(guard.DiscardRefusal);
+
+        Assert.False(guard.Discard());
+
+        // Still asking, with the reason on display; nothing was reverted underneath the save.
+        Assert.True(guard.IsAsking);
+        Assert.Contains("still being saved", guard.DiscardRefusal);
+        Assert.Equal(AdventurePlateOrientation.Mirrored, harness.Document.BasicPlate!.Orientation);
+
+        store.Release();
+        Assert.True(await save);
+        harness.Session.SyncWithCurrentProfile();
+
+        // Once the save is done the answer goes through, and the reason with it.
+        Assert.True(guard.Discard());
+        Assert.Null(guard.DiscardRefusal);
+        Assert.False(guard.IsAsking);
+        Assert.Equal(AdventurePlateOrientation.Mirrored, harness.Library.OpenDocumentForEditing(harness.PlateId).BasicPlate!.Orientation);
+    }
+
+    [Fact]
     public async Task Save_SavesThenCloses()
     {
         using var harness = await BasicHarness.NewClassicAsync();

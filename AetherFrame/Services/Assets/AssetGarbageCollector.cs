@@ -69,8 +69,8 @@ internal sealed class AssetGarbageCollector
 
     /// <summary>
     /// Classifies every managed asset. <paramref name="additionallyInUse"/> covers references the
-    /// saved Plates can't know about — e.g. every asset the open editor document or its undo
-    /// history refers to.
+    /// saved Plates can't know about — every asset the open editor document or its undo history
+    /// refers to, which is exactly the editor session's <c>EditorSession.AssetsInUse</c>.
     /// </summary>
     internal AssetCleanupPlan Plan(AssetReferenceScan scan, IEnumerable<Guid>? additionallyInUse = null)
     {
@@ -111,7 +111,14 @@ internal sealed class AssetGarbageCollector
         return new AssetCleanupPlan(true, null, result);
     }
 
-    /// <summary>Moves a plan's unreferenced assets to the asset trash. Returns how many moved.</summary>
+    /// <summary>
+    /// Moves a plan's unreferenced assets to the asset trash. Returns how many moved. A move that
+    /// fails leaves nothing behind: the record written for it is removed again, so a later purge
+    /// can never treat a still-live asset as trashed. An id whose record names a file that is in
+    /// the trash (a second file for the same id, e.g. "{id}.jpg" beside "{id}.png") is left in
+    /// place, since one record can name only one trashed file and overwriting it would orphan
+    /// the first; a stale record naming nothing is simply replaced.
+    /// </summary>
     internal int MoveToTrash(AssetCleanupPlan plan)
     {
         if (!plan.CanProceed)
@@ -122,10 +129,18 @@ internal sealed class AssetGarbageCollector
         var moved = 0;
         foreach (var candidate in plan.Unreferenced)
         {
+            var recordPath = GetRecordPath(candidate.AssetId);
+            var recordWritten = false;
             try
             {
                 if (!File.Exists(candidate.Path))
                 {
+                    continue;
+                }
+
+                if (File.Exists(recordPath) && TryReadRecord(candidate.AssetId) is { } existing && File.Exists(Path.Combine(trashDirectory, existing.FileName)))
+                {
+                    log.Warning($"AetherFrame left unused asset {candidate.AssetId} in place: another file for that id is already in the trash.");
                     continue;
                 }
 
@@ -134,20 +149,31 @@ internal sealed class AssetGarbageCollector
                 var record = new AssetTrashRecord(1, candidate.AssetId, fileName, utcNow());
 
                 // The record first: a trashed file without one would never become purgeable.
-                SystemFileStore.WriteAtomically(GetRecordPath(candidate.AssetId), Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, JsonOptions.Default)));
+                SystemFileStore.WriteAtomically(recordPath, Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, JsonOptions.Default)));
+                recordWritten = true;
                 File.Move(candidate.Path, Path.Combine(trashDirectory, fileName), overwrite: false);
                 moved++;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                log.Warning($"AetherFrame could not move unused asset {candidate.AssetId} to the trash: {ex.Message}");
+                log.Warning($"AetherFrame could not move unused asset {candidate.AssetId} to the trash ({ex.GetType().Name}).");
+                if (recordWritten && File.Exists(candidate.Path))
+                {
+                    // The asset is still live, so the record would be a lie that purge acts on.
+                    TryDeleteRecord(recordPath, candidate.AssetId);
+                }
             }
         }
 
         return moved;
     }
 
-    /// <summary>Moves a trashed asset back into managed storage. Returns false if it isn't in the trash.</summary>
+    /// <summary>
+    /// Moves a trashed asset back into managed storage. Returns false if it isn't in the trash.
+    /// The restored file gets a fresh <see cref="MinimumUnreferencedAge"/> window (its last-write
+    /// time is set to now): the player restored it to use it, and an unsaved edit referencing it
+    /// must not see it trashed again by the next cleanup pass.
+    /// </summary>
     internal bool Restore(Guid assetId)
     {
         var record = TryReadRecord(assetId);
@@ -158,15 +184,29 @@ internal sealed class AssetGarbageCollector
         }
 
         Directory.CreateDirectory(assets.AssetsDirectory);
-        File.Move(trashedPath, Path.Combine(assets.AssetsDirectory, record!.FileName), overwrite: false);
-        File.Delete(GetRecordPath(assetId));
+        var restoredPath = Path.Combine(assets.AssetsDirectory, record!.FileName);
+        File.Move(trashedPath, restoredPath, overwrite: false);
+
+        try
+        {
+            File.SetLastWriteTimeUtc(restoredPath, utcNow());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Warning($"AetherFrame restored asset {assetId} but could not refresh its age ({ex.GetType().Name}).");
+        }
+
+        TryDeleteRecord(GetRecordPath(assetId), assetId);
         return true;
     }
 
     /// <summary>
     /// Permanently deletes trashed assets older than <see cref="TrashGracePeriod"/> — but only when
     /// <paramref name="purgeEnabled"/> is explicitly true; otherwise it just reports what it would
-    /// purge. Returns the affected asset ids.
+    /// purge. Returns the affected asset ids. An asset's metadata goes only when its file was
+    /// really in the trash and is gone from managed storage — a stale record for a live asset
+    /// removes nothing but itself — and the record is deleted last, so a failed step leaves it
+    /// for the next pass to retry.
     /// </summary>
     internal IReadOnlyList<Guid> PurgeExpired(bool purgeEnabled)
     {
@@ -199,17 +239,23 @@ internal sealed class AssetGarbageCollector
             try
             {
                 var trashedPath = Path.Combine(trashDirectory, record.FileName);
+                var deletedTrashedFile = false;
                 if (File.Exists(trashedPath))
                 {
                     File.Delete(trashedPath);
+                    deletedTrashedFile = true;
+                }
+
+                if (deletedTrashedFile && assets.ResolveAssetPath(assetId) is null)
+                {
+                    assets.Metadata.Delete(assetId);
                 }
 
                 File.Delete(recordPath);
-                assets.Metadata.Delete(assetId);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                log.Warning($"AetherFrame could not purge trashed asset {assetId}: {ex.Message}");
+                log.Warning($"AetherFrame could not purge trashed asset {assetId} ({ex.GetType().Name}).");
             }
         }
 
@@ -217,6 +263,18 @@ internal sealed class AssetGarbageCollector
     }
 
     private string GetRecordPath(Guid assetId) => Path.Combine(trashDirectory, assetId.ToString("N") + TrashRecordSuffix);
+
+    private void TryDeleteRecord(string recordPath, Guid assetId)
+    {
+        try
+        {
+            File.Delete(recordPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Warning($"AetherFrame could not remove the trash record for asset {assetId} ({ex.GetType().Name}).");
+        }
+    }
 
     private AssetTrashRecord? TryReadRecord(Guid assetId)
     {
@@ -234,9 +292,9 @@ internal sealed class AssetGarbageCollector
             return record is not null && record.AssetId == assetId && record.FileName == Path.GetFileName(record.FileName)
                 && Path.GetFileNameWithoutExtension(record.FileName) == assetId.ToString("N") ? record : null;
         }
-        catch (Exception ex) when (ex is IOException or JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            log.Warning($"AetherFrame could not read the trash record for asset {assetId}: {ex.Message}");
+            log.Warning($"AetherFrame could not read the trash record for asset {assetId} ({ex.GetType().Name}).");
             return null;
         }
     }

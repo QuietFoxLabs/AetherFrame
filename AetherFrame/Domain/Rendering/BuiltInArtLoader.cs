@@ -32,6 +32,9 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
     private readonly Func<BuiltInArtAsset, CancellationToken, Task<LoadedArt<TTexture>>> load;
     private readonly Dictionary<string, Task<LoadedArt<TTexture>>> loads = new(StringComparer.Ordinal);
 
+    // The releases handed to loads still running at Dispose, so a test can wait for them instead of guessing.
+    private readonly List<Task> releasesAfterDispose = new();
+
     // Never disposed: a load still running when this is disposed keeps reading its token.
     private readonly CancellationTokenSource disposing = new();
     private bool disposed;
@@ -45,6 +48,13 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
 
     /// <summary>How many loads have been started (at most one per artwork).</summary>
     public int LoadsStarted { get; private set; }
+
+    /// <summary>
+    /// Completes once every load that was still running at <see cref="Dispose"/> has ended and
+    /// released what it made (a load cancelled before it started counts as ended). Already complete
+    /// when nothing was running then. For tests, which otherwise could only wait a guessed time.
+    /// </summary>
+    internal Task ReleasesAfterDispose => Task.WhenAll(releasesAfterDispose);
 
     /// <summary>
     /// Draw thread: the level of <paramref name="art"/> to draw <paramref name="screenPixels"/> across,
@@ -94,7 +104,7 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
             }
             else
             {
-                task.ContinueWith(Release, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                releasesAfterDispose.Add(task.ContinueWith(Release, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default));
             }
         }
 

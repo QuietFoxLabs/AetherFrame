@@ -66,6 +66,7 @@ internal sealed class PackageManifest
 
     internal string? Generator { get; init; }
 
+    /// <summary>The Plate's name as this build folds it (see <see cref="PlateNaming.TryNormalizeName"/>).</summary>
     internal string PlateName { get; init; } = string.Empty;
 
     internal int PlateSchemaVersion { get; init; }
@@ -170,9 +171,17 @@ internal sealed class PackageManifest
     /// </summary>
     internal static PackageManifest? Parse(ReadOnlySpan<byte> utf8Json, PackageDiagnostics diagnostics)
     {
-        if (PackageJson.TryParseObject(utf8Json, out var root, out var parseError) is false)
+        if (!PackageJson.TryParseObject(utf8Json, out var root, out var problem))
         {
-            diagnostics.Error(PackageErrorCode.ManifestInvalid, "The package's description is damaged.", parseError);
+            if (problem!.Kind == PackageJsonProblemKind.TooLarge)
+            {
+                diagnostics.Error(PackageErrorCode.PackageTooLarge, "The package's description is too large to import.", problem.Detail);
+            }
+            else
+            {
+                diagnostics.Error(PackageErrorCode.ManifestInvalid, "The package's description is damaged.", problem.Detail);
+            }
+
             return null;
         }
 
@@ -249,9 +258,12 @@ internal sealed class PackageManifest
             return null;
         }
 
-        if (!PlateNaming.TryNormalizeName(ReadString(plate, "name"), out var plateName, out _) || plateName != ReadString(plate, "name"))
+        // Carried folded by this build's rules (a Format character an older build wrote verbatim
+        // — a family emoji's joiner, a soft hyphen — becomes a space, as renaming would make it),
+        // and refused only when nothing usable is left: blank, or too long once folded.
+        if (!PlateNaming.TryNormalizeName(ReadString(plate, "name"), out var plateName, out _))
         {
-            Invalid("plate name missing, blank, too long, or untrimmed");
+            Invalid("plate name missing, blank, or too long");
             return null;
         }
 

@@ -1,0 +1,1003 @@
+{
+  "Version": 2,
+  "ProfileId": "5289c851-df68-40d5-b1fe-fc5448d697ed",
+  "OwnerContentId": 0,
+  "Name": "Adventure Plate Classic",
+  "Revision": 0,
+  "CreatedAtUtc": "2026-09-01T12:04:00Z",
+  "UpdatedAtUtc": "2026-09-01T12:04:00Z",
+  "CanvasWidth": 1280,
+  "CanvasHeight": 720,
+  "Elements": [
+    {
+      "elementType": "text",
+      "Text": "Visible Hero",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 43,
+      "Color": {
+        "X": 1,
+        "Y": 0.8392157,
+        "Z": 0.43137255,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": true,
+      "OutlineColor": {
+        "X": 0.101960786,
+        "Y": 0.0627451,
+        "Z": 0.2509804,
+        "W": 1
+      },
+      "OutlineThickness": 1.5,
+      "OutlineOpacity": 0.575,
+      "ShadowEnabled": true,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.45,
+      "ShadowOffsetX": 2,
+      "ShadowOffsetY": 2,
+      "LayoutVersion": 1,
+      "Id": "70eb7d25-8345-47d1-ba94-7da21c45a613",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 44
+      },
+      "Size": {
+        "X": 760,
+        "Y": 60
+      },
+      "ZIndex": 0,
+      "Role": 2
+    },
+    {
+      "elementType": "text",
+      "Text": "HOME WORLD",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 0.9098039,
+        "Y": 0.77254903,
+        "Z": 0.41960785,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "d0a4e165-7140-40de-a1cd-bd3fd61987ca",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 196
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 1,
+      "Role": 7
+    },
+    {
+      "elementType": "text",
+      "Text": "Phoenix [Light]",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 0.9607843,
+        "Y": 0.94509804,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "b1a6e18a-ba74-4f4b-8854-f90c0e6d1a5e",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 220
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 2,
+      "Role": 6
+    },
+    {
+      "elementType": "text",
+      "Text": "FREE COMPANY",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 0.9098039,
+        "Y": 0.77254903,
+        "Z": 0.41960785,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "eab57117-85b9-4287-8d3f-98539b0c4052",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 880,
+        "Y": 196
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 3,
+      "Role": 12
+    },
+    {
+      "elementType": "text",
+      "Text": "\u00ABABC\u00BB",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 0.9607843,
+        "Y": 0.94509804,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "743ff966-c81f-4dd8-a0f1-9c7626bb8633",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 880,
+        "Y": 220
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 4,
+      "Role": 11
+    },
+    {
+      "elementType": "text",
+      "Text": "FAVORITE JOB",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 0.9098039,
+        "Y": 0.77254903,
+        "Z": 0.41960785,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "494b4e4a-4c68-41f4-bba9-e81a473a1c05",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 276
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 5,
+      "Role": 9
+    },
+    {
+      "elementType": "text",
+      "Text": "Paladin",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 0.9607843,
+        "Y": 0.94509804,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "8e3fcb9e-0dfa-40bc-994d-3aaddaf8be4e",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 300
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 6,
+      "Role": 8
+    },
+    {
+      "elementType": "text",
+      "Text": "ACTIVE HOURS",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 0.9098039,
+        "Y": 0.77254903,
+        "Z": 0.41960785,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "7c5f4a70-2f93-4573-8471-0eb7fdfda039",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 880,
+        "Y": 276
+      },
+      "Size": {
+        "X": 360,
+        "Y": 24
+      },
+      "ZIndex": 7,
+      "Role": 16
+    },
+    {
+      "elementType": "text",
+      "Text": "",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 20,
+      "Color": {
+        "X": 0.9607843,
+        "Y": 0.94509804,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "73737d86-b283-4ae7-8cb5-7acf84aaf8aa",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 880,
+        "Y": 300
+      },
+      "Size": {
+        "X": 360,
+        "Y": 34
+      },
+      "ZIndex": 8,
+      "Role": 15
+    },
+    {
+      "elementType": "text",
+      "Text": "PLAYSTYLE",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 0.9098039,
+        "Y": 0.77254903,
+        "Z": 0.41960785,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "913ccb07-07ad-48ea-b67c-2ed2e13d456d",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 356
+      },
+      "Size": {
+        "X": 760,
+        "Y": 24
+      },
+      "ZIndex": 9,
+      "Role": 14
+    },
+    {
+      "elementType": "text",
+      "Text": "",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 18,
+      "Color": {
+        "X": 0.9607843,
+        "Y": 0.94509804,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": true,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "ac04e3b3-a0fc-46e6-b55b-7924e4a28246",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 380
+      },
+      "Size": {
+        "X": 760,
+        "Y": 58
+      },
+      "ZIndex": 10,
+      "Role": 13
+    },
+    {
+      "elementType": "text",
+      "Text": "MESSAGE",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 16,
+      "Color": {
+        "X": 0.9098039,
+        "Y": 0.77254903,
+        "Z": 0.41960785,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 2,
+      "Wrap": false,
+      "FontFamily": "aetherframe-sans",
+      "Bold": true,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 1.5,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "99ec456b-7e6a-4df7-8fd1-fe4bccff92a3",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 460
+      },
+      "Size": {
+        "X": 760,
+        "Y": 24
+      },
+      "ZIndex": 11,
+      "Role": 17
+    },
+    {
+      "elementType": "text",
+      "Text": "",
+      "Prefix": "",
+      "Suffix": "",
+      "FontSize": 18,
+      "Color": {
+        "X": 0.9607843,
+        "Y": 0.94509804,
+        "Z": 1,
+        "W": 1
+      },
+      "Alignment": 0,
+      "VerticalAlignment": 0,
+      "Wrap": true,
+      "FontFamily": "aetherframe-sans",
+      "Bold": false,
+      "Italic": false,
+      "Underline": false,
+      "Strikethrough": false,
+      "LetterSpacing": 0,
+      "LineSpacing": 1,
+      "AutoFitText": true,
+      "AutoFitMinimumSize": 10,
+      "OutlineEnabled": false,
+      "OutlineColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "OutlineThickness": 2,
+      "OutlineOpacity": 1,
+      "ShadowEnabled": false,
+      "ShadowColor": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0,
+        "W": 1
+      },
+      "ShadowOpacity": 0.6,
+      "ShadowOffsetX": 3,
+      "ShadowOffsetY": 3,
+      "LayoutVersion": 1,
+      "Id": "9198b519-cd66-44f5-acef-ee375ddd028c",
+      "Name": "",
+      "Visible": true,
+      "Locked": false,
+      "Position": {
+        "X": 480,
+        "Y": 484
+      },
+      "Size": {
+        "X": 760,
+        "Y": 196
+      },
+      "ZIndex": 12,
+      "Role": 4
+    }
+  ],
+  "Background": {
+    "Mode": 2,
+    "PrimaryColor": {
+      "X": 0.11764706,
+      "Y": 0.105882354,
+      "Z": 0.29411766,
+      "W": 1
+    },
+    "SecondaryColor": {
+      "X": 0.4862745,
+      "Y": 0.22745098,
+      "Z": 0.92941177,
+      "W": 1
+    },
+    "GradientAngle": 135,
+    "Opacity": 1,
+    "Texture": 6,
+    "TextureIntensity": 0.25,
+    "TextureScale": 24,
+    "TextureRotation": 0,
+    "ImageAssetId": null,
+    "ImageFit": 2,
+    "ImageFlipX": false,
+    "ImageFlipY": false,
+    "HasImage": false
+  },
+  "BasicIdentity": {
+    "TitleSource": 0,
+    "GameTitleId": 0,
+    "GameTitleIsPrefix": false,
+    "CustomTitle": "",
+    "Layout": 1,
+    "RegionPosition": {
+      "X": 480,
+      "Y": 44
+    },
+    "RegionWidth": 760,
+    "AppliedLayout": {
+      "Name": {
+        "Position": {
+          "X": 480,
+          "Y": 44
+        },
+        "Size": {
+          "X": 760,
+          "Y": 60
+        }
+      },
+      "Title": null,
+      "Tagline": null
+    },
+    "LayoutStyle": null
+  },
+  "BasicPlate": {
+    "Orientation": 0,
+    "PortraitSource": 0,
+    "Placements": [
+      {
+        "Role": 7,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 196
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 6,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 220
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 12,
+        "Rect": {
+          "Position": {
+            "X": 880,
+            "Y": 196
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 11,
+        "Rect": {
+          "Position": {
+            "X": 880,
+            "Y": 220
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 9,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 276
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 8,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 300
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 16,
+        "Rect": {
+          "Position": {
+            "X": 880,
+            "Y": 276
+          },
+          "Size": {
+            "X": 360,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 15,
+        "Rect": {
+          "Position": {
+            "X": 880,
+            "Y": 300
+          },
+          "Size": {
+            "X": 360,
+            "Y": 34
+          }
+        }
+      },
+      {
+        "Role": 14,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 356
+          },
+          "Size": {
+            "X": 760,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 13,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 380
+          },
+          "Size": {
+            "X": 760,
+            "Y": 58
+          }
+        }
+      },
+      {
+        "Role": 17,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 460
+          },
+          "Size": {
+            "X": 760,
+            "Y": 24
+          }
+        }
+      },
+      {
+        "Role": 4,
+        "Rect": {
+          "Position": {
+            "X": 480,
+            "Y": 484
+          },
+          "Size": {
+            "X": 760,
+            "Y": 196
+          }
+        }
+      }
+    ],
+    "Playstyles": [],
+    "ActiveHours": null,
+    "FavoriteJobId": 19,
+    "FavoriteJobIds": [
+      19
+    ],
+    "Level": 0,
+    "ThemeName": "Royal"
+  }
+}

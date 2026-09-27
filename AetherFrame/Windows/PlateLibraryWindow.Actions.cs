@@ -323,7 +323,7 @@ internal sealed partial class PlateLibraryWindow
         catch (Exception ex)
         {
             errorMessage = "That Plate couldn't be opened. See the Dalamud log for details.";
-            DalamudServices.Log.Error(ex, "AetherFrame failed to open a Plate.");
+            DalamudServices.Log.Error(LogPrivacy.ForLog(ex), "AetherFrame failed to open a Plate.");
         }
     }
 
@@ -408,13 +408,19 @@ internal sealed partial class PlateLibraryWindow
             }
         }
 
+        // Discard is unavailable while a save is being written, exactly like Save: the revert would
+        // be refused underneath it, and the other Plate would then open over unsaved edits.
         ImGui.SameLine();
-        if (ImGui.Button("Discard", buttonSize))
+        using (ImRaii.Disabled(profileService.IsBusy || guardSaveTask is not null))
         {
-            editorSession.DiscardChanges();
-            guardedOpen = null;
-            ImGui.CloseCurrentPopup();
-            OpenNow(open.PlateId, open.Basic);
+            if (ImGui.Button("Discard", buttonSize) && editorSession.DiscardChanges())
+            {
+                // Only once the edits are really gone: a refused revert (a save landed meanwhile)
+                // keeps the question open, with the editor's own message saying why.
+                guardedOpen = null;
+                ImGui.CloseCurrentPopup();
+                OpenNow(open.PlateId, open.Basic);
+            }
         }
 
         ImGui.SameLine();
@@ -607,7 +613,7 @@ internal sealed partial class PlateLibraryWindow
         }
         catch (Exception ex) when (ex is not PlateLibraryException and not TemplateLibraryException)
         {
-            DalamudServices.Log.Error(ex, $"AetherFrame failed to {name}.");
+            DalamudServices.Log.Error(LogPrivacy.ForLog(ex), $"AetherFrame failed to {name}.");
             throw;
         }
     }

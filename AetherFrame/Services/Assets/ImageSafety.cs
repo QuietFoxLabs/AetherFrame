@@ -12,8 +12,13 @@ internal enum DetectedImageFormat
     WebP,
 }
 
-/// <summary>What an image file really is, read from its own bytes (never its extension).</summary>
-internal sealed record ImageInspection(DetectedImageFormat Format, int Width, int Height, int FrameCount, long ByteLength)
+/// <summary>
+/// What an image file really is, read from its own bytes (never its extension).
+/// <paramref name="BytesPerPixel"/> is what the texture pipeline keeps per decoded pixel: 4 for
+/// everything it converts to 32-bit RGBA, 8 for a 16-bit colour PNG, which it uploads at 16 bits
+/// per channel (see <see cref="ImageSafety.BytesPerPixelOf"/>).
+/// </summary>
+internal sealed record ImageInspection(DetectedImageFormat Format, int Width, int Height, int FrameCount, long ByteLength, int BytesPerPixel = ImageSafety.DefaultBytesPerPixel)
 {
     internal string MediaType => ImageSafety.MediaTypeOf(Format);
 
@@ -22,8 +27,8 @@ internal sealed record ImageInspection(DetectedImageFormat Format, int Width, in
 
     internal long PixelCount => (long)Width * Height;
 
-    /// <summary>Memory one decoded frame needs as 32-bit RGBA (what the texture pipeline uploads).</summary>
-    internal long EstimatedDecodedBytes => PixelCount * 4L;
+    /// <summary>Memory one decoded frame needs in the format the texture pipeline uploads.</summary>
+    internal long EstimatedDecodedBytes => PixelCount * BytesPerPixel;
 }
 
 /// <summary>
@@ -50,7 +55,17 @@ internal static class ImageSafety
     /// </summary>
     internal const long MaxPixelCount = 32L * 1024 * 1024;
 
+    /// <summary>
+    /// 128 MiB decoded, whatever the pixel format: a 16-bit colour PNG costs twice as much per
+    /// pixel, so it reaches this at half <see cref="MaxPixelCount"/>.
+    /// </summary>
     internal const long MaxDecodedBytes = MaxPixelCount * 4L;
+
+    /// <summary>What the texture pipeline keeps per pixel for an image it converts to 32-bit RGBA.</summary>
+    internal const int DefaultBytesPerPixel = 4;
+
+    /// <summary>What it keeps per pixel for a 16-bit colour PNG, uploaded at 16 bits per channel.</summary>
+    internal const int SixteenBitBytesPerPixel = 8;
 
     /// <summary>
     /// Only the first frame of an animated image is ever shown, but a declared frame count far
@@ -76,6 +91,16 @@ internal static class ImageSafety
         DetectedImageFormat.WebP => ".webp",
         _ => string.Empty,
     };
+
+    /// <summary>
+    /// Bytes per decoded pixel the game's decoder keeps for a PNG: 8 when it is 16 bits per channel
+    /// in a colour or alpha layout (colour type 2 truecolour, 4 greyscale with alpha, 6 truecolour
+    /// with alpha), which it uploads at 16 bits per channel rather than converting to 32-bit RGBA;
+    /// else 4. Deliberately conservative: every 16-bit colour or alpha layout counts the full 8
+    /// bytes, even one the decoder ends up converting, since it still materializes the wide frame.
+    /// </summary>
+    internal static int BytesPerPixelOf(PngHeader png) =>
+        png.BitDepth == 16 && png.ColorType is 2 or 4 or 6 ? SixteenBitBytesPerPixel : DefaultBytesPerPixel;
 
     /// <summary>Identifies a format from the first bytes of a file (its "magic number").</summary>
     internal static DetectedImageFormat Sniff(ReadOnlySpan<byte> header)
@@ -115,6 +140,7 @@ internal static class ImageSafety
             }
 
             var dimensions = ImageDimensionReader.TryReadDimensions(path);
+            var bytesPerPixel = ImageDimensionReader.TryReadPng(header[..read], out var png) ? BytesPerPixelOf(png) : DefaultBytesPerPixel;
             var frames = format switch
             {
                 DetectedImageFormat.Png => CountPngFrames(stream),
@@ -122,7 +148,7 @@ internal static class ImageSafety
                 _ => 1,
             };
 
-            return new ImageInspection(format, dimensions?.Width ?? 0, dimensions?.Height ?? 0, frames, length);
+            return new ImageInspection(format, dimensions?.Width ?? 0, dimensions?.Height ?? 0, frames, length, bytesPerPixel);
         }
         catch (IOException)
         {
@@ -175,9 +201,15 @@ internal static class ImageSafety
             return $"The image is {inspection.Width} x {inspection.Height} pixels. The limit is {MaxDimension} pixels per side.";
         }
 
-        if (inspection.PixelCount > MaxPixelCount || inspection.EstimatedDecodedBytes > MaxDecodedBytes)
+        if (inspection.PixelCount > MaxPixelCount)
         {
             return $"The image has too many pixels ({inspection.PixelCount / 1_000_000.0:0.#} megapixels). The limit is {MaxPixelCount / 1_000_000.0:0.#} megapixels.";
+        }
+
+        if (inspection.EstimatedDecodedBytes > MaxDecodedBytes)
+        {
+            // Only a 16-bit colour PNG gets here: it costs twice the memory per pixel.
+            return $"The image is a 16-bit PNG with {inspection.PixelCount / 1_000_000.0:0.#} megapixels, which needs too much memory to show. The limit for 16-bit images is {MaxDecodedBytes / inspection.BytesPerPixel / 1_000_000.0:0.#} megapixels; an 8-bit version can have up to {MaxPixelCount / 1_000_000.0:0.#} megapixels.";
         }
 
         if (inspection.FrameCount < 1 || inspection.FrameCount > MaxFrameCount)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
+using AetherFrame.Domain.Assets;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
@@ -89,6 +90,9 @@ internal sealed partial class EditorSession
     private int dirtyMemoFrame = -1;
     private bool dirtyMemo;
 
+    // Every asset this document has referred to since it was opened (see AssetsInUse).
+    private readonly HashSet<Guid> assetsInUse = new();
+
     internal EditorSession(
         ProfileService profileService, AssetStorageService assetStorage, IEditorImageInfo imageTextureCache, IAetherFrameLog log, Func<int> frameCounter)
     {
@@ -105,12 +109,24 @@ internal sealed partial class EditorSession
     internal const string EditFailedMessage = "That change couldn't be made.";
     internal const string ImageImportFailedMessage = "The image couldn't be added.";
     internal const string SaveFailedMessage = "The Plate couldn't be saved.";
+    internal const string BaselineFailedMessage = "The Plate's saved state couldn't be read, so Revert to Saved isn't available.";
 
     internal Guid? SelectedElementId { get; private set; }
 
     internal bool CanUndo => undoStack.Count > 0;
 
     internal bool CanRedo => redoStack.Count > 0;
+
+    /// <summary>
+    /// Every asset the open document has referred to since it was opened: what it referenced when
+    /// it was opened, every image imported through the editor since, and every state a recorded
+    /// edit left it in — so it covers everything undo or redo can bring back, not only what is on
+    /// the canvas now. This is the <c>additionallyInUse</c> feed for
+    /// <see cref="Services.Assets.AssetGarbageCollector.Plan"/>: a cleanup that ignores it could
+    /// trash an image that is one Ctrl+Z away. Reset when another Plate is opened; only ever grown
+    /// by an edit, never scanned per frame.
+    /// </summary>
+    internal IReadOnlySet<Guid> AssetsInUse => assetsInUse;
 
     /// <summary>
     /// True when the live profile differs from the last successfully loaded/saved state, or while
@@ -155,8 +171,8 @@ internal sealed partial class EditorSession
             // history, selection, or in-progress edit — those all refer to the old document.
             imageTextureCache.Clear();
             ResetTransientState();
-            CaptureBaseline(profile);
             completedSave = null;
+            CaptureBaseline(profile);
             return;
         }
 
@@ -207,14 +223,8 @@ internal sealed partial class EditorSession
     {
         ErrorMessage = null;
 
-        Guid assetId;
-        try
+        if (ImportImage(sourceFilePath) is not { } assetId)
         {
-            assetId = assetStorage.ImportImage(sourceFilePath);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
             return;
         }
 
@@ -268,14 +278,8 @@ internal sealed partial class EditorSession
     {
         ErrorMessage = null;
 
-        Guid assetId;
-        try
+        if (ImportImage(sourceFilePath) is not { } assetId)
         {
-            assetId = assetStorage.ImportImage(sourceFilePath);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
             return;
         }
 
@@ -296,6 +300,10 @@ internal sealed partial class EditorSession
         try
         {
             var snapshot = profileService.CloneElement(elementId);
+
+            // Where it sits in the list: undo puts it back there, among the elements it shares
+            // its ZIndex with (ties paint in list order), not on top of them at the end.
+            var index = profileService.CurrentProfile?.Elements.FindIndex(e => e.Id == elementId);
             profileService.RemoveElement(elementId);
 
             if (SelectedElementId == elementId)
@@ -306,7 +314,7 @@ internal sealed partial class EditorSession
             RecordHistory(
                 undo: () =>
                 {
-                    profileService.InsertElement(snapshot.Clone());
+                    profileService.InsertElement(snapshot.Clone(), index);
                     Select(snapshot.Id);
                 },
                 redo: () =>
@@ -545,13 +553,15 @@ internal sealed partial class EditorSession
     /// <summary>
     /// Saves the current profile. On success the saved state becomes the new clean baseline (the
     /// state captured here, on the render thread, is exactly what was written: the profile can't
-    /// be edited while the save is in flight). Returns false (with <see cref="ErrorMessage"/> set)
-    /// on failure.
+    /// be edited while the save is in flight). A drag or resize still in progress (Ctrl+S with the
+    /// mouse button held) is ended first, so it is recorded as one history entry and what is saved
+    /// is exactly what is on screen. Returns false (with <see cref="ErrorMessage"/> set) on failure.
     /// </summary>
     internal async Task<bool> SaveProfileAsync()
     {
         ErrorMessage = null;
         CommitPendingEdits();
+        EndInteraction();
 
         var profile = profileService.CurrentProfile;
         if (profile is null)
@@ -583,9 +593,11 @@ internal sealed partial class EditorSession
     /// Restores the live profile to its last loaded/saved state. As an explicit toolbar action
     /// (<paramref name="undoable"/> true) the revert itself is one undoable history entry; as the
     /// "Discard" answer to an unsaved-changes prompt, history is cleared instead, since it only
-    /// described the work being thrown away.
+    /// described the work being thrown away. Returns whether the saved state was restored: false,
+    /// with the document untouched, when there is no baseline or the Plate can't be changed right
+    /// now (a save in flight; <see cref="ErrorMessage"/> says so).
     /// </summary>
-    internal void RevertToSaved(bool undoable)
+    internal bool RevertToSaved(bool undoable)
     {
         ErrorMessage = null;
         CommitPendingEdits();
@@ -593,7 +605,8 @@ internal sealed partial class EditorSession
 
         if (savedBaseline is not { } baseline)
         {
-            return;
+            ErrorMessage = profileService.CurrentProfile is null ? "No Plate is open." : BaselineFailedMessage;
+            return false;
         }
 
         ProfileService.DocumentState before;
@@ -605,7 +618,7 @@ internal sealed partial class EditorSession
         catch (Exception ex)
         {
             ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
-            return;
+            return false;
         }
 
         DropSelectionIfMissing();
@@ -614,7 +627,7 @@ internal sealed partial class EditorSession
         if (!undoable)
         {
             ClearHistory();
-            return;
+            return true;
         }
 
         RecordHistory(
@@ -628,10 +641,11 @@ internal sealed partial class EditorSession
                 profileService.RestoreDocumentState(baseline);
                 DropSelectionIfMissing();
             });
+        return true;
     }
 
-    /// <summary>Discards unsaved work (see <see cref="RevertToSaved"/>) without an undo entry.</summary>
-    internal void DiscardChanges() => RevertToSaved(undoable: false);
+    /// <summary>Discards unsaved work (see <see cref="RevertToSaved"/>) without an undo entry. Returns whether it was discarded.</summary>
+    internal bool DiscardChanges() => RevertToSaved(undoable: false);
 
     // ---------------------------------------------------------------- selection / history
 
@@ -783,8 +797,39 @@ internal sealed partial class EditorSession
             undoStack.RemoveAt(0);
         }
 
+        // The state this action left is what its redo brings back: whatever it refers to stays in
+        // use for the rest of the session (see AssetsInUse), however the image got there.
+        NoteDocumentAssets();
         InvalidateDirtyMemo();
         return entry;
+    }
+
+    /// <summary>
+    /// Imports an image file into managed asset storage for the open document, recording it as in
+    /// use for the rest of the session. Returns null, with <see cref="ErrorMessage"/> set, when
+    /// the file can't be imported.
+    /// </summary>
+    private Guid? ImportImage(string sourceFilePath)
+    {
+        try
+        {
+            var assetId = assetStorage.ImportImage(sourceFilePath);
+            assetsInUse.Add(assetId);
+            return assetId;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = UserFacingError.Describe(ex, ImageImportFailedMessage);
+            return null;
+        }
+    }
+
+    private void NoteDocumentAssets()
+    {
+        if (profileService.CurrentProfile is { } profile)
+        {
+            AssetReferenceScanner.Collect(profile, assetsInUse);
+        }
     }
 
     private void DropSelectionIfMissing()
@@ -798,6 +843,7 @@ internal sealed partial class EditorSession
     private void ResetTransientState()
     {
         ClearHistory();
+        assetsInUse.Clear();
         pendingEditBefore = null;
         pendingBackgroundBefore = null;
         pendingDocumentBefore = null;
@@ -810,10 +856,31 @@ internal sealed partial class EditorSession
 
     private void InvalidateDirtyMemo() => dirtyMemoFrame = -1;
 
+    /// <summary>
+    /// Makes <paramref name="profile"/> the baselined document. The capture comes first and the
+    /// two fields are assigned together: a capture that fails must leave this document with no
+    /// baseline at all (it reads as unsaved, and Revert to Saved is unavailable), never with the
+    /// previous Plate's — reverting would then put another Plate's content into this one.
+    /// </summary>
     private void CaptureBaseline(ProfileDocument? profile)
     {
+        ProfileService.DocumentState? baseline = null;
+        if (profile is not null)
+        {
+            try
+            {
+                baseline = ProfileService.DocumentState.Capture(profile);
+                AssetReferenceScanner.Collect(profile, assetsInUse);
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = BaselineFailedMessage;
+                log.Error(ex, "AetherFrame couldn't capture the open Plate's saved state; Revert to Saved is unavailable until it is reopened.");
+            }
+        }
+
         baselineSourceProfile = profile;
-        savedBaseline = profile is null ? null : ProfileService.DocumentState.Capture(profile);
+        savedBaseline = baseline;
         InvalidateDirtyMemo();
     }
 

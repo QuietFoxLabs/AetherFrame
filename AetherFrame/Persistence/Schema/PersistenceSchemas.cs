@@ -18,6 +18,10 @@ internal static class PersistenceSchemas
     /// Step 1 → 2 is structurally a no-op on purpose: what version 2 added (explicit canvas size,
     /// the background model) is repaired field-by-field, in memory, by the document's own legacy
     /// normalizers at load — so migrating never repositions, re-sizes, or rewrites anything.
+    /// Versions 0 and 1 (and character binding version 1) predate v0.1.0 and never reached a
+    /// tester: every tagged build from v0.1.0 on wrote document 2, binding 2, Template 1, library 1
+    /// and asset metadata 1 (pinned by the historical fixtures in the tests), so those steps only
+    /// ever see pre-release developer data.
     /// </summary>
     internal static readonly SchemaDefinition ProfileDocument = new(
         "Plate document",

@@ -14,12 +14,25 @@ namespace AetherFrame.Domain.Profiles;
 /// </summary>
 public sealed class IdentityLayoutStyle
 {
+    // Never null: an explicit JSON null (which no build writes) reads as an empty set of values,
+    // so cloning and comparing the style never has to guard against it.
+    private TitleStyleValues applied = new();
+    private TitleStyleValues previous = new();
+
     /// <summary>The layout that applied <see cref="Applied"/>.</summary>
     public IdentityTitleLayout Layout { get; set; }
 
-    public TitleStyleValues Applied { get; set; } = new();
+    public TitleStyleValues Applied
+    {
+        get => applied;
+        set => applied = value ?? new TitleStyleValues();
+    }
 
-    public TitleStyleValues Previous { get; set; } = new();
+    public TitleStyleValues Previous
+    {
+        get => previous;
+        set => previous = value ?? new TitleStyleValues();
+    }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }

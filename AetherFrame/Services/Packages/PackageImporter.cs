@@ -18,7 +18,11 @@ namespace AetherFrame.Services.Packages;
 /// point; only then does the Plate appear in the Library. Anything failing before the commit point
 /// rolls back exactly the image files this import created (their ids were minted here, so no
 /// pre-existing file can be among them) and leaves the Library as it was. Images already in storage
-/// are never overwritten, reused, or deleted.</para>
+/// are never overwritten, reused, or deleted. The one exception to the rollback: a document write
+/// that reported failure after its file landed, and whose file then couldn't be moved away (a
+/// failed move, or unloading stopping the operation first). That document is a whole Plate the
+/// next load lists, so its images stay with it (see <see cref="DocumentRemains"/>): a failure can
+/// leave an import finished later, never a Plate pointing at images that are gone.</para>
 ///
 /// <para><b>Identity.</b> Every import is a new Plate: a fresh Plate id (never the package's),
 /// created and modified "now", revision 0, no legacy character owner. It's associated with no
@@ -27,8 +31,12 @@ namespace AetherFrame.Services.Packages;
 /// </summary>
 internal static class PackageImporter
 {
+    /// <param name="continuesOwnedOperation">The caller registered this import as an owned
+    /// operation already (see <c>PlatePackageService.ImportAsync</c>), so its Plate write is that
+    /// operation's last step rather than a new one shutdown could refuse.</param>
     internal static async Task<PackageImportResult> ImportAsync(
-        StagedPackage package, PlateLibraryService library, AssetStorageService assets, IAetherFrameLog? log = null, DateTime? nowUtc = null)
+        StagedPackage package, PlateLibraryService library, AssetStorageService assets, IAetherFrameLog? log = null, DateTime? nowUtc = null,
+        bool continuesOwnedOperation = false)
     {
         log ??= NullAetherFrameLog.Instance;
         if (!package.CanImport || package.Summary is not { } summary)
@@ -47,10 +55,16 @@ internal static class PackageImporter
             }
 
             var raw = WithNewIdentity(package.PreparedProfile!, plateId, nowUtc ?? DateTime.UtcNow);
-            await library.ImportPlateAsync(plateId, raw).ConfigureAwait(false);
+            await library.ImportPlateAsync(plateId, raw, continuesOwnedOperation).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
+            if (DocumentRemains(library, plateId))
+            {
+                log.Error(ex, $"AetherFrame could not finish importing {package.DescribeForLog()}, but its Plate file stayed in the Plates folder; its {created.Count} new image(s) are kept with it, and it is listed the next time AetherFrame loads.");
+                return PackageImportResult.Failed(PackageErrorCode.CommitFailed, UnfinishedMessage, ex.GetType().Name);
+            }
+
             log.Error(ex, $"AetherFrame could not import {package.DescribeForLog()}; rolling back {created.Count} new image(s).");
             RollBack(created, assets, log);
             var message = ex is PlateLibraryException refused ? refused.Message : "The Plate couldn't be imported. Nothing was changed.";
@@ -74,6 +88,19 @@ internal static class PackageImporter
         raw[nameof(ProfileDocument.UpdatedAtUtc)] = nowUtc;
         return raw;
     }
+
+    /// <summary>
+    /// Whether the import's Plate document is in the Plates folder although the import failed:
+    /// its write reported failure after the file landed, and the Library couldn't move it away.
+    /// Every write of it is an atomic replacement, so such a file is the whole document. Checked
+    /// on the disk itself, not through the Library's store: the answer decides whether the images
+    /// may go, even for an operation unloading has stopped.
+    /// </summary>
+    private static bool DocumentRemains(PlateLibraryService library, Guid plateId) =>
+        File.Exists(library.Paths.GetPlatePath(plateId));
+
+    /// <summary>What the player is told when the import failed after its Plate was written.</summary>
+    internal const string UnfinishedMessage = "The import didn't finish, but the Plate was saved. It appears in My Plates the next time AetherFrame starts.";
 
     private static void RollBack(List<(Guid AssetId, string Path)> created, AssetStorageService assets, IAetherFrameLog log)
     {

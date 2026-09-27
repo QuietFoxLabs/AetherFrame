@@ -55,6 +55,10 @@ internal sealed partial class PlateLibraryWindow
 
     private readonly Dictionary<Guid, string> templateCardIds = new();
 
+    // A built-in Template's document is generated on every request; its background never changes,
+    // so the fallback thumbnail reads it once per Template instead of once per frame.
+    private readonly Dictionary<Guid, ProfileBackground?> builtInBackgrounds = new();
+
     private LibraryView activeView = LibraryView.MyPlates;
     private Guid? selectedTemplateId;
     private string templateSearchText = string.Empty;
@@ -254,7 +258,7 @@ internal sealed partial class PlateLibraryWindow
     {
         drawList.AddRectFilled(min, max, ImGui.GetColorU32(FallbackBackdropColor), 4f);
 
-        var background = template.IsReady ? templates.GetSavedDocument(template.TemplateId)?.Background : null;
+        var background = template.IsReady ? SavedBackgroundOf(template) : null;
         var icon = FontAwesomeIcon.Copy;
 
         if (!template.IsReady)
@@ -291,6 +295,24 @@ internal sealed partial class PlateLibraryWindow
             var iconSize = ImGui.CalcTextSize(iconText);
             drawList.AddText((min + max - iconSize) / 2f, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.35f)), iconText);
         }
+    }
+
+    /// <summary>The Template's saved background, read only: a user Template's is the saved
+    /// document's own; a built-in one's is kept from the first request.</summary>
+    private ProfileBackground? SavedBackgroundOf(TemplateSummary template)
+    {
+        if (!template.IsBuiltIn)
+        {
+            return templates.GetSavedDocument(template.TemplateId)?.Background;
+        }
+
+        if (!builtInBackgrounds.TryGetValue(template.TemplateId, out var background))
+        {
+            background = templates.GetSavedDocument(template.TemplateId)?.Background;
+            builtInBackgrounds[template.TemplateId] = background;
+        }
+
+        return background;
     }
 
     private static void DrawTemplateKindBadge(ImDrawListPtr drawList, TemplateSummary template, Vector2 thumbnailMin, Vector2 thumbnailMax)

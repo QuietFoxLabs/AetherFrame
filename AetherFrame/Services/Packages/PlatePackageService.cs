@@ -11,10 +11,14 @@ namespace AetherFrame.Services.Packages;
 /// <summary>
 /// Export and import of .aetherframe files for the UI: wires the pure package code to the Plate
 /// Library, managed asset storage, and the private staging folder. Every member does file IO and
-/// hashing, so the UI calls them off the draw thread; none of them touch ImGui.
+/// hashing, so the UI calls <see cref="Export"/> and <see cref="Inspect"/> off the draw thread;
+/// <see cref="ImportAsync"/> moves its own copying and hashing onto the thread pool before its
+/// first await, so it is safe to start from anywhere. None of them touch ImGui.
 ///
-/// <para>Export and Import write files, so each is an <see cref="OwnedOperations"/> operation:
-/// unloading waits for one already running, and neither starts once unloading has begun.</para>
+/// <para>Export and Import write files and Inspect extracts into staging, so each is an
+/// <see cref="OwnedOperations"/> operation: unloading waits for one already running (so a reload's
+/// staging sweep never deletes a folder still being written), and none starts once unloading has
+/// begun.</para>
 /// </summary>
 internal sealed class PlatePackageService
 {
@@ -80,10 +84,32 @@ internal sealed class PlatePackageService
             new PackageExportRequest(saved.Json, saved.Name, destinationPath, previewPngPath, overwrite), assets, stagingRoot, generator, isDecoderSupported, log);
     }
 
-    /// <summary>Opens and fully validates a package. The caller disposes the result (deleting its staging folder).</summary>
-    internal StagedPackage Inspect(string packagePath) => PackageReader.Open(packagePath, stagingRoot, isDecoderSupported, log);
+    /// <summary>
+    /// Opens and fully validates a package. The caller disposes the result (deleting its staging
+    /// folder). Never throws: once unloading has begun the result is a refused package with no
+    /// staging folder at all.
+    /// </summary>
+    internal StagedPackage Inspect(string packagePath)
+    {
+        if (!operations.TryBegin(out var operation))
+        {
+            return StagedPackage.Refused(Path.GetFileName(packagePath), stagingRoot, log, PackageErrorCode.CommitFailed, "AetherFrame is closing, so the file wasn't checked.");
+        }
 
-    /// <summary>Imports a validated package as a new Plate. Never activates, opens, or binds it.</summary>
+        using (operation)
+        {
+            return PackageReader.Open(packagePath, stagingRoot, isDecoderSupported, log);
+        }
+    }
+
+    /// <summary>
+    /// Imports a validated package as a new Plate. Never activates, opens, or binds it. The lease
+    /// is taken on the caller's thread (so refusal once unloading has begun is immediate); the
+    /// commit itself — copying and hashing every image, then the Plate write — runs on the thread
+    /// pool, never on the caller, and all of it under that one lease: an import already copying
+    /// its images when unloading begins is waited for and commits (or fails) as one operation,
+    /// rather than its Plate write being refused as a new one and the images rolled back.
+    /// </summary>
     internal async Task<PackageImportResult> ImportAsync(StagedPackage package)
     {
         if (!operations.TryBegin(out var operation))
@@ -93,7 +119,8 @@ internal sealed class PlatePackageService
 
         using (operation)
         {
-            return await PackageImporter.ImportAsync(package, library, assets, log, utcNow()).ConfigureAwait(false);
+            var now = utcNow();
+            return await Task.Run(() => PackageImporter.ImportAsync(package, library, assets, log, now, continuesOwnedOperation: true)).ConfigureAwait(false);
         }
     }
 

@@ -218,14 +218,19 @@ internal sealed class ProfileService
     /// Mutates an existing element of the currently loaded profile. Synchronous UI mutation;
     /// safe to call directly from ImGui Draw. Throws <see cref="InvalidOperationException"/>
     /// if the profile isn't editable (busy, no character, wrong character, etc.) or if no
-    /// element with the given id exists.
+    /// element with the given id exists. Afterwards any value the edit left that isn't a number
+    /// (a typed 1e39 overflowing to infinity) is replaced by its default (see
+    /// <see cref="ProfileElementLimits"/>): every slider, undo and Basic edit passes through here,
+    /// so no edit can leave the Plate unsaveable.
     /// </summary>
     internal void UpdateElement(Guid elementId, Action<ProfileElement> update)
     {
         lock (gate)
         {
             var profile = RequireEditableProfileLocked();
-            update(FindElementLocked(profile, elementId));
+            var element = FindElementLocked(profile, elementId);
+            update(element);
+            ProfileElementLimits.Bound(element);
         }
     }
 
@@ -241,9 +246,12 @@ internal sealed class ProfileService
 
     /// <summary>
     /// Inserts a fully-formed element (e.g. an undo/redo snapshot, or a duplicate) into the
-    /// currently loaded profile, replacing any existing element with the same id.
+    /// currently loaded profile, replacing any existing element with the same id: at
+    /// <paramref name="index"/> in the element list (clamped to the list's bounds) when given —
+    /// so an undone delete puts the element back among the elements that share its ZIndex, where
+    /// ties paint in list order — otherwise at the end.
     /// </summary>
-    internal void InsertElement(ProfileElement element)
+    internal void InsertElement(ProfileElement element, int? index = null)
     {
         lock (gate)
         {
@@ -251,7 +259,7 @@ internal sealed class ProfileService
 
             profile.Elements.RemoveAll(e => e.Id == element.Id);
             EnsureCapacityLocked(profile);
-            profile.Elements.Add(element);
+            profile.Elements.Insert(index is { } position ? Math.Clamp(position, 0, profile.Elements.Count) : profile.Elements.Count, element);
         }
     }
 
@@ -383,14 +391,17 @@ internal sealed class ProfileService
     /// <summary>
     /// Mutates the current profile's <see cref="ProfileBackground"/>. Kept separate from element
     /// mutation since the background isn't itself a <see cref="ProfileElement"/> (no Z order, not
-    /// hit-testable).
+    /// hit-testable). Like <see cref="UpdateElement"/>, any value the edit left that isn't a
+    /// number is replaced by its default afterwards.
     /// </summary>
     internal void UpdateBackground(Action<ProfileBackground> update)
     {
         lock (gate)
         {
             var profile = RequireEditableProfileLocked();
-            update(GetOrCreateBackgroundLocked(profile));
+            var background = GetOrCreateBackgroundLocked(profile);
+            update(background);
+            background.Bound();
         }
     }
 
@@ -583,9 +594,21 @@ internal sealed class ProfileService
         }
     }
 
-    /// <summary>Must be called while holding <see cref="gate"/>.</summary>
-    private static int NextZIndexLocked(ProfileDocument profile) =>
-        profile.Elements.Count == 0 ? 0 : profile.Elements.Max(e => e.ZIndex) + 1;
+    /// <summary>
+    /// One above the highest ZIndex, or that value itself when it can't be exceeded (a
+    /// hand-edited int.MaxValue): ties paint in list order, so the new element, added last, still
+    /// paints on top instead of wrapping to the very back. Must be called while holding <see cref="gate"/>.
+    /// </summary>
+    private static int NextZIndexLocked(ProfileDocument profile)
+    {
+        if (profile.Elements.Count == 0)
+        {
+            return 0;
+        }
+
+        var highest = profile.Elements.Max(e => e.ZIndex);
+        return highest == int.MaxValue ? highest : highest + 1;
+    }
 
     /// <summary>
     /// Applies a reordering operation to the elements sorted by their current ZIndex (ties

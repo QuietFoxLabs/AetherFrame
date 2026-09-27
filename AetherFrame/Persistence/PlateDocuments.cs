@@ -18,15 +18,26 @@ namespace AetherFrame.Persistence;
 internal static class PlateDocuments
 {
     /// <summary>
-    /// A fresh, independent document from saved JSON, with the in-memory legacy repairs applied
-    /// (never persisted by this; only an explicit save writes them). Every call returns a new
-    /// instance sharing nothing with the JSON or any other document.
+    /// A fresh, independent document from saved JSON, with the in-memory repairs applied: the
+    /// legacy ones (<see cref="ApplyLegacyRepairs(ProfileDocument)"/>), and unique element ids
+    /// (<see cref="ProfileDocument.NormalizeElementIds"/> — here rather than there, because the
+    /// package validator shares the legacy repairs and must still refuse a repeated id). Never
+    /// persisted by this; only an explicit save writes them. Every call returns a new instance
+    /// sharing nothing with the JSON or any other document.
     /// </summary>
-    internal static ProfileDocument Materialize(JsonObject raw)
+    internal static ProfileDocument Materialize(JsonObject raw) => Materialize(raw, out _);
+
+    /// <summary>
+    /// <see cref="Materialize(JsonObject)"/>, reporting whether something no build writes — a value
+    /// that isn't a number (see <see cref="ProfileDocument.NormalizeValues"/>) or a missing or
+    /// repeated element id — was repaired, so a loader can log it.
+    /// </summary>
+    internal static ProfileDocument Materialize(JsonObject raw, out bool repairedValues)
     {
         var document = Deserialize(raw) ?? throw new JsonException("Plate document deserialized to null.");
 
-        ApplyLegacyRepairs(document);
+        ApplyLegacyRepairs(document, out repairedValues);
+        repairedValues |= document.NormalizeElementIds();
         return document;
     }
 
@@ -150,11 +161,18 @@ internal static class PlateDocuments
         && ProfileElement.IsKnownTypeDiscriminator(discriminator);
 
     /// <summary>
-    /// The legacy repairs every loaded document gets, in this order: an invalid (legacy) canvas
-    /// size first, so element repair clamps against the resolved bounds; then the pre-model
-    /// background fields; then each element's legacy layout. A current document is untouched.
+    /// The repairs every loaded document gets, in this order: an invalid (legacy) canvas size
+    /// first, so element repair clamps against the resolved bounds; then the pre-model background
+    /// fields; then each element's legacy layout; then every value that isn't a number (see
+    /// <see cref="ProfileDocument.NormalizeValues"/>); then Component ids. A current document is untouched.
     /// </summary>
-    internal static void ApplyLegacyRepairs(ProfileDocument document)
+    internal static void ApplyLegacyRepairs(ProfileDocument document) => ApplyLegacyRepairs(document, out _);
+
+    /// <summary>
+    /// <see cref="ApplyLegacyRepairs(ProfileDocument)"/>, reporting whether a value that isn't a
+    /// number — something no build writes — was repaired, so a loader can log it.
+    /// </summary>
+    internal static void ApplyLegacyRepairs(ProfileDocument document, out bool repairedValues)
     {
         document.NormalizeLegacyCanvasSize();
         document.NormalizeLegacyBackground();
@@ -164,6 +182,7 @@ internal static class PlateDocuments
             element.NormalizeLegacyLayout(document.CanvasWidth, document.CanvasHeight);
         }
 
+        repairedValues = document.NormalizeValues();
         document.NormalizeComponentIds();
 
         // A Basic name still using its theme's older automatic color gets the current one, and a
@@ -172,10 +191,25 @@ internal static class PlateDocuments
         Domain.Basic.BasicPlateEditor.UpgradeFavoriteJobRow(document);
     }
 
+    /// <summary>
+    /// Serializes a document, reattaching what the serializer can't carry (unrecognized elements
+    /// and Components). Throws <see cref="InvalidOperationException"/>, worded for the player and
+    /// naming the value, if the document still holds a number JSON can't express: every load and
+    /// edit repairs those (see <see cref="ProfileDocument.NormalizeValues"/>), so this is the last
+    /// resort that turns "couldn't be saved" into something the player can act on.
+    /// </summary>
     internal static JsonObject ToJson(ProfileDocument document)
     {
-        var json = JsonSerializer.SerializeToNode(document, JsonOptions.Default) as JsonObject
-            ?? throw new JsonException("Plate document serialized to something other than an object.");
+        JsonObject json;
+        try
+        {
+            json = JsonSerializer.SerializeToNode(document, JsonOptions.Default) as JsonObject
+                ?? throw new JsonException("Plate document serialized to something other than an object.");
+        }
+        catch (ArgumentException ex) when (ProfileElementLimits.DescribeNonFiniteValue(document) is { } value)
+        {
+            throw new InvalidOperationException($"The Plate can't be saved because {value} isn't a number. Undo the last change and try again.", ex);
+        }
 
         if (document.UnrecognizedElements is { Count: > 0 } unrecognized && json[nameof(ProfileDocument.Elements)] is JsonArray elements)
         {

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using Dalamud.Configuration;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AetherFrame;
 
@@ -16,4 +19,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
     /// (see <c>BasicGuidance</c>). Once true it is never shown again.
     /// </summary>
     public bool BasicGuidanceHandled { get; set; }
+
+    /// <summary>
+    /// Whatever a newer version of AetherFrame stored here and this one doesn't know: kept as it
+    /// is and written back unchanged, so going back to this version never loses a newer one's
+    /// settings (the same forward compatibility every Plate and Template file has).
+    /// </summary>
+    [JsonExtensionData]
+    public IDictionary<string, JToken>? ExtensionData { get; set; }
 }

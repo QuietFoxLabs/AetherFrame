@@ -29,8 +29,12 @@ namespace AetherFrame.Services.Templates;
 /// document keeps <c>ProfileDocument</c>'s own schema/migration exactly as a Plate's does; this
 /// envelope versions itself independently (see <c>TemplateDocuments</c>).</para>
 ///
-/// <para><b>Threading.</b> Operations are serialized and run through the supplied dispatcher, like
-/// <see cref="PlateLibraryService"/>. Query members are safe from any thread.</para>
+/// <para><b>Threading.</b> Operations are serialized and started through the supplied dispatcher,
+/// like <see cref="PlateLibraryService"/>: only an operation's synchronous prefix runs on the
+/// dispatcher's thread (the framework thread in game). The load's read/parse phase runs on the
+/// thread pool, and everything after an operation's first file step — including
+/// <see cref="Generation"/> changing — runs on whichever thread completes that step (the thread
+/// pool in game). Query members are safe from any thread.</para>
 /// </summary>
 internal sealed class TemplateLibraryService
 {
@@ -137,8 +141,10 @@ internal sealed class TemplateLibraryService
 
     /// <summary>
     /// Loads every saved Template. Safe to run on every startup. One unreadable file never
-    /// prevents the rest from loading. Never writes anything (unlike Plates, Templates have no
-    /// legacy format to migrate on disk and no index to rebuild).
+    /// prevents the rest from loading. Never rewrites a Template (unlike Plates, Templates have no
+    /// legacy format to migrate on disk and no index to rebuild); the only thing it may write is a
+    /// Recovery copy of a damaged file the store served from its backup (see
+    /// <see cref="LoadTemplateAsync"/>).
     /// </summary>
     /// <remarks>Loading only reads, so <paramref name="cancellationToken"/> (like shutdown) stops it
     /// between files with <see cref="OperationCanceledException"/>, leaving Templates unloaded. Any
@@ -149,22 +155,12 @@ internal sealed class TemplateLibraryService
 
     private async Task InitializeCoreAsync(CancellationToken cancellationToken)
     {
-        var loaded = new List<TemplateRecord>();
+        List<TemplateRecord> loaded;
         try
         {
-            foreach (var path in store.ListFiles(paths.TemplatesDirectory, "*.json"))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                operations.Stopping.ThrowIfCancellationRequested();
-
-                if (!PlateStoragePaths.TryParseTemplateFileName(path, out var templateId))
-                {
-                    log.Warning($"AetherFrame ignored a file in the Templates folder that isn't a Template: {Path.GetFileName(path)}");
-                    continue;
-                }
-
-                loaded.Add(await LoadTemplateAsync(path, templateId).ConfigureAwait(false));
-            }
+            // Reading and parsing every file is the whole cost of a load, so it runs on the thread
+            // pool rather than inside the dispatcher's tick (see the class remarks on threading).
+            loaded = await Task.Run(() => LoadTemplatesAsync(cancellationToken)).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
         {
@@ -193,11 +189,53 @@ internal sealed class TemplateLibraryService
         log.Information($"AetherFrame Template Library loaded: {loaded.Count} Template(s).");
     }
 
+    private async Task<List<TemplateRecord>> LoadTemplatesAsync(CancellationToken cancellationToken)
+    {
+        var loaded = new List<TemplateRecord>();
+
+        foreach (var path in store.ListFiles(paths.TemplatesDirectory, "*.json"))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            operations.Stopping.ThrowIfCancellationRequested();
+
+            if (!PlateStoragePaths.TryParseTemplateFileName(path, out var templateId))
+            {
+                log.Warning($"AetherFrame ignored a file in the Templates folder that isn't a Template: {Path.GetFileName(path)}");
+                continue;
+            }
+
+            // A built-in Template is never a file (see BuiltInTemplateCatalog): a file using one of
+            // their ids would be listed as a second, unremovable copy of the built-in, so it's
+            // ignored like any other file that isn't a Template, and left untouched.
+            if (BuiltInTemplateCatalog.IsBuiltIn(templateId))
+            {
+                log.Warning($"AetherFrame ignored a file in the Templates folder that uses a built-in Template's id: {Path.GetFileName(path)}");
+                continue;
+            }
+
+            loaded.Add(await LoadTemplateAsync(path, templateId).ConfigureAwait(false));
+        }
+
+        return loaded;
+    }
+
+    /// <summary>
+    /// One Template's record from its file. A file the store had to serve from its backup copy is
+    /// logged and its damaged on-disk bytes are kept under Recovery (a copy only: loading never
+    /// rewrites the file, and the next save of that Template replaces it as usual). A read that
+    /// unloading abandoned or canceled is not a damaged file, so it propagates instead of being
+    /// recorded as unreadable.
+    /// </summary>
     private async Task<TemplateRecord> LoadTemplateAsync(string path, Guid templateId)
     {
         try
         {
             var result = await ReadTemplateFileAsync(path).ConfigureAwait(false);
+            if (result.RecoveredFromBackup)
+            {
+                log.Warning($"AetherFrame Template file {Path.GetFileName(path)} was damaged and was recovered from its backup copy.");
+                KeepRecoveryCopy(path);
+            }
 
             if (result.Status == TemplateStatus.NewerVersion)
             {
@@ -217,10 +255,15 @@ internal sealed class TemplateLibraryService
                 result.Raw![nameof(PlateTemplate.TemplateId)] = templateId;
             }
 
+            if (result.RepairedValues)
+            {
+                log.Warning($"AetherFrame repaired values in Template {templateId} that no build writes; its file is left untouched until it is next saved.");
+            }
+
             var rawJson = VersionedJson.Serialize(result.Raw!);
             return new TemplateRecord(templateId, TemplateStatus.Ready, rawJson, template, template.Name, template.CreatedAtUtc, template.UpdatedAtUtc, null);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
         {
             log.Error(ex, $"AetherFrame could not read Template {templateId}; it is listed as unreadable and its file is left untouched.");
             return new TemplateRecord(templateId, TemplateStatus.Unreadable, null, null, "Unreadable Template", DateTime.MinValue, DateTime.MinValue,
@@ -236,14 +279,20 @@ internal sealed class TemplateLibraryService
     /// exactly as read. Invalid content throws inside the reader (matching
     /// <see cref="VersionedJson.ReadAsync{T}"/>'s convention) so a store with backups retries from
     /// its backup copy; a newer-version result deliberately does not throw, so it's never retried
-    /// from a stale backup.
+    /// from a stale backup. A result the store had to retry for reports
+    /// <see cref="TemplateFileReadResult.RecoveredFromBackup"/>, exactly as
+    /// <see cref="VersionedJson.ReadAsync{T}"/> does.
     /// </summary>
     private async Task<TemplateFileReadResult> ReadTemplateFileAsync(string path)
     {
         TemplateFileReadResult? result = null;
+        var attempts = 0;
 
         await store.ReadTextAsync(path, text =>
         {
+            // A second invocation is the store retrying from its backup after the first copy failed.
+            var recoveredFromBackup = ++attempts > 1;
+
             if (JsonNode.Parse(text) is not JsonObject raw)
             {
                 throw new InvalidDataException("Template is not a JSON object.");
@@ -253,7 +302,7 @@ internal sealed class TemplateLibraryService
             if (envelopeMigration.Outcome == SchemaMigrationOutcome.NewerVersion)
             {
                 result = new TemplateFileReadResult(raw, null, TemplateStatus.NewerVersion,
-                    "This Template was saved by a newer version of AetherFrame. Update AetherFrame to open it.");
+                    "This Template was saved by a newer version of AetherFrame. Update AetherFrame to open it.", recoveredFromBackup, false);
                 return;
             }
 
@@ -271,7 +320,7 @@ internal sealed class TemplateLibraryService
             if (documentMigration.Outcome == SchemaMigrationOutcome.NewerVersion)
             {
                 result = new TemplateFileReadResult(raw, null, TemplateStatus.NewerVersion,
-                    "This Template's content was saved by a newer version of AetherFrame. Update AetherFrame to open it.");
+                    "This Template's content was saved by a newer version of AetherFrame. Update AetherFrame to open it.", recoveredFromBackup, false);
                 return;
             }
 
@@ -280,8 +329,8 @@ internal sealed class TemplateLibraryService
                 throw new InvalidDataException(documentMigration.Error ?? "Template's content is unreadable.");
             }
 
-            var template = TemplateDocuments.Materialize(raw);
-            result = new TemplateFileReadResult(raw, template, TemplateStatus.Ready, null);
+            var template = TemplateDocuments.Materialize(raw, out var repairedValues);
+            result = new TemplateFileReadResult(raw, template, TemplateStatus.Ready, null, recoveredFromBackup, repairedValues);
         }).ConfigureAwait(false);
 
         return result ?? throw new InvalidDataException("Template could not be read.");
@@ -455,8 +504,10 @@ internal sealed class TemplateLibraryService
 
     /// <summary>
     /// Use Template: creates a brand-new, independent Plate from a Template's saved content (a
-    /// built-in's is regenerated fresh; a user Template's is exactly what was last saved). The
-    /// Template itself — built-in or user — is only ever read here, never mutated. See
+    /// built-in's is regenerated fresh; a user Template's is exactly what was last saved — taken
+    /// from the saved JSON like every other Library copy, so unknown data is kept by construction
+    /// and the shared document <see cref="GetSavedDocument"/> hands out for display plays no part).
+    /// The Template itself — built-in or user — is only ever read here, never mutated. See
     /// <see cref="PlateLibraryService.CreatePlateFromTemplateAsync"/> for the guarantees this
     /// relies on (fresh Plate Guid, no character binding copied, existing Active-Plate rules
     /// unchanged, shared asset ids with no bytes duplicated).
@@ -482,7 +533,7 @@ internal sealed class TemplateLibraryService
                 lock (gate)
                 {
                     var record = RequireReadyLocked(templateId, "used");
-                    rawDocument = PlateDocuments.ToJson(record.Template!.Document);
+                    rawDocument = EmbeddedDocument(ParseObject(record.RawJson!));
                     name = record.Name;
                 }
             }
@@ -542,9 +593,12 @@ internal sealed class TemplateLibraryService
                         problems.Add($"Trashed Template {Path.GetFileName(path)} was saved by a newer version.");
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
                 {
-                    problems.Add($"Trashed Template {Path.GetFileName(path)} is unreadable: {ex.Message}");
+                    // Only the failure's kind goes into the problem (it may reach the player); the
+                    // exception itself, whose message may name the file's path, goes to the log.
+                    log.Error(ex, $"AetherFrame could not read trashed Template {Path.GetFileName(path)} while scanning for image references.");
+                    problems.Add($"Trashed Template {Path.GetFileName(path)} is unreadable ({ex.GetType().Name}).");
                 }
             }
 
@@ -633,6 +687,32 @@ internal sealed class TemplateLibraryService
     private async Task WriteTemplateAsync(Guid templateId, JsonObject raw) =>
         await store.WriteTextAsync(paths.GetTemplatePath(templateId), VersionedJson.Serialize(raw)).ConfigureAwait(false);
 
+    /// <summary>
+    /// Copies the damaged on-disk bytes of <paramref name="path"/> under Recovery (never
+    /// overwriting anything there) so the next write of that Template, which replaces them,
+    /// destroys nothing the player might still want. Best effort: a failure is logged and the
+    /// load goes on, since the Template itself was read fine; only abandonment by unloading
+    /// propagates.
+    /// </summary>
+    private void KeepRecoveryCopy(string path)
+    {
+        try
+        {
+            if (!store.FileExists(path))
+            {
+                return;
+            }
+
+            var destination = paths.GetRecoveryPath(path, utcNow());
+            store.CopyFile(path, destination);
+            log.Warning($"AetherFrame kept a copy of the damaged Template file {Path.GetFileName(path)} in its Recovery folder as {Path.GetFileName(destination)}.");
+        }
+        catch (Exception ex) when (ex is not OperationAbandonedException)
+        {
+            log.Error(ex, $"AetherFrame couldn't keep a Recovery copy of the damaged Template file {Path.GetFileName(path)}; the Template still loaded from its backup copy.");
+        }
+    }
+
     /// <summary>Must hold <see cref="gate"/>.</summary>
     private IReadOnlyList<TemplateSummary> BuildOrderedSummariesLocked()
     {
@@ -665,7 +745,22 @@ internal sealed class TemplateLibraryService
     private static JsonObject ParseObject(string json) =>
         JsonNode.Parse(json) as JsonObject ?? throw new JsonException("Template JSON is not an object.");
 
-    private readonly record struct TemplateFileReadResult(JsonObject? Raw, PlateTemplate? Template, TemplateStatus Status, string? Problem);
+    /// <summary>The embedded document of a saved (so already validated) Template envelope.</summary>
+    private static JsonObject EmbeddedDocument(JsonObject envelope) =>
+        envelope[nameof(PlateTemplate.Document)] as JsonObject ?? throw new JsonException("Template JSON has no embedded document.");
+
+    /// <summary>
+    /// One file as read. <see cref="RecoveredFromBackup"/>: the store served its backup copy
+    /// because the on-disk one was unusable. <see cref="RepairedValues"/>: materializing repaired
+    /// content no build writes (see <see cref="TemplateDocuments.Materialize(JsonObject, out bool)"/>).
+    /// </summary>
+    private readonly record struct TemplateFileReadResult(
+        JsonObject? Raw,
+        PlateTemplate? Template,
+        TemplateStatus Status,
+        string? Problem,
+        bool RecoveredFromBackup,
+        bool RepairedValues);
 
     /// <summary>
     /// One Template as loaded. Immutable apart from replacement on rename: the saved JSON is kept

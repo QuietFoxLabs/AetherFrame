@@ -8,6 +8,8 @@ using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Persistence;
+using AetherFrame.Services;
 using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
 using Xunit;
@@ -108,6 +110,42 @@ public class PackageSecurityTests
             Assert.Equal(plates, Library.GetOrderedPlates().Select(p => p.PlateId).ToList());
             Assert.Equal(PlateId, Library.GetActivePlateId(PackageFixture.PrivateContentId));
             Assert.True(Fixture.StagingIsEmpty);
+        }
+
+        /// <summary>
+        /// For content no build writes (an explicit null): opening never throws, and the package
+        /// is then either refused like any hostile one, or imported as a Plate that materializes,
+        /// clones (the editor's baseline capture) and saves. Either way staging is cleaned up.
+        /// </summary>
+        internal async Task AssertRefusedOrUsableAsync(string path)
+        {
+            var staged = Packages.Inspect(path);
+            Assert.True(Directory.Exists(staged.StagingDirectory));
+            if (!staged.CanImport)
+            {
+                staged.Dispose();
+                await AssertRefusedAsync(path, PackageErrorCode.ProfileInvalid);
+                return;
+            }
+
+            try
+            {
+                var result = await Packages.ImportAsync(staged);
+                Assert.True(result.Succeeded, result.Error?.Message);
+                var document = Library.OpenDocumentForEditing(result.PlateId);
+                var state = ProfileService.DocumentState.Capture(document);
+                Assert.Equal(document.Elements.Count, state.Elements.Count);
+                Assert.NotNull(PlateDocuments.ToJson(document));
+                await Library.SavePlateDocumentAsync(document);
+                Assert.True((await Fixture.Library.LoadAsync()).FindPlate(result.PlateId)!.IsReady);
+            }
+            finally
+            {
+                staged.Dispose();
+            }
+
+            Assert.False(Directory.Exists(staged.StagingDirectory));
+            Assert.Equal(PlateId, Library.GetActivePlateId(PackageFixture.PrivateContentId));
         }
 
         public void Dispose() => Fixture.Dispose();
@@ -778,6 +816,13 @@ public class PackageSecurityTests
     [InlineData("too-many-playstyles")]
     [InlineData("active-hours")]
     [InlineData("duplicate-property")]
+    [InlineData("elements-null")]
+    [InlineData("playstyles-null")]
+    [InlineData("placements-null")]
+    [InlineData("timezone-null")]
+    [InlineData("element-name-null")]
+    [InlineData("fontfamily-null")]
+    [InlineData("text-null")]
     public async Task HostileValues_AreRefused(string kind)
     {
         using var setup = await Setup.CreateAsync();
@@ -815,9 +860,24 @@ public class PackageSecurityTests
                     case "level-out-of-range": p["BasicPlate"] = new JsonObject { ["Level"] = 100_000 }; break;
                     case "too-many-playstyles": p["BasicPlate"] = new JsonObject { ["Playstyles"] = new JsonArray("a", "b", "c", "d", "e", "f", "g") }; break;
                     case "active-hours": p["BasicPlate"] = new JsonObject { ["ActiveHours"] = new JsonObject { ["StartMinutes"] = -30 } }; break;
+                    case "elements-null": p["Elements"] = null; break;
+                    case "playstyles-null": p["BasicPlate"] = new JsonObject { ["Playstyles"] = null }; break;
+                    case "placements-null": p["BasicPlate"] = new JsonObject { ["Placements"] = null }; break;
+                    case "timezone-null": p["BasicPlate"] = new JsonObject { ["ActiveHours"] = new JsonObject { ["TimeZone"] = null } }; break;
+                    case "element-name-null": text!["Name"] = null; break;
+                    case "fontfamily-null": text!["FontFamily"] = null; break;
+                    case "text-null": text!["Text"] = null; break;
                 }
             });
         });
+
+        if (kind.EndsWith("-null", StringComparison.Ordinal))
+        {
+            // No build writes an explicit null. Opening must never throw on one; the package is
+            // then refused outright or imported as a Plate every consumer can use (see the helper).
+            await setup.AssertRefusedOrUsableAsync(path);
+            return;
+        }
 
         if (kind == "unknown-type-name")
         {

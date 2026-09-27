@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -16,15 +17,29 @@ public static class PlateNaming
     private const string CopySuffix = " Copy";
 
     /// <summary>
-    /// Trims the name and folds control characters (e.g. a pasted newline) to spaces. Returns
-    /// false with a player-facing <paramref name="error"/> for an empty or over-long result.
+    /// Trims the name and folds control characters (e.g. a pasted newline) and Unicode format
+    /// characters (zero-width spaces and joiners, byte order marks, bidirectional overrides, tag
+    /// characters — none of which show as anything) to spaces, so a name can't be invisible or
+    /// render its neighbours backwards. Returns false with a player-facing <paramref name="error"/>
+    /// for an empty or over-long result.
     /// </summary>
     public static bool TryNormalizeName(string? input, out string normalized, out string? error)
     {
-        var builder = new StringBuilder(input?.Length ?? 0);
-        foreach (var c in input ?? string.Empty)
+        var text = input ?? string.Empty;
+        var builder = new StringBuilder(text.Length);
+        for (var i = 0; i < text.Length; i++)
         {
-            builder.Append(char.IsControl(c) ? ' ' : c);
+            var c = text[i];
+            if (char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                // A character outside the Basic Multilingual Plane (an emoji, or a tag character).
+                var rune = new Rune(c, text[i + 1]);
+                builder.Append(Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format ? " " : rune.ToString());
+                i++;
+                continue;
+            }
+
+            builder.Append(char.IsControl(c) || CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.Format ? ' ' : c);
         }
 
         normalized = builder.ToString().Trim();
