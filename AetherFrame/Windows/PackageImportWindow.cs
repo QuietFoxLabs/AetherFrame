@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using AetherFrame.Services;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Packages;
 using AetherFrame.UI.Rendering;
 using Dalamud.Bindings.ImGui;
@@ -280,7 +281,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
             else
             {
                 importError = "The file couldn't be checked. See the Dalamud log for details.";
-                DalamudServices.Log.Error(inspecting.Exception?.GetBaseException(), "AetherFrame failed to check a Plate file.");
+                DalamudServices.Log.Error(LogPrivacy.ForLog(inspecting.Exception?.GetBaseException()), "AetherFrame failed to check a Plate file.");
             }
         }
 
@@ -293,7 +294,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
 
             if (!importing.IsCompletedSuccessfully)
             {
-                DalamudServices.Log.Error(importing.Exception?.GetBaseException(), "AetherFrame failed to import a Plate file.");
+                DalamudServices.Log.Error(LogPrivacy.ForLog(importing.Exception?.GetBaseException()), "AetherFrame failed to import a Plate file.");
             }
 
             if (result.Succeeded)

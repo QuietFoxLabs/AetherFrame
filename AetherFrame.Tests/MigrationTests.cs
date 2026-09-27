@@ -10,6 +10,7 @@ using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Persistence;
 using AetherFrame.Persistence.Schema;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Plates;
 using Xunit;
 
@@ -609,9 +610,12 @@ public class FailureIsolationTests
         var preserved = Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory));
         Assert.Equal("not json at all", File.ReadAllText(preserved));
 
-        // The log names the copy by file name only, never by its directory.
+        // The log never names the copy's directory, nor a binding's file: its name is the
+        // character's Content ID, so the log says "character binding file" instead.
         var kept = Assert.Single(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("kept a copy", StringComparison.Ordinal));
-        Assert.Contains(Path.GetFileName(preserved), kept, StringComparison.Ordinal);
+        Assert.StartsWith($"{Characters.Alice.ContentId}.damaged-", Path.GetFileName(preserved), StringComparison.Ordinal);
+        Assert.Contains(LogPrivacy.CharacterBindingFile, kept, StringComparison.Ordinal);
+        Assert.DoesNotContain(Characters.Alice.ContentId.ToString(), kept, StringComparison.Ordinal);
         Assert.DoesNotContain(fixture.Root, kept, StringComparison.Ordinal);
     }
 

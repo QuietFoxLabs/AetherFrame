@@ -121,7 +121,7 @@ internal sealed class StuckTempFallbackFileStore : IPlateFileStore
         }
 
         log.Warning(
-            $"AetherFrame wrote \"{Path.GetFileName(path)}\" directly because its temporary file is stuck open in the reliable storage; "
+            $"AetherFrame wrote \"{LogPrivacy.FileName(path)}\" directly because its temporary file is stuck open in the reliable storage; "
             + "the backup copy of that file is stale until its next save succeeds.");
     }
 }

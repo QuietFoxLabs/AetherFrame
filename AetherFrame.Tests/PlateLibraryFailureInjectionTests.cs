@@ -8,6 +8,7 @@ using AetherFrame.Domain.Assets;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Persistence;
 using AetherFrame.Services;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Lifecycle;
 using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
@@ -69,7 +70,7 @@ public class UnavailableFileTests
         Assert.True(library.IsLoaded);
         Assert.Equal(2, library.GetOrderedPlates().Count);
         Assert.Null(library.GetBinding(Characters.Alice.ContentId));
-        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("1001.json", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("a character binding file", StringComparison.Ordinal) && !m.Contains("1001", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
 
         var refused = await Assert.ThrowsAsync<PlateLibraryException>(() => library.SetActivePlateAsync(Characters.Alice, second.PlateId));
         Assert.Contains("Restart the game", refused.Message, StringComparison.Ordinal);
@@ -250,7 +251,7 @@ public class BackupRecoveryObservabilityTests
 
         Assert.Equal(first.PlateId, library.GetActivePlateId(Characters.Alice.ContentId));
         Assert.Equal([first.PlateId, second.PlateId], library.GetBinding(Characters.Alice.ContentId)!.PlateIds);
-        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("1001.json", StringComparison.Ordinal) && m.Contains("backup", StringComparison.Ordinal));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains(LogPrivacy.CharacterBindingFile, StringComparison.Ordinal) && !m.Contains("1001", StringComparison.Ordinal) && m.Contains("backup", StringComparison.Ordinal));
         var preserved = Assert.Single(Directory.GetFiles(fixture.Paths.RecoveryDirectory));
         Assert.Equal("{ \"Version\": 2, \"ContentId\": 1001, \"Pro", File.ReadAllText(preserved));
 
@@ -769,7 +770,7 @@ public class StartupWriteFailureTests
         Assert.Equal(profileId, Assert.Single(library.GetOrderedPlates()).PlateId);
         Assert.Equal(profileId, library.GetActivePlateId(Owner));
         Assert.Equal(legacyBinding, fixture.ReadBindingJson(Owner));
-        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains($"{Owner}.json", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("could not write a character binding file", StringComparison.Ordinal) && !m.Contains($"{Owner}", StringComparison.Ordinal) && !m.Contains(fixture.Root, StringComparison.Ordinal));
 
         // No index this session — not even after an operation that normally writes it.
         Assert.False(File.Exists(fixture.Paths.LibraryFile));

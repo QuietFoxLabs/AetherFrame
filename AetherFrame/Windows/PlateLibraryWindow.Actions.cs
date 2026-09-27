@@ -323,7 +323,7 @@ internal sealed partial class PlateLibraryWindow
         catch (Exception ex)
         {
             errorMessage = "That Plate couldn't be opened. See the Dalamud log for details.";
-            DalamudServices.Log.Error(ex, "AetherFrame failed to open a Plate.");
+            DalamudServices.Log.Error(LogPrivacy.ForLog(ex), "AetherFrame failed to open a Plate.");
         }
     }
 
@@ -613,7 +613,7 @@ internal sealed partial class PlateLibraryWindow
         }
         catch (Exception ex) when (ex is not PlateLibraryException and not TemplateLibraryException)
         {
-            DalamudServices.Log.Error(ex, $"AetherFrame failed to {name}.");
+            DalamudServices.Log.Error(LogPrivacy.ForLog(ex), $"AetherFrame failed to {name}.");
             throw;
         }
     }

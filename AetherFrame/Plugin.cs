@@ -67,7 +67,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly PlatePackageService packageService;
     private readonly BasicGuidance basicGuidance;
     private readonly AetherFrameCommandRegistration commands;
-    private readonly DalamudAetherFrameLog log;
+    private readonly IAetherFrameLog log;
 
     // Every file-writing operation the plugin owns (Library, Templates, package import/export),
     // so unloading can let running ones finish before disposing what they use.
@@ -76,7 +76,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     public Plugin()
     {
         DalamudServices.Initialize(PluginInterface, PlayerState, Framework, Log, KeyState, TextureProvider, DataManager, UnlockState, ObjectTable);
-        log = new DalamudAetherFrameLog(Log);
+        // Every message and exception passes LogPrivacy first: no character binding file (named by
+        // the character's Content ID) is ever named in the log.
+        log = new RedactingAetherFrameLog(new DalamudAetherFrameLog(Log));
 
         // A damaged configuration file never stops AetherFrame from loading: it starts from the
         // defaults instead (the file holds only the guidance flag below, and is rewritten readable).
@@ -244,7 +246,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
 
             // Nothing on disk is touched by a failed load; My Plates says it couldn't load.
-            Log.Error(ex, "AetherFrame could not load the Plate Library.");
+            Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not load the Plate Library.");
             plateLibraryWindow.MarkLoadFailed();
         }
 
@@ -258,7 +260,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
             // Nothing on disk is touched by a failed load; Templates says the saved ones couldn't
             // load, and built-in Templates stay usable, so Create Plate still works.
-            Log.Error(ex, "AetherFrame could not load the Template Library.");
+            Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not load the Template Library.");
         }
     }
 
@@ -285,7 +287,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "AetherFrame could not clean up after its load was stopped.");
+            Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not clean up after its load was stopped.");
         }
 
         throw new OperationCanceledException("AetherFrame stopped loading because it is unloading.", exception, cancellationToken);

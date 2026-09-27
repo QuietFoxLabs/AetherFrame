@@ -341,7 +341,7 @@ internal sealed class PlateLibraryService
                 // Writing the index now would mark the migration complete with this character's
                 // legacy associations still only in memory, so the index stays unwritten this
                 // session and the next startup migrates again (idempotently).
-                log.Error(ex, $"AetherFrame loaded the Plate Library but could not write character binding {Path.GetFileName(paths.GetBindingPath(contentId))}; the migration will be retried at the next startup.");
+                log.Error(ex, "AetherFrame loaded the Plate Library but could not write a character binding file; the migration will be retried at the next startup.");
                 lock (gate)
                 {
                     libraryWritable = false;
@@ -470,7 +470,7 @@ internal sealed class PlateLibraryService
 
                 if (result.IsNewerVersion)
                 {
-                    log.Warning($"AetherFrame found a character binding saved by a newer version ({Path.GetFileName(path)}); it is left untouched.");
+                    log.Warning("AetherFrame found a character binding file saved by a newer version; it is left untouched.");
                     newer.Add(contentId);
                     continue;
                 }
@@ -487,12 +487,12 @@ internal sealed class PlateLibraryService
             }
             catch (Exception ex) when (IsContentDamage(ex))
             {
-                log.Error(ex, $"AetherFrame could not read character binding {Path.GetFileName(path)}; it is left untouched.");
+                log.Error(ex, "AetherFrame could not read a character binding file; it is left untouched.");
                 unreadable.Add(contentId);
             }
             catch (Exception ex) when (!IsInterruption(ex))
             {
-                log.Error(ex, $"AetherFrame could not open character binding {Path.GetFileName(path)}; this character's Plate settings are left untouched and can't be changed until the game is restarted.");
+                log.Error(ex, "AetherFrame could not open a character binding file; this character's Plate settings are left untouched and can't be changed until the game is restarted.");
                 unavailable.Add(contentId);
             }
         }
@@ -588,7 +588,7 @@ internal sealed class PlateLibraryService
             }
             catch (Exception ex)
             {
-                log.Error(ex, $"AetherFrame could not back up {Path.GetFileName(path)} before migrating; continuing (the original is not modified destructively).");
+                log.Error(ex, "AetherFrame could not back up a character binding file before migrating; continuing (the original is not modified destructively).");
             }
         }
     }
@@ -1457,7 +1457,7 @@ internal sealed class PlateLibraryService
 
         var destination = paths.GetRecoveryPath(path, utcNow());
         store.CopyFile(path, destination);
-        log.Warning($"AetherFrame kept a copy of damaged file {Path.GetFileName(path)} in Recovery as {Path.GetFileName(destination)}.");
+        log.Warning($"AetherFrame kept a copy of damaged file {LogPrivacy.FileName(path)} in Recovery as {LogPrivacy.FileName(destination)}.");
     }
 
     /// <summary>
@@ -1469,7 +1469,7 @@ internal sealed class PlateLibraryService
     /// </summary>
     private void KeepRecoveredFile(string path)
     {
-        var fileName = Path.GetFileName(path);
+        var fileName = LogPrivacy.FileName(path);
         log.Warning($"AetherFrame found {fileName} damaged and read it from the backup copy instead; the damaged file is kept in Recovery.");
 
         try
