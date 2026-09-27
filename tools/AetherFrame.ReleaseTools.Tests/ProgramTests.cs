@@ -185,6 +185,25 @@ public class ProgramTests
     }
 
     [Fact]
+    public void ValidateRepository_ChecksATestingExclusiveEntryAgainstTheGivenTestingPackage()
+    {
+        using var directory = new TempDirectory();
+        using var other = new TempDirectory();
+        var config = TestPackages.Config(directory);
+        var changelog = TestPackages.Changelog(directory, ("0.1.6", "- New."), ("0.1.5", "- Old."));
+        var package = TestPackages.Package(directory, "0.1.5");
+        var output = directory.File("pluginmaster.json");
+        Assert.Equal(0, Run("generate-repository", "--config", config, "--changelog", changelog, "--last-update", "1790414610", "--testing-exclusive", "--testing-package", package, "--output", output).Code);
+
+        Assert.Equal(0, Run("validate-repository", "--repository", output, "--config", config, "--testing-package", package, "--changelog", changelog).Code);
+
+        var (code, text, _) = Run("validate-repository", "--repository", output, "--config", config, "--testing-package", TestPackages.Package(other, "0.1.6"), "--changelog", changelog);
+        Assert.Equal(1, code);
+        Assert.Contains("[FAIL] testing package version: the entry says 0.1.5, the package is 0.1.6.", text);
+        Assert.DoesNotContain("Repository metadata OK", text);
+    }
+
+    [Fact]
     public void GenerateRepository_RefusesABrokenPackage_AndWritesNothing()
     {
         using var directory = new TempDirectory();
