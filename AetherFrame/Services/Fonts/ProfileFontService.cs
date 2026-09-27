@@ -285,8 +285,8 @@ internal sealed class ProfileFontService : IDisposable
         atlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
         {
             // Explicit ranges for the bundled faces (see FontTierPolicy.GlyphRanges); without
-            // them Dalamud builds every glyph the TTF maps, which for Cousine is nearly three
-            // times the surface for glyphs no Plate can show.
+            // them Dalamud builds every glyph the TTF maps, which for Cousine is about 1.4 times
+            // the surface, the extra all glyphs no Plate needs.
             var config = new SafeFontConfig { SizePx = sizePx, GlyphRanges = FontTierPolicy.GlyphRanges(descriptor.Id) };
             var resourceName = GetEmbeddedResourceName(descriptor.Id, bold, italic);
 

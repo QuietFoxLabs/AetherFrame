@@ -95,7 +95,7 @@ public class FontTierPolicyTests
         // what zoom level starts upscaling, and should be deliberate.
         Assert.Equal(280f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameSans));
         Assert.Equal(240f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameSerif));
-        Assert.Equal(160f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono));
+        Assert.Equal(140f, FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono));
         Assert.Equal(TextProfileElement.MaxFontSize, FontTierPolicy.MaxTierSize(ProfileFontFamilies.DalamudDefault));
         Assert.Equal(12_000_000L, FontTierPolicy.SingleTierBudgetPixels);
         Assert.Equal(16L * 4096 * 4096, FontTierPolicy.AtlasBudgetPixels);
@@ -312,14 +312,15 @@ public class FontTierPolicyTests
     [Fact]
     public void ExplicitRanges_LeaveOutAThirdOfMonosFullCmap()
     {
-        // The reason Mono reaches 160 px rather than 140: without ranges Dalamud builds every
-        // glyph Cousine maps (over 2200), the phonetic alphabets, combining marks and box drawing
-        // among them, and the full set would not fit the single-tier budget at the cap.
-        var face = TrueTypeFace.Load(FontPath("Cousine", "Regular"));
+        // The reason Mono reaches 140 px rather than 120: without ranges Dalamud builds every
+        // glyph Cousine maps (over 2200), the phonetic alphabets, combining marks and polytonic
+        // Greek among them, and in its heaviest face the full set would not fit the single-tier
+        // budget at the cap.
+        var faces = FaceSuffixes.Select(suffix => TrueTypeFace.Load(FontPath("Cousine", suffix))).ToList();
         var cap = FontTierPolicy.MaxTierSize(ProfileFontFamilies.AetherFrameMono);
-        var full = face.Surface(cap, _ => true);
-        var ranged = face.Surface(cap, FontTierPolicy.CoversCodepoint);
-        Assert.True(face.CountMapped(_ => true) > 2000);
+        var full = faces.Max(face => face.Surface(cap, _ => true));
+        var ranged = faces.Max(face => face.Surface(cap, FontTierPolicy.CoversCodepoint));
+        Assert.All(faces, face => Assert.True(face.CountMapped(_ => true) > 2000));
         Assert.True(ranged * 4 < full * 3, $"ranged {ranged / 1e6:F1} Mpx vs full {full / 1e6:F1} Mpx");
         Assert.True(full > FontTierPolicy.SingleTierBudgetPixels, $"the full cmap fits the budget at {cap} px ({full / 1e6:F1} Mpx)");
         Assert.True(ranged <= FontTierPolicy.SingleTierBudgetPixels);
@@ -351,7 +352,8 @@ public class FontTierPolicyTests
         Assert.True(FontTierPolicy.CoversCodepoint('·')); // the Basic separator
         Assert.True(FontTierPolicy.CoversCodepoint('Ж')); // Cyrillic
         Assert.True(FontTierPolicy.CoversCodepoint('…')); // ellipsis
-        Assert.False(FontTierPolicy.CoversCodepoint(0x2500)); // box drawing
+        Assert.True(FontTierPolicy.CoversCodepoint(0x2550)); // box drawing, decorative text in Mono
+        Assert.False(FontTierPolicy.CoversCodepoint(0x0301)); // combining mark
         Assert.False(FontTierPolicy.CoversCodepoint(0x4E2D)); // CJK
     }
 
@@ -375,6 +377,16 @@ public class FontTierPolicyTests
     [InlineData(0x2665, "black heart suit")]
     [InlineData(0x266A, "eighth note")]
     [InlineData(0xFB01, "fi ligature")]
+    [InlineData(0x2302, "house (Mono)")]
+    [InlineData(0x2500, "box drawings light horizontal (Mono)")]
+    [InlineData(0x2502, "box drawings light vertical (Mono)")]
+    [InlineData(0x2550, "box drawings double horizontal (Mono)")]
+    [InlineData(0x2554, "box drawings double down and right (Mono)")]
+    [InlineData(0x256C, "box drawings double vertical and horizontal (Mono)")]
+    [InlineData(0x2580, "upper half block (Mono)")]
+    [InlineData(0x2588, "full block (Mono)")]
+    [InlineData(0x2591, "light shade (Mono)")]
+    [InlineData(0x2593, "dark shade (Mono)")]
     public void GlyphRanges_KeepWhat015Rendered(int codepoint, string what)
     {
         // Every one of these is mapped by at least one bundled face and was rasterized by 0.1.5,
@@ -388,8 +400,6 @@ public class FontTierPolicyTests
     [InlineData(0x0301, "combining acute accent")]
     [InlineData(0x1D00, "phonetic extensions")]
     [InlineData(0x1F00, "Greek Extended")]
-    [InlineData(0x2500, "box drawing")]
-    [InlineData(0x2588, "block elements")]
     [InlineData(0x2726, "Dingbats (no face maps it)")]
     [InlineData(0xF500, "private use alternates")]
     [InlineData(0xFB1D, "Hebrew presentation forms")]
@@ -412,8 +422,6 @@ public class FontTierPolicyTests
             (0x1D00, 0x1DFF, "Phonetic Extensions and their supplement, Combining Diacritical Marks Supplement"),
             (0x1F00, 0x1FFF, "Greek Extended"),
             (0x20D0, 0x20FF, "Combining Diacritical Marks for Symbols"),
-            (0x2300, 0x23FF, "Miscellaneous Technical"),
-            (0x2500, 0x259F, "Box Drawing, Block Elements"),
             (0x2C60, 0x2C7F, "Latin Extended-C"),
             (0x2E00, 0x2E7F, "Supplemental Punctuation"),
             (0xA640, 0xA69F, "Cyrillic Extended-B"),

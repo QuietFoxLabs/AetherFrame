@@ -19,10 +19,11 @@ namespace AetherFrame.Domain.Rendering;
 /// <list type="bullet">
 /// <item>The bundled families are built with explicit <see cref="GlyphRanges"/> — the scripts
 /// and symbols a Plate's text can plausibly hold (Latin with its extensions, Greek, Cyrillic,
-/// Hebrew, punctuation, currency, arrows, mathematical and common symbols) — instead of every
-/// glyph their TTF maps, which leaves out the phonetic alphabets, combining marks, box drawing
-/// and presentation forms Cousine also carries: a third of its surface, and one tier of the
-/// size Mono can reach for the same budget.</item>
+/// Hebrew, punctuation, currency, arrows, mathematical and common symbols, and the box drawing
+/// and block characters of decorative text) — instead of every glyph their TTF maps, which
+/// leaves out the phonetic alphabets, combining marks, polytonic Greek and presentation forms
+/// Cousine also carries: almost a third of its surface, and one tier of the size Mono can reach
+/// for the same budget.</item>
 /// <item>Each family has a largest tier (<see cref="MaxTierIndex"/>) chosen so that a single
 /// tier's <see cref="EstimatedSurfacePixels"/> stays under <see cref="SingleTierBudgetPixels"/>.
 /// A request above it uses the largest allowed tier, exactly as a request above the ladder's top
@@ -87,11 +88,12 @@ internal static class FontTierPolicy
     /// zero-terminated): whole Unicode blocks, so that everything a Latin-, Greek-, Cyrillic- or
     /// Hebrew-script player types, everything AetherFrame itself writes into a Plate (see
     /// <c>BasicPlateText</c>, <c>IdentityHeaderRules.DecorationSymbols</c>) and the symbols 0.1.5
-    /// rendered from these faces (€, ™, №, →, ≠, ♥, the fi/fl ligatures, …) stay covered. Left
-    /// out, deliberately: IPA and phonetic extensions, combining marks, Greek Extended, box
-    /// drawing and block elements, Hebrew presentation forms and the fonts' private-use
-    /// alternates (the exclusion test lists them), none of which a Plate needs; no bundled face
-    /// carries the Dingbats such as U+2726 either.
+    /// rendered from these faces (€, ™, №, →, ≠, ♥, the fi/fl ligatures, the box drawing and
+    /// block characters Mono carries for decorative text such as ═══ or ░▒▓, …) stay covered.
+    /// Left out, deliberately: IPA and phonetic extensions, combining marks, Greek Extended,
+    /// Hebrew presentation forms and the fonts' private-use alternates (the exclusion test lists
+    /// them), none of which a Plate needs; no bundled face carries the Dingbats such as U+2726
+    /// either.
     /// </summary>
     private static readonly ushort[] BundledGlyphRanges =
     [
@@ -111,6 +113,9 @@ internal static class FontTierPolicy
         0x2100, 0x218F, // Letterlike Symbols, Number Forms
         0x2190, 0x21FF, // Arrows
         0x2200, 0x22FF, // Mathematical Operators
+        0x2300, 0x23FF, // Miscellaneous Technical (⌂, ⌐, ⌠, ⌡)
+        0x2500, 0x257F, // Box Drawing (─, │, ═, ║, ╔, ╬, …)
+        0x2580, 0x259F, // Block Elements (▀, ▄, █, ░, ▒, ▓, …)
         0x25A0, 0x25FF, // Geometric Shapes
         0x2600, 0x26FF, // Miscellaneous Symbols
         0xFB00, 0xFB06, // Latin ligatures (ﬁ, ﬂ)
@@ -131,7 +136,7 @@ internal static class FontTierPolicy
 
     private static readonly SurfaceModel SansModel = new(608, 0.475);
     private static readonly SurfaceModel SerifModel = new(612, 0.500);
-    private static readonly SurfaceModel MonoModel = new(1488, 0.541);
+    private static readonly SurfaceModel MonoModel = new(1540, 0.541);
 
     /// <summary>
     /// The flat charge for one Dalamud Default tier, whose real glyph set is unknowable here
