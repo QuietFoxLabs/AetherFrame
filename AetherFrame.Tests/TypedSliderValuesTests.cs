@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -86,6 +87,107 @@ public class TypedSliderValuesTests
             Assert.Equal(MathF.Cos(typedRadians), MathF.Cos(wrappedRadians), 3);
             Assert.Equal(MathF.Sin(typedRadians), MathF.Sin(wrappedRadians), 3);
         }
+    }
+
+    // ---------------------------------------------------------------- a typed angle, frame by frame
+
+    /// <summary>
+    /// What Dalamud's ImGui (1.88) hands a 0-360 "%.0f deg" SliderFloat on each frame of a
+    /// Ctrl+Click entry, recorded by driving the real slider headlessly: the text is applied on
+    /// every keystroke (a prefix that doesn't parse changes nothing), and once more by Enter. So a
+    /// typed 1e39 passes 1 and 1e3 = 1000 (which wraps to 280) before its last character
+    /// overflows to +Infinity.
+    /// </summary>
+    private static readonly Dictionary<string, float[]> TypedFrames = new()
+    {
+        ["1e39"] = [1f, 1000f, float.PositiveInfinity, float.PositiveInfinity],
+        ["-1e39"] = [-1f, -1000f, float.NegativeInfinity, float.NegativeInfinity],
+        ["5000"] = [5f, 50f, 500f, 5000f, 5000f],
+        ["-90"] = [-9f, -90f, -90f],
+        ["100"] = [1f, 10f, 100f, 100f],
+    };
+
+    private static (Func<ProfileBackground, float> Read, Action<ProfileBackground, float> Write) AngleOf(string control) => control switch
+    {
+        "Gradient Angle" => (b => b.GradientAngle, (b, v) => b.GradientAngle = v),
+        "Texture Rotation" => (b => b.TextureRotation, (b, v) => b.TextureRotation = v),
+        _ => throw new ArgumentOutOfRangeException(nameof(control)),
+    };
+
+    private static void Type(EditorSession session, string control, string typed)
+    {
+        var (read, write) = AngleOf(control);
+        foreach (var frame in TypedFrames[typed])
+        {
+            session.ContinueBackgroundAngleEdit(frame, read, write);
+        }
+
+        session.CommitPendingBackgroundEdit(); // the slider deactivates after the edit
+    }
+
+    /// <summary>
+    /// Step 13 of the 0.1.6 acceptance: after -90 (270 degrees), a typed 1e39 left the angle at 280,
+    /// the wrap of the 1e3 its typing passed through. An angle that overflows changes nothing: it
+    /// is what it was before the typed edit began, whatever the earlier keystrokes showed.
+    /// </summary>
+    [Theory]
+    [InlineData("Gradient Angle", "1e39", 270f)]
+    [InlineData("Gradient Angle", "-1e39", 270f)]
+    [InlineData("Gradient Angle", "5000", 320f)]
+    [InlineData("Gradient Angle", "-90", 270f)]
+    [InlineData("Texture Rotation", "1e39", 270f)]
+    [InlineData("Texture Rotation", "-1e39", 270f)]
+    [InlineData("Texture Rotation", "5000", 320f)]
+    [InlineData("Texture Rotation", "-90", 270f)]
+    public async Task ATypedAngle_AsImGuiAppliesItPerKeystroke_EndsAtItsText_OrUnchangedWhenItOverflows(string control, string typed, float expected)
+    {
+        using var harness = await BasicHarness.OpenDocumentAsync(BasicDocuments.Blank());
+        var session = harness.Session;
+        var (read, _) = AngleOf(control);
+        Type(session, control, "-90");
+        Assert.Equal(270f, read(harness.Document.Background!));
+
+        Type(session, control, typed);
+
+        Assert.Equal(expected, read(harness.Document.Background!));
+        Assert.Null(session.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData("Gradient Angle")]
+    [InlineData("Texture Rotation")]
+    public async Task AnOverflowingTypedAngle_LeavesNoHistoryEntry_AndEachEditKeepsItsOwnStartingAngle(string control)
+    {
+        using var harness = await BasicHarness.OpenDocumentAsync(BasicDocuments.Blank());
+        var session = harness.Session;
+        var (read, _) = AngleOf(control);
+        Type(session, control, "100");
+        Assert.True(session.CanUndo);
+        Assert.True(session.IsDirty);
+
+        // A second edit starts from 100, not from anything the first one passed through.
+        Type(session, control, "1e39");
+        Assert.Equal(100f, read(harness.Document.Background!));
+
+        // It changed nothing, so the only history entry is still the first edit.
+        session.Undo();
+        Assert.False(session.CanUndo);
+        Assert.Equal(read(BasicDocuments.Blank().Background!), read(harness.Document.Background!));
+    }
+
+    [Fact]
+    public async Task AnOverflowingAngle_ArrivingInOneFrame_AsWhenPasted_ChangesNothing()
+    {
+        using var harness = await BasicHarness.OpenDocumentAsync(BasicDocuments.Blank());
+        var session = harness.Session;
+        var before = harness.Document.Background!.GradientAngle;
+
+        session.ContinueBackgroundAngleEdit(float.PositiveInfinity, b => b.GradientAngle, (b, v) => b.GradientAngle = v);
+        session.CommitPendingBackgroundEdit();
+
+        Assert.Equal(before, harness.Document.Background.GradientAngle);
+        Assert.False(session.CanUndo);
+        Assert.False(session.IsDirty);
     }
 
     [Fact]

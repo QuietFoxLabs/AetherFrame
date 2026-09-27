@@ -123,6 +123,17 @@ internal sealed partial class EditorSession
         }
     }
 
+    /// <summary>
+    /// One frame of a background angle slider (the gradient's, the Pattern's) as a continuous
+    /// background edit, the value going through <see cref="TypedSliderValues.Angle"/>. ImGui applies
+    /// a value typed with Ctrl+Click on every keystroke, so by the last one the background already
+    /// holds what the earlier ones made of it (typing 1e39 passes 1e3, which wraps to 280). An
+    /// angle that changes nothing therefore leaves the one the background held before this edit
+    /// began, not the previous keystroke's.
+    /// </summary>
+    internal void ContinueBackgroundAngleEdit(float sliderValue, Func<ProfileBackground, float> read, Action<ProfileBackground, float> write) =>
+        BeginOrContinueBackgroundEdit(style => write(style, TypedSliderValues.Angle(sliderValue, read(pendingBackgroundBefore ?? style))));
+
     /// <summary>Finalizes a pending background edit started by <see cref="BeginOrContinueBackgroundEdit"/>.</summary>
     internal void CommitPendingBackgroundEdit()
     {

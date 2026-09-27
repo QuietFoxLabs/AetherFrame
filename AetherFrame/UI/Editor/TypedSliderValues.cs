@@ -38,7 +38,8 @@ internal static class TypedSliderValues
     /// A gradient or Pattern angle on a 0-360 slider. The renderer turns it into a direction, so
     /// a typed value outside 0-360 wraps into it (-90 is 270, 450 is 90) and draws exactly as the
     /// unwrapped value did in 0.1.5, while staying in the slider's range and in the package's. An
-    /// infinite angle has no direction, so it changes nothing.
+    /// infinite angle has no direction, so it changes nothing: <paramref name="current"/> is the
+    /// angle before the edit began (see <see cref="EditorSession.ContinueBackgroundAngleEdit"/>).
     /// </summary>
     internal static float Angle(float value, float current)
     {

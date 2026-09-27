@@ -463,8 +463,7 @@ internal sealed class BackgroundStylePanel
         // A typed angle outside 0-360 wraps into it (see TypedSliderValues).
         if (ImGui.SliderFloat("##GradientAngle", ref angle, 0f, 360f, "%.0f deg"))
         {
-            var value = TypedSliderValues.Angle(angle, background.GradientAngle);
-            editorSession.BeginOrContinueBackgroundEdit(style => style.GradientAngle = value);
+            editorSession.ContinueBackgroundAngleEdit(angle, style => style.GradientAngle, (style, value) => style.GradientAngle = value);
         }
 
         CommitBackgroundOnRelease();
@@ -658,8 +657,7 @@ internal sealed class BackgroundStylePanel
             EditorWidgets.PropertyLabel("Rotation");
             if (ImGui.SliderFloat("##TextureRotation", ref rotation, 0f, 360f, "%.0f deg"))
             {
-                var value = TypedSliderValues.Angle(rotation, background.TextureRotation);
-                editorSession.BeginOrContinueBackgroundEdit(style => style.TextureRotation = value);
+                editorSession.ContinueBackgroundAngleEdit(rotation, style => style.TextureRotation, (style, value) => style.TextureRotation = value);
             }
 
             CommitBackgroundOnRelease();
