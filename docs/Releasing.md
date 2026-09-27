@@ -16,17 +16,18 @@ Testers follow [Testing](Testing.md).
 
 1. Finish the milestone on `master` as [Versioning](Versioning.md) describes, with `Version.props` set to the new version.
 2. Move the `## [Unreleased]` notes in [CHANGELOG.md](../CHANGELOG.md) under `## [<version>] - <date>` and add its compare link. The release fails without that section.
-3. Optional dry run: **Actions → Release → Run workflow** on `master`. It builds, tests and checks the package and keeps it as a workflow artifact, without creating a release.
-4. Tag and push the tag:
+3. Regenerate the dry-run repository fixture for the new version and commit it with steps 1 and 2 ([command](../distribution/dry-run/README.md#regenerating)). The tooling tests fail while `distribution/dry-run/pluginmaster.json` describes another version or another CHANGELOG text, so the Build workflow and a tagged Release would fail without it, and a tag is never moved.
+4. Optional dry run: **Actions → Release → Run workflow** on `master`. It builds, tests and checks the package and keeps it as a workflow artifact, without creating a release.
+5. Tag and push the tag (only after the Build workflow passed on that commit):
 
    ```bash
    git tag -a v0.1.6 -m "AetherFrame 0.1.6"
    git push origin v0.1.6
    ```
 
-5. The **Release** workflow runs. When it succeeds, a draft pre-release is waiting under **Releases**.
-6. Download the ZIP from the draft and load it in game as a dev plugin ([Testing](Testing.md#from-a-github-release-zip-dev-plugin)). `/af version` should print the new version and the tag's commit.
-7. Publish the draft by hand when you're happy with it, or delete it.
+6. The **Release** workflow runs. When it succeeds, a draft pre-release is waiting under **Releases**.
+7. Download the ZIP from the draft and load it in game as a dev plugin ([Testing](Testing.md#from-a-github-release-zip-dev-plugin)). `/af version` should print the new version and the tag's commit.
+8. Publish the draft by hand when you're happy with it, or delete it.
 
 ### What the workflow checks
 
