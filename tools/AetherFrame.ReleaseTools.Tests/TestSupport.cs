@@ -219,6 +219,28 @@ internal static class TestPackages
         return path;
     }
 
+    /// <summary>
+    /// Rewrites one entry of a ZIP in place, for damaged-archive tests: the callback gets the file's bytes
+    /// and the offsets of the entry's central directory header and local header (ZIP specification
+    /// layout: central +10 / local +8 compression method, central +24 / local +22 uncompressed size).
+    /// </summary>
+    internal static void RewriteEntry(string zipPath, string entryName, Action<byte[], int, int> rewrite)
+    {
+        var bytes = File.ReadAllBytes(zipPath);
+        var name = Encoding.ASCII.GetBytes(entryName);
+        for (var i = 0; i + 46 + name.Length <= bytes.Length; i++)
+        {
+            if (BitConverter.ToUInt32(bytes, i) == 0x02014b50 && BitConverter.ToUInt16(bytes, i + 28) == name.Length && bytes.AsSpan(i + 46, name.Length).SequenceEqual(name))
+            {
+                rewrite(bytes, i, (int)BitConverter.ToUInt32(bytes, i + 42));
+                File.WriteAllBytes(zipPath, bytes);
+                return;
+            }
+        }
+
+        throw new InvalidOperationException($"no central directory header for {entryName}");
+    }
+
     /// <summary>A valid package for the version, with optional replacements and extra entries.</summary>
     internal static string Package(
         TempDirectory directory,

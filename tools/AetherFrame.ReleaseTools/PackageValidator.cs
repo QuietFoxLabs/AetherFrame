@@ -370,7 +370,19 @@ public static class PackageValidator
             checks.Require(major == config.DalamudApiLevel, "project SDK API level", major.ToString(System.Globalization.CultureInfo.InvariantCulture), $"Dalamud.NET.Sdk {major} does not match the configured API level {config.DalamudApiLevel}.");
         }
 
-        string? Property(string name) => project.Root?.Elements("PropertyGroup").Elements(name).SingleOrDefault()?.Value.Trim();
+        // The project file is read as XML, not evaluated by MSBuild, so a field set twice (say, under a
+        // Condition) has no single value to compare and fails below.
+        var repeated = new List<string>();
+        string? Property(string name)
+        {
+            var values = project.Root?.Elements("PropertyGroup").Elements(name).ToList() ?? new List<XElement>();
+            if (values.Count > 1)
+            {
+                repeated.Add(name);
+            }
+
+            return values.Count == 1 ? values[0].Value.Trim() : null;
+        }
 
         var differences = new List<string>();
         void Compare(string name, string? projectValue, string? manifestValue)
@@ -391,6 +403,12 @@ public static class PackageValidator
         if (!(projectTags ?? Array.Empty<string>()).SequenceEqual(manifest.Tags ?? new List<string>(), StringComparer.Ordinal))
         {
             differences.Add("Tags");
+        }
+
+        if (repeated.Count > 0)
+        {
+            checks.Fail("project manifest fields", $"{string.Join(", ", repeated)} {(repeated.Count == 1 ? "is" : "are")} set more than once in {Path.GetFileName(projectPath)}; each manifest field must be set exactly once, since this check reads the project file without evaluating MSBuild conditions.");
+            return;
         }
 
         checks.Require(differences.Count == 0, "project manifest fields", "match the packaged manifest", $"the packaged manifest differs from the project in {string.Join(", ", differences)}; the package was built from other sources.");

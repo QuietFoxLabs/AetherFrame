@@ -81,6 +81,60 @@ public class PackageValidatorTests
     }
 
     [Theory]
+    [InlineData("central directory")]
+    [InlineData("entry data")]
+    [InlineData("compression method")]
+    public void DamagedZip_IsAFailedCheck_NotACrash(string damage)
+    {
+        using var directory = new TempDirectory();
+        var path = TestPackages.Package(directory);
+        TestPackages.RewriteEntry(path, damage == "central directory" ? "AetherFrame.json" : "AetherFrame.dll", (bytes, central, local) =>
+        {
+            switch (damage)
+            {
+                case "central directory":
+                    bytes[central] = 0;
+                    break;
+                case "entry data":
+                    var data = local + 30 + BitConverter.ToUInt16(bytes, local + 26) + BitConverter.ToUInt16(bytes, local + 28);
+                    for (var i = data + 2; i < data + 64; i++)
+                    {
+                        bytes[i] ^= 0xFF;
+                    }
+
+                    break;
+                default:
+                    bytes[central + 10] = 14; // LZMA, which .NET cannot read
+                    bytes[local + 8] = 14;
+                    break;
+            }
+        });
+
+        var (checks, report) = TestPackages.Validate(new PackageValidationRequest { PackagePath = path, Configuration = TestPackages.Configuration() });
+
+        Assert.Null(report);
+        Assert.Contains("damaged or uses a feature .NET cannot read", TestPackages.Failure(checks, "package format"));
+    }
+
+    [Fact]
+    public void EntryShorterThanItsDeclaredSize_Fails()
+    {
+        using var directory = new TempDirectory();
+        var path = TestPackages.Package(directory);
+        var actual = TestPackages.Manifest().Length;
+        TestPackages.RewriteEntry(path, "AetherFrame.json", (bytes, central, local) =>
+        {
+            BitConverter.GetBytes((uint)actual + 100).CopyTo(bytes, central + 24);
+            BitConverter.GetBytes((uint)actual + 100).CopyTo(bytes, local + 22);
+        });
+
+        var (checks, report) = TestPackages.Validate(new PackageValidationRequest { PackagePath = path, Configuration = TestPackages.Configuration() });
+
+        Assert.Null(report);
+        Assert.Contains($"{actual} bytes when decompressed, although the directory says {actual + 100}", TestPackages.Failure(checks, "size of AetherFrame.json"));
+    }
+
+    [Theory]
     [InlineData("0.1.5", "0.1.6", "Version.props", "Version.props says 0.1.6, the package is 0.1.5")]
     public void VersionPropsMismatch_Fails(string packageVersion, string propsVersion, string check, string message)
     {
@@ -315,6 +369,20 @@ public class PackageValidatorTests
 
         Assert.Null(report);
         Assert.Contains(message, TestPackages.Failure(checks, "assembly architecture"));
+    }
+
+    [Fact]
+    public void X64DllMarkedAs32BitRequired_Fails()
+    {
+        using var directory = new TempDirectory();
+        var (checks, report) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(directory, assembly: TestPackages.Assembly(machine: Machine.Amd64, flags: CorFlags.ILOnly | CorFlags.Requires32Bit)),
+            Configuration = TestPackages.Configuration(),
+        });
+
+        Assert.Null(report);
+        Assert.Contains("machine Amd64, PE32+, IL only, requires 32-bit", TestPackages.Failure(checks, "assembly architecture"));
     }
 
     [Fact]
@@ -657,6 +725,20 @@ public class PackageValidatorTests
     }
 
     [Fact]
+    public void DepsJsonNotDescribingTheProjectLibrary_Fails()
+    {
+        using var directory = new TempDirectory();
+        var deps = Encoding.UTF8.GetString(TestPackages.Deps()).Replace("\"type\": \"project\"", "\"type\": \"package\"", StringComparison.Ordinal);
+        var (checks, _) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(directory, deps: Encoding.UTF8.GetBytes(deps)),
+            Configuration = TestPackages.Configuration(),
+        });
+
+        Assert.Contains("does not describe AetherFrame/0.1.5 as the project library", TestPackages.Failure(checks, "deps.json"));
+    }
+
+    [Fact]
     public void MalformedDepsJson_Fails()
     {
         using var directory = new TempDirectory();
@@ -698,6 +780,24 @@ public class PackageValidatorTests
         });
 
         Assert.Contains("differs from the project in Description, Tags", TestPackages.Failure(checks, "project manifest fields"));
+    }
+
+    [Fact]
+    public void ProjectSettingAFieldTwice_Fails_InsteadOfGuessingWhichApplies()
+    {
+        using var directory = new TempDirectory();
+        var project = TestPackages.Csproj(directory);
+        File.WriteAllText(project, File.ReadAllText(project).Replace("</Project>", "  <PropertyGroup Condition=\"'$(Configuration)' == 'Debug'\">\n    <Description>Debug build.</Description>\n  </PropertyGroup>\n</Project>", StringComparison.Ordinal));
+
+        var (checks, report) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(directory),
+            Configuration = TestPackages.Configuration(),
+            ProjectPath = project,
+        });
+
+        Assert.Null(report);
+        Assert.Contains("Description is set more than once in AetherFrame.csproj", TestPackages.Failure(checks, "project manifest fields"));
     }
 
     [Fact]

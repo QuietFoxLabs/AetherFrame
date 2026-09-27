@@ -90,6 +90,20 @@ public class ProgramTests
     }
 
     [Fact]
+    public void ValidatePackage_ReportsADamagedZip_AsAFailedCheck()
+    {
+        using var directory = new TempDirectory();
+        var package = TestPackages.Package(directory);
+        TestPackages.RewriteEntry(package, "AetherFrame.json", (bytes, central, _) => bytes[central] = 0);
+
+        var (code, output, _) = Run("validate-package", "--package", package, "--config", TestPackages.Config(directory));
+
+        Assert.Equal(1, code);
+        Assert.Contains("[FAIL] package format: the ZIP archive is damaged", output);
+        Assert.Contains("FAILED:", output);
+    }
+
+    [Fact]
     public void ValidatePackage_WithAMissingConfiguration_Fails()
     {
         using var directory = new TempDirectory();

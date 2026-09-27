@@ -197,6 +197,9 @@ public class RepositoryGeneratorTests
     [InlineData("1000000000")]
     [InlineData("99999999999")]
     [InlineData("-5")]
+    [InlineData("١٧٩٠٤١٤٦١٠")]
+    [InlineData("１７９０４１４６１０")]
+    [InlineData("٢٠٢٦-09-26T09:23:30Z")]
     public void LastUpdateInAnotherFormOrOutOfRange_IsRefused(string text)
     {
         Assert.Throws<ReleaseCheckException>(() => RepositoryGenerator.ParseLastUpdate(text));

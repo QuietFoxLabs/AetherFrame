@@ -17,8 +17,9 @@ public static class RepositoryGenerator
     public static readonly DateTimeOffset EarliestLastUpdate = new(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
     public static readonly DateTimeOffset LatestLastUpdate = new(2100, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static readonly Regex UnixSeconds = new(@"^\d{1,11}$", RegexOptions.CultureInvariant);
-    private static readonly Regex Iso8601 = new(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})$", RegexOptions.CultureInvariant);
+    // ASCII digits only: \d also matches other scripts' digits, which the number parsers then reject with an exception.
+    private static readonly Regex UnixSeconds = new(@"^[0-9]{1,11}$", RegexOptions.CultureInvariant);
+    private static readonly Regex Iso8601 = new(@"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,7})?(Z|[+-][0-9]{2}:[0-9]{2})$", RegexOptions.CultureInvariant);
 
     public static RepositoryEntry Build(RepositoryConfiguration config, PackageReport? stable, PackageReport? testing, bool testingExclusive, DateTimeOffset lastUpdate)
     {
