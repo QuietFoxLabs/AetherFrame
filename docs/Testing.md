@@ -23,13 +23,15 @@ This is the current route. Test builds are attached to [GitHub Releases](https:/
 
 To update, disable AetherFrame, replace the three files with the new ones, and enable it again.
 
-### From the Dalamud plugin installer (testing builds)
+### From the Dalamud plugin installer (AetherFrame's custom repository)
 
-**Not available yet.** This will become the main route once AetherFrame has been accepted into the official Dalamud repository's testing track. Updates will then arrive automatically.
+**Not available yet.** This will become the main route once AetherFrame's own custom Dalamud repository is published; its address will be announced in the README and here. Dalamud then installs AetherFrame from it and updates it automatically.
 
 1. Type `/xlsettings` in game and open the **Experimental** tab.
-2. Tick **Get plugin testing builds**, then **Save and Close**.
+2. Under **Custom Plugin Repositories**, add the repository address, make sure it is enabled, then **Save and Close**.
 3. Type `/xlplugins`, search for **AetherFrame**, and install it.
+
+If a build there is offered to testers only, also tick **Get plugin testing builds** in step 2.
 
 ### Switching between the two
 

@@ -58,7 +58,7 @@ To run the package check locally after a Release build (PowerShell 7 or Windows 
 Then the full rule set and the repository metadata, with the release tooling:
 
 ```bash
-dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- validate-package --package dist/AetherFrame-0.1.5.zip --config distribution/repository.json --version-props Version.props --csproj AetherFrame/AetherFrame.csproj --changelog CHANGELOG.md --checksums dist/SHA256SUMS.txt --commit "$(git rev-parse HEAD)"
+dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- validate-package --package dist/AetherFrame-0.1.6.zip --config distribution/repository.json --version-props Version.props --csproj AetherFrame/AetherFrame.csproj --changelog CHANGELOG.md --checksums dist/SHA256SUMS.txt --commit "$(git rev-parse HEAD)"
 ```
 
 [CustomRepository](CustomRepository.md#building-and-validating-a-release-locally) has the rest of the commands.

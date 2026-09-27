@@ -131,7 +131,7 @@ I would also like to add a small amount of optional character information for pe
 
 ### Dalamud release
 
-There is still performance work, UI polish, accessibility work, and general cleanup to do before I submit AetherFrame to the official Dalamud plugin repository.
+There is still performance work, UI polish, accessibility work, and general cleanup to do before AetherFrame is ready for a wider release.
 
 The finished idea is simple: start with something that feels familiar to anyone who has made an FFXIV Adventure Plate, then give people the freedom to take it much further.
 

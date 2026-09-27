@@ -15,4 +15,4 @@ dotnet build AetherFrame.slnx --configuration Release
 dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- generate-repository --config distribution/repository.json --changelog CHANGELOG.md --last-update "$(git log -1 --format=%cI HEAD)" --stable-package AetherFrame/bin/x64/Release/AetherFrame/latest.zip --download-url-template "https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v{version}/{package}" --output distribution/dry-run/pluginmaster.json
 ```
 
-`--last-update` is the release instant the entry shows; for the fixture it is the commit date of the version's tag (`git log -1 --format=%cI v0.1.5`). Any fixed instant works, as long as it is given explicitly: the tool never uses the current time, so the output stays reproducible.
+`--last-update` is the release instant the entry shows; for the fixture it is the commit date of the version's tag (`git log -1 --format=%cI v0.1.6`). Any fixed instant works, as long as it is given explicitly: the tool never uses the current time, so the output stays reproducible.

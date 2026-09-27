@@ -90,18 +90,18 @@ dotnet test tools/AetherFrame.ReleaseTools.Tests/AetherFrame.ReleaseTools.Tests.
 ```
 
 ```powershell
-./.github/scripts/New-ReleasePackage.ps1 -Version 0.1.5 -Destination dist
+./.github/scripts/New-ReleasePackage.ps1 -Version 0.1.6 -Destination dist
 ```
 
 ```bash
-dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- validate-package --package dist/AetherFrame-0.1.5.zip --config distribution/repository.json --version-props Version.props --csproj AetherFrame/AetherFrame.csproj --changelog CHANGELOG.md --checksums dist/SHA256SUMS.txt --commit "$(git rev-parse HEAD)" --summary dist/package-summary.json
+dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- validate-package --package dist/AetherFrame-0.1.6.zip --config distribution/repository.json --version-props Version.props --csproj AetherFrame/AetherFrame.csproj --changelog CHANGELOG.md --checksums dist/SHA256SUMS.txt --commit "$(git rev-parse HEAD)" --summary dist/package-summary.json
 ```
 
 ```bash
-dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- generate-repository --config distribution/repository.json --changelog CHANGELOG.md --last-update "$(git log -1 --format=%cI HEAD)" --stable-package dist/AetherFrame-0.1.5.zip --output dist/pluginmaster.json
+dotnet run --project tools/AetherFrame.ReleaseTools --configuration Release --no-build -- generate-repository --config distribution/repository.json --changelog CHANGELOG.md --last-update "$(git log -1 --format=%cI HEAD)" --stable-package dist/AetherFrame-0.1.6.zip --output dist/pluginmaster.json
 ```
 
-Add `--dry-run` instead of `--output` to print the document without writing anything. `--tag v0.1.5` adds the tag check. `validate-repository --repository <file> --config distribution/repository.json [--stable-package <zip>] [--testing-package <zip>] [--changelog CHANGELOG.md]` checks an existing file. `checksums --output SHA256SUMS.txt <files>` and `verify-checksums --checksums SHA256SUMS.txt` write and check checksum files.
+Add `--dry-run` instead of `--output` to print the document without writing anything. `--tag v0.1.6` adds the tag check. `validate-repository --repository <file> --config distribution/repository.json [--stable-package <zip>] [--testing-package <zip>] [--changelog CHANGELOG.md]` checks an existing file. `checksums --output SHA256SUMS.txt <files>` and `verify-checksums --checksums SHA256SUMS.txt` write and check checksum files.
 
 Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Package OK`, `Repository metadata OK`, `Checksums OK` or `FAILED: n check(s) failed`. Exit codes: 0 all checks passed, 1 a check failed, 2 wrong usage. A run that fails writes nothing.
 
@@ -157,7 +157,7 @@ What is not enforced: byte-identical ZIPs across builds. The DLL itself is repro
 
 `package-summary.json`, written by `validate-package --summary`, records the package's SHA-256 and the SHA-256 of each of the three files inside it, including `AetherFrame.dll`, so a DLL loaded in game can be traced to a release with `Get-FileHash`.
 
-Players verify a download with `Get-FileHash .\AetherFrame-0.1.5.zip` (PowerShell) or `sha256sum -c SHA256SUMS.txt`. GitHub also publishes a `digest` for every release asset; the future publish workflow compares it with `SHA256SUMS.txt` before touching the repository.
+Players verify a download with `Get-FileHash .\AetherFrame-0.1.6.zip` (PowerShell) or `sha256sum -c SHA256SUMS.txt`. GitHub also publishes a `digest` for every release asset; the future publish workflow compares it with `SHA256SUMS.txt` before touching the repository.
 
 ## CI today: the dry run
 
