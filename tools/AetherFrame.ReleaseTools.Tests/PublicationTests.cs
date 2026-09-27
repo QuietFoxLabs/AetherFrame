@@ -38,7 +38,8 @@ public class PublicationTests
         Assert.Equal(15, entry.TestingDalamudApiLevel);
         Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip", entry.DownloadLinkTesting);
         Assert.Equal(DateTimeOffset.Parse("2026-09-28T12:00:00Z").ToUnixTimeSeconds(), entry.LastUpdate);
-        Assert.Equal($"changed=true\nsha256={Checksums.Sha256Hex(document)}\n", outputs);
+        var summaryBytes = File.ReadAllBytes(Path.Combine(publication, "summary.json"));
+        Assert.Equal($"changed=true\nsha256={Checksums.Sha256Hex(document)}\nsummary_sha256={Checksums.Sha256Hex(summaryBytes)}\n", outputs);
 
         // What the tool wrote passes validate-repository against the very package it links to.
         var (validateCode, validateOutput) = Run(
@@ -64,6 +65,7 @@ public class PublicationTests
         var message = File.ReadAllText(Path.Combine(publication, "commit-message.txt"));
         Assert.StartsWith("Publish 0.1.6 to testing\n\nAetherFrame custom repository: testing-exclusive 0.1.6 (was: nothing published).\n", message);
         Assert.Contains("Release v0.1.6 (testing-exclusive): https://github.com/richhiiee/AetherFrame/releases/tag/v0.1.6\n", message);
+        Assert.Contains($"  release id {TestReleases.ReleaseId}, published 2026-09-28T12:00:00Z, pre-release\n", message);
         Assert.Contains($"  tagged commit {TestPackages.Commit}\n", message);
         Assert.Contains($"pluginmaster.json: sha256 {Checksums.Sha256Hex(document)}", message);
         Assert.Contains("Workflow run: https://github.com/richhiiee/AetherFrame/actions/runs/123456789\n", message);
@@ -190,6 +192,27 @@ public class PublicationTests
     }
 
     [Fact]
+    public void TheRecord_BindsEachPackage_WhereTheFileCannot()
+    {
+        // pluginmaster.json names each release's download address, not its hash: a different build of the
+        // same release gives the same file. The record (and so the approval) still tells them apart.
+        using var first = new TempDirectory();
+        using var second = new TempDirectory();
+        var rebuilt = new string('d', 40);
+        TestReleases.Create(first.File("releases"), "0.1.6");
+        TestReleases.Create(second.File("releases"), "0.1.6", new ReleaseOptions { BuildCommit = rebuilt, TagCommit = rebuilt });
+
+        var (a, _, aOutputs) = Prepare(first, "0.1.6", "testing", current: null);
+        var (b, _, bOutputs) = Prepare(second, "0.1.6", "testing", current: null);
+
+        Assert.Equal(0, a);
+        Assert.Equal(0, b);
+        Assert.Equal(File.ReadAllBytes(first.File("publication/branch/pluginmaster.json")), File.ReadAllBytes(second.File("publication/branch/pluginmaster.json")));
+        Assert.Equal(aOutputs.Split('\n')[1], bOutputs.Split('\n')[1]);
+        Assert.NotEqual(aOutputs.Split('\n')[2], bOutputs.Split('\n')[2]);
+    }
+
+    [Fact]
     public void TheSameRequestAgain_PublishesNothing()
     {
         using var directory = new TempDirectory();
@@ -200,7 +223,7 @@ public class PublicationTests
 
         Assert.True(code == 0, output);
         Assert.Contains("Nothing to publish: branch plugin-repository already serves exactly this pluginmaster.json", output);
-        Assert.Equal($"changed=false\nsha256={Checksums.Sha256Hex(File.ReadAllBytes(published))}\n", outputs);
+        Assert.StartsWith($"changed=false\nsha256={Checksums.Sha256Hex(File.ReadAllBytes(published))}\nsummary_sha256=", outputs);
         Assert.Equal(File.ReadAllBytes(published), File.ReadAllBytes(directory.File("again/branch/pluginmaster.json")));
         Assert.Contains("**Nothing to publish:**", File.ReadAllText(directory.File("again/report.md")));
     }

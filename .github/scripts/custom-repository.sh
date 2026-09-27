@@ -11,8 +11,10 @@
 #
 #   custom-repository.sh publish <new work directory>
 #       Everything prepare does, again from scratch. Then it requires the branch to still be at
-#       EXPECTED_BASE and the new pluginmaster.json to be EXPECTED_SHA256 (what the approved run showed),
-#       and commits exactly the two prepared files, pushed as a fast-forward.
+#       EXPECTED_BASE, the new pluginmaster.json to be EXPECTED_SHA256, and the publication record
+#       (summary.json: every release's id, publish time and package hash) to be EXPECTED_SUMMARY_SHA256,
+#       which is what the approved run showed, and commits exactly the two prepared files, pushed as a
+#       fast-forward.
 #
 #   custom-repository.sh commit <prepared publication directory> <base commit | none>
 #       Only the commit and push of publish, for a publication directory prepared earlier.
@@ -24,7 +26,7 @@
 #   VERSION, CHANNEL    the request; ROLLBACK is "true" or "false"
 #   GITHUB_REPOSITORY   OWNER/REPO for the GitHub API; GH_TOKEN authenticates the API and the push
 #   RUN_URL             optional: the workflow run, recorded in the commit message
-#   EXPECTED_BASE, EXPECTED_SHA256   what publish and commit must find
+#   EXPECTED_BASE, EXPECTED_SHA256, EXPECTED_SUMMARY_SHA256   what publish must find (commit: the SHA-256)
 #   GITHUB_OUTPUT, GITHUB_STEP_SUMMARY   optional, set by GitHub Actions
 #
 # Run it from the root of a clone whose remote "origin" is the repository.
@@ -219,14 +221,20 @@ case "$command" in
 
   publish)
     [ $# -eq 2 ] || fail "usage: custom-repository.sh publish <new work directory>"
-    require_env EXPECTED_BASE EXPECTED_SHA256
+    require_env EXPECTED_BASE EXPECTED_SHA256 EXPECTED_SUMMARY_SHA256
     prepare "$2"
     base="$(output_value base "$2/outputs")"
     sha256="$(output_value sha256 "$2/outputs")"
+    summary_sha256="$(output_value summary_sha256 "$2/outputs")"
     [ "$base" = "$EXPECTED_BASE" ] \
       || fail "origin/$PUBLICATION_BRANCH is at $base, not at the $EXPECTED_BASE the approved run prepared from: something else changed it. Nothing was written; run the workflow again."
     [ "$sha256" = "$EXPECTED_SHA256" ] \
       || fail "the pluginmaster.json derived now ($sha256) is not the one the approved run showed ($EXPECTED_SHA256): a release changed in between. Nothing was written; run the workflow again and review the new result."
+    # The same file can describe a different ZIP (the file names each release's download address, not
+    # its hash), so the whole record must match too: a release asset replaced while the run waited for
+    # approval stops the publication even when the replacement is a valid package.
+    [ "$summary_sha256" = "$EXPECTED_SUMMARY_SHA256" ] \
+      || fail "the publication record derived now ($summary_sha256) is not the one the approved run showed ($EXPECTED_SUMMARY_SHA256): a release or its assets changed in between. Nothing was written; run the workflow again and review the new result."
     commit_publication "$2/publication" "$base"
     if [ -n "${GITHUB_OUTPUT:-}" ]; then
       echo "commit=$PUBLISHED_COMMIT" >> "$GITHUB_OUTPUT"

@@ -287,7 +287,7 @@ public static class Publication
                 Commit = r.Commit,
                 ReleaseId = r.Release.Id,
                 ReleaseUrl = r.Release.HtmlUrl,
-                PublishedAt = r.PublishedAt.ToString("O", CultureInfo.InvariantCulture),
+                PublishedAt = r.PublishedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
                 Prerelease = r.Release.Prerelease,
                 Package = new Program.FileSummary { Name = r.Package.Package.FileName, Size = r.Package.Package.Size, Sha256 = r.Package.Package.Sha256 },
                 ChecksumsSha256 = r.ChecksumsSha256,

@@ -377,8 +377,9 @@ public static class Program
         }
 
         var utf8 = new System.Text.UTF8Encoding(false);
+        var summary = StrictJson.Serialize(prepared.Summary);
         var files = Publication.BranchFiles(prepared).Select(f => (Path.Combine(Publication.BranchDirectory, f.Name), f.Content)).ToList();
-        files.Add((Publication.SummaryFileName, StrictJson.Serialize(prepared.Summary)));
+        files.Add((Publication.SummaryFileName, summary));
         files.Add((Publication.ReportFileName, utf8.GetBytes(prepared.Report)));
         files.Add((Publication.CommitMessageFileName, utf8.GetBytes(prepared.CommitMessage)));
         WriteDirectoryAtomically(outputPath, files);
@@ -389,7 +390,9 @@ public static class Program
             : $"Nothing to publish: branch {prepared.Target.Branch} already serves exactly this pluginmaster.json (SHA-256 {sha256}).");
         if (options.Optional("github-output") is { } githubOutput)
         {
-            AppendGitHubOutputs(githubOutput, ("changed", prepared.Changed ? "true" : "false"), ("sha256", sha256));
+            // summary_sha256 covers everything the reviewer approves: each release's id, publish time and
+            // package hash, the branch commit built upon, and the new file's hash.
+            AppendGitHubOutputs(githubOutput, ("changed", prepared.Changed ? "true" : "false"), ("sha256", sha256), ("summary_sha256", Checksums.Sha256Hex(summary)));
         }
 
         return 0;

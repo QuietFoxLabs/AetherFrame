@@ -64,6 +64,7 @@ jobs:
       base: ${{ steps.prepare.outputs.base }}
       changed: ${{ steps.prepare.outputs.changed }}
       sha256: ${{ steps.prepare.outputs.sha256 }}
+      summary_sha256: ${{ steps.prepare.outputs.summary_sha256 }}
 
     steps:
     - name: Check where the run comes from
@@ -142,8 +143,9 @@ jobs:
         dotnet restore tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj --locked-mode
         dotnet build tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj --configuration Release --no-restore
 
-    # Everything prepare did, again, just before the push: the file must be byte-identical to the one the
-    # reviewer approved, and the branch must not have moved.
+    # Everything prepare did, again, just before the push: the file and the publication record (each
+    # release's id and package hash) must be byte-identical to what the reviewer approved, and the branch
+    # must not have moved.
     - name: Verify again and publish
       env:
         GH_TOKEN: ${{ github.token }}
@@ -154,6 +156,7 @@ jobs:
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         EXPECTED_BASE: ${{ needs.prepare.outputs.base }}
         EXPECTED_SHA256: ${{ needs.prepare.outputs.sha256 }}
+        EXPECTED_SUMMARY_SHA256: ${{ needs.prepare.outputs.summary_sha256 }}
         GIT_AUTHOR_NAME: github-actions[bot]
         GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         GIT_COMMITTER_NAME: github-actions[bot]
