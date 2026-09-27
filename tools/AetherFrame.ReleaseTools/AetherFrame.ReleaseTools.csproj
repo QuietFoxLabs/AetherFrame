@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Release tooling for AetherFrame's distribution (docs/CustomRepository.md):
+
+      validate-package      checks the plugin package DalamudPackager built (the release ZIP)
+      generate-repository   writes the custom Dalamud repository metadata (pluginmaster.json)
+      validate-repository   checks a pluginmaster.json against the configuration and the packages
+      checksums             writes a SHA256SUMS.txt in `sha256sum -c` format
+      verify-checksums      checks files against a SHA256SUMS.txt
+
+    Plain .NET with no NuGet packages, no Dalamud reference and no network access, so it behaves the
+    same on a developer machine and in CI. It never reads the user's AppData and never touches the
+    plugin's runtime data.
+  -->
+
+  <!-- The tool reports the product version it belongs to; nothing sets a version anywhere else. -->
+  <Import Project="..\..\Version.props" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AetherFrame.ReleaseTools</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <IsPackable>false</IsPackable>
+    <!-- Locked restore (dotnet restore in locked mode) covers this project too, even though it has
+         no package references today: a package added later must be locked deliberately. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+</Project>

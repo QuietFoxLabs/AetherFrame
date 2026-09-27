@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests for the release tooling. Every test works in its own temporary directory on packages,
+    manifests and assemblies it builds itself; the only repository files read are the committed
+    configuration and dry-run fixture under distribution/, and the plugin's own build output when
+    there is one. Nothing here reads or writes live AetherFrame user data.
+  -->
+
+  <Import Project="..\..\Version.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>AetherFrame.ReleaseTools.Tests</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AetherFrame.ReleaseTools\AetherFrame.ReleaseTools.csproj" />
+  </ItemGroup>
+
+  <!-- The same test packages, at the same versions, as AetherFrame.Tests. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>
