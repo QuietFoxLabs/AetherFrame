@@ -153,6 +153,49 @@ public class RepositoryValidatorTests
     }
 
     [Fact]
+    public void TestingExclusiveEntry_IsComparedWithTheTestingPackageGivenForIt()
+    {
+        using var directory = new TempDirectory();
+        using var other = new TempDirectory();
+        var changelog = TestPackages.Changelog(directory, ("0.1.6", "- Only for testers."), ("0.1.5", "- Older."));
+        var configuration = TestPackages.Configuration();
+        var exclusive = TestPackages.ValidReport(directory, "0.1.6", configuration, changelog);
+        var document = RepositoryDocument.Serialize(new[] { RepositoryGenerator.Build(configuration, null, exclusive, true, LastUpdate) });
+
+        var (matching, _) = Validate(document, configuration, null, changelog, testing: exclusive);
+        TestPackages.AllPassed(matching);
+        Assert.Contains(matching.Checks, c => c.Name == "testing package version" && c.Passed);
+
+        var (otherChecks, otherBuild) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(other, "0.1.5", manifest: TestPackages.Manifest("0.1.5", m => m["Description"] = "Another build.")),
+            Configuration = configuration,
+            ChangelogPath = changelog,
+        });
+        TestPackages.AllPassed(otherChecks);
+
+        var (checks, entries) = Validate(document, configuration, null, changelog, testing: otherBuild);
+
+        Assert.Null(entries);
+        Assert.Contains("the entry says 0.1.6, the package is 0.1.5", TestPackages.Failure(checks, "testing package version"));
+        Assert.Contains("Description", TestPackages.Failure(checks, "testing package manifest fields"));
+    }
+
+    [Fact]
+    public void TestingExclusiveEntry_WithAnotherTestingChangelog_Fails()
+    {
+        using var directory = new TempDirectory();
+        var changelog = TestPackages.Changelog(directory, ("0.1.6", "- Only for testers."));
+        var configuration = TestPackages.Configuration();
+        var entry = RepositoryGenerator.Build(configuration, null, TestPackages.ValidReport(directory, "0.1.6", configuration, changelog), true, LastUpdate);
+        entry.TestingChangelog = "- Something else.";
+
+        var (checks, _) = Validate(RepositoryDocument.Serialize(new[] { entry }), configuration, null, null);
+
+        Assert.Contains("the same text", TestPackages.Failure(checks, "testing-exclusive changelogs"));
+    }
+
+    [Fact]
     public void EntryDescribingAnotherPackage_Fails()
     {
         using var directory = new TempDirectory();
@@ -214,7 +257,7 @@ public class RepositoryValidatorTests
     private static byte[] Generate(RepositoryConfiguration configuration, PackageReport stable) =>
         RepositoryDocument.Serialize(new[] { RepositoryGenerator.Build(configuration, stable, null, false, LastUpdate) });
 
-    private static (CheckList Checks, IReadOnlyList<RepositoryEntry>? Entries) Validate(byte[] document, RepositoryConfiguration configuration, PackageReport? stable, string? changelog)
+    private static (CheckList Checks, IReadOnlyList<RepositoryEntry>? Entries) Validate(byte[] document, RepositoryConfiguration configuration, PackageReport? stable, string? changelog, PackageReport? testing = null)
     {
         var checks = new CheckList();
         try
@@ -225,6 +268,7 @@ public class RepositoryValidatorTests
                 What = "test document",
                 Configuration = configuration,
                 StablePackage = stable,
+                TestingPackage = testing,
                 ChangelogPath = changelog,
             }, checks));
         }

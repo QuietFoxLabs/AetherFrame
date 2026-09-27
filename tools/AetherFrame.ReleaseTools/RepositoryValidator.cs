@@ -170,6 +170,7 @@ public static class RepositoryValidator
                 {
                     checks.Require(testingVersion.Value == stableVersion, "testing-exclusive versions", stableVersion.ToString(), $"a testing-exclusive entry carries one version in both slots; stable is {stableVersion}, testing {testingVersion}.");
                     checks.Require(entry.DownloadLinkTesting == install, "DownloadLinkTesting", entry.DownloadLinkTesting ?? string.Empty, "a testing-exclusive entry's three links are the same.");
+                    checks.Require(entry.TestingChangelog == entry.Changelog, "testing-exclusive changelogs", "the same", "a testing-exclusive entry carries one release, so its Changelog and TestingChangelog are the same text.");
                 }
                 else
                 {
@@ -198,6 +199,13 @@ public static class RepositoryValidator
         {
             checks.Require(testingVersion is not null && testingVersion.Value == request.TestingPackage.Version, "testing package version", request.TestingPackage.Version.ToString(), $"the entry's testing version is {testingVersion?.ToString() ?? "absent"}, the package is {request.TestingPackage.Version}.");
             checks.Require(entry.TestingChangelog == request.TestingPackage.ChangelogSection, "testing package changelog", "matches", "the entry's TestingChangelog is not the testing package's changelog section.");
+        }
+
+        if (request.TestingPackage is not null && entry.IsTestingExclusive == true)
+        {
+            // A testing-exclusive entry serves its one package from both slots, so a package given as the
+            // testing package (as generate-repository --testing-exclusive takes it) must be exactly that one.
+            ComparePackage(entry, request.TestingPackage, testingVersion ?? stableVersion, entry.TestingChangelog, "testing package", checks);
         }
 
         if (request.ChangelogPath is not null)
