@@ -1095,7 +1095,13 @@ internal sealed class PlateLibraryService
             log.Information($"AetherFrame imported a package as new Plate {plateId}.");
         }, continuesOwnedOperation);
 
-    /// <summary>Moves an imported document whose write reported failure out of the Plates folder, if it landed there.</summary>
+    /// <summary>
+    /// Moves an imported document whose write reported failure out of the Plates folder, if it
+    /// landed there. Best effort, and never throws, so the write's own failure is what the
+    /// importer sees: a document that can't be moved (the move fails, or unloading stops the
+    /// operation before this file step) stays where it is, and the importer, which checks the
+    /// Plates folder before removing anything, then keeps its images with it.
+    /// </summary>
     private void TrashHalfWrittenImport(Guid plateId)
     {
         try
@@ -1107,9 +1113,13 @@ internal sealed class PlateLibraryService
                 log.Warning($"AetherFrame moved the file of a failed import ({plateId}) to the Plate trash so it isn't listed without its images.");
             }
         }
-        catch (Exception ex) when (!IsInterruption(ex))
+        catch (Exception ex) when (IsInterruption(ex))
         {
-            log.Error(ex, $"AetherFrame could not move the file of a failed import ({plateId}) to the Plate trash; it may be listed without its images at the next startup.");
+            log.Warning($"AetherFrame is unloading, so the file of a failed import ({plateId}) stays in the Plates folder with its images; it is listed at the next startup.");
+        }
+        catch (Exception ex)
+        {
+            log.Error(ex, $"AetherFrame could not move the file of a failed import ({plateId}) to the Plate trash; it stays in the Plates folder with its images and is listed at the next startup.");
         }
     }
 

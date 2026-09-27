@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using AetherFrame.Domain.Assets;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Persistence;
+using AetherFrame.Services;
 using AetherFrame.Services.Lifecycle;
 using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
@@ -425,6 +428,84 @@ public class ImportLateFailureTests
         store.ThrowAfterWrite = null;
         var reloaded = await fixture.Library.LoadAsync();
         Assert.Equal(listedBefore, reloaded.GetOrderedPlates().Select(p => p.PlateId));
+    }
+
+    [Fact]
+    public async Task CommitFailureAfterTheWriteLanded_WhoseDocumentCantBeMovedAway_KeepsItsImages()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new PackageFixture(store: store);
+        var (library, packages) = await fixture.LoadAsync();
+        var (plateId, _, _, _) = await fixture.CreateRichPlateAsync(library);
+        var path = fixture.Export(packages, plateId);
+        var platesBefore = Directory.GetFiles(fixture.Paths.PlatesDirectory).ToHashSet();
+
+        // The document lands, the store reports failure anyway, and moving it to the trash fails.
+        store.ThrowAfterWrite = LibraryFiles.IsPlate;
+        store.FailMove = LibraryFiles.IsPlate;
+        using var staged = packages.Inspect(path);
+        var result = await packages.ImportAsync(staged);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(PackageErrorCode.CommitFailed, result.Error!.Code);
+        var remained = Assert.Single(Directory.GetFiles(fixture.Paths.PlatesDirectory).Except(platesBefore));
+        Assert.DoesNotContain("Nothing was changed", result.Error.Message, StringComparison.Ordinal);
+
+        // The next load lists the document that stayed, whole: every image it points at is there.
+        store.ThrowAfterWrite = null;
+        store.FailMove = null;
+        var reloaded = await fixture.Library.LoadAsync();
+        Assert.Contains(reloaded.GetOrderedPlates(), p => fixture.Paths.GetPlatePath(p.PlateId) == remained);
+        AssertNoListedPlatePointsAtAMissingImage(reloaded, fixture.Assets);
+    }
+
+    [Fact]
+    public async Task CommitFailureAfterTheWriteLanded_WhenUnloadingAbandonsTheImport_KeepsItsImages()
+    {
+        // The plugin's composition: one OwnedOperations for the Library, the packages and the
+        // shutdown-guarded store.
+        var operations = new OwnedOperations();
+        var faults = new FaultInjectingStore();
+        using var fixture = new PackageFixture(store: new ShutdownGuardedFileStore(faults, operations));
+        var library = new PlateLibraryService(fixture.Paths, fixture.Library.Store, fixture.Log, () => fixture.Clock.Now, operations: operations);
+        await library.InitializeAsync();
+        var packages = new PlatePackageService(library, fixture.Assets, fixture.Paths, "AetherFrame Tests", fixture.Decoder, fixture.Log, () => fixture.Clock.Now, operations);
+        var (plateId, _, _, _) = await fixture.CreateRichPlateAsync(library);
+        var path = fixture.Export(packages, plateId);
+        var platesBefore = Directory.GetFiles(fixture.Paths.PlatesDirectory).ToHashSet();
+        using var staged = packages.Inspect(path);
+
+        // The document lands; meanwhile unloading stops waiting for the import (it still holds its
+        // lease, so it is abandoned); then the store reports failure. Moving the document away is a
+        // file step, which an abandoned operation never takes.
+        faults.ThrowAfterWrite = LibraryFiles.IsPlate;
+        faults.FaultFactory = failing =>
+        {
+            Assert.False(operations.ShutdownAsync(TimeSpan.Zero).GetAwaiter().GetResult());
+            return new IOException($"Injected commit failure: '{failing}'");
+        };
+
+        var result = await packages.ImportAsync(staged);
+
+        Assert.False(result.Succeeded);
+        Assert.True(operations.IsAbandoned);
+        var remained = Assert.Single(Directory.GetFiles(fixture.Paths.PlatesDirectory).Except(platesBefore));
+
+        // The next plugin instance lists the document that stayed, whole.
+        var next = new PlateLibraryService(fixture.Paths, new SystemFileStore(), fixture.Log, () => fixture.Clock.Now);
+        await next.InitializeAsync();
+        Assert.Contains(next.GetOrderedPlates(), p => fixture.Paths.GetPlatePath(p.PlateId) == remained);
+        AssertNoListedPlatePointsAtAMissingImage(next, fixture.Assets);
+    }
+
+    private static void AssertNoListedPlatePointsAtAMissingImage(PlateLibraryService library, AssetStorageService assets)
+    {
+        foreach (var summary in library.GetOrderedPlates())
+        {
+            var referenced = new HashSet<Guid>();
+            AssetReferenceScanner.Collect(library.GetSavedDocument(summary.PlateId)!, referenced);
+            Assert.All(referenced, id => Assert.True(assets.ResolveAssetPath(id) is not null, $"Plate {summary.PlateId} points at missing image {id:N}"));
+        }
     }
 }
 
