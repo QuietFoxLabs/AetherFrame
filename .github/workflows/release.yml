@@ -98,7 +98,9 @@ jobs:
 
     - name: Check and stage the package
       shell: pwsh
-      run: ./.github/scripts/New-ReleasePackage.ps1 -Version '${{ steps.version.outputs.version }}' -Destination dist
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+      run: ./.github/scripts/New-ReleasePackage.ps1 -Version $env:VERSION -Destination dist
 
     # The staged ZIP against every release rule (docs/CustomRepository.md): built from this commit, at
     # this version, for the configured Dalamud API level, listed correctly in SHA256SUMS.txt, and
