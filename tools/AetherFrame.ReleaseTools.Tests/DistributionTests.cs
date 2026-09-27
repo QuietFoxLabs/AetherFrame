@@ -52,7 +52,11 @@ public class DistributionTests
             entries[0].AssemblyVersion == current.AssemblyVersion.ToString(),
             $"distribution/dry-run/pluginmaster.json describes {entries[0].AssemblyVersion} but Version.props is {current}. Regenerate it as docs/CustomRepository.md describes.");
         Assert.Contains("dry-run.invalid", entries[0].DownloadLinkInstall);
-        Assert.Equal(RepositoryEntry.KnownKeys.Count, RepositoryEntry.KnownKeys.Count);
+
+        // The fixture must be checked out byte for byte (distribution/dry-run/.gitattributes). A Windows
+        // checkout with core.autocrlf, such as GitHub's Windows runners, would otherwise give it CRLF line
+        // ends, and it would no longer be what the tool writes.
+        Assert.True(Array.IndexOf(fixture, (byte)'\r') < 0, "distribution/dry-run/pluginmaster.json has CR line ends; git must check it out without converting them.");
     }
 
     [Fact]

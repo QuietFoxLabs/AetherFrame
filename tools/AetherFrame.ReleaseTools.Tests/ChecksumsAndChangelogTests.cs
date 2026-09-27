@@ -149,7 +149,10 @@ public class ChangelogSectionsTests
     [Fact]
     public void Section_NormalizesWindowsLineEnds()
     {
-        Assert.Equal("### Fixed\n\n- Newer thing.", ChangelogSections.Section(Changelog.Replace("\n", "\r\n", StringComparison.Ordinal), new ProductVersion(0, 1, 6)));
+        // Built from LF text: on a Windows checkout this source file, and so the raw string above, has CRLF.
+        var windows = Changelog.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
+
+        Assert.Equal("### Fixed\n\n- Newer thing.", ChangelogSections.Section(windows, new ProductVersion(0, 1, 6)));
     }
 
     [Theory]
