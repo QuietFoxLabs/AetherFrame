@@ -341,6 +341,36 @@ public class NonFiniteValueTests
         AssertEveryNumberIsFinite(JsonNode.Parse(harness.Fixture.ReadPlateJson(harness.PlateId)));
     }
 
+    /// <summary>
+    /// The Inspector's image Rotation slider doesn't clamp a typed value: it wraps it with
+    /// <see cref="RotationGeometry.NormalizeDegrees"/> (as 0.1.5 did), and a typed value that
+    /// overflows to infinity comes out of that as NaN. The edit it feeds must still leave a
+    /// saveable Plate, and the wrap must still wrap.
+    /// </summary>
+    [Theory]
+    [InlineData(-45f, 315f)]
+    [InlineData(370f, 10f)]
+    [InlineData(5000f, 320f)]
+    [InlineData(float.PositiveInfinity, 0f)]
+    [InlineData(float.NegativeInfinity, 0f)]
+    public async Task TypedImageRotation_WrapsLikeTheSlider_AndOneThatIsNotANumberSavesAsZero(float typed, float expected)
+    {
+        using var harness = await BasicHarness.OpenDocumentAsync(BasicDocuments.Blank());
+        var session = harness.Session;
+        var imageId = harness.Profiles.AddElement(new ImageProfileElement { AssetId = Guid.NewGuid(), RotationDegrees = 90f });
+        var image = (ImageProfileElement)harness.Document.Elements.Single(e => e.Id == imageId);
+
+        // Exactly what the Inspector does with the slider's value.
+        var normalized = RotationGeometry.NormalizeDegrees(typed);
+        session.BeginOrContinueEdit(imageId, e => ((ImageProfileElement)e).RotationDegrees = normalized);
+        session.CommitPendingEdit();
+
+        Assert.Null(session.ErrorMessage);
+        Assert.Equal(expected, image.RotationDegrees, 3);
+        Assert.True(await session.SaveProfileAsync(), session.ErrorMessage);
+        AssertEveryNumberIsFinite(JsonNode.Parse(harness.Fixture.ReadPlateJson(harness.PlateId)));
+    }
+
     [Fact]
     public async Task UpdateElementAndBackground_BoundAfterTheEdit_AndUndoRestoresTheFiniteValue()
     {

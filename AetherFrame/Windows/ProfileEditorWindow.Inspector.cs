@@ -300,13 +300,15 @@ internal sealed partial class ProfileEditorWindow
     private void DrawRotationRow(ImageProfileElement image)
     {
         // Precise, arbitrary rotation; the buttons are the quick 90-degree steps. A full slider
-        // drag is one history entry. Ctrl+Click the slider to type an exact value.
+        // drag is one history entry. Ctrl+Click the slider to type an exact value: a typed value
+        // outside 0-360 wraps (-45 is 315), so the slider doesn't clamp it first; one that isn't
+        // a number (1e39) comes out of NormalizeDegrees as NaN, which the edit bounds to 0.
         var buttonSize = ImGui.GetFrameHeight();
         var sliderWidth = ImGui.GetContentRegionAvail().X - EditorWidgets.LabelColumnWidth - ((buttonSize + 2f) * 3f) - 4f;
 
         var rotation = image.RotationDegrees;
         EditorWidgets.PropertyLabel("Rotation", sliderWidth);
-        if (ImGui.SliderFloat("##Rotation", ref rotation, 0f, 359.9f, "%.1f deg", ImGuiSliderFlags.AlwaysClamp))
+        if (ImGui.SliderFloat("##Rotation", ref rotation, 0f, 359.9f, "%.1f deg"))
         {
             var normalized = RotationGeometry.NormalizeDegrees(rotation);
             ContinueImageEdit(image.Id, element => element.RotationDegrees = normalized);
