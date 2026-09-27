@@ -91,30 +91,40 @@ public sealed class PluginPackage
 
         using (archive)
         {
-            if (archive.Entries.Count > MaxEntries)
+            try
             {
-                checks.Fail("package entries", $"{archive.Entries.Count} entries; a plugin package has 3.");
+                if (archive.Entries.Count > MaxEntries)
+                {
+                    checks.Fail("package entries", $"{archive.Entries.Count} entries; a plugin package has 3.");
+                    return null;
+                }
+
+                var entries = archive.Entries
+                    .Select(e => new PackageEntry(e.FullName, e.Length, e.CompressedLength, e.LastWriteTime))
+                    .ToList();
+
+                if (!PackageEntryPolicy.Check(entries, internalName, checks))
+                {
+                    return null;
+                }
+
+                byte[]? assembly = Read(archive, AssemblyEntryName(internalName), MaxAssemblyBytes, checks);
+                byte[]? manifest = Read(archive, ManifestEntryName(internalName), MaxTextBytes, checks);
+                byte[]? deps = Read(archive, DepsEntryName(internalName), MaxTextBytes, checks);
+                if (assembly is null || manifest is null || deps is null)
+                {
+                    return null;
+                }
+
+                return new PluginPackage(path, size, sha256, entries, assembly, manifest, deps);
+            }
+            catch (InvalidDataException e)
+            {
+                // A damaged central directory or entry, or an unsupported compression method: .NET reports
+                // these only when the directory is enumerated or an entry is read, not when the file opens.
+                checks.Fail("package format", $"the ZIP archive is damaged or uses a feature .NET cannot read: {e.Message}");
                 return null;
             }
-
-            var entries = archive.Entries
-                .Select(e => new PackageEntry(e.FullName, e.Length, e.CompressedLength, e.LastWriteTime))
-                .ToList();
-
-            if (!PackageEntryPolicy.Check(entries, internalName, checks))
-            {
-                return null;
-            }
-
-            byte[]? assembly = Read(archive, AssemblyEntryName(internalName), MaxAssemblyBytes, checks);
-            byte[]? manifest = Read(archive, ManifestEntryName(internalName), MaxTextBytes, checks);
-            byte[]? deps = Read(archive, DepsEntryName(internalName), MaxTextBytes, checks);
-            if (assembly is null || manifest is null || deps is null)
-            {
-                return null;
-            }
-
-            return new PluginPackage(path, size, sha256, entries, assembly, manifest, deps);
         }
     }
 
