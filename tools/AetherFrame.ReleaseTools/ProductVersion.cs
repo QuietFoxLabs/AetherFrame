@@ -62,10 +62,11 @@ public readonly record struct ProductVersion(int Major, int Minor, int Patch) : 
         return new ProductVersion(version.Major, version.Minor, version.Build);
     }
 
-    /// <summary>The product version behind a four-part MAJOR.MINOR.PATCH.0 assembly version string.</summary>
+    /// <summary>The product version behind a four-part MAJOR.MINOR.PATCH.0 assembly version string, written canonically.</summary>
     public static ProductVersion FromAssemblyVersion(string? text, string what)
     {
-        if (text is null || text.Split('.').Length != 4 || !Version.TryParse(text, out var version))
+        // Version.TryParse also takes spaces, signs and leading zeros ("+0.01.5.0 "); only its canonical text passes.
+        if (text is null || text.Split('.').Length != 4 || !Version.TryParse(text, out var version) || version.ToString() != text)
         {
             throw new ReleaseCheckException($"{what} is '{text}', not MAJOR.MINOR.PATCH.0.");
         }

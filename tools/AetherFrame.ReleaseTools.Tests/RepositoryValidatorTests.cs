@@ -61,6 +61,8 @@ public class RepositoryValidatorTests
     [InlineData("ApplicableVersion", "\"7.0\"", "ApplicableVersion", "expected 'any'")]
     [InlineData("AssemblyVersion", "\"0.1.5\"", "AssemblyVersion", "not MAJOR.MINOR.PATCH.0")]
     [InlineData("AssemblyVersion", "\"0.1.5.1\"", "AssemblyVersion", "not MAJOR.MINOR.PATCH.0")]
+    [InlineData("AssemblyVersion", "\"00.1.5.0\"", "AssemblyVersion", "not MAJOR.MINOR.PATCH.0")]
+    [InlineData("AssemblyVersion", "\"0.1.5.0 \"", "AssemblyVersion", "not MAJOR.MINOR.PATCH.0")]
     [InlineData("LastUpdate", "0", "LastUpdate", "between 2020 and 2100")]
     [InlineData("IsHide", "true", "IsHide", "rolled back rather than hidden")]
     [InlineData("Name", "\" \"", "installer fields", "empty: Name")]

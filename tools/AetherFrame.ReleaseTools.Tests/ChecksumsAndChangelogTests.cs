@@ -62,6 +62,10 @@ public class ChecksumsTests
     [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  ../a.zip\n", "not a plain file name")]
     [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  sub/a.zip\n", "not a plain file name")]
     [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  C:\\a.zip\n", "not a plain file name")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  a.zip \n", "not a plain file name")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  a.zip.\n", "not a plain file name")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  a.zip::$DATA\n", "not a plain file name")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  a*.zip\n", "not a plain file name")]
     [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  a.zip\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  a.zip\n", "more than once")]
     public void Parse_RefusesMalformedFiles(string text, string message)
     {

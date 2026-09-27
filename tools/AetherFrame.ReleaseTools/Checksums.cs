@@ -156,7 +156,11 @@ public static class Checksums
 
     private static void ValidateName(string name, string what = "checksum entry")
     {
-        if (name.Length == 0 || name.IndexOfAny(new[] { '/', '\\' }) >= 0 || name is "." or ".." || name.Any(c => c < ' ' || c == (char)0x7F))
+        // A name that means the same file on every platform: besides folders and control characters, no
+        // character Windows reserves and no leading or trailing space or trailing dot, which Windows drops
+        // ("a.zip." and "a.zip " open a.zip there; "a.zip:x" is one of its alternate data streams).
+        if (name.Length == 0 || name.IndexOfAny(new[] { '/', '\\', ':', '*', '?', '"', '<', '>', '|' }) >= 0 || name is "." or ".."
+            || name.Any(c => c < ' ' || c == (char)0x7F) || name.Trim() != name || name.EndsWith('.'))
         {
             throw new ReleaseCheckException($"{what}: '{name}' is not a plain file name.");
         }
