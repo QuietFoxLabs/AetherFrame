@@ -8,6 +8,10 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 Reliability, data safety and import security, the v0.1.6 milestone. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged: a file written by 0.1.0 through 0.1.5 loads and re-saves byte for byte, and the schema versions did not move.
 
+### Added
+
+- Release tooling for a public custom Dalamud repository ([docs/CustomRepository.md](docs/CustomRepository.md)): `tools/AetherFrame.ReleaseTools` checks a release package against the full rule set (x64, built from the released commit, one version and one Dalamud API level everywhere, only the three plugin files, safe entry names), generates and checks the repository metadata Dalamud reads (`pluginmaster.json`, stable and testing channels), and writes and verifies SHA-256 checksum files. The Build and Release workflows run it; the Release dry run keeps the generated metadata as an artifact. Nothing is published to a repository yet, and the plugin itself is unchanged.
+
 ### Fixed
 
 - A `.aetherframe` file with an explicit `null` where a list or text belongs no longer passes validation and then throws inside the editor; a local Plate with the same shape opens with those fields empty.
