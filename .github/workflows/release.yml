@@ -4,8 +4,8 @@ name: Release
 # package, generates the custom repository metadata it would be served with, then creates a DRAFT
 # GitHub Release with the package. A draft is visible only to the repository's maintainers;
 # publishing it is always a manual step. Nothing here submits to Dalamud or updates the custom
-# repository (that is the future publish workflow, designed in docs/CustomRepository.md and not yet
-# active).
+# repository: that is the Publish custom repository workflow (publish-custom-repository.yml), run by
+# hand after the GitHub Release has been published.
 #
 # Run it by hand (Actions > Release > Run workflow) for a dry run: the same build, tests, package
 # checks and metadata generation, with everything kept as a workflow artifact and no release created.
@@ -127,7 +127,7 @@ jobs:
 
     # What the custom repository would serve for this release, in both channel shapes, kept with the
     # package as an artifact. Nothing is published: the pluginmaster.json Dalamud reads is updated
-    # only by the future publish workflow, after the GitHub Release has been published by hand.
+    # only by the Publish custom repository workflow, after the GitHub Release has been published by hand.
     - name: Generate the custom repository metadata (not published)
       shell: bash
       env:

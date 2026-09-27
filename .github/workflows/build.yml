@@ -70,6 +70,13 @@ jobs:
         --changelog CHANGELOG.md
         --commit "$COMMIT"
 
+    # The custom repository publication script runs on Linux, in a workflow that only ever runs by hand
+    # (publish-custom-repository.yml), so it is checked here on every change instead. The release
+    # tooling tests above cover the decisions it hands to AetherFrame.ReleaseTools.
+    - name: Check the publication script
+      if: runner.os == 'Linux'
+      run: shellcheck .github/scripts/custom-repository.sh
+
     - name: Store artifacts
       if: runner.os == 'Windows'
       uses: actions/upload-artifact@v4
