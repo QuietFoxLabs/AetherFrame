@@ -10,6 +10,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace AetherFrame.ReleaseTools.Tests;
@@ -278,13 +279,15 @@ internal static class TestPackages
         return Zip(directory.File(fileName ?? $"{InternalName}-{version}.zip"), entries.ToArray());
     }
 
-    internal static string ConfigJson(string template = DownloadTemplate, int apiLevel = 15, string internalName = InternalName, string sourceRepositoryUrl = RepoUrl) => $$"""
+    internal const string PluginMasterUrl = "https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json";
+
+    internal static string ConfigJson(string template = DownloadTemplate, int apiLevel = 15, string internalName = InternalName, string sourceRepositoryUrl = RepoUrl, string pluginMasterUrl = PluginMasterUrl) => $$"""
         {
           "$comment": "test configuration",
           "internalName": "{{internalName}}",
           "dalamudApiLevel": {{apiLevel}},
           "sourceRepositoryUrl": "{{sourceRepositoryUrl}}",
-          "pluginMasterUrl": "https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json",
+          "pluginMasterUrl": "{{pluginMasterUrl}}",
           "downloadUrlTemplate": "{{template}}"
         }
         """;
@@ -331,10 +334,16 @@ internal static class TestPackages
 
     internal static string Csproj(TempDirectory directory, string sdk = "Dalamud.NET.Sdk/15.0.0", Dictionary<string, object?>? fields = null)
     {
+        var path = directory.File("AetherFrame.csproj");
+        File.WriteAllText(path, CsprojText(sdk, fields));
+        return path;
+    }
+
+    internal static string CsprojText(string sdk = "Dalamud.NET.Sdk/15.0.0", Dictionary<string, object?>? fields = null)
+    {
         fields ??= ManifestFields();
         var tags = string.Join(";", (string[])fields["Tags"]!);
-        var path = directory.File("AetherFrame.csproj");
-        File.WriteAllText(path, $"""
+        return $"""
             <?xml version="1.0" encoding="utf-8"?>
             <Project Sdk="{sdk}">
               <Import Project="..\Version.props" />
@@ -348,8 +357,7 @@ internal static class TestPackages
                 <IconUrl>{fields["IconUrl"]}</IconUrl>
               </PropertyGroup>
             </Project>
-            """);
-        return path;
+            """;
     }
 
     internal static string Checksums(TempDirectory directory, string packagePath, string? hash = null)
@@ -396,4 +404,124 @@ internal static class TestPackages
 
     internal static void AllPassed(CheckList checks) =>
         Assert.True(!checks.HasFailures, string.Join("\n", checks.Checks.Where(c => !c.Passed).Select(c => c.Name + ": " + c.Detail)));
+}
+
+/// <summary>What a test release differs in from a consistent, published release of its version.</summary>
+internal sealed class ReleaseOptions
+{
+    public bool Draft { get; init; }
+
+    public bool Prerelease { get; init; } = true;
+
+    public string PublishedAt { get; init; } = "2026-09-28T12:00:00Z";
+
+    /// <summary>The commit the DLL says it was built from.</summary>
+    public string BuildCommit { get; init; } = TestPackages.Commit;
+
+    /// <summary>The commit the tag points at.</summary>
+    public string TagCommit { get; init; } = TestPackages.Commit;
+
+    public string TagObjectType { get; init; } = "tag";
+
+    public bool OnDefaultBranch { get; init; } = true;
+
+    /// <summary>The version Version.props sets at the tag; the release's own when null.</summary>
+    public string? TaggedVersion { get; init; }
+
+    /// <summary>SHA256SUMS.txt; a correct line for the package when null.</summary>
+    public string? ChecksumsText { get; init; }
+
+    /// <summary>Changes the release description after it was built from the files.</summary>
+    public Action<JsonObject>? Release { get; init; }
+
+    /// <summary>Runs last, with the release directory, to damage or remove a file.</summary>
+    public Action<string>? After { get; init; }
+}
+
+/// <summary>
+/// Release directories as .github/scripts/custom-repository.sh fetch-release lays them out: the GitHub
+/// Release description (shaped like the REST API's, extra fields included), its two downloaded assets,
+/// the tag facts and the tagged sources. A published release of the version, built from the tagged
+/// commit on the default branch, unless <see cref="ReleaseOptions"/> changes one fact.
+/// </summary>
+internal static class TestReleases
+{
+    internal const long ReleaseId = 397792887;
+
+    internal static string Create(string releasesDirectory, string version, ReleaseOptions? options = null)
+    {
+        options ??= new ReleaseOptions();
+        var tag = "v" + version;
+        var directory = Path.Combine(releasesDirectory, tag);
+        var source = Path.Combine(directory, "source");
+        Directory.CreateDirectory(source);
+
+        var packageName = $"{TestPackages.InternalName}-{version}.zip";
+        var package = TestPackages.Zip(
+            Path.Combine(directory, packageName),
+            (TestPackages.InternalName + ".deps.json", TestPackages.Deps(version)),
+            (TestPackages.InternalName + ".dll", TestPackages.Assembly(version: version, informationalVersion: version + "+" + options.BuildCommit)),
+            (TestPackages.InternalName + ".json", TestPackages.Manifest(version)));
+        var checksums = Path.Combine(directory, "SHA256SUMS.txt");
+        File.WriteAllText(checksums, options.ChecksumsText ?? $"{Checksums.Sha256Hex(package)}  {packageName}\n");
+
+        // A draft has no tag yet as far as GitHub's addresses are concerned.
+        var place = options.Draft ? "untagged-0123456789abcdef0123" : tag;
+        var release = new JsonObject
+        {
+            ["url"] = $"https://api.github.com/repos/richhiiee/AetherFrame/releases/{ReleaseId}",
+            ["html_url"] = $"https://github.com/richhiiee/AetherFrame/releases/tag/{place}",
+            ["id"] = ReleaseId,
+            ["author"] = new JsonObject { ["login"] = "richhiiee", ["id"] = 1 },
+            ["tag_name"] = tag,
+            ["target_commitish"] = "master",
+            ["name"] = $"AetherFrame {version}",
+            ["draft"] = options.Draft,
+            ["immutable"] = false,
+            ["prerelease"] = options.Prerelease,
+            ["created_at"] = "2026-09-27T20:04:13Z",
+            ["published_at"] = options.Draft ? null : options.PublishedAt,
+            ["assets"] = new JsonArray(Asset(593676853, package, place), Asset(593676854, checksums, place)),
+            ["body"] = "Release notes.",
+        };
+        options.Release?.Invoke(release);
+        File.WriteAllText(Path.Combine(directory, "release.json"), release.ToJsonString());
+
+        File.WriteAllText(Path.Combine(directory, "tag.json"), new JsonObject
+        {
+            ["tag"] = tag,
+            ["objectType"] = options.TagObjectType,
+            ["commit"] = options.TagCommit,
+            ["defaultBranch"] = "master",
+            ["onDefaultBranch"] = options.OnDefaultBranch,
+        }.ToJsonString());
+
+        File.WriteAllText(Path.Combine(source, "Version.props"), $"<Project>\n  <PropertyGroup>\n    <Version>{options.TaggedVersion ?? version}</Version>\n  </PropertyGroup>\n</Project>\n");
+        File.WriteAllText(Path.Combine(source, "AetherFrame.csproj"), TestPackages.CsprojText());
+        File.WriteAllText(Path.Combine(source, "CHANGELOG.md"), TestPackages.ChangelogText((version, $"### Fixed\n\n- Changes in {version}.")));
+        options.After?.Invoke(directory);
+        return directory;
+    }
+
+    /// <summary>One asset of a release description, for tests that change it.</summary>
+    internal static JsonObject AssetNamed(JsonObject release, string name) =>
+        release["assets"]!.AsArray().Select(a => a!.AsObject()).Single(a => (string?)a["name"] == name);
+
+    private static JsonObject Asset(long id, string path, string place)
+    {
+        var name = Path.GetFileName(path);
+        return new JsonObject
+        {
+            ["url"] = $"https://api.github.com/repos/richhiiee/AetherFrame/releases/assets/{id}",
+            ["id"] = id,
+            ["name"] = name,
+            ["label"] = string.Empty,
+            ["content_type"] = name.EndsWith(".zip", StringComparison.Ordinal) ? "application/zip" : "text/plain; charset=utf-8",
+            ["state"] = "uploaded",
+            ["size"] = new FileInfo(path).Length,
+            ["digest"] = "sha256:" + Checksums.Sha256Hex(path),
+            ["download_count"] = 0,
+            ["browser_download_url"] = $"https://github.com/richhiiee/AetherFrame/releases/download/{place}/{name}",
+        };
+    }
 }
