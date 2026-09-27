@@ -1,13 +1,16 @@
 name: Release
 
 # Pushing an annotated v<MAJOR>.<MINOR>.<PATCH> tag on master builds, tests and checks the plugin
-# package, then creates a DRAFT GitHub Release with it. A draft is visible only to the repository's
-# maintainers; publishing it is always a manual step. Nothing here submits to Dalamud.
+# package, generates the custom repository metadata it would be served with, then creates a DRAFT
+# GitHub Release with the package. A draft is visible only to the repository's maintainers;
+# publishing it is always a manual step. Nothing here submits to Dalamud or updates the custom
+# repository (that is the future publish workflow, designed in docs/CustomRepository.md and not yet
+# active).
 #
-# Run it by hand (Actions > Release > Run workflow) for a dry run: the same build, tests and package
-# checks, with the package kept as a workflow artifact and no release created.
+# Run it by hand (Actions > Release > Run workflow) for a dry run: the same build, tests, package
+# checks and metadata generation, with everything kept as a workflow artifact and no release created.
 #
-# Full process: docs/Releasing.md.
+# Full process: docs/Releasing.md and docs/CustomRepository.md.
 
 on:
   push:
@@ -76,7 +79,7 @@ jobs:
         Expand-Archive -Force latest.zip $dalamud
         "DALAMUD_HOME=$dalamud" >> $env:GITHUB_ENV
 
-    # Locked mode fails if packages.lock.json is out of date, as the official plugin build would.
+    # Locked mode fails if any packages.lock.json is out of date, as the official plugin build would.
     - name: Restore
       run: dotnet restore AetherFrame.slnx --locked-mode
 
@@ -88,9 +91,68 @@ jobs:
         AETHERFRAME_PLUGIN_ASSEMBLY: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame.dll
       run: dotnet test AetherFrame.Tests/AetherFrame.Tests.csproj --configuration Release --no-build
 
+    - name: Test the release tooling
+      env:
+        AETHERFRAME_RELEASE_PACKAGE: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame/latest.zip
+      run: dotnet test tools/AetherFrame.ReleaseTools.Tests/AetherFrame.ReleaseTools.Tests.csproj --configuration Release --no-build
+
     - name: Check and stage the package
       shell: pwsh
       run: ./.github/scripts/New-ReleasePackage.ps1 -Version '${{ steps.version.outputs.version }}' -Destination dist
+
+    # The staged ZIP against every release rule (docs/CustomRepository.md): built from this commit, at
+    # this version, for the configured Dalamud API level, listed correctly in SHA256SUMS.txt, and
+    # matching the tag when there is one.
+    - name: Check the staged package
+      shell: bash
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+        COMMIT: ${{ github.sha }}
+        TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      run: |
+        tag_option=()
+        if [ -n "$TAG" ]; then tag_option=(--tag "$TAG"); fi
+        dotnet tools/AetherFrame.ReleaseTools/bin/Release/net10.0/AetherFrame.ReleaseTools.dll validate-package \
+          --package "dist/AetherFrame-$VERSION.zip" \
+          --config distribution/repository.json \
+          --version-props Version.props \
+          --csproj AetherFrame/AetherFrame.csproj \
+          --changelog CHANGELOG.md \
+          --checksums dist/SHA256SUMS.txt \
+          --commit "$COMMIT" \
+          "${tag_option[@]}" \
+          --summary dist/package-summary.json
+
+    # What the custom repository would serve for this release, in both channel shapes, kept with the
+    # package as an artifact. Nothing is published: the pluginmaster.json Dalamud reads is updated
+    # only by the future publish workflow, after the GitHub Release has been published by hand.
+    - name: Generate the custom repository metadata (not published)
+      shell: bash
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        tool=tools/AetherFrame.ReleaseTools/bin/Release/net10.0/AetherFrame.ReleaseTools.dll
+        last_update="$(git log -1 --format=%cI HEAD)"
+        dotnet "$tool" generate-repository --config distribution/repository.json --changelog CHANGELOG.md \
+          --last-update "$last_update" --stable-package "dist/AetherFrame-$VERSION.zip" \
+          --output dist/pluginmaster.json
+        dotnet "$tool" generate-repository --config distribution/repository.json --changelog CHANGELOG.md \
+          --last-update "$last_update" --testing-exclusive --testing-package "dist/AetherFrame-$VERSION.zip" \
+          --output dist/pluginmaster.testing-exclusive.json
+        dotnet "$tool" validate-repository --repository dist/pluginmaster.json --config distribution/repository.json \
+          --stable-package "dist/AetherFrame-$VERSION.zip" --changelog CHANGELOG.md
+        dotnet "$tool" verify-checksums --checksums dist/SHA256SUMS.txt
+        {
+          echo "### AetherFrame $VERSION"
+          echo
+          echo '`SHA256SUMS.txt`:'
+          echo
+          echo '```'
+          cat dist/SHA256SUMS.txt
+          echo '```'
+          echo
+          echo 'The workflow artifact holds the package, its checksums, the release notes, `package-summary.json` and the custom repository metadata (`pluginmaster.json`, `pluginmaster.testing-exclusive.json`). Nothing was published.'
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Store the package
       uses: actions/upload-artifact@v4
