@@ -66,7 +66,7 @@ public sealed class PersonaPublicKey : IEquatable<PersonaPublicKey>
         {
             parameters = key.ExportParameters(includePrivateParameters: false);
         }
-        catch (Exception e) when (e is CryptographicException or PlatformNotSupportedException or NotSupportedException or ObjectDisposedException)
+        catch (Exception e) when (e is CryptographicException or PlatformNotSupportedException or NotSupportedException or NotImplementedException or ObjectDisposedException)
         {
             throw new ProtocolException(ProtocolError.InvalidKey, "The key's public parameters could not be exported.");
         }

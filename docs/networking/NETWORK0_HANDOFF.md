@@ -1,4 +1,19 @@
-# NETWORK0 handoff
+`BenchmarkTests.Measure_WhenAskedTo` (set `AETHERFRAME_PROTOCOL_BENCHMARK=<file>`), Release, Windows 11 x64, .NET 10.0.12, 32 cores, single thread. `[refreshed 2026-09-28 at the pre-merge cleanup; the night's figures predate the whole-input copy in Verify and are replaced here. "Sign" is the signer alone; SignedDocumentCodec.Sign also verifies its output, so it costs about a sign plus a verify.]`
+
+| Operation | Time | Allocation |
+|---|---|---|
+| Encode snapshot payload (332-byte document) | 0.4 µs | 592 B |
+| Encode maximal payload (128,710-byte document) | 131 µs | 519 KB |
+| Sign (signer only) | 98 µs | 564 B |
+| Verify signature only | 337 µs | 1.3 KB |
+| Verify and decode, normal document | 345 µs | 4.2 KB |
+| Verify and decode, maximal document | 1.24 ms | 647 KB |
+| Refuse an oversized declared length | 1.7 µs | 1.1 KB |
+| Refuse random bytes | 1.1 µs | 632 B |
+| Refuse a flipped payload bit (signature mismatch) | 357 µs | 3.5 KB |
+| Refuse an off-curve key | 2.1 µs | 1.4 KB |
+| Parse a public key (on-curve check) | 0.7 µs | 664 B |
+| Derive a persona id | 0.8 µs | 312 B |# NETWORK0 handoff
 
 Written on the night of 2026-09-27, at the end of the overnight NETWORK0 run, for the owner's morning review.
 
@@ -20,6 +35,24 @@ What changed:
 
 Results after remediation: solution builds with 0 warnings; `AetherFrame.Protocol.Tests` 145 passed (112 that night); the plugin's 2739 and the release tooling's 439 unchanged and passing; the regenerated vectors reproduced by the review's independent Python implementation (all 65 rejected documents with the same codes, all 5 documents verified by it and by OpenSSL 3.5.7). The mutation review was repeated on the repaired guards; see "Mutation review" below.
 
+## Pre-merge cleanup (2026-09-28, after the second review)
+
+The second independent review of `a96d7fd` verified the security fixes and found no new code vulnerability. It listed five test and documentation defects to correct before a merge, and six findings (L4, L6, N1, N2, N3, N5) to fix where small or to record. All of it was done on this branch in the commits after `a96d7fd`; nothing about the wire format, a domain tag or the protocol version changed, and the specification stays DRAFT.
+
+**T1, the DER test.** `ThirdPartySignatureTests` asserted that platform DER signatures are 70 to 72 bytes. Shorter ones are legal: 20,000 platform signatures measured 44 of 69 bytes (0.22 %, the reviewers' 0.21 %), each a run the Release workflow could have failed. A strict X.690 reader (`DerEcdsaSignature`) now validates the grammar (SEQUENCE with short-form length equal to the remainder, two INTEGERs with minimal positive encodings of 1 to 33 bytes, no trailing bytes, r and s in 1 to n-1) and the test asserts that the length equals 6 plus the two integer lengths derived from r and s. Two new tests: 2,000 platform signatures of every length parse, re-encode to the same bytes and verify; and a deterministic set of the shortest (8 bytes), longest (72) and intermediate encodings is accepted while a padding zero, a negative integer, long-form lengths, wrong tags, trailing bytes, zero, n and a 34-byte integer are refused. Removing the leading-zero, negativity, range or sequence-length rule from the reader fails the deterministic test.
+
+**T2, the identifier race test.** The test rewrote byte 15 of `a1a1…a1`, which never becomes an empty id, so the 568c137 check-then-read code passed it. The buffer now alternates between an all-zero id and one whose only non-zero byte is the last, and the digest race likewise; the test also requires that the race produced both an acceptance and an `InvalidValue` refusal whenever a second core exists, so it can no longer pass vacuously. With the old check-then-read `Id128.FromBytes` restored it failed 5 of 5 runs. A deterministic test is not possible without a production seam for intercepting reads, which would be worse than the stress test; the verification against the old code is the evidence that it detects the targeted behaviour.
+
+**T3, ownership fixtures.** The fixture now carries a `profiles` table (the recorded owner of each profile id, as a backend would hold it) and each `serverObligations` vector names the recorded owner it is not. New tests: every valid vector is signed by the recorded owner of its profile id and its verified profile is that owner's; every obligation vector verifies, is about the signer's profile, and is not the recorded owner's act; obligation documents never appear among the valid ones. Reverting the retraction vector to persona B retracting persona A's profile id and regenerating fails exactly `ValidDocuments_AreSignedByTheRecordedOwnerOfTheirProfile` (verified; also with the ownership assertion removed, the remaining assertions still fail it). Recording the signer as an obligation's owner fails exactly `ServerObligationDocuments_AreValidSignaturesButNotTheRecordedOwnersActs`. The specification (section 8.4) now says in so many words that the ownership rule is normative for what a document means, that the library cannot enforce it, and that refusing to apply a valid document to another persona's profile is the backend's obligation with the backend's own owner records.
+
+**T4, revision fixtures.** `profile-snapshot`, `-unicode`, `-empty` and `-maximal` shared `rev_b2b2…` with different content, which section 13 rule 4 forbids. They now carry `rev_b2b2…`, `rev_b3b3…`, `rev_b4b4…` and `rev_b5b5…`; a new test refuses a shared revision id over different payload bytes. The fixture was regenerated (every signature changed, as always) and the maximal vector's construction text names its revision id. The review's independent Python and OpenSSL 3.5.7 checker, with its hard-coded maximal revision id updated to match, reproduced the regenerated fixture: both personas, all 5 documents (Python ECDSA and OpenSSL), all 77 rejected vectors with the same codes.
+
+**T5, documentation.** Corrected in place, each marked `[corrected 2026-09-28]` where it was wrong before: the local Plate name limit is 64 UTF-16 code units after folding, not scalars; every recommendation to digest stored or source images is withdrawn pending D5; the exception claims (hostile bytes versus caller misuse, `Sign` passing signer exceptions through, `FromEcdsa` now mapping every export refusal); the reference verification claim (personas and documents, not rejected vectors, and no non-C# checker in the repository); the "refuse regressions" ordering line; specification rule 3 no longer decides D6; the fixture notes say DRAFT; `CurvePoints` no longer says x = 1 is the smallest x on the curve (x = 0 is, pinned by a test); and the Linux status is stated (section 13 of NETWORK0.md and below).
+
+**L4, L6, N1, N2, N3, N5.** Small defects fixed: `FromEcdsa` maps every export refusal (`NotSupportedException`, `NotImplementedException`, `PlatformNotSupportedException`, a disposed key) to `InvalidKey`, with a test; twelve per-field range vectors were added (dimension, per-image bytes, zero asset id, format 0, zero height, height over the limit, width at u32 max, nine images declared, fewer images than present, truncated image, nested count abuse, createdAt at u64 max), so a reader without the per-dimension or per-image limit now fails the vectors (verified by mutation); the vector builder's false claim about range coverage is corrected. Everything else is recorded, not decided, in NETWORK0.md section 12: N1 and N2 are backend gates, N3 needs an explicit decision before real keys sign (no tag was changed), N5 and L6 are API-shape decisions for NETWORK1 (both marked provisional in their documentation), L4's remainder is a key-provider decision.
+
+**Results.** `AetherFrame.Protocol.Tests` 153 passed (145 before; 8 added: 2 DER, 3 vector ownership and uniqueness, 2 payload theory rows, 1 export refusal), about 3 s. The plugin's 2739 and the release tooling's 439 pass unchanged; solution 0 warnings. Targeted mutations: T1 rules (4 of 4 detected), T2 (old code fails 5 of 5), T3 (3 of 3), T4 (1 of 1), image limits V1 to V5 (dimension, bytes, format, pixels detected; the constructor-only zero-asset-id check is redundant with `Id128.FromBytes` on the wire path and its removal is equivalent), `FromEcdsa` catch narrowed back (detected by the new test). Benchmark refreshed (below). **Linux CI verification remains outstanding**: no test here has run on Linux; the draft PR's ubuntu leg will be the first.
+
 ## What was built
 
 - `AetherFrame.Protocol`, a standalone net10.0 assembly (no packages, no Dalamud, no plugin reference, no `System.Net`, no file or process APIs; a test enforces this). 36 KB compiled, 0 warnings with warnings as errors and XML docs on every public member.
@@ -29,9 +62,9 @@ Results after remediation: solution builds with 0 warnings; `AetherFrame.Protoco
   - Documents: `SignedDocumentCodec.Sign` and `.Verify`, `VerifiedDocument` (persona derived from the verifying key), `DocumentType` (ProfileSnapshot = 1, ProfileRetraction = 2).
   - Remote model: `ProfileSnapshot` (profile id, revision id, createdAt, name, up to 8 `ImageReference`s held as a sorted set), `ProfileRetraction` (profile id, issuedAt). Immutable, validated on construction.
   - `ProtocolLimits`: every enforced limit, plus `FuturePolicy` for the approved limits only a server can enforce.
-  - `ProtocolError` (13 codes) and `ProtocolException`, the only exception the assembly throws.
+  - `ProtocolError` (13 codes) and `ProtocolException`, the only exception the assembly throws. `[corrected 2026-09-28: the only exception for hostile bytes; caller misuse throws the usual .NET argument and object-disposed exceptions, and Sign passes the signer's own exceptions through unchanged.]`
   - `IPersonaKeyProvider`: the seam for NETWORK1's protected key storage. Nothing implements it.
-- `AetherFrame.Protocol.Tests`: 112 tests (xunit, same package versions as the other test projects), plus an independent affine-arithmetic P-256 implementation (`ReferenceP256.cs`) written from the specification, used to check every vector.
+- `AetherFrame.Protocol.Tests`: 112 tests (xunit, same package versions as the other test projects), plus an independent affine-arithmetic P-256 implementation (`ReferenceP256.cs`) written from the specification, used to check every vector. `[corrected 2026-09-28: the reference checks the personas and the five documents (keys, identities, signing inputs, digests, signatures, envelopes); the rejected vectors are checked against the library only. No non-C# checker is committed; the reviews' Python and OpenSSL checker, kept outside the repository, reproduced all vectors including the 77 rejected ones after the pre-merge regeneration.]`
 - `AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json` (synthetic personas, canonical bytes, digests, signatures, 40 rejected documents) and `public-api.txt` (the approved public surface, compared on every run). Both regenerate deliberately with `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1`. `[corrected 2026-09-28: 65 rejected documents and a serverObligations section; the public API list regenerates with its own switch, AETHERFRAME_PROTOCOL_REGENERATE_PUBLIC_API=1, and a regeneration run reads back what it wrote.]`
 - Solution and CI: both projects in `AetherFrame.slnx`; `build.yml` and `release.yml` run the protocol tests after the release tooling tests. `CHANGELOG.md` has an Unreleased entry.
 
@@ -120,7 +153,30 @@ The guards the review found untested, and the guards the remediation added, remo
 | `RemoteProfileKey` equality on the persona | fails |
 | Signer high-S normalization, unknown type refusal, empty payload check (from the original list, re-run) | fails |
 
-The exact results, with failure counts, are in the remediation report delivered with the branch.
+The exact results, with failure counts (each run in a scratch clone of the remediated branch; R1 to R20 as the remediation report numbered them; that report is not in the repository, so the counts are copied here):
+
+| # | Mutation | Suite |
+|---|---|---|
+| R1 | Coordinate range check removed entirely | 3 failures (was green at 568c137) |
+| R2 | Only the y-range half removed | 2 |
+| R3 | Only the x-range half removed | 2 |
+| R4 | Low-S bound off by one in `FromBytes` | 2 (was green at 568c137) |
+| R5 | Whole-input copy in `Verify` removed | 1 (the payload race) |
+| R6 | `PersonaPublicKey.FromBytes` checks the span, copies after | 1 (the key race) |
+| R7 | `ProtocolSignature.FromBytes` checks the span, copies after | 1 (the signature race) |
+| R8 | Platform exception mapping narrowed to `CryptographicException` | 1 |
+| R9 | `Sign` no longer verifies its output | 2 |
+| R10 | `Sign` reads the signer's key twice | 2 |
+| R11 | Curve identifier check in `FromEcdsa` removed | 1 |
+| R12 | Set-order check moved after the digest (precedence) | 1 |
+| R13 | Set-order check removed | 5 |
+| R14 | `RemoteProfileKey` equality ignores the persona | 3 |
+| R15 | Opaque id zero check removed | 1 |
+| R16 | Image digest zero check removed | 5 |
+| R17 | Signer high-S normalization removed | 48 |
+| R18 | Unknown document type accepted | 3 |
+| R19 | Envelope empty-payload check removed | 2 |
+| R20 | `Sign` accepts a null signature | 1 |
 
 ## Performance
 
@@ -141,13 +197,13 @@ The exact results, with failure counts, are in the remediation report delivered 
 | Parse a public key (on-curve check) | 1.1 µs | 664 B |
 | Derive a persona id | 0.3 µs | 312 B |
 
-No quadratic behaviour was found; everything is linear in the input. Two things could be cheaper but are not pathological: verification imports the public key into a platform `ECDsa` on every call (most of the 389 µs; a per-key cache would cut it), and a maximal snapshot allocates the name twice (the UTF-16 string and a validation re-encoding). Both are NETWORK1 options, not blockers.
+No quadratic behaviour was found; everything is linear in the input. Two things could be cheaper but are not pathological: verification imports the public key into a platform `ECDsa` on every call (most of the 337 µs; a per-key cache would cut it), and a maximal document now costs one whole-input copy plus the name twice (the UTF-16 string and a validation re-encoding). Both are NETWORK1 options, not blockers.
 
 ## Open security points
 
 - The strength of ECDSA rests on the platform (Windows CNG, OpenSSL on Linux); nonce generation is theirs. The protocol only fixes the encoding.
 - Nothing yet protects a private key at rest; that is NETWORK1's `IPersonaKeyProvider`. Until then the only signer is in-memory.
-- Replay of whole documents is a server concern (order snapshots and retractions per profile; refuse regressions). The protocol gives timestamps and ids but no nonce or sequence, on purpose, so a client without server state can sign.
+- Replay of whole documents is a server concern. `[corrected 2026-09-28: not "order by createdAt and refuse regressions", which two client clocks cannot support; the baseline is specification section 13 (terminal retraction, receipt-time ordering, idempotent resubmission), and rollback by replaying a pruned revision (N2) is still open.]` The protocol gives timestamps and ids but no nonce or sequence, on purpose, so a client without server state can sign.
 - `EcdsaPersonaSigner` is not thread-safe; NETWORK1 must serialize signing.
 
 ## Product decisions still needed
@@ -162,7 +218,7 @@ No quadratic behaviour was found; everything is linear in the input. Two things 
 
 ## Recommended NETWORK1 scope
 
-Client side only, still no backend: `IPersonaKeyProvider` over a DPAPI-protected P-256 key in the plugin's configuration folder (generate once, never export); a snapshot builder from `ProfileDocument` (name and image references, digests computed from the stored assets); a minimal publish and retract flow behind a feature flag with no UI beyond a command, that produces documents and, for now, writes them to a local outbox instead of a server; the request-proof signing tag and schema, defined and vectored the same way as the documents. Only then the backend, which reuses `AetherFrame.Protocol` unchanged.
+Client side only, still no backend: `IPersonaKeyProvider` over a DPAPI-protected P-256 key in the plugin's configuration folder (generate once, never export); a snapshot builder from `ProfileDocument` (name and image references) `[corrected 2026-09-28: not "digests computed from the stored assets": what a digest covers, and whether original image bytes are ever uploaded or digested, is decision D5, and no milestone may upload originals or expose their digests before the image processing and privacy design is approved]`; a minimal publish and retract flow behind a feature flag with no UI beyond a command, that produces documents and, for now, writes them to a local outbox instead of a server; the request-proof signing tag and schema, defined and vectored the same way as the documents. Only then the backend, which reuses `AetherFrame.Protocol` unchanged.
 
 ## How to review
 

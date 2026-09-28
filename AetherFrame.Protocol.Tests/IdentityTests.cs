@@ -73,6 +73,20 @@ public class IdentityTests
     }
 
     [Fact]
+    public void PublicKey_ReportsAnyExportRefusalAsInvalidKey()
+    {
+        // A platform key, or an ECDsa implementation, that cannot hand out its public parameters is
+        // an invalid key to the protocol, whatever exception it uses to say so.
+        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => PersonaPublicKey.FromEcdsa(new RefusingEcdsa(new NotSupportedException())));
+        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => PersonaPublicKey.FromEcdsa(new RefusingEcdsa(new PlatformNotSupportedException())));
+        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => PersonaPublicKey.FromEcdsa(new RefusingEcdsa(new CryptographicException())));
+        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => PersonaPublicKey.FromEcdsa(new RefusingEcdsa(null)));
+        var disposed = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        disposed.Dispose();
+        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => PersonaPublicKey.FromEcdsa(disposed));
+    }
+
+    [Fact]
     public void PublicKey_RefusesKeysOnOtherCurves()
     {
         // Including the 256-bit curves whose coordinates have the right length: they fail the curve
@@ -155,5 +169,15 @@ public class IdentityTests
         Assert.True(mid.CompareTo(high) < 0);
         Assert.Equal(0, low.CompareTo(AssetId.Parse(low.ToString())));
         Assert.Equal([low, mid, high], new[] { high, low, mid }.OrderBy(a => a).ToArray());
+    }
+
+    /// <summary>An ECDsa whose export throws the given exception, or the base class's NotImplementedException when null.</summary>
+    private sealed class RefusingEcdsa(Exception? exception) : ECDsa
+    {
+        public override ECParameters ExportParameters(bool includePrivateParameters) => throw exception ?? new NotImplementedException();
+
+        public override byte[] SignHash(byte[] hash) => throw new NotSupportedException();
+
+        public override bool VerifyHash(byte[] hash, byte[] signature) => throw new NotSupportedException();
     }
 }
