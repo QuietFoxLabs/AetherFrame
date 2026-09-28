@@ -2,7 +2,7 @@
 
 How AetherFrame reaches players without the official Dalamud plugin repository: a public custom repository, hosted from this GitHub repository, that Dalamud's plugin installer reads like any other. This page covers the format, the tooling that produces and checks it, how a release is validated and published, and how to undo a bad release.
 
-**Status:** the publication system is implemented and tested, and **nothing is published**. The `plugin-repository` branch does not exist yet, so the repository URL answers 404 and no player can add it. The first publication waits for the v0.1.6 in-game smoke test and for the owner's settings and decisions below ([First publication](#first-publication), [Decisions still open](#decisions-still-open)).
+**Status:** the publication system is implemented and tested, and **nothing is published to the repository yet**. The repository URL is approved ([Permanent repository URL](#permanent-repository-url)), but the `plugin-repository` branch doesn't exist, so the address answers 404 and no player can add it. v0.1.6 passed its in-game smoke test and its GitHub Release is published; the first publication waits for the owner's settings below ([First publication](#first-publication), [Decisions still open](#decisions-still-open)).
 
 Principles this is built on: everything is local first, nothing in the plugin phones home, and the custom repository adds no networking to the plugin itself. Dalamud does the downloading, from GitHub Releases, exactly as it does for every plugin. GitHub stays the public source and release host. Approval into the official Dalamud repository is welcome but not required. No account or backend is involved in installing AetherFrame.
 
@@ -98,7 +98,7 @@ And the rules behind the table:
 | [`.github/workflows/publish-custom-repository.yml`](../.github/workflows/publish-custom-repository.yml) | Publishing, by hand only: see [Publishing](#publishing). |
 | branch `plugin-repository` (not created yet) | The live `pluginmaster.json` and the README, and nothing else, written only by the publication workflow. |
 
-The live `pluginmaster.json` never lives on `master`. It has its own branch, `plugin-repository`, served as `https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json` (the address is still to be confirmed: [Permanent repository URL](#permanent-repository-url)). That keeps generated data out of the source history, gives it its own history for auditing, and lets the workflow write it with the built-in `GITHUB_TOKEN`. The first publication creates the branch.
+The live `pluginmaster.json` never lives on `master`. It has its own branch, `plugin-repository`, served as `https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json`, the approved permanent address ([Permanent repository URL](#permanent-repository-url)). That keeps generated data out of the source history, gives it its own history for auditing, and lets the workflow write it with the built-in `GITHUB_TOKEN`. The first publication creates the branch.
 
 ## Building and validating a release locally
 
@@ -324,21 +324,29 @@ Never edit `pluginmaster.json` by hand and never force-push the branch: a hand-e
 
 ## Permanent repository URL
 
-The candidate is `https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json`, configured as `pluginMasterUrl` in `distribution/repository.json`. It is not active: the branch doesn't exist, and the address answers 404. The publication derives its target branch from that URL, so the URL can still change freely before the first publication. After that, never.
-
-What was checked (2026-09-27, against the live service):
-
-- **How GitHub serves it.** `raw.githubusercontent.com` serves a branch's file as `text/plain; charset=utf-8`, with `Cache-Control: max-age=300`, through a CDN. Dalamud reads the body as JSON whatever the content type, so `text/plain` is fine. A new publication reaches every player within about five minutes; so does a rollback.
-- **The two address forms.** `…/AetherFrame/<ref>/pluginmaster.json` and `…/AetherFrame/refs/heads/<branch>/pluginmaster.json` serve the same file. The short form accepts tags as well as branches (`…/AetherFrame/v0.1.6/Version.props` answers 200), so a tag ever named `plugin-repository` would make the short address ambiguous. The `refs/heads/` form can only mean the branch.
-- **Availability.** The same GitHub service that hosts the release ZIPs, which Dalamud downloads anyway. If GitHub is down, installs fail either way.
-- **GitHub Pages** (`https://richhiiee.github.io/AetherFrame/pluginmaster.json`) would serve `application/json` and needs Pages switched on and a deployment step: either Pages building from the branch, or a deployment job with `pages: write` and `id-token: write`. That is more moving parts, and it is no more reliable: it is the same GitHub, and it is tied to the same account and repository names. Only a custom domain would make the address independent of GitHub, and that is a paid service.
-- **Permanence.** The address contains the owner name, the repository name and the branch name. Renaming any of them breaks every installed copy's updates; don't rely on GitHub's redirects for this.
-
-**Recommendation:** keep `raw.githubusercontent.com` and the `plugin-repository` branch, and switch to the explicit form before the first publication:
+Approved by the owner on 2026-09-27:
 
 `https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json`
 
-That is a one-line change of `pluginMasterUrl` in `distribution/repository.json`, through a pull request. The workflow's branch stays `plugin-repository`, and the tool accepts both forms. If the short form is kept instead, never create a tag named `plugin-repository`: the tag ruleset below protects `v*` tags, but doesn't stop other tag names.
+It is `pluginMasterUrl` in `distribution/repository.json`, and the publication writes the branch it names, `plugin-repository`. It is not active yet: the branch doesn't exist until the first publication, and until then the address answers 404. Once players use it, it never changes. Dalamud offers a plugin's updates only from the exact address it was installed from, so every installation made from this address depends on it for good. `DistributionTests` fails if the configured address changes, so a change can only ever be deliberate.
+
+**This is the GitHub compatibility endpoint.** A shorter, branded address, such as `https://repo.aetherframe.app/pluginmaster.json`, may be introduced later. If that happens:
+
+- This address stays `pluginMasterUrl`, and the publication keeps writing the branch it serves. It remains the endpoint of every installation made from it, for as long as that is practical.
+- The branded address must serve the same file as this one, for example by redirecting to it or as a copy written by the same publication, so that both always offer the same versions. Check that Dalamud's installer reads it before announcing it.
+- Players who installed from this address keep getting updates without doing anything. Moving an installed copy to the branded address means reinstalling it from there.
+- Players should add one of the two addresses, not both.
+- A branded address, once announced, is permanent too, for the same reason.
+
+The branded address is not configured anywhere, and no DNS or hosting exists for it.
+
+Why this address (checked 2026-09-27, against the live service):
+
+- **How GitHub serves it.** `raw.githubusercontent.com` serves a branch's file as `text/plain; charset=utf-8`, with `Cache-Control: max-age=300`, through a CDN. Dalamud reads the body as JSON whatever the content type, so `text/plain` is fine. A new publication reaches every player within about five minutes; so does a rollback.
+- **The `refs/heads/` form.** `…/AetherFrame/<ref>/pluginmaster.json` and `…/AetherFrame/refs/heads/<branch>/pluginmaster.json` serve the same file, but the short form accepts tags as well as branches (`…/AetherFrame/v0.1.6/Version.props` answers 200), so a tag ever named `plugin-repository` would make a short address ambiguous. The approved `refs/heads/` form can only mean the branch.
+- **Availability.** The same GitHub service that hosts the release ZIPs, which Dalamud downloads anyway. If GitHub is down, installs fail either way.
+- **GitHub Pages** (`https://richhiiee.github.io/AetherFrame/pluginmaster.json`) would serve `application/json` and needs Pages switched on and a deployment step: either Pages building from the branch, or a deployment job with `pages: write` and `id-token: write`. That is more moving parts, and it is no more reliable: it is the same GitHub, and it is tied to the same account and repository names. Only a custom domain, such as the branded address above, makes an address independent of GitHub.
+- **Permanence.** The address contains the owner name, the repository name and the branch name. Never rename any of them; don't rely on GitHub's redirects for this.
 
 ## Protecting the repository
 
@@ -359,21 +367,21 @@ Optionally, give the existing `release` environment (the Release workflow's draf
 - **`plugin-repository`** (New branch ruleset; target: include by pattern `plugin-repository`): **Restrict deletions**, **Block force pushes**, **Require linear history**. The workflow's pushes satisfy all three. Don't add **Require signed commits** (the workflow's commits are unsigned) or **Restrict updates**, unless you have checked that the workflow can still push (GitHub Actions itself must then be on the bypass list).
 - **Release tags** (New tag ruleset; target: include by pattern `v*`): **Restrict updates** (a release tag can never be moved), **Restrict deletions**, **Block force pushes**. Creating new tags stays allowed. A publication refuses a release whose DLL wasn't built from the tag's commit, so a moved tag could never be published anyway; this stops the move itself.
 
-**3. Immutable releases.** Settings → Releases → **Enable release immutability**. Once a release is published, its assets can't be modified or deleted and its tag can't be moved or deleted; its title, notes and pre-release flag can still be edited, so promotion to stable still works. GitHub's documentation says it applies only to future releases and doesn't say how it treats an existing draft, so if you want v0.1.6 covered, turn it on before publishing v0.1.6. Afterwards, `gh api repos/richhiiee/AetherFrame/releases/tags/v0.1.6 --jq .immutable` shows whether it took effect, and every publication record says so too. The trade-off: a bad release's ZIP can never be removed or replaced. Nothing here depends on doing that.
+**3. Immutable releases.** Settings → Releases → **Enable release immutability**. Once a release is published, its assets can't be modified or deleted and its tag can't be moved or deleted; its title, notes and pre-release flag can still be edited, so promotion to stable still works. GitHub's documentation says it applies only to future releases. v0.1.6 was published before it was turned on, so it isn't covered, and its publication record will say `not immutable`; turning it on now covers the releases after it. `gh api repos/richhiiee/AetherFrame/releases/tags/<tag> --jq .immutable` shows whether a release is immutable, and every publication record says so too. The trade-off: a bad release's ZIP can never be removed or replaced. Nothing here depends on doing that.
 
 Sources: GitHub Docs, "Immutable releases" (`/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases`) and "Preventing changes to your releases" (`/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes`), read 2026-09-27.
 
 ## First publication
 
-The order, once the v0.1.6 in-game smoke test has passed. Until step 6, nothing is visible to players.
+The order for v0.1.6, whose in-game smoke test has passed. Nothing reaches the plugin installer before step 5.
 
-1. **Decide the URL** ([Permanent repository URL](#permanent-repository-url)). To use the recommended `refs/heads/` form, change `pluginMasterUrl` in `distribution/repository.json` through a pull request and merge it after its checks pass.
-2. **Set up the protections**: at least the `custom-repository` environment; ideally also the rulesets and, if wanted for 0.1.6, immutable releases ([Protecting the repository](#protecting-the-repository)).
-3. **Publish the GitHub Release** "AetherFrame 0.1.6": open the draft on GitHub, keep **Set as a pre-release** ticked, press **Publish release**. Then check `gh release view v0.1.6` shows it published with its two assets unchanged (`AetherFrame-0.1.6.zip`, SHA-256 `6c6e708b…ad23`).
+1. **Set up the protections**: at least the `custom-repository` environment; ideally also the rulesets and immutable releases ([Protecting the repository](#protecting-the-repository)).
+2. **Have the workflow on `master`**: it runs only from there, so the pull request that adds it must be merged first.
+3. **The GitHub Release** "AetherFrame 0.1.6": done. It was published on 2026-09-27T23:58:31Z as a pre-release, with its two assets unchanged (`AetherFrame-0.1.6.zip`, SHA-256 `6c6e708b…ad23`). For later releases: open the draft on GitHub, keep **Set as a pre-release** ticked for the testing channel, and press **Publish release**.
 4. **Dry run**: **Actions → Publish custom repository → Run workflow**, branch `master`, version `0.1.6`, channel `testing`, **rollback** and **publish** unticked. The run summary should say *Publish 0.1.6 to testing*, *nothing published → testing-exclusive 0.1.6*, and list v0.1.6 as a pre-release with tagged commit `76e53963…` and package SHA-256 `6c6e708b…`.
 5. **Publish**: the same inputs with **publish** ticked. When the run pauses, check its summary says the same as the dry run, then **Review deployments → custom-repository → Approve and deploy**. The publish job writes the first commit of `plugin-repository`, which creates the branch.
-6. **Check what is served**: a few minutes later, `curl -sS <repository URL> | sha256sum` gives the SHA-256 in the run summary.
-7. **Install**: in game, `/xlsettings` → Experimental: tick **Get plugin testing builds**, add the repository URL under Custom Plugin Repositories, enable it, save. Remove the AetherFrame dev plugin location first; Dalamud can't load both. `/xlplugins` lists AetherFrame 0.1.6; install it, and check `/af version` says 0.1.6 and commit `76e5396`.
+6. **Check what is served**: a few minutes later, `curl -sS https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json | sha256sum` gives the SHA-256 in the run summary.
+7. **Install**: in game, `/xlsettings` → Experimental: tick **Get plugin testing builds**, add `https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json` under Custom Plugin Repositories, enable it, save. Remove the AetherFrame dev plugin location first; Dalamud can't load both. `/xlplugins` lists AetherFrame 0.1.6; install it, and check `/af version` says 0.1.6 and commit `76e5396`.
 8. **Confirm updates**: the next release goes through the same steps, and the installed copy should be offered it. Only then tell other players the URL, and update `README.md` and `docs/Testing.md` with it.
 
 ## Security review
@@ -412,11 +420,13 @@ Not addressed, deliberately: signing the ZIP or the metadata. Dalamud has no sig
 
 ## Decisions still open
 
-1. **Repository URL.** Recommended: the `refs/heads/` form of the current candidate ([Permanent repository URL](#permanent-repository-url)). Permanent once anyone uses it.
-2. **The `custom-repository` environment** with the owner as required reviewer and `master` as its only branch. Needed before the first publication.
-3. **Rulesets** for `master`, `plugin-repository` and release tags ([Protecting the repository](#protecting-the-repository)).
-4. **Immutable releases**, before v0.1.6 is published if it should cover 0.1.6.
-5. **When to promote to stable.** 0.1.6 starts testing-exclusive; stable stays empty until a release is deliberately promoted.
+The repository URL is decided ([Permanent repository URL](#permanent-repository-url)). Still open:
+
+1. **The `custom-repository` environment** with the owner as required reviewer and `master` as its only branch. Needed before the first publication.
+2. **Rulesets** for `master`, `plugin-repository` and release tags ([Protecting the repository](#protecting-the-repository)).
+3. **Immutable releases** for the releases after 0.1.6, which was published without it.
+4. **When to promote to stable.** 0.1.6 starts testing-exclusive; stable stays empty until a release is deliberately promoted.
+5. **A branded short address**, later and optional. It must serve the same file, and the GitHub address stays the compatibility endpoint ([Permanent repository URL](#permanent-repository-url)).
 6. **A Dalamud API level change.** The configuration has one API level for both slots, so the first publication after an API change must replace both slots with releases built for the new level. Plan it when it comes.
 7. **Folding `New-ReleasePackage.ps1` into the tool.** Today the script stages `dist/` and the tool re-checks it; one implementation would be simpler once the tool has run in CI for a few releases.
-8. **Player-facing text.** `README.md` and `docs/Testing.md` describe the custom repository only in outline until the URL is live; the install steps for players belong there then.
+8. **Player-facing text.** `README.md` and `docs/Testing.md` describe the custom repository only in outline until the URL is live; the install steps and the address belong there then.

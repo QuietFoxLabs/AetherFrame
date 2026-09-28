@@ -279,7 +279,7 @@ internal static class TestPackages
         return Zip(directory.File(fileName ?? $"{InternalName}-{version}.zip"), entries.ToArray());
     }
 
-    internal const string PluginMasterUrl = "https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json";
+    internal const string PluginMasterUrl = "https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json";
 
     internal static string ConfigJson(string template = DownloadTemplate, int apiLevel = 15, string internalName = InternalName, string sourceRepositoryUrl = RepoUrl, string pluginMasterUrl = PluginMasterUrl) => $$"""
         {

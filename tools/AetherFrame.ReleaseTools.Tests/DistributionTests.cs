@@ -31,6 +31,18 @@ public class DistributionTests
     }
 
     [Fact]
+    public void RepositoryUrl_IsTheApprovedPermanentAddress()
+    {
+        // Dalamud offers a plugin's updates only from the exact address it was installed from, so this address
+        // can never change once players use it (docs/CustomRepository.md, Permanent repository URL). A change
+        // here is a decision, not an edit: it would orphan every installation made from the old address.
+        var configuration = RepositoryConfiguration.Load(RepositoryPaths.File(Path.Combine("distribution", "repository.json")));
+
+        Assert.Equal("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json", configuration.PluginMasterUrl);
+        Assert.Equal("plugin-repository", PublicationTarget.FromConfiguration(configuration).Branch);
+    }
+
+    [Fact]
     public void DryRunFixture_IsForTheCurrentVersion_AndValidates()
     {
         var configuration = RepositoryConfiguration.Load(RepositoryPaths.File(Path.Combine("distribution", "repository.json")))
