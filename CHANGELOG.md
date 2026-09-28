@@ -10,6 +10,19 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 - Release tooling for a public custom Dalamud repository ([docs/CustomRepository.md](docs/CustomRepository.md)): `tools/AetherFrame.ReleaseTools` checks a release package against the full rule set (x64, built from the released commit, one version and one Dalamud API level everywhere, only the three plugin files, safe entry names), generates and checks the repository metadata Dalamud reads (`pluginmaster.json`, stable and testing channels), and writes and verifies SHA-256 checksum files. The Build and Release workflows run it; the Release dry run keeps the generated metadata as an artifact. Nothing is published to a repository yet, and the plugin itself is unchanged.
 - A manual **Publish custom repository** workflow ([docs/CustomRepository.md](docs/CustomRepository.md#publishing)) that puts a published GitHub Release into the custom repository's testing or stable channel after the owner's approval, or rolls a channel back. It verifies every release it describes from scratch, never publishes a draft, never moves a channel to an older version by accident, and writes only `pluginmaster.json` and a README to its own branch. It has not been used yet.
 
+### Fixed
+
+Plate Library reliability and data preservation ([docs/reliability/PlateLibraryReliability.md](docs/reliability/PlateLibraryReliability.md)). Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged.
+
+- A damaged Plate, Template, character or Plate order file that was read from Dalamud's backup copy is never written over until its damaged bytes are kept under `Recovery`: if that copy failed at load (a full disk), the next save or change now retries it, and is refused with a plain message while it still fails, instead of replacing bytes that may be newer than the backup.
+- A Plate, Template, character or Plate order file holding bytes that aren't valid text is treated as damaged (read from its backup copy, with the damaged file kept in `Recovery`, or left untouched), instead of loading with replacement characters that the next save would write over the backup too.
+- Recovery and pre-migration backup copies are flushed to disk before the original is written over.
+- Every Plate and Template write is checked to load again before anything is written.
+- Duplicate no longer reports a failure (inviting a second copy) when only the Plate order couldn't be saved.
+- Exporting a Plate that holds a value a Plate file can't carry (for example a font size over 1024 typed in 0.1.5) says which value, instead of "The Plate in this file is damaged."
+- A package whose image is only mentioned in a text field, or whose text isn't valid UTF-8, is refused as such; a package can't be imported twice from the same Import window after its Plate was saved.
+- Add Image names the stored file after the stored content, and a Plate or Template file that couldn't be opened (in use by another program) is no longer described as damaged.
+
 ## [0.1.6] - 2026-09-27
 
 Reliability, data safety and import security, the v0.1.6 milestone. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged: a file written by 0.1.0 through 0.1.5 loads and re-saves byte for byte, and the schema versions did not move.
