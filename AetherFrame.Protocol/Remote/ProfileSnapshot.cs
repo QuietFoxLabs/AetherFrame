@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Encoding;
 using AetherFrame.Protocol.Identity;
@@ -20,6 +21,7 @@ public sealed class ProfileSnapshot : RemoteDocument
     public const ushort SchemaVersion = 1;
 
     private readonly ImageReference[] images;
+    private readonly ReadOnlyCollection<ImageReference> imagesView;
 
     /// <summary>Builds a snapshot, refusing any value outside the limits and any repeated asset id.</summary>
     /// <exception cref="ProtocolException"><see cref="ProtocolError.InvalidValue"/>, <see cref="ProtocolError.InvalidText"/> or <see cref="ProtocolError.LimitExceeded"/>.</exception>
@@ -41,10 +43,16 @@ public sealed class ProfileSnapshot : RemoteDocument
         ProtocolTimestamps.Check(createdAtUnixSeconds, "createdAt");
         ProtocolText.Encode(name, "name");
 
-        var sorted = new List<ImageReference>(images);
-        if (sorted.Count > ProtocolLimits.MaxImagesPerProfile)
+        var sorted = new List<ImageReference>(ProtocolLimits.MaxImagesPerProfile);
+        foreach (var image in images)
         {
-            throw new ProtocolException(ProtocolError.LimitExceeded, $"A snapshot references {ProtocolText.Number(sorted.Count)} images; the limit is {ProtocolText.Number(ProtocolLimits.MaxImagesPerProfile)}.");
+            ArgumentNullException.ThrowIfNull(image, nameof(images));
+            if (sorted.Count == ProtocolLimits.MaxImagesPerProfile)
+            {
+                throw new ProtocolException(ProtocolError.LimitExceeded, $"A snapshot references more than {ProtocolText.Number(ProtocolLimits.MaxImagesPerProfile)} images.");
+            }
+
+            sorted.Add(image);
         }
 
         sorted.Sort(static (a, b) => a.AssetId.CompareTo(b.AssetId));
@@ -69,6 +77,7 @@ public sealed class ProfileSnapshot : RemoteDocument
         CreatedAtUnixSeconds = createdAtUnixSeconds;
         Name = name;
         this.images = sorted.ToArray();
+        imagesView = Array.AsReadOnly(this.images);
         TotalImageBytes = totalBytes;
     }
 
@@ -90,8 +99,8 @@ public sealed class ProfileSnapshot : RemoteDocument
     /// <summary>The Plate's display name, exactly as authored (possibly empty).</summary>
     public string Name { get; }
 
-    /// <summary>The referenced images, in ascending asset id order.</summary>
-    public IReadOnlyList<ImageReference> Images => images;
+    /// <summary>The referenced images, in ascending asset id order. A read-only view: no cast reaches the array behind it.</summary>
+    public IReadOnlyList<ImageReference> Images => imagesView;
 
     /// <summary>The bytes the images declare in total.</summary>
     public long TotalImageBytes { get; }

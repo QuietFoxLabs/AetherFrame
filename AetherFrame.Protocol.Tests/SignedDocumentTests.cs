@@ -71,5 +71,11 @@ public class SignedDocumentTests
         digestCopy[0] ^= 0xFF;
         Assert.Equal(Samples.Digest(0x11), snapshot.Images[0].Sha256ToArray());
         Assert.Throws<NotSupportedException>(() => ((System.Collections.Generic.IList<ImageReference>)snapshot.Images).Clear());
+
+        // The image list is a read-only view, not the array itself: neither the indexer nor a cast
+        // reaches the storage behind a verified document.
+        Assert.IsNotType<ImageReference[]>(snapshot.Images);
+        Assert.Throws<NotSupportedException>(() => ((System.Collections.Generic.IList<ImageReference>)snapshot.Images)[0] = snapshot.Images[1]);
+        Assert.Equal(Samples.Asset1, snapshot.Images[0].AssetId);
     }
 }

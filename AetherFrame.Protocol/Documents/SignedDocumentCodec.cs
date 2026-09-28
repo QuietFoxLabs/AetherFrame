@@ -68,13 +68,18 @@ public static class SignedDocumentCodec
         // Structural checks are done; from here each step costs more, and each is fail-closed.
         var key = PersonaPublicKey.FromBytes(keyBytes);
         var signature = ProtocolSignature.FromBytes(signatureBytes);
-        var input = SigningInput.Create(type, key, payload);
+
+        // The payload is verified and decoded from one private copy, so a caller whose buffer is
+        // shared with another thread can never have the bytes that were verified differ from the
+        // bytes that are decoded. The key and the header were already copied out above.
+        var payloadCopy = payload.ToArray();
+        var input = SigningInput.Create(type, key, payloadCopy);
         if (!SignatureVerifier.Verify(input, signature))
         {
             throw new ProtocolException(ProtocolError.SignatureMismatch, "The signature does not verify over the document with the key it names.");
         }
 
-        return new VerifiedDocument(key, PayloadCodec.Decode(type, payload));
+        return new VerifiedDocument(key, PayloadCodec.Decode(type, payloadCopy));
     }
 
     /// <summary>Lays out the envelope. Internal so tests can build documents whose parts disagree.</summary>
