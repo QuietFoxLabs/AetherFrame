@@ -21,7 +21,7 @@ Every fix keeps the saved file formats, schema versions and package format as th
   - D: migrations, backward compatibility, recovery and test coverage.
 - **Reconciliation.** Every claimed weakness was checked against the code before being fixed.
 - **Tests that prove each fix.** Every fix has a regression test. Each test was shown to fail with the fix removed, except where noted in section 3.
-- **Adversarial review.** An independent review of the finished diff followed.
+- **Adversarial review.** An independent review of the finished diff followed. It found no high- or medium-severity defect. Its five low-severity findings (a Recovery copy losing the damaged file's modified time, two wording issues, the Import window's verdict and the refusal message's advice) are fixed in the last code commit, `Address the review of the reliability fixes`.
 - **Baseline at `6384db6`**, built and run on Linux with .NET 10.0.401 and Dalamud's reference assemblies:
   - AetherFrame.Tests: 2739 passed.
   - AetherFrame.Protocol.Tests: 153 passed.
@@ -106,7 +106,7 @@ What stays safe around them:
 1. **A damaged file written over with no Recovery copy.**
    - **Before:** `KeepRecoveredFile` in the Plate Library, and `KeepRecoveryCopy` in the Template Library, tried the Recovery copy once, at load, and only logged a failure. The next Save, Rename, Set Active, Move or Template rename then replaced the damaged bytes.
    - **Why it matters:** the damaged on-disk file is the newest content whenever Dalamud's backup is stale, and that is by design after a stuck-temp direct write on a full disk. It contradicted the 0.1.6 changelog.
-   - **Now:** such a path is remembered for the session. Every write to it first retries the copy (`PreserveBeforeOverwrite`), and refuses with "A damaged file couldn't be copied to AetherFrame's Recovery folder, so it wasn't written over. Free some disk space and try again." while the copy still fails.
+   - **Now:** such a path is remembered for the session. Every write to it first retries the copy (`PreserveBeforeOverwrite`), and refuses with "A damaged file couldn't be copied to AetherFrame's Recovery folder, so it wasn't written over. Check that the drive isn't full and the AetherFrame folder isn't read-only, then try again." while the copy still fails.
    - **Tests:** `DamagedFilePreservationTests`, covering Plate save and rename, a binding, `library.json` and a Template. Five of the six fail without the fix; the sixth pins the unchanged case where the copy succeeds at load.
 
 2. **Invalid UTF-8 read as intact.**
@@ -117,8 +117,9 @@ What stays safe around them:
 
 3. **Unflushed copies.**
    - **Before:** `SystemFileStore.CopyFile` used `File.Copy`, which gives no durability guarantee, while the write that follows it over the original is flushed.
-   - **Now:** it copies through streams, flushes the copy to disk, removes a partial copy on failure, and still never overwrites.
-   - **Tests:** `SystemFileStoreCopyTests` pins the exact bytes, the no-overwrite rule and that a failed copy creates nothing. A flush can't be observed deterministically, so no test fails without this change.
+   - **Now:** it copies through streams, flushes the copy to disk and removes a partial copy on failure. Like `File.Copy`, it still never overwrites, keeps the source's modified time and lets other programs keep the source open.
+   - **Why the modified time matters:** for a damaged file, it is the evidence of whether the damaged bytes are newer than the backup.
+   - **Tests:** `SystemFileStoreCopyTests` pins the exact bytes, the modified time, the no-overwrite rule and that a failed copy creates nothing. The flush itself can't be observed deterministically.
 
 4. **Writes that might not load again.**
    - **Now:** each Plate and Template write serializes once, runs that exact text through the startup reader, and writes it only if it would load as Ready (`PreparePlateWrite`, `PrepareTemplateWrite`). Otherwise the write is refused with "AetherFrame couldn't save this change: the result wouldn't load again, so nothing was written." The Library's record is built from the same text.
@@ -131,7 +132,7 @@ What stays safe around them:
 
 6. **Export wording.**
    - **Before:** a Plate saved by 0.1.5 with a typed font size over 1024, or a hand-edited Plate with a repeated element id, opens fine but is refused by the export self-check.
-   - **Now:** the player sees "This Plate holds a value a Plate file can't carry (font size out of range). Change it in the editor and save, then export again." The detail is the validator's fixed text, omitted if it ever looks like a path. Any other self-check refusal reads "The Plate couldn't be exported."
+   - **Now:** the player sees "This Plate holds a value a Plate file can't carry (font size out of range). Change it in the editor and save, then export again." The detail is the validator's fixed text, omitted if it ever looks like a path. Any other self-check refusal keeps the check's own message, as before, such as "too many elements".
    - **Tests:** `PackageReliabilityTests`.
 
 7. **Images riding along.**
@@ -142,7 +143,7 @@ What stays safe around them:
    - **Now:** `PackageJson.Screen` checks string values as well as property names, so the profile or manifest is refused as damaged. `PackageManifest.Parse` no longer throws.
 
 9. **Import retry.**
-   - **Now:** `StagedPackage` becomes non-importable once its Plate is on disk: after a success, or after an unfinished import whose Plate stayed.
+   - **Now:** `StagedPackage` becomes non-importable once its Plate is on disk: after a success, or after an unfinished import whose Plate stayed. The Import window then shows "Already imported" instead of "Ready to import", and keeps the preview.
 
 10. **The dormant cleanup's reference scan.** This is not active: nothing calls the cleanup. The scan now also counts:
     - every GUID in a Template envelope's and its Origin's preserved data;
@@ -156,6 +157,7 @@ What stays safe around them:
 
 12. **Locked-file wording.**
     - **Now:** an unreadable Plate or Template whose file couldn't be opened, as opposed to one whose content is damaged, says "couldn't be opened; another program may be using it … Restart the game to try again". The log line says "could not open".
+   - **How the two are told apart:** only an I/O or access failure counts as "couldn't be opened". Any content failure keeps "damaged".
     - **Tests:** `UnopenableFileDiagnosticsTests`.
 
 ## 4. Every behavior change
@@ -171,10 +173,10 @@ Everything a player or an existing file can notice:
 | Exporting an over-limit Plate names the value instead of saying the file is damaged | Plates saved by 0.1.5's unbounded sliders, or hand edits |
 | A package whose image is referenced only from text is refused ("The file contains an image the Plate doesn't use.") | Crafted packages; AetherFrame never exports one |
 | A package with invalid UTF-8 in a text value is refused as damaged instead of "isn't a valid AetherFrame Plate file" | Corrupted or crafted packages |
-| A checked package can't be imported twice from the same Import window | After a success, or after an unfinished import |
+| A checked package can't be imported twice from the same Import window, which then says "Already imported" | After a success, or after an unfinished import |
 | Add Image names the stored file after the stored content | Only if the source changed format while being added |
 | A locked Plate or Template is described as "couldn't be opened", not "damaged" | Files held by another program at load |
-| Recovery and migration backup copies are flushed to disk | Not visible |
+| Recovery and migration backup copies are flushed to disk; like before, they keep the original's modified time | Not visible |
 | The dormant cleanup's scan protects more images | Not visible: cleanup doesn't run |
 
 Unchanged:
@@ -201,7 +203,7 @@ Unchanged:
 
 | | Before (`6384db6`) | After |
 |---|---|---|
-| AetherFrame.Tests | 2739 passed | 2796 passed (57 new cases) |
+| AetherFrame.Tests | 2739 passed | 2798 passed (59 new cases) |
 | AetherFrame.Protocol.Tests | 153 passed | 153 passed |
 | AetherFrame.ReleaseTools.Tests | 439 passed | 439 passed |
 | Solution build (Release, Dalamud plugin included) | 0 warnings, 0 errors | 0 warnings, 0 errors |
@@ -230,10 +232,9 @@ None of these puts existing data at risk today. Each needs a product decision, t
 | D10 | A crash mid-export leaves `.{guid}.aetherframe.tmp` in the player's chosen folder. The suggested export name doesn't avoid reserved Windows names (a Plate named "Con"). | Outside AetherFrame's folder, so it can't be swept safely. The Windows case is untested here. |
 | D11 | Imported unknown elements are checked only for number sizes, so a future build that recognises them must validate them on load. | Forward compatibility by design. Recorded for the build that adds new element types. |
 | D12 | `ImageSafety`: the truncation check for JPEGs of 1 MiB or less is weak, and compressed PNG ancillary chunks are not bounded. | The decoder's behavior is unverified. Dimensions and bytes are already bounded. |
-| D13 | After an unfinished import, the Import window still shows the green "Ready to import" verdict above its error. The button is disabled. | Cosmetic UI. |
-| D14 | A version number out of `int` range is read as damage, not as a newer version, so a binding with one is replaced after a Recovery copy. | No build writes one. |
-| D15 | `Vector2`, `Vector4` and `ElementRect` values carry no extension data, so unknown sub-fields inside them are dropped on a model save. | Forward compatibility only. It would need a model change. |
-| D16 | No bounded retry on transient sharing violations (antivirus, indexers). | A failed save keeps the old file and the editor dirty, which is acceptable. A retry policy is optional polish. |
+| D13 | A version number out of `int` range is read as damage, not as a newer version, so a binding with one is replaced after a Recovery copy. | No build writes one. |
+| D14 | `Vector2`, `Vector4` and `ElementRect` values carry no extension data, so unknown sub-fields inside them are dropped on a model save. | Forward compatibility only. It would need a model change. |
+| D15 | No bounded retry on transient sharing violations (antivirus, indexers). | A failed save keeps the old file and the editor dirty, which is acceptable. A retry policy is optional polish. |
 
 The D4 prerequisites, before asset cleanup is ever switched on:
 
@@ -260,12 +261,13 @@ These need the game. Use Windows, Dalamud API 15, this branch's build installed 
    6. Delete the `Recovery` file and save again: it succeeds, and `Recovery/<guid>.damaged-*.json` holds the truncated bytes.
 4. **Invalid bytes.** With the plugin unloaded, use a hex editor to change one letter of a saved Plate's name to `FF`, then load. The card shows the intact name, the log says it was read from the backup copy, and a Recovery copy holds the edited bytes.
 5. **Locked file.** With the plugin unloaded, hold a Plate file open with no sharing, for example in PowerShell: `$f=[IO.File]::Open("<path>",'Open','Read','None')`. Load: the card's hint says the file couldn't be opened and asks for a restart, not that it is damaged. Close the handle and reload: the Plate is Ready.
-6. **Duplicate while the order can't be written.** Make `Library/library.json` read-only, then Duplicate a Plate. The copy appears with no error message, and the log has an Error about the Library order. Undo the read-only flag and reload: both Plates are listed.
-7. **Export an over-limit Plate.** Export a Plate saved by 0.1.5 with a typed font size over 1024, or hand-edit a text's `FontSize` to 2000. The message names "font size out of range" and asks to change it and save, and no file is written.
-8. **Import.** Round-trip export and import a Plate with images. Also import a package another tester exported with 0.1.5 or 0.1.6: both import as before, and nothing existing is replaced.
-9. **Add Image.** Add a PNG, a JPEG and a WebP. Each stored file in `assets/` has the extension matching its content, and each displays.
+6. **Import twice.** Import a package, then import it again from the same Import window: the verdict reads "Already imported" and the button is disabled. Opening the file again imports it again, as a new Plate, as before.
+7. **Duplicate while the order can't be written.** Make `Library/library.json` read-only, then Duplicate a Plate. The copy appears with no error message, and the log has an Error about the Library order. Undo the read-only flag and reload: both Plates are listed.
+8. **Export an over-limit Plate.** Export a Plate saved by 0.1.5 with a typed font size over 1024, or hand-edit a text's `FontSize` to 2000. The message names "font size out of range" and asks to change it and save, and no file is written.
+9. **Import.** Round-trip export and import a Plate with images. Also import a package another tester exported with 0.1.5 or 0.1.6: both import as before, and nothing existing is replaced.
+10. **Add Image.** Add a PNG, a JPEG and a WebP. Each stored file in `assets/` has the extension matching its content, and each displays.
 
-Anything failing in steps 1 to 4 or 8 blocks a release.
+Anything failing in steps 1 to 4 or 9 blocks a release.
 
 ## 9. What could not be checked in the cloud
 
