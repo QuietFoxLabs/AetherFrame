@@ -1,0 +1,3 @@
+# Test vectors are compared byte for byte with what the protocol produces: git must never normalize
+# their line endings or otherwise rewrite them on checkout.
+* -text

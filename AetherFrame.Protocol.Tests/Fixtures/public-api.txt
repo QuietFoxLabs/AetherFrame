@@ -1,0 +1,193 @@
+enum AetherFrame.Protocol.Documents.DocumentType
+    Byte value__
+    const DocumentType ProfileRetraction
+    const DocumentType ProfileSnapshot
+abstract class AetherFrame.Protocol.Documents.RemoteDocument
+    DocumentType DocumentType { get; }
+    ProfileId ProfileId { get; }
+static class AetherFrame.Protocol.Documents.SignedDocumentCodec
+    Byte[] Sign(RemoteDocument document, IPersonaSigner signer)
+    VerifiedDocument Verify(ReadOnlySpan<Byte> document)
+sealed class AetherFrame.Protocol.Documents.VerifiedDocument
+    DocumentType DocumentType { get; }
+    PersonaId Persona { get; }
+    PersonaPublicKey PublicKey { get; }
+    RemoteDocument Document { get; }
+    RemoteProfileKey Profile { get; }
+struct AetherFrame.Protocol.Identity.AssetId
+    AssetId FromBytes(ReadOnlySpan<Byte> bytes)
+    AssetId NewId()
+    AssetId Parse(String text)
+    Boolean Equals(AssetId other)
+    Boolean Equals(Object obj)
+    Boolean IsEmpty { get; }
+    Boolean TryParse(String text, ref AssetId id)
+    Byte[] ToArray()
+    Int32 CompareTo(AssetId other)
+    Int32 GetHashCode()
+    String ToString()
+    Void WriteBytes(Span<Byte> destination)
+    const String Prefix
+struct AetherFrame.Protocol.Identity.PersonaId
+    Boolean Equals(Object obj)
+    Boolean Equals(PersonaId other)
+    Boolean IsEmpty { get; }
+    Boolean TryParse(String text, ref PersonaId id)
+    Byte[] ToArray()
+    Int32 GetHashCode()
+    PersonaId Parse(String text)
+    String ToString()
+    Void WriteBytes(Span<Byte> destination)
+    const Int32 TextLength
+    const String Prefix
+sealed class AetherFrame.Protocol.Identity.PersonaPublicKey
+    Boolean Equals(Object obj)
+    Boolean Equals(PersonaPublicKey other)
+    Byte[] ToArray()
+    Int32 GetHashCode()
+    PersonaId Id { get; }
+    PersonaPublicKey FromBytes(ReadOnlySpan<Byte> uncompressedPoint)
+    PersonaPublicKey FromEcdsa(ECDsa key)
+    ReadOnlySpan<Byte> Bytes { get; }
+    String ToString()
+struct AetherFrame.Protocol.Identity.ProfileId
+    Boolean Equals(Object obj)
+    Boolean Equals(ProfileId other)
+    Boolean IsEmpty { get; }
+    Boolean TryParse(String text, ref ProfileId id)
+    Byte[] ToArray()
+    Int32 CompareTo(ProfileId other)
+    Int32 GetHashCode()
+    ProfileId FromBytes(ReadOnlySpan<Byte> bytes)
+    ProfileId NewId()
+    ProfileId Parse(String text)
+    String ToString()
+    Void WriteBytes(Span<Byte> destination)
+    const String Prefix
+struct AetherFrame.Protocol.Identity.RevisionId
+    Boolean Equals(Object obj)
+    Boolean Equals(RevisionId other)
+    Boolean IsEmpty { get; }
+    Boolean TryParse(String text, ref RevisionId id)
+    Byte[] ToArray()
+    Int32 CompareTo(RevisionId other)
+    Int32 GetHashCode()
+    RevisionId FromBytes(ReadOnlySpan<Byte> bytes)
+    RevisionId NewId()
+    RevisionId Parse(String text)
+    String ToString()
+    Void WriteBytes(Span<Byte> destination)
+    const String Prefix
+interface AetherFrame.Protocol.Integration.IPersonaKeyProvider
+    IPersonaSigner ActiveSigner { get; }
+static class AetherFrame.Protocol.ProtocolConstants
+    ReadOnlySpan<Byte> DocumentMagic { get; }
+    ReadOnlySpan<Byte> PersonaIdDomainTag { get; }
+    ReadOnlySpan<Byte> SignatureDomainTag { get; }
+    const Byte PersonaKeyFormatUncompressedP256
+    const Int32 DigestLength
+    const Int32 OpaqueIdLength
+    const Int32 PublicKeyLength
+    const Int32 SignatureLength
+    const UInt16 ProtocolVersion
+enum AetherFrame.Protocol.ProtocolError
+    Int32 value__
+    const ProtocolError InvalidFraming
+    const ProtocolError InvalidKey
+    const ProtocolError InvalidLength
+    const ProtocolError InvalidSignature
+    const ProtocolError InvalidText
+    const ProtocolError InvalidValue
+    const ProtocolError LimitExceeded
+    const ProtocolError NotCanonical
+    const ProtocolError SignatureMismatch
+    const ProtocolError TrailingBytes
+    const ProtocolError Truncated
+    const ProtocolError UnknownDocumentType
+    const ProtocolError UnsupportedVersion
+sealed class AetherFrame.Protocol.ProtocolException
+    ProtocolError Error { get; }
+    new(ProtocolError error, String message)
+static class AetherFrame.Protocol.ProtocolLimits
+    FuturePolicy
+    const Int32 MaxDocumentBytes
+    const Int32 MaxImageDimension
+    const Int32 MaxImagesPerProfile
+    const Int32 MaxPayloadBytes
+    const Int32 MaxTextBytes
+    const Int32 MaxTextScalars
+    const Int32 SignedDocumentOverheadBytes
+    const Int64 MaxImageBytes
+    const Int64 MaxImagePixels
+    const Int64 MaxProfileImageBytes
+    const Int64 MaxUnixSeconds
+static class AetherFrame.Protocol.ProtocolLimits+FuturePolicy
+    const Int32 MaxActiveShares
+    const Int32 MaxComponentsPerProfile
+    const Int32 MaxElementsPerProfile
+    const Int32 MaxProcessedImageDimension
+    const Int32 MaxProfilesPerPersona
+    const Int64 PersonaFirstWeekStorageTargetBytes
+    const Int64 PersonaStorageTargetBytes
+enum AetherFrame.Protocol.Remote.ImageFormat
+    Byte value__
+    const ImageFormat Jpeg
+    const ImageFormat Png
+    const ImageFormat WebP
+sealed class AetherFrame.Protocol.Remote.ImageReference
+    AssetId AssetId { get; }
+    Byte[] Sha256ToArray()
+    ImageFormat Format { get; }
+    Int32 Height { get; }
+    Int32 Width { get; }
+    Int64 ByteLength { get; }
+    ReadOnlySpan<Byte> Sha256 { get; }
+    new(AssetId assetId, ReadOnlySpan<Byte> sha256, ImageFormat format, Int64 byteLength, Int32 width, Int32 height)
+sealed class AetherFrame.Protocol.Remote.ProfileRetraction
+    DateTimeOffset IssuedAt { get; }
+    DocumentType DocumentType { get; }
+    Int64 IssuedAtUnixSeconds { get; }
+    ProfileId ProfileId { get; }
+    const UInt16 SchemaVersion
+    new(ProfileId profileId, Int64 issuedAtUnixSeconds)
+sealed class AetherFrame.Protocol.Remote.ProfileSnapshot
+    DateTimeOffset CreatedAt { get; }
+    DocumentType DocumentType { get; }
+    IReadOnlyList<ImageReference> Images { get; }
+    Int64 CreatedAtUnixSeconds { get; }
+    Int64 TotalImageBytes { get; }
+    ProfileId ProfileId { get; }
+    RevisionId RevisionId { get; }
+    String Name { get; }
+    const UInt16 SchemaVersion
+    new(ProfileId profileId, RevisionId revisionId, Int64 createdAtUnixSeconds, String name, IEnumerable<ImageReference> images)
+struct AetherFrame.Protocol.Remote.RemoteProfileKey
+    Boolean Equals(Object obj)
+    Boolean Equals(RemoteProfileKey other)
+    Boolean IsEmpty { get; }
+    Int32 GetHashCode()
+    PersonaId Persona { get; }
+    ProfileId ProfileId { get; }
+    String ToString()
+    new(PersonaId persona, ProfileId profileId)
+sealed class AetherFrame.Protocol.Signing.EcdsaPersonaSigner
+    EcdsaPersonaSigner CreateEphemeral()
+    PersonaPublicKey PublicKey { get; }
+    ProtocolSignature Sign(SigningInput input)
+    Void Dispose()
+    new(ECDsa key)
+interface AetherFrame.Protocol.Signing.IPersonaSigner
+    PersonaPublicKey PublicKey { get; }
+    ProtocolSignature Sign(SigningInput input)
+sealed class AetherFrame.Protocol.Signing.ProtocolSignature
+    Byte[] ToArray()
+    ProtocolSignature FromBytes(ReadOnlySpan<Byte> rs)
+    ReadOnlySpan<Byte> Bytes { get; }
+static class AetherFrame.Protocol.Signing.SignatureVerifier
+    Boolean Verify(SigningInput input, ProtocolSignature signature)
+sealed class AetherFrame.Protocol.Signing.SigningInput
+    Byte[] ComputeDigest()
+    DocumentType DocumentType { get; }
+    PersonaPublicKey PublicKey { get; }
+    ReadOnlySpan<Byte> Bytes { get; }
+    SigningInput Create(DocumentType documentType, PersonaPublicKey publicKey, ReadOnlySpan<Byte> payload)

@@ -96,6 +96,11 @@ jobs:
         AETHERFRAME_RELEASE_PACKAGE: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame/latest.zip
       run: dotnet test tools/AetherFrame.ReleaseTools.Tests/AetherFrame.ReleaseTools.Tests.csproj --configuration Release --no-build
 
+    # The remote protocol foundation (docs/networking/NETWORK0.md): a standalone assembly the plugin
+    # does not reference yet, with its own test vectors, canonicalization proofs and adversarial suites.
+    - name: Test the protocol
+      run: dotnet test AetherFrame.Protocol.Tests/AetherFrame.Protocol.Tests.csproj --configuration Release --no-build
+
     - name: Check and stage the package
       shell: pwsh
       env:

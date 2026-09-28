@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    AetherFrame's remote protocol foundation (docs/networking/NETWORK0.md): the canonical binary
+    encoding, the signed document envelope, persona identities derived from P-256 public keys, and
+    the narrow remote profile model that future online features (NETWORK1) and a backend can build on.
+
+    Plain .NET with no NuGet packages, no Dalamud reference, no game state and no network access.
+    It never opens a connection, never reads or writes files, and never sees a private key it did
+    not receive as a caller's ECDsa object. The plugin does not reference it yet: adding a fourth
+    assembly to the release package is a NETWORK1 decision (docs/CustomRepository.md keeps the
+    package to exactly three files).
+  -->
+
+  <Import Project="..\Version.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AetherFrame.Protocol</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <IsPackable>false</IsPackable>
+    <!-- Locked restore (dotnet restore in locked mode) covers this project too, even though it has
+         no package references: a package added later must be locked deliberately. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AetherFrame.Protocol.Tests" />
+  </ItemGroup>
+
+</Project>
