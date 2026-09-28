@@ -90,8 +90,15 @@ public class ConcurrentInputTests
     [Fact]
     public void OpaqueIdsAndDigests_WhileRewrittenToZero_AreNeverReturnedEmpty()
     {
-        var id = Samples.Profile.ToArray();
-        Race(id, 15, 0, buffer =>
+        // The shared buffer alternates between an all-zero id, which must be refused, and an id whose
+        // only non-zero byte is the last one, which must be accepted. A reader that checked the
+        // buffer in one read and took its value in another could pass the check on the non-zero
+        // state and return the empty id from the zero state: that is exactly what 568c137's
+        // check-then-read Id128.FromBytes did, and this test fails against it within milliseconds.
+        // (An id such as a1a1…a1 with one byte rewritten never becomes empty and tests nothing.)
+        var id = new byte[16];
+        id[15] = 1;
+        var idOutcomes = Race(id, 15, 0, buffer =>
         {
             var parsed = ProfileId.FromBytes(buffer);
             if (parsed.IsEmpty)
@@ -99,10 +106,11 @@ public class ConcurrentInputTests
                 throw new XunitException("FromBytes returned an empty profile id.");
             }
         });
+        AssertRaceWasExercised(idOutcomes, ProtocolError.InvalidValue);
 
         var digest = new byte[32];
         digest[31] = 1;
-        Race(digest, 31, 0, buffer =>
+        var digestOutcomes = Race(digest, 31, 0, buffer =>
         {
             var image = new ImageReference(Samples.Asset1, buffer, ImageFormat.Png, 1, 1, 1);
             if (image.Sha256.IndexOfAnyExcept((byte)0) < 0)
@@ -110,6 +118,23 @@ public class ConcurrentInputTests
                 throw new XunitException("ImageReference holds an all-zero digest.");
             }
         });
+        AssertRaceWasExercised(digestOutcomes, ProtocolError.InvalidValue);
+    }
+
+    /// <summary>
+    /// A race that never produced both an acceptance and the expected refusal exercised nothing: the
+    /// writer thread did not interleave with the reader. Required wherever a second core is available;
+    /// on one core the scheduler decides, and the test can only be vacuous, never wrong.
+    /// </summary>
+    private static void AssertRaceWasExercised(Dictionary<string, int> outcomes, ProtocolError expectedRefusal)
+    {
+        if (Environment.ProcessorCount < 2)
+        {
+            return;
+        }
+
+        Assert.True(outcomes.ContainsKey("accepted"), "the genuine value was never accepted: " + string.Join(", ", outcomes.Keys));
+        Assert.True(outcomes.ContainsKey(expectedRefusal.ToString()), "the rewritten value was never seen: " + string.Join(", ", outcomes.Keys));
     }
 
     [Fact]
@@ -139,7 +164,7 @@ public class ConcurrentInputTests
         }
     }
 
-    private static void Race(byte[] template, int offset, byte alternative, Action<byte[]> attempt) =>
+    private static Dictionary<string, int> Race(byte[] template, int offset, byte alternative, Action<byte[]> attempt) =>
         Race(template, offset, [alternative], attempt);
 
     /// <summary>
@@ -147,7 +172,7 @@ public class ConcurrentInputTests
     /// thread keeps rewriting <paramref name="alternative"/> over the original bytes at
     /// <paramref name="offset"/>. Anything but a protocol exception or a return is a failure.
     /// </summary>
-    private static void Race(byte[] template, int offset, byte[] alternative, Action<byte[]> attempt)
+    private static Dictionary<string, int> Race(byte[] template, int offset, byte[] alternative, Action<byte[]> attempt)
     {
         var shared = (byte[])template.Clone();
         var original = template.AsSpan(offset, alternative.Length).ToArray();
@@ -197,5 +222,6 @@ public class ConcurrentInputTests
         }
 
         Assert.NotEmpty(outcomes);
+        return outcomes;
     }
 }

@@ -31,6 +31,75 @@ public class TestVectorTests
         Assert.Equal(VectorBuilder.Models().Select(m => m.Name), fixture.Documents.Select(d => d.Name));
         Assert.True(fixture.Rejected.Count >= 40);
         Assert.Equal(["retraction-by-another-persona", "snapshot-by-another-persona"], fixture.ServerObligations.Select(o => o.Name));
+        Assert.StartsWith("DRAFT", fixture.Notes, StringComparison.Ordinal);
+        Assert.Equal(Samples.ProfileOwners.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => (p.Key, p.Value)), fixture.Profiles.Select(p => (p.ProfileId, p.Owner)));
+    }
+
+    [Fact]
+    public void ValidDocuments_AreSignedByTheRecordedOwnerOfTheirProfile()
+    {
+        // The documents section holds the valid examples: each is signed by the persona the fixture's
+        // owner table records for its profile id, and its verified profile is that owner's. A document
+        // that made another persona appear to publish to, or retract, a recorded owner's profile
+        // cannot be listed here; it belongs under serverObligations, with the owner it is not.
+        var fixture = VectorFixture.Load();
+        var owners = fixture.Profiles.ToDictionary(p => p.ProfileId, p => p.Owner, StringComparer.Ordinal);
+        var personas = fixture.Personas.ToDictionary(p => p.Name, p => PersonaId.Parse(p.PersonaId), StringComparer.Ordinal);
+        foreach (var vector in fixture.Documents)
+        {
+            var model = VectorBuilder.Models().Single(m => m.Name == vector.Name).Model;
+            var profileId = model.ProfileId.ToString();
+            Assert.Equal(profileId, vector.Snapshot?.ProfileId ?? vector.Retraction?.ProfileId ?? profileId);
+            Assert.True(owners.TryGetValue(profileId, out var owner), $"{vector.Name}: {profileId} has no recorded owner");
+            Assert.True(owner == vector.Persona, $"{vector.Name}: signed by {vector.Persona}, but {profileId} belongs to {owner}");
+
+            var document = vector.Document is null ? SignedDocumentCodec.Sign(model, TestPersonas.Create(TestPersonas.Scalar(fixture.Personas.Single(p => p.Name == vector.Persona).Label))) : Hex.Parse(vector.Document);
+            var verified = SignedDocumentCodec.Verify(document);
+            Assert.Equal(new RemoteProfileKey(personas[owner], model.ProfileId), verified.Profile);
+        }
+    }
+
+    [Fact]
+    public void ServerObligationDocuments_AreValidSignaturesButNotTheRecordedOwnersActs()
+    {
+        // Signature validity and authorization are different things: each obligation document is a
+        // valid document of its signer about the signer's own profile of that id, and the fixture's
+        // owner table says the id belongs to someone else. The protocol proves the first; only a
+        // backend holding the owner table can refuse to treat it as the owner's act.
+        var fixture = VectorFixture.Load();
+        var owners = fixture.Profiles.ToDictionary(p => p.ProfileId, p => p.Owner, StringComparer.Ordinal);
+        var personas = fixture.Personas.ToDictionary(p => p.Name, p => PersonaId.Parse(p.PersonaId), StringComparer.Ordinal);
+        foreach (var vector in fixture.ServerObligations)
+        {
+            var verified = SignedDocumentCodec.Verify(Hex.Parse(vector.Document));
+            Assert.Equal(owners[vector.ProfileId], vector.Owner);
+            Assert.NotEqual(vector.Owner, vector.Persona);
+            Assert.Equal(personas[vector.Persona], verified.Persona);
+            Assert.Equal(new RemoteProfileKey(personas[vector.Persona], ProfileId.Parse(vector.ProfileId)), verified.Profile);
+            Assert.NotEqual(new RemoteProfileKey(personas[vector.Owner], ProfileId.Parse(vector.ProfileId)), verified.Profile);
+            Assert.DoesNotContain(fixture.Documents, d => d.Document == vector.Document);
+        }
+    }
+
+    [Fact]
+    public void SnapshotVectors_ShareARevisionIdOnlyWithIdenticalBytes()
+    {
+        // Within one profile a revision id names exactly one document (specification, section 13,
+        // rule 4): valid vectors with different payloads carry different revision ids.
+        var fixture = VectorFixture.Load();
+        var snapshots = VectorBuilder.Models().Where(m => m.Model is ProfileSnapshot).Select(m => (m.Name, m.Persona, Snapshot: (ProfileSnapshot)m.Model)).ToList();
+        Assert.Equal(4, snapshots.Count);
+        foreach (var group in snapshots.GroupBy(s => (s.Persona, s.Snapshot.ProfileId, s.Snapshot.RevisionId)))
+        {
+            var payloads = group.Select(s => Hex.Of(s.Snapshot.EncodePayload())).Distinct().Count();
+            Assert.True(payloads == 1, $"revision {group.Key.RevisionId} of ({group.Key.Persona}, {group.Key.ProfileId}) names {payloads} different documents: {string.Join(", ", group.Select(s => s.Name))}");
+        }
+
+        Assert.Equal(4, snapshots.Select(s => s.Snapshot.RevisionId).Distinct().Count());
+        foreach (var vector in fixture.Documents.Where(d => d.Snapshot is not null))
+        {
+            Assert.Equal(snapshots.Single(s => s.Name == vector.Name).Snapshot.RevisionId.ToString(), vector.Snapshot!.RevisionId);
+        }
     }
 
     [Fact]

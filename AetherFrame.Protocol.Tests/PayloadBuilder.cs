@@ -83,6 +83,6 @@ internal static class PayloadBuilder
         }
 
         var name = string.Concat(System.Linq.Enumerable.Repeat("\U0001F600", ProtocolLimits.MaxTextScalars));
-        return new ProfileSnapshot(Samples.Profile, Samples.Revision, ProtocolLimits.MaxUnixSeconds, name, images);
+        return new ProfileSnapshot(Samples.Profile, Samples.RevisionMaximal, ProtocolLimits.MaxUnixSeconds, name, images);
     }
 }

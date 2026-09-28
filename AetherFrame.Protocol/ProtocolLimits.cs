@@ -60,6 +60,12 @@ public static class ProtocolLimits
     /// state a document does not carry (how many profiles a persona has published, how much it
     /// stores), or they belong to the layout schema NETWORK1 will define. Declared here so the
     /// numbers have one home; nothing in this assembly checks them.
+    ///
+    /// PROVISIONAL (review finding L6): these are policy, not protocol, and as constants they compile
+    /// into any caller, so a later change would not reach code built against an older assembly.
+    /// Whether they stay here, move to backend configuration or become documentation only is an
+    /// open decision (docs/networking/NETWORK0.md, "Open product decisions"); nothing should read
+    /// them as a contract before it is made.
     /// </summary>
     public static class FuturePolicy
     {

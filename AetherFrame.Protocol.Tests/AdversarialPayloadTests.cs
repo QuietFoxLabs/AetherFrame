@@ -50,6 +50,8 @@ public class AdversarialPayloadTests
     [InlineData("image bytes u64 max", ProtocolError.LimitExceeded)]
     [InlineData("image zero width", ProtocolError.InvalidValue)]
     [InlineData("image width over max", ProtocolError.LimitExceeded)]
+    [InlineData("image zero height", ProtocolError.InvalidValue)]
+    [InlineData("image height over max", ProtocolError.LimitExceeded)]
     [InlineData("image width u32 max", ProtocolError.LimitExceeded)]
     [InlineData("image pixels over max", ProtocolError.LimitExceeded)]
     [InlineData("images total bytes over max", ProtocolError.LimitExceeded)]

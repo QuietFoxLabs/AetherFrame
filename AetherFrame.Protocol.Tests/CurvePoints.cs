@@ -12,7 +12,10 @@ namespace AetherFrame.Protocol.Tests;
 /// </summary>
 internal static class CurvePoints
 {
-    /// <summary>The smallest x with a point on P-256 (x = 1 to 4 have no square root); y is derived from the equation.</summary>
+    /// <summary>
+    /// A small x with a point on P-256; y is derived from the equation. x = 0 is on the curve too (b
+    /// is a square), x = 1 to 4 are not; 5 is used so that the coordinate is plainly non-zero.
+    /// </summary>
     public static readonly BigInteger SmallX = 5;
 
     public static readonly BigInteger SmallXY = ReferenceP256.LiftX(SmallX) ?? throw new InvalidOperationException("x = 5 is on P-256");

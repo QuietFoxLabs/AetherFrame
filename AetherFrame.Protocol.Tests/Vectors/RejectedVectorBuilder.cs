@@ -11,8 +11,11 @@ namespace AetherFrame.Protocol.Tests;
 /// <summary>
 /// Documents that must be refused: each derived from the profile-snapshot or profile-retraction
 /// vector with one fault, or signed by a real key over a payload that breaks exactly one schema
-/// rule. These are the conformance negatives a second implementation checks against, so every
-/// range boundary the specification states has an entry here.
+/// rule. These are the conformance negatives a second implementation checks against. Every
+/// envelope, key and signature rule has an entry; of the payload rules, the ones a small document
+/// can express have one, while the text limits (a name one scalar or one byte over the maximum is
+/// 32 to 128 KB of payload) are covered by the unit tests only: a second implementation must take
+/// those from the specification (section 2.3), not from this file.
 /// </summary>
 internal static class RejectedVectorBuilder
 {
@@ -88,6 +91,11 @@ internal static class RejectedVectorBuilder
             ("image format 4", ProtocolError.InvalidValue), ("image zero bytes", ProtocolError.InvalidValue), ("image bytes u64 max", ProtocolError.LimitExceeded),
             ("image zero width", ProtocolError.InvalidValue), ("image pixels over max", ProtocolError.LimitExceeded), ("images total bytes over max", ProtocolError.LimitExceeded),
             ("image count huge", ProtocolError.LimitExceeded), ("image count more than present", ProtocolError.Truncated), ("trailing byte", ProtocolError.TrailingBytes),
+            // The per-field limits a second implementation could omit and still pass the rest (review L2).
+            ("createdAt u64 max", ProtocolError.InvalidValue), ("image zero asset id", ProtocolError.InvalidValue), ("image format 0", ProtocolError.InvalidValue),
+            ("image bytes over max", ProtocolError.LimitExceeded), ("image width over max", ProtocolError.LimitExceeded), ("image zero height", ProtocolError.InvalidValue),
+            ("image height over max", ProtocolError.LimitExceeded), ("image width u32 max", ProtocolError.LimitExceeded), ("image count 9 declared", ProtocolError.LimitExceeded),
+            ("image count less than present", ProtocolError.TrailingBytes), ("truncated image", ProtocolError.Truncated), ("nested count abuse", ProtocolError.LimitExceeded),
         })
         {
             var document = PayloadBuilder.Signed(DocumentType.ProfileSnapshot, signer, SnapshotPayloadCases.Build(caseName));

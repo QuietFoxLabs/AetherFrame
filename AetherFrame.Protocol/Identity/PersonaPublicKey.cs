@@ -59,12 +59,14 @@ public sealed class PersonaPublicKey : IEquatable<PersonaPublicKey>
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        // Whatever the platform (or an ECDsa subclass) uses to refuse the export, the caller sees an
+        // invalid key, as for every other platform refusal in this type.
         ECParameters parameters;
         try
         {
             parameters = key.ExportParameters(includePrivateParameters: false);
         }
-        catch (CryptographicException)
+        catch (Exception e) when (e is CryptographicException or PlatformNotSupportedException or NotSupportedException or ObjectDisposedException)
         {
             throw new ProtocolException(ProtocolError.InvalidKey, "The key's public parameters could not be exported.");
         }

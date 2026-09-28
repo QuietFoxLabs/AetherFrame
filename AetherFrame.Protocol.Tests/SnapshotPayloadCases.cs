@@ -45,6 +45,8 @@ internal static class SnapshotPayloadCases
             "image bytes u64 max" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, byteLength: ulong.MaxValue)]),
             "image zero width" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, width: 0)]),
             "image width over max" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, width: ProtocolLimits.MaxImageDimension + 1)]),
+            "image zero height" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, height: 0)]),
+            "image height over max" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, height: ProtocolLimits.MaxImageDimension + 1)]),
             "image width u32 max" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, width: uint.MaxValue, height: uint.MaxValue)]),
             "image pixels over max" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, width: 5000, height: 4001)]),
             "images total bytes over max" => PayloadBuilder.Snapshot(images: sortedIds.Take(6).Select(id => PayloadBuilder.Image(id, byteLength: (ulong)ProtocolLimits.MaxImageBytes)).ToArray()),

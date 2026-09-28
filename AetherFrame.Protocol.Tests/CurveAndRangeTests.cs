@@ -28,6 +28,14 @@ public class CurveAndRangeTests
         Assert.Equal(ReferenceP256.B, P256Curve.B);
         Assert.True(ReferenceP256.IsOnCurve(CurvePoints.SmallXKey));
         Assert.True(ReferenceP256.IsOnCurve(CurvePoints.SmallYKey));
+
+        // What CurvePoints says about small x: 0 and 5 have points, 1 to 4 do not.
+        Assert.NotNull(ReferenceP256.LiftX(BigInteger.Zero));
+        Assert.NotNull(ReferenceP256.LiftX(CurvePoints.SmallX));
+        for (var x = 1; x <= 4; x++)
+        {
+            Assert.Null(ReferenceP256.LiftX(x));
+        }
     }
 
     [Fact]

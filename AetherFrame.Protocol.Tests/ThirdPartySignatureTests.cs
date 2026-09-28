@@ -31,7 +31,8 @@ public class ThirdPartySignatureTests
         for (var round = 0; round < 64 && !(sawLow && sawHigh); round++)
         {
             var der = platform.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
-            var (r, s) = ParseDer(der);
+            var (r, s) = DerEcdsaSignature.Parse(der);
+            Assert.Equal(DerEcdsaSignature.Length(r, s), der.Length);
             byte[] raw = [.. ReferenceP256.ToBytes32(r), .. ReferenceP256.ToBytes32(s)];
             Assert.True(ReferenceP256.Verify(key.Bytes, digest, raw), "a platform signature is valid ECDSA whichever half s is in");
             ProtocolAssert.Throws(ProtocolError.InvalidSignature, () => ProtocolSignature.FromBytes(der));
@@ -61,14 +62,23 @@ public class ThirdPartySignatureTests
         var key = PersonaPublicKey.FromEcdsa(platform);
         var payload = Samples.Snapshot().EncodePayload();
         var der = platform.SignData(ReferenceProtocol.SigningInput(1, key.Bytes, payload), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
-        Assert.InRange(der.Length, 70, 72);
 
-        // The envelope's signature field is exactly 64 bytes: DER shifts the document's end, so the
-        // reader sees trailing bytes, and a DER prefix cut to 64 bytes is not a valid r ‖ s.
+        // Whatever length the platform produced (68 to 72 bytes are all common; shorter is legal), it
+        // is a well-formed DER signature whose length follows from r and s: no assumption about the
+        // usual length is made, so this cannot fail on a short signature.
+        var (r, s) = DerEcdsaSignature.Parse(der);
+        Assert.Equal(DerEcdsaSignature.Length(r, s), der.Length);
+        Assert.InRange(der.Length, DerEcdsaSignature.MinLength, DerEcdsaSignature.MaxLength);
+
+        // The envelope's signature field is exactly 64 bytes: DER of any length shifts the document's
+        // end, so the reader sees trailing bytes, and the first 64 bytes of a DER signature (padded
+        // with zeros when it is shorter) are never a valid r ‖ s.
         var body = SignedDocumentCodec.Assemble(DocumentType.ProfileSnapshot, key, payload, ProtocolSignature.FromBytes(FirstCanonical(platform, key, payload)));
         var withDer = Append(Truncate(body, Layout.SignatureOffset(body)), der);
         ProtocolAssert.Throws(ProtocolError.TrailingBytes, () => SignedDocumentCodec.Verify(withDer));
-        ProtocolAssert.Rejects(() => SignedDocumentCodec.Verify(Substitute(body, Layout.SignatureOffset(body), der[..64])));
+        var prefix = new byte[64];
+        der.AsSpan(0, Math.Min(64, der.Length)).CopyTo(prefix);
+        ProtocolAssert.Rejects(() => SignedDocumentCodec.Verify(Substitute(body, Layout.SignatureOffset(body), prefix)));
     }
 
     private static byte[] FirstCanonical(ECDsa platform, PersonaPublicKey key, byte[] payload)
@@ -77,21 +87,84 @@ public class ThirdPartySignatureTests
         return ProtocolSignature.Normalize(rs).ToArray();
     }
 
-    private static (BigInteger R, BigInteger S) ParseDer(byte[] der)
+    [Fact]
+    public void PlatformDerSignatures_OfEveryLength_ParseAndVerify()
     {
-        Assert.Equal(0x30, der[0]);
-        Assert.Equal(der.Length - 2, der[1]);
-        var offset = 2;
-        var values = new BigInteger[2];
-        for (var index = 0; index < 2; index++)
+        // 2000 platform signatures: r and s each need 33 bytes about half the time and fewer than
+        // 32 about one time in 256, so lengths from 68 to 72 all occur here and shorter ones are
+        // legal. Each must parse as strict DER whose length follows from its integers, and verify.
+        using var platform = TestPersonas.CreateEcdsa(TestPersonas.ScalarA);
+        var key = PersonaPublicKey.FromEcdsa(platform);
+        var input = ReferenceProtocol.SigningInput(2, key.Bytes, Samples.Retraction().EncodePayload());
+        var digest = SHA256.HashData(input);
+        var lengths = new System.Collections.Generic.HashSet<int>();
+        for (var round = 0; round < 2000; round++)
         {
-            Assert.Equal(0x02, der[offset]);
-            var length = der[offset + 1];
-            values[index] = new BigInteger(der.AsSpan(offset + 2, length), isUnsigned: true, isBigEndian: true);
-            offset += 2 + length;
+            var der = platform.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
+            var (r, s) = DerEcdsaSignature.Parse(der);
+            Assert.Equal(DerEcdsaSignature.Length(r, s), der.Length);
+            Assert.Equal(der, DerEcdsaSignature.Encode(r, s));
+            byte[] raw = [.. ReferenceP256.ToBytes32(r), .. ReferenceP256.ToBytes32(s)];
+            Assert.True(platform.VerifyData(input, raw, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+            if (round < 8)
+            {
+                Assert.True(ReferenceP256.Verify(key.Bytes, digest, raw));
+            }
+
+            lengths.Add(der.Length);
         }
 
-        Assert.Equal(der.Length, offset);
-        return (values[0], values[1]);
+        Assert.Contains(72, lengths);
+        Assert.Contains(70, lengths);
+        Assert.All(lengths, length => Assert.InRange(length, DerEcdsaSignature.MinLength, DerEcdsaSignature.MaxLength));
+    }
+
+    [Fact]
+    public void DerReader_AcceptsEveryLegalLengthAndRefusesEveryNonCanonicalEncoding()
+    {
+        // Deterministic: the shortest and longest legal signatures, one of each length between, and
+        // the encodings DER forbids (a padding zero, a negative integer, long-form lengths, wrong tags,
+        // trailing bytes, zero, and n itself).
+        var one = BigInteger.One;
+        var nMinusOne = ReferenceP256.N - 1;
+        Assert.Equal(8, DerEcdsaSignature.Encode(one, one).Length);
+        Assert.Equal(72, DerEcdsaSignature.Encode(nMinusOne, nMinusOne).Length);
+        for (var bits = 1; bits <= 256; bits += 5)
+        {
+            var r = (BigInteger.One << bits) - 1;
+            var s = BigInteger.One << (bits - 1);
+            if (r >= ReferenceP256.N)
+            {
+                r = nMinusOne;
+            }
+
+            var der = DerEcdsaSignature.Encode(r, s);
+            var (parsedR, parsedS) = DerEcdsaSignature.Parse(der);
+            Assert.Equal((r, s), (parsedR, parsedS));
+            Assert.Equal(DerEcdsaSignature.Length(r, s), der.Length);
+        }
+
+        var valid = DerEcdsaSignature.Encode(one, one);
+        Assert.True(DerEcdsaSignature.TryParse(valid, out _, out _, out _));
+        foreach (var (name, bytes) in new (string, byte[])[]
+        {
+            ("padding zero before a small byte", [0x30, 0x07, 0x02, 0x02, 0x00, 0x01, 0x02, 0x01, 0x01]),
+            ("negative integer", [0x30, 0x06, 0x02, 0x01, 0x80, 0x02, 0x01, 0x01]),
+            ("zero integer", [0x30, 0x06, 0x02, 0x01, 0x00, 0x02, 0x01, 0x01]),
+            ("long-form sequence length", [0x30, 0x81, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01]),
+            ("wrong sequence tag", [0x31, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01]),
+            ("wrong integer tag", [0x30, 0x06, 0x04, 0x01, 0x01, 0x02, 0x01, 0x01]),
+            ("trailing byte", [0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01, 0x00]),
+            ("sequence length too short", [0x30, 0x05, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01]),
+            ("three integers", [0x30, 0x09, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01]),
+            ("integer of 34 bytes", DerEcdsaSignature.Encode(BigInteger.One << 263, one)),
+            ("s equals n", DerEcdsaSignature.Encode(one, ReferenceP256.N)),
+            ("r equals n", DerEcdsaSignature.Encode(ReferenceP256.N, one)),
+            ("empty", []),
+        })
+        {
+            Assert.False(DerEcdsaSignature.TryParse(bytes, out _, out _, out var error), name);
+            Assert.NotNull(error);
+        }
     }
 }

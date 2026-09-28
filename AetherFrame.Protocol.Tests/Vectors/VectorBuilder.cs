@@ -18,9 +18,9 @@ internal static class VectorBuilder
     public static IReadOnlyList<ModelVector> Models() =>
     [
         new("profile-snapshot", "A", Samples.Snapshot(), null),
-        new("profile-snapshot-unicode", "A", new ProfileSnapshot(Samples.Profile, Samples.Revision, 1_726_000_000, SnapshotUnicodeName, [Samples.Image(Samples.Asset2, 0x7f, ImageFormat.WebP, ProtocolLimits.MaxImageBytes, 8192, 2441)]), null),
-        new("profile-snapshot-empty", "A", new ProfileSnapshot(Samples.Profile, Samples.Revision, 0, "", []), null),
-        new("profile-snapshot-maximal", "A", PayloadBuilder.MaximalSnapshot(), "name = U+1F600 repeated 32000 times (128000 UTF-8 bytes); createdAt = 253402300799; images = eight references with asset ids ast_ + 31 zeros + 1..8, digest bytes all equal to the index, format png (1), 5242880 bytes each (40 MiB in total), 5000 x 4000 pixels; profile and revision ids as in profile-snapshot. Payload, signing input and document are omitted for size; digest and signature are over exactly that construction."),
+        new("profile-snapshot-unicode", "A", new ProfileSnapshot(Samples.Profile, Samples.RevisionUnicode, 1_726_000_000, SnapshotUnicodeName, [Samples.Image(Samples.Asset2, 0x7f, ImageFormat.WebP, ProtocolLimits.MaxImageBytes, 8192, 2441)]), null),
+        new("profile-snapshot-empty", "A", new ProfileSnapshot(Samples.Profile, Samples.RevisionEmpty, 0, "", []), null),
+        new("profile-snapshot-maximal", "A", PayloadBuilder.MaximalSnapshot(), "name = U+1F600 repeated 32000 times (128000 UTF-8 bytes); createdAt = 253402300799; images = eight references with asset ids ast_ + 31 zeros + 1..8, digest bytes all equal to the index, format png (1), 5242880 bytes each (40 MiB in total), 5000 x 4000 pixels; profile id as in profile-snapshot and revision id rev_ + b5 repeated 16 times. Payload, signing input and document are omitted for size; digest and signature are over exactly that construction."),
         new("profile-retraction", "B", new ProfileRetraction(Samples.ProfileB, Samples.IssuedAt), null),
     ];
 
@@ -35,7 +35,7 @@ internal static class VectorBuilder
             ProtocolVersion = ProtocolConstants.ProtocolVersion,
             SignatureDomainTag = System.Text.Encoding.ASCII.GetString(ProtocolConstants.SignatureDomainTag),
             PersonaIdDomainTag = System.Text.Encoding.ASCII.GetString(ProtocolConstants.PersonaIdDomainTag),
-            Notes = "Synthetic test identities only: each private scalar is SHA-256(label) mod n. Signatures are ECDSA P-256 over SHA-256 of the signing input, P1363 r||s with low s; ECDSA is randomized, so a regeneration produces different but equally valid signatures. A profile is (persona, profileId): the retraction is persona B's, of B's own profile, and the serverObligations documents are valid documents that name another persona's profile id and must be applied to the signing persona's profile only. See docs/networking/ProtocolSpecification-v1.md.",
+            Notes = "DRAFT protocol (docs/networking/ProtocolSpecification-v1.md is not frozen; these vectors describe the draft as implemented and are regenerated when it changes). Synthetic test identities only: each private scalar is SHA-256(label) mod n. Signatures are ECDSA P-256 over SHA-256 of the signing input, P1363 r||s with low s; ECDSA is randomized, so a regeneration produces different but equally valid signatures. A profile is (persona, profileId): the retraction is persona B's, of B's own profile, and the serverObligations documents are valid documents that name another persona's profile id and must be applied to the signing persona's profile only. See docs/networking/ProtocolSpecification-v1.md.",
             Personas =
             [
                 Persona("A", TestPersonas.LabelA, TestPersonas.ScalarA, a.PublicKey),
@@ -47,6 +47,8 @@ internal static class VectorBuilder
         {
             fixture.Documents.Add(Document(model, signers[model.Persona]));
         }
+
+        fixture.Profiles = Samples.ProfileOwners.Select(p => new ProfileOwnerVector { ProfileId = p.Key, Owner = p.Value }).OrderBy(p => p.ProfileId, StringComparer.Ordinal).ToList();
 
         var baseDocument = Hex.Parse(fixture.Documents[0].Document!);
         var retractionDocument = Hex.Parse(fixture.Documents.Single(d => d.Name == "profile-retraction").Document!);
@@ -68,6 +70,7 @@ internal static class VectorBuilder
             Document = Hex.Of(SignedDocumentCodec.Sign(new ProfileRetraction(Samples.Profile, Samples.IssuedAt), b)),
             Persona = "B",
             ProfileId = Samples.Profile.ToString(),
+            Owner = Samples.ProfileOwners[Samples.Profile.ToString()],
             Obligation = "Verifies as persona B and withdraws (B, " + Samples.Profile + "), a profile B never published. Persona A's profile (A, " + Samples.Profile + ") is untouched.",
         },
         new()
@@ -76,6 +79,7 @@ internal static class VectorBuilder
             Document = Hex.Of(SignedDocumentCodec.Sign(Samples.Snapshot(), b)),
             Persona = "B",
             ProfileId = Samples.Profile.ToString(),
+            Owner = Samples.ProfileOwners[Samples.Profile.ToString()],
             Obligation = "Verifies as persona B and is a revision of (B, " + Samples.Profile + "), unrelated to persona A's profile of the same id; it never becomes a revision of A's profile.",
         },
     ];

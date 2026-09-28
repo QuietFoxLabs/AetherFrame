@@ -36,6 +36,13 @@ internal sealed class VectorFixture
 
     public List<RejectedVector> Rejected { get; set; } = [];
 
+    /// <summary>
+    /// The owner of each profile id the vectors use, as the record a backend would hold. The protocol
+    /// cannot know owners; this table is what the ownership tests check the documents against, so a
+    /// document signed by anyone but the recorded owner can only appear under serverObligations.
+    /// </summary>
+    public List<ProfileOwnerVector> Profiles { get; set; } = [];
+
     /// <summary>Valid documents that verify but oblige a server to do something in particular (docs/networking/ProtocolSpecification-v1.md, "Server obligations").</summary>
     public List<ServerObligationVector> ServerObligations { get; set; } = [];
 
@@ -141,6 +148,14 @@ internal sealed class RejectedVector
     public bool Deterministic { get; set; } = true;
 }
 
+internal sealed class ProfileOwnerVector
+{
+    public string ProfileId { get; set; } = "";
+
+    /// <summary>The persona that published this profile id, by the backend's record.</summary>
+    public string Owner { get; set; } = "";
+}
+
 internal sealed class ServerObligationVector
 {
     public string Name { get; set; } = "";
@@ -152,6 +167,9 @@ internal sealed class ServerObligationVector
 
     /// <summary>The profile id the document carries; together with <see cref="Persona"/>, the profile it is about.</summary>
     public string ProfileId { get; set; } = "";
+
+    /// <summary>The recorded owner of <see cref="ProfileId"/> (see <see cref="VectorFixture.Profiles"/>): never the signer, so the document is valid but is not about that owner's profile.</summary>
+    public string Owner { get; set; } = "";
 
     public string Obligation { get; set; } = "";
 }

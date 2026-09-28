@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Security.Cryptography;
 using AetherFrame.Protocol.Documents;
@@ -62,11 +63,28 @@ internal static class Samples
     public static readonly ProfileId Profile = ProfileId.Parse("prf_a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1");
     public static readonly ProfileId ProfileB = ProfileId.Parse("prf_e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5");
     public static readonly RevisionId Revision = RevisionId.Parse("rev_b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2");
+
+    // One revision id per sample snapshot: within a profile a revision id names exactly one document
+    // (specification, section 13, rule 4), so vectors with different content never share one.
+    public static readonly RevisionId RevisionUnicode = RevisionId.Parse("rev_b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3");
+    public static readonly RevisionId RevisionEmpty = RevisionId.Parse("rev_b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4");
+    public static readonly RevisionId RevisionMaximal = RevisionId.Parse("rev_b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5");
     public static readonly AssetId Asset1 = AssetId.Parse("ast_c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3");
     public static readonly AssetId Asset2 = AssetId.Parse("ast_d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4");
     public const long CreatedAt = 1_700_000_000;
     public const long IssuedAt = 1_700_000_100;
     public const string Name = "Sample Plate";
+
+    /// <summary>
+    /// The owner of each sample profile id, as the record a backend would hold: persona A published
+    /// prf_a1a1…, persona B published prf_e5e5…. The vectors that are valid examples are signed by the
+    /// recorded owner; the serverObligations vectors are signed by the other persona.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> ProfileOwners = new Dictionary<string, string>
+    {
+        [Profile.ToString()] = "A",
+        [ProfileB.ToString()] = "B",
+    };
 
     public static byte[] Digest(byte fill)
     {
