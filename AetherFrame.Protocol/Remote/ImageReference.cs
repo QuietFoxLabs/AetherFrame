@@ -151,7 +151,7 @@ public sealed class ImageReference
     {
         if (byteLength > (ulong)ProtocolLimits.MaxImageBytes)
         {
-            throw new ProtocolException(ProtocolError.LimitExceeded, $"An image declares {(byteLength > long.MaxValue ? "more than the limit in" : ProtocolText.Number((long)byteLength))} bytes; the limit is {ProtocolText.Number(ProtocolLimits.MaxImageBytes)}.");
+            throw new ProtocolException(ProtocolError.LimitExceeded, $"An image declares {byteLength.ToString(System.Globalization.CultureInfo.InvariantCulture)} bytes; the limit is {ProtocolText.Number(ProtocolLimits.MaxImageBytes)}.");
         }
     }
 
