@@ -107,6 +107,7 @@ internal static class VersionedJson
         await store.ReadTextAsync(path, text =>
         {
             attempts++;
+            RejectUndecodableText(text, schema.Name);
             var parsed = Parse(text, schema, deserialize);
             if (!parsed.IsUsable && !parsed.IsNewerVersion)
             {
@@ -118,6 +119,24 @@ internal static class VersionedJson
         }).ConfigureAwait(false);
 
         return result ?? throw new InvalidDataException($"{schema.Name} could not be read.");
+    }
+
+    /// <summary>
+    /// Refuses, as damage, text read from a file whose bytes weren't all valid text: the store
+    /// decodes leniently, so each invalid byte sequence arrives as U+FFFD. AetherFrame never writes
+    /// that character as it is (the serializer escapes everything outside ASCII), so a file holding
+    /// one is damaged even when it still parses — and accepting it would load the damaged copy as
+    /// if it were intact, skip the store's backup copy and its Recovery copy of the file, and let
+    /// the next save write the replacement characters over both. Only a hand-edited file could
+    /// hold the character legitimately; it is then left untouched like any other damaged file.
+    /// </summary>
+    /// <exception cref="InvalidDataException">The text holds U+FFFD.</exception>
+    internal static void RejectUndecodableText(string text, string what)
+    {
+        if (text.Contains('\uFFFD', StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"{what} holds bytes that aren't valid text.");
+        }
     }
 
     internal static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JsonOptions.Default);

@@ -303,6 +303,7 @@ internal sealed class TemplateLibraryService
             // A second invocation is the store retrying from its backup after the first copy failed.
             var recoveredFromBackup = ++attempts > 1;
 
+            VersionedJson.RejectUndecodableText(text, "Template");
             if (JsonNode.Parse(text) is not JsonObject raw)
             {
                 throw new InvalidDataException("Template is not a JSON object.");
