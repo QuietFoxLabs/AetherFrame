@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests for the remote protocol foundation (docs/networking/NETWORK0.md): the committed test
+    vectors, the canonicalization proofs, and the adversarial and fuzz-style suites that feed the
+    codecs hostile bytes. Every key here is a synthetic test identity generated for the fixtures;
+    nothing reads or writes AetherFrame user data, and nothing opens a connection.
+  -->
+
+  <Import Project="..\Version.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>AetherFrame.Protocol.Tests</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- The canonicalization tests switch the current culture; globalization must stay available. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
+  </ItemGroup>
+
+  <!-- The test vectors, copied next to the test binaries byte for byte (Fixtures/.gitattributes keeps
+       git from rewriting their line endings). -->
+  <ItemGroup>
+    <None Update="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The same test packages, at the same versions, as the other test projects. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>

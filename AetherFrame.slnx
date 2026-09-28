@@ -3,6 +3,8 @@
     <Platform Project="x64" />
   </Project>
   <Project Path="AetherFrame.Tests/AetherFrame.Tests.csproj" />
+  <Project Path="AetherFrame.Protocol/AetherFrame.Protocol.csproj" />
+  <Project Path="AetherFrame.Protocol.Tests/AetherFrame.Protocol.Tests.csproj" />
   <Project Path="tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj" />
   <Project Path="tools/AetherFrame.ReleaseTools.Tests/AetherFrame.ReleaseTools.Tests.csproj" />
 </Solution>
