@@ -1,6 +1,8 @@
-throws the usual .NET argument and object-disposed exceptions (`ArgumentNullException`, `ArgumentException`, `ObjectDisposedException`); those are not listed per member, only `ProtocolException` is. `Sign` lets the signer's own exceptions pass through unchanged. |# NETWORK0: the remote protocol foundation
+# NETWORK0: the remote protocol foundation
 
 **Status (2026-09-28): the code is reviewed and remediated; the wire format is a DRAFT** until the open product decisions in section 11 are settled, some of which change signed bytes. Nothing here is published, referenced by the plugin, or accepted by any server.
+
+**Update (2026-09-28, after the merge):** NETWORK0 was merged into master as `6384db6` with both CI legs green (section 13). Protocol version 1 is still a DRAFT. The open decisions are tracked with their current status in [DecisionRegister.md](DecisionRegister.md); none of them has been resolved. The planned NETWORK1 boundaries are in [NETWORK1.md](NETWORK1.md), and the platform cryptography findings are in [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md).
 
 NETWORK0 is the first networking milestone of AetherFrame, and it builds no network. It is the isolated protocol, identity, signing, verification, serialization and hostile-input foundation that the later milestones (NETWORK1, the client that talks to a backend; the backend itself) depend on, so that those milestones can be built without revisiting how bytes are framed, how a persona is identified, or what a signature covers. This document explains what was built and why; [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) is the normative wire format; [NETWORK0_HANDOFF.md](NETWORK0_HANDOFF.md) is the morning handoff with results and open questions.
 
@@ -69,7 +71,7 @@ Every byte a client will one day receive from a server, and every byte a server 
 | Invalid curve material (off-curve or compressed points, coordinates at or above p, other curves) | The protocol's own range and on-curve check before the platform sees the key, so behaviour is the same on Windows and Linux; the range rule is tested with the same point encoded as x + p and as y + p, which the curve equation alone would accept. A platform key is checked by curve identifier before its point. Whatever exception the platform uses for a point it dislikes (Windows CNG: `PlatformNotSupportedException`) is reported as `InvalidKey`. |
 | Oversized or hostile lengths driving allocation | The whole document is capped at 1 MiB before parsing; every length and count is compared with its limit before allocation; nothing is ever sized by a declared length that has not passed its limit. A reader's allocations are proportional to the input it was given (one copy of the input, the signing input, and the decoded model), never to what the input claims. Measured: a hostile length costs about 700 bytes and 2 µs to refuse. |
 | Truncation, trailing bytes, nested-count abuse, malformed UTF-8, U+0000 | Refused with a typed error at the exact boundary; covered by truncation at every offset, a flipped bit at every position, and seeded fuzz campaigns. |
-| Exceptions leaking bytes or crashing the host | For hostile bytes, the only exception type is `ProtocolException`; messages name fields and numbers, never content; tests assert no other exception type escapes for tens of thousands of hostile inputs, including inputs rewritten by another thread while they are read. Misuse of the API by its caller (a null argument, a destination span that is too short, a disposed signer) throws the usual .NET argument and object-disposed exceptions, as documented per member. |
+| Exceptions leaking bytes or crashing the host | For hostile bytes, the only exception type is `ProtocolException`; messages name fields and numbers, never content; tests assert no other exception type escapes for tens of thousands of hostile inputs, including inputs rewritten by another thread while they are read. Misuse of the API by its caller (a null argument, a destination span that is too short, a disposed signer) throws the usual .NET argument and object-disposed exceptions (`ArgumentNullException`, `ArgumentException`, `ObjectDisposedException`); those are not listed per member, only `ProtocolException` is. `Sign` lets the signer's own exceptions pass through unchanged. |
 | A value that passed a check differing from the value used (time-of-check to time-of-use) | Every reader copies its input before the first check and uses only the copy: `Verify` copies the whole document, `PersonaPublicKey.FromBytes` and `ProtocolSignature.FromBytes` copy their bytes, identifiers and digests are read once. Every model and result type is immutable, and list views cannot reach their storage. Tests race each reader against a rewriting thread. |
 | A signer that misbehaves (misreports its key, signs with another key, signs other bytes) | `Sign` reads the signer's key once and verifies the finished document before returning it; bytes the reader would refuse never leave `Sign`. |
 | A document applied to a profile its signer does not own | A profile is (persona, profileId); a document names the signing persona's profile and nobody else's (specification, sections 8.4 and 13), and `VerifiedDocument.Profile` exposes exactly that pair. |
@@ -89,7 +91,7 @@ What the protocol can promise on its own, because it is a property of the bytes:
 
 What it deliberately does not do, matching the product's privacy direction: viewer identities, "last seen", location, social graphs, discovery and nearby scraping have no representation. They cannot be added by extending a schema; they would need a new document type, which is a visible design decision.
 
-What only NETWORK1 and the backend can promise: that the key never leaves the machine (protected local storage), that a persona is not linked to game identifiers server-side, that shares are intentional, and that a retraction is honoured.
+What only NETWORK1 and the backend can promise: that the key never leaves the machine (protected local storage), that a persona is not linked to game identifiers server-side, that shares are intentional, and that a retraction is honoured. `[updated 2026-09-28: whether the key may leave the machine as a passphrase-encrypted backup that the player makes and keeps is decision D2, still unresolved. "Protected local storage" is platform-dependent: see NETWORK1_CryptoCompatibility.md, section 5.]`
 
 Known open points, each an owner decision (section 11), none of them settled by the bytes as they are:
 
@@ -97,7 +99,7 @@ Known open points, each an owner decision (section 11), none of them settled by 
 - The remote `name` allows control and format characters and 32,000 scalars, where the local Plate name rules fold those characters and stop at 64. A modified client can publish names the official client cannot (D4).
 - A signed snapshot is transferable proof that a persona published it, even after a retraction; whether viewers receive signed envelopes or server-attested content is undecided (D6).
 - One key per install would link every character's published profiles; persona granularity is undecided (D3).
-- User-scoped platform key protection (DPAPI) keeps a key from other Windows accounts and from offline copies, not from other plugins in the same game process or from software running as the user; its behaviour under Wine is unverified (D2, NETWORK1).
+- User-scoped platform key protection (DPAPI) keeps a key from other Windows accounts and from offline copies, not from other plugins in the same game process or from software running as the user; its behaviour under Wine is unverified (D2, NETWORK1). `[updated 2026-09-28: DPAPI was measured working on native Windows. Wine's source shows its DPAPI derives the key from the user name and a constant, which is obfuscation rather than protection. That is a source finding, not a runtime test: see NETWORK1_CryptoCompatibility.md.]`
 
 ## 6. Remote model versus local model
 
@@ -129,7 +131,7 @@ A reader either returns a fully verified and decoded document or throws `Protoco
 
 ## 9. NETWORK1 integration points
 
-- `IPersonaKeyProvider` → `IPersonaSigner`: NETWORK1 implements a provider over a key generated once and kept in protected local storage (user-scoped platform protection), and decides how the active persona is chosen. `EcdsaPersonaSigner` wraps whatever `ECDsa` the provider produces. A signer is not thread-safe; serialize access to it.
+- `IPersonaKeyProvider` → `IPersonaSigner`: NETWORK1 implements a provider over a key generated once and kept in protected local storage (user-scoped platform protection), and decides how the active persona is chosen. `EcdsaPersonaSigner` wraps whatever `ECDsa` the provider produces. A signer is not thread-safe; serialize access to it. `[updated 2026-09-28: the provider's shape (L6), whether keys are exportable for backup (D2), how many personas an installation holds (D3) and which platform implementation is used (K1 to K3) are unresolved; see DecisionRegister.md and NETWORK1.md. "Generated once" does not settle any of them.]`
 - A snapshot builder on the plugin side: `ProfileDocument` → `ProfileSnapshot`, choosing the name and the image references. What an image reference's digest covers, and whether original image bytes are ever uploaded or digested, is decision D5: until the image processing and privacy design is approved, the builder must not upload originals or publish digests of them. The protocol never sees the Plate.
 - Transport: the document bytes are the request body (or base64 in JSON if an API prefers text); `SignedDocumentCodec.Verify` is the server's entry point, and the same assembly runs on both sides.
 - Server obligations (specification, section 13): profiles keyed by (persona, profileId), identity from the key, nothing rewritten; and, as the baseline until decision D1, a retraction that is terminal for its profile, revision ids unique within a profile with byte-identical resubmission idempotent, and timestamps treated as client claims bounded against the server's own receipt time. Ordering by `createdAt` and `issuedAt` alone is not enough, since both are client clocks. Storage accounting and creating a persona from the key of its first document remain server policy.
@@ -152,6 +154,8 @@ Each was chosen as the safest, simplest option that preserves flexibility; each 
 ## 11. Open product decisions
 
 These are the owner's to make. None is decided here, and none is frozen: the specification is a draft until they are, because D1, D4, D5 and D7 change what is signed or what a signature means. For each, the baseline is what the code and the specification do today, so that NETWORK1 can be built against something definite; changing a baseline before the freeze costs a schema edit and a vector regeneration, nothing more.
+
+`[updated 2026-09-28: every decision below is still unresolved. The table records the NETWORK0 baseline as merged. The current status of each decision, the NETWORK1 additions and the point by which each must be decided are kept in DecisionRegister.md, which is the one place a decision is marked as approved.]`
 
 | # | Decision | Baseline today | What changes if decided otherwise |
 |---|---|---|---|
@@ -181,8 +185,23 @@ The second independent review (2026-09-28, of `a96d7fd`) confirmed the security 
 | L4 a public-only key is accepted by `EcdsaPersonaSigner` | Detected at the first `Sign`, as `InvalidKey`; nothing wrong is produced. Probing at construction would mean signing a probe message. | NETWORK1 key provider | Whether the provider guarantees a private half, or the signer probes. |
 | L6 `FuturePolicy` and `IPersonaKeyProvider` in the public API | Policy numbers compile into callers as constants; the provider's synchronous getter will not fit DPAPI loading, prompting or several personas. Both are marked provisional in their documentation; neither was moved. | NETWORK1 | Where the policy numbers live, and the provider's real shape (D3). |
 | L8 signing-context rules non-normative | The rules for new tags (one-byte length, ASCII tag, never server-supplied bytes outside a tagged input, never a truncated persona id) are only in this document. | Before any second signing context | Move them into the specification's versioning section when the first new context is designed. |
-| L9 release workflow gated on protocol tests; Linux never run | A protocol test failure blocks a plugin release, and the ubuntu leg of the Build workflow has never executed this suite. | Owner, at the first PR | Keep the step in `release.yml` or move it to `build.yml` only. |
+| L9 release workflow gated on protocol tests | A protocol test failure blocks a plugin release. `[corrected 2026-09-28: this row also said the ubuntu leg had never executed the suite. It has since run green twice (section 13).]` | Owner | Keep the step in `release.yml` or move it to `build.yml` only (still unresolved). |
 
 ## 13. Verification status
 
-Everything in this document and the handoff was verified on Windows 11 x64 (.NET 10.0.12, Windows CNG). **The Linux leg has never run**: `build.yml` runs the protocol suite on ubuntu-24.04 (OpenSSL), and its first execution will be the CI of the draft pull request. OpenSSL behaviour is reasoned only (it reports the curve OID value and throws `CryptographicException`, both handled) and confirmed for the vectors by OpenSSL 3.5.7 on Windows through the review's independent checker, not by running the suite on Linux. Until that run is green, Linux compatibility of the tests (the race tests on fewer cores, the platform DER lengths, the exception mapping) is a claim, not a result.
+Everything in this document and the handoff was first verified on Windows 11 x64 (.NET 10.0.12, Windows CNG).
+
+`[corrected 2026-09-28, after the merge: this section said the Linux leg had never run and that Linux compatibility was a claim, not a result. The protocol suite has since run green on ubuntu-24.04 twice.]`
+
+GitHub Actions "Build and test" (`build.yml`), .NET runtime 10.0.12 and SDK 10.0.401 on both legs:
+
+| Run | Commit | Leg | Plugin tests | Release tooling tests | Protocol tests |
+|---|---|---|---|---|---|
+| 36446719752 (pull request #20, the first Linux run of the protocol suite) | `dcd56f9` | ubuntu-24.04 (image 20260920.314.1) | 2739 passed | 439 passed | 153 passed |
+| 36446719752 | `dcd56f9` | windows-2022 | 2739 passed | 439 passed | 153 passed |
+| 36474945050 (push of the merge) | `6384db6` | ubuntu-24.04 (image 20260920.314.1) | 2739 passed | 439 passed | 153 passed |
+| 36474945050 | `6384db6` | windows-2022 | 2739 passed | 439 passed | 153 passed |
+
+So the suite's Linux behaviour (the race tests on fewer cores, the platform DER lengths, the exception mapping) is now a result for native Linux .NET with OpenSSL. The independent Python and OpenSSL 3.5.7 checker from the reviews had already reproduced the vectors.
+
+What these runs do not show: how the Windows build of .NET behaves under Wine, Proton or macOS compatibility layers. Players on those systems run Dalamud on the Windows .NET runtime inside Wine, where cryptography comes from Wine's `ncrypt`, `bcrypt` and `crypt32` rather than OpenSSL. A native Linux result says nothing about that environment. See [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md).

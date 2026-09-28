@@ -1,25 +1,24 @@
-`BenchmarkTests.Measure_WhenAskedTo` (set `AETHERFRAME_PROTOCOL_BENCHMARK=<file>`), Release, Windows 11 x64, .NET 10.0.12, 32 cores, single thread. `[refreshed 2026-09-28 at the pre-merge cleanup; the night's figures predate the whole-input copy in Verify and are replaced here. "Sign" is the signer alone; SignedDocumentCodec.Sign also verifies its output, so it costs about a sign plus a verify.]`
-
-| Operation | Time | Allocation |
-|---|---|---|
-| Encode snapshot payload (332-byte document) | 0.4 µs | 592 B |
-| Encode maximal payload (128,710-byte document) | 131 µs | 519 KB |
-| Sign (signer only) | 98 µs | 564 B |
-| Verify signature only | 337 µs | 1.3 KB |
-| Verify and decode, normal document | 345 µs | 4.2 KB |
-| Verify and decode, maximal document | 1.24 ms | 647 KB |
-| Refuse an oversized declared length | 1.7 µs | 1.1 KB |
-| Refuse random bytes | 1.1 µs | 632 B |
-| Refuse a flipped payload bit (signature mismatch) | 357 µs | 3.5 KB |
-| Refuse an off-curve key | 2.1 µs | 1.4 KB |
-| Parse a public key (on-curve check) | 0.7 µs | 664 B |
-| Derive a persona id | 0.8 µs | 312 B |# NETWORK0 handoff
+# NETWORK0 handoff
 
 Written on the night of 2026-09-27, at the end of the overnight NETWORK0 run, for the owner's morning review.
 
 - Branch: `claude/network0-protocol-foundation`, started from `origin/master` at `9934650` (Merge AetherFrame custom repository publication workflow).
 - Worktree: `AetherFrame/.claude/worktrees/network0-protocol-foundation`. The primary checkout, the stashes, the tags, the releases, the plugin-repository branch and the plugin's AppData were not touched. Nothing was pushed or merged.
 - Documents: [NETWORK0.md](NETWORK0.md) (architecture, threat model, privacy, limits, decisions), [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) (the normative wire format), this file.
+
+## After the merge (2026-09-28)
+
+- **Merged.** The branch was merged into master as `6384db6` through pull request #20. Protocol version 1 is still a **DRAFT**, and the plugin still does not reference the assembly.
+- **CI.** Both legs passed on the pull request's head `dcd56f9` and on the merge. That includes the first two runs of the protocol suite on ubuntu-24.04, 153 of 153 each. The run numbers and counts are in NETWORK0.md, section 13. The statements below that Linux had never run are left as written that day and marked in place.
+- **Document repair.** A mistaken edit in `8cf071a` had placed two pieces of text above the titles:
+  - The refreshed benchmark table from this file, which now sits in its Performance section.
+  - The corrected end of NETWORK0.md's "Exceptions leaking bytes" threat-model row, which is now in that row.
+
+  Nothing else in the content changed.
+- **What comes next.**
+  - The open decisions, still unresolved, are tracked in [DecisionRegister.md](DecisionRegister.md).
+  - The planned NETWORK1 boundaries are in [NETWORK1.md](NETWORK1.md).
+  - The platform cryptography findings are in [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md).
 
 ## Remediation (2026-09-28)
 
@@ -51,7 +50,7 @@ The second independent review of `a96d7fd` verified the security fixes and found
 
 **L4, L6, N1, N2, N3, N5.** Small defects fixed: `FromEcdsa` maps every export refusal (`NotSupportedException`, `NotImplementedException`, `PlatformNotSupportedException`, a disposed key) to `InvalidKey`, with a test; twelve per-field range vectors were added (dimension, per-image bytes, zero asset id, format 0, zero height, height over the limit, width at u32 max, nine images declared, fewer images than present, truncated image, nested count abuse, createdAt at u64 max), so a reader without the per-dimension or per-image limit now fails the vectors (verified by mutation); the vector builder's false claim about range coverage is corrected. Everything else is recorded, not decided, in NETWORK0.md section 12: N1 and N2 are backend gates, N3 needs an explicit decision before real keys sign (no tag was changed), N5 and L6 are API-shape decisions for NETWORK1 (both marked provisional in their documentation), L4's remainder is a key-provider decision.
 
-**Results.** `AetherFrame.Protocol.Tests` 153 passed (145 before; 8 added: 2 DER, 3 vector ownership and uniqueness, 2 payload theory rows, 1 export refusal), about 3 s. The plugin's 2739 and the release tooling's 439 pass unchanged; solution 0 warnings. Targeted mutations: T1 rules (4 of 4 detected), T2 (old code fails 5 of 5), T3 (3 of 3), T4 (1 of 1), image limits V1 to V5 (dimension, bytes, format, pixels detected; the constructor-only zero-asset-id check is redundant with `Id128.FromBytes` on the wire path and its removal is equivalent), `FromEcdsa` catch narrowed back (detected by the new test). Benchmark refreshed (below). **Linux CI verification remains outstanding**: no test here has run on Linux; the draft PR's ubuntu leg will be the first.
+**Results.** `AetherFrame.Protocol.Tests` 153 passed (145 before; 8 added: 2 DER, 3 vector ownership and uniqueness, 2 payload theory rows, 1 export refusal), about 3 s. The plugin's 2739 and the release tooling's 439 pass unchanged; solution 0 warnings. Targeted mutations: T1 rules (4 of 4 detected), T2 (old code fails 5 of 5), T3 (3 of 3), T4 (1 of 1), image limits V1 to V5 (dimension, bytes, format, pixels detected; the constructor-only zero-asset-id check is redundant with `Id128.FromBytes` on the wire path and its removal is equivalent), `FromEcdsa` catch narrowed back (detected by the new test). Benchmark refreshed (below). **Linux CI verification remains outstanding**: no test here has run on Linux; the draft PR's ubuntu leg will be the first. `[corrected 2026-09-28, after the merge: it has run. The protocol suite passed 153 of 153 on ubuntu-24.04 in pull request run 36446719752 (dcd56f9) and in the merge's run 36474945050 (6384db6), with every other suite green on both legs; see NETWORK0.md, section 13.]`
 
 ## What was built
 
@@ -180,6 +179,25 @@ The exact results, with failure counts (each run in a scratch clone of the remed
 
 ## Performance
 
+`BenchmarkTests.Measure_WhenAskedTo` (set `AETHERFRAME_PROTOCOL_BENCHMARK=<file>`), Release, Windows 11 x64, .NET 10.0.12, 32 cores, single thread. `[refreshed 2026-09-28 at the pre-merge cleanup; the night's figures predate the whole-input copy in Verify and are replaced here. "Sign" is the signer alone; SignedDocumentCodec.Sign also verifies its output, so it costs about a sign plus a verify.]`
+
+| Operation | Time | Allocation |
+|---|---|---|
+| Encode snapshot payload (332-byte document) | 0.4 µs | 592 B |
+| Encode maximal payload (128,710-byte document) | 131 µs | 519 KB |
+| Sign (signer only) | 98 µs | 564 B |
+| Verify signature only | 337 µs | 1.3 KB |
+| Verify and decode, normal document | 345 µs | 4.2 KB |
+| Verify and decode, maximal document | 1.24 ms | 647 KB |
+| Refuse an oversized declared length | 1.7 µs | 1.1 KB |
+| Refuse random bytes | 1.1 µs | 632 B |
+| Refuse a flipped payload bit (signature mismatch) | 357 µs | 3.5 KB |
+| Refuse an off-curve key | 2.1 µs | 1.4 KB |
+| Parse a public key (on-curve check) | 0.7 µs | 664 B |
+| Derive a persona id | 0.8 µs | 312 B |
+
+`[repaired 2026-09-28, after the merge: the paragraph and table above were placed before this document's title by a mistaken edit in 8cf071a; they are moved here unchanged. The night's figures below are kept as the record of 2026-09-27 and are superseded by the table above.]`
+
 `BenchmarkTests.Measure_WhenAskedTo` (set `AETHERFRAME_PROTOCOL_BENCHMARK=<file>`), Release, Windows 11 x64, .NET 10.0.12, 32 cores, single thread:
 
 | Operation | Time | Allocation |
@@ -201,14 +219,14 @@ No quadratic behaviour was found; everything is linear in the input. Two things 
 
 ## Open security points
 
-- The strength of ECDSA rests on the platform (Windows CNG, OpenSSL on Linux); nonce generation is theirs. The protocol only fixes the encoding.
-- Nothing yet protects a private key at rest; that is NETWORK1's `IPersonaKeyProvider`. Until then the only signer is in-memory.
+- The strength of ECDSA rests on the platform (Windows CNG, OpenSSL on Linux); nonce generation is theirs. The protocol only fixes the encoding. `[updated 2026-09-28: under Wine, Proton or macOS compatibility layers the platform is Wine's ncrypt and bcrypt. Source inspection indicates the path the protocol uses today does not work there. That is not yet confirmed by running anything: see NETWORK1_CryptoCompatibility.md.]`
+- Nothing yet protects a private key at rest; that is NETWORK1's `IPersonaKeyProvider`. Until then the only signer is in-memory. `[updated 2026-09-28: the provider's shape (L6) and the storage mechanism are unresolved; see NETWORK1.md and DecisionRegister.md.]`
 - Replay of whole documents is a server concern. `[corrected 2026-09-28: not "order by createdAt and refuse regressions", which two client clocks cannot support; the baseline is specification section 13 (terminal retraction, receipt-time ordering, idempotent resubmission), and rollback by replaying a pruned revision (N2) is still open.]` The protocol gives timestamps and ids but no nonce or sequence, on purpose, so a client without server state can sign.
 - `EcdsaPersonaSigner` is not thread-safe; NETWORK1 must serialize signing.
 
 ## Product decisions still needed
 
-`[superseded 2026-09-28 by NETWORK0.md, section 11, "Open product decisions" (D1 to D9), which lists these five and the review's additions with the baseline each has today. Nothing there is decided.]`
+`[superseded 2026-09-28 by NETWORK0.md, section 11, "Open product decisions" (D1 to D9), which lists these five and the review's additions with the baseline each has today. Nothing there is decided.]` `[updated 2026-09-28, after the merge: the current status of every decision is kept in DecisionRegister.md; all are still unresolved.]`
 
 1. Keep `ProfileRetraction` as a signed document, or unpublish through an authenticated request? (NETWORK0.md, section 10, decision 2; now D1.)
 2. Is a metadata-only snapshot the right first remote model, with the layout as schema 2, or should the layout come first? (D8.)
@@ -219,6 +237,8 @@ No quadratic behaviour was found; everything is linear in the input. Two things 
 ## Recommended NETWORK1 scope
 
 Client side only, still no backend: `IPersonaKeyProvider` over a DPAPI-protected P-256 key in the plugin's configuration folder (generate once, never export); a snapshot builder from `ProfileDocument` (name and image references) `[corrected 2026-09-28: not "digests computed from the stored assets": what a digest covers, and whether original image bytes are ever uploaded or digested, is decision D5, and no milestone may upload originals or expose their digests before the image processing and privacy design is approved]`; a minimal publish and retract flow behind a feature flag with no UI beyond a command, that produces documents and, for now, writes them to a local outbox instead of a server; the request-proof signing tag and schema, defined and vectored the same way as the documents. Only then the backend, which reuses `AetherFrame.Protocol` unchanged.
+
+`[updated 2026-09-28, after the merge: this paragraph was the night's recommendation, not a decision. Three parts of it are open owner decisions. "Generate once, never export": whether keys are exportable for a backup is D2. "A DPAPI-protected P-256 key": the storage and platform choices are K1 to K3; both were measured working on native Windows, while under Wine DPAPI is obfuscation only, from source inspection. "The request-proof signing tag and schema" inside NETWORK1: the architecture review suggests reserving only the tag name until the transport is designed, which is also unresolved. See NETWORK1.md for the planned boundaries and DecisionRegister.md for the gates; none of this is approved.]`
 
 ## How to review
 
