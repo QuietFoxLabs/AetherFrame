@@ -11,6 +11,7 @@ namespace AetherFrame.Protocol.Signing;
 public static class SignatureVerifier
 {
     /// <summary>True when <paramref name="signature"/> is a valid ECDSA P-256 / SHA-256 signature over <paramref name="input"/> by its key.</summary>
+    /// <exception cref="ProtocolException"><see cref="ProtocolError.InvalidKey"/> when the platform refuses the input's key, which the protocol already checked.</exception>
     public static bool Verify(SigningInput input, ProtocolSignature signature)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -21,7 +22,7 @@ public static class SignatureVerifier
         {
             return key.VerifyData(input.Bytes, signature.Bytes, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
         }
-        catch (CryptographicException)
+        catch (Exception e) when (e is CryptographicException or PlatformNotSupportedException)
         {
             return false;
         }

@@ -43,7 +43,7 @@ internal static class Id128
         return prefix + ProtocolHex.ToLower(bytes);
     }
 
-    /// <summary>Reads 16 wire bytes, refusing the all-zero value.</summary>
+    /// <summary>Reads 16 wire bytes, refusing the all-zero value. The bytes are read once; the check is on what was read.</summary>
     public static (ulong High, ulong Low) FromBytes(ReadOnlySpan<byte> bytes, string what)
     {
         if (bytes.Length != ProtocolConstants.OpaqueIdLength)
@@ -51,12 +51,13 @@ internal static class Id128
             throw new ProtocolException(ProtocolError.InvalidValue, $"A {what} is {ProtocolConstants.OpaqueIdLength} bytes.");
         }
 
-        if (IsZero(bytes))
+        var (high, low) = Read(bytes);
+        if ((high | low) == 0)
         {
             throw new ProtocolException(ProtocolError.InvalidValue, $"A {what} is never all zero.");
         }
 
-        return Read(bytes);
+        return (high, low);
     }
 
     /// <summary>Parses the text form strictly: the prefix, then exactly 32 lowercase hex digits, not all zero.</summary>

@@ -29,7 +29,9 @@ public sealed class ImageReference
             throw new ProtocolException(ProtocolError.InvalidValue, $"An image digest is {ProtocolText.Number(ProtocolConstants.DigestLength)} bytes; this one is {ProtocolText.Number(sha256.Length)}.");
         }
 
-        if (sha256.IndexOfAnyExcept((byte)0) < 0)
+        // Copied before it is checked, so the digest this holds is the one that passed.
+        var digest = sha256.ToArray();
+        if (digest.AsSpan().IndexOfAnyExcept((byte)0) < 0)
         {
             throw new ProtocolException(ProtocolError.InvalidValue, "An image digest is never all zero.");
         }
@@ -57,7 +59,7 @@ public sealed class ImageReference
         }
 
         AssetId = assetId;
-        this.sha256 = sha256.ToArray();
+        this.sha256 = digest;
         Format = format;
         ByteLength = byteLength;
         Width = width;

@@ -22,7 +22,11 @@ public sealed class ProtocolSignature
     /// <summary>The 64 bytes: r then s.</summary>
     public ReadOnlySpan<byte> Bytes => bytes;
 
-    /// <summary>Reads the wire form, refusing anything that is not a canonical signature.</summary>
+    /// <summary>
+    /// Reads the wire form, refusing anything that is not a canonical signature. The bytes are
+    /// copied before they are checked, so the signature this returns holds exactly the bytes that
+    /// passed, whatever happens to the caller's buffer meanwhile.
+    /// </summary>
     /// <exception cref="ProtocolException"><see cref="ProtocolError.InvalidSignature"/>.</exception>
     public static ProtocolSignature FromBytes(ReadOnlySpan<byte> rs)
     {
@@ -31,8 +35,9 @@ public sealed class ProtocolSignature
             throw new ProtocolException(ProtocolError.InvalidSignature, $"A signature is {ProtocolText.Number(ProtocolConstants.SignatureLength)} bytes; this one is {ProtocolText.Number(rs.Length)}.");
         }
 
-        var r = P256Curve.ToUnsigned(rs.Slice(0, P256Curve.FieldBytes));
-        var s = P256Curve.ToUnsigned(rs.Slice(P256Curve.FieldBytes));
+        var copy = rs.ToArray();
+        var r = P256Curve.ToUnsigned(copy.AsSpan(0, P256Curve.FieldBytes));
+        var s = P256Curve.ToUnsigned(copy.AsSpan(P256Curve.FieldBytes));
         if (r.IsZero || r >= P256Curve.N)
         {
             throw new ProtocolException(ProtocolError.InvalidSignature, "The signature's r is out of range.");
@@ -48,7 +53,7 @@ public sealed class ProtocolSignature
             throw new ProtocolException(ProtocolError.InvalidSignature, "The signature's s is not in the low half, so the signature is not canonical.");
         }
 
-        return new ProtocolSignature(rs.ToArray());
+        return new ProtocolSignature(copy);
     }
 
     /// <summary>
@@ -62,15 +67,14 @@ public sealed class ProtocolSignature
             throw new ProtocolException(ProtocolError.InvalidSignature, "The platform produced a signature of an unexpected length.");
         }
 
-        var s = P256Curve.ToUnsigned(rs.Slice(P256Curve.FieldBytes));
-        if (s <= P256Curve.HalfN)
+        Span<byte> normalized = stackalloc byte[ProtocolConstants.SignatureLength];
+        rs.CopyTo(normalized);
+        var s = P256Curve.ToUnsigned(normalized.Slice(P256Curve.FieldBytes));
+        if (s > P256Curve.HalfN)
         {
-            return FromBytes(rs);
+            P256Curve.WriteFixed32(P256Curve.N - s, normalized.Slice(P256Curve.FieldBytes));
         }
 
-        Span<byte> normalized = stackalloc byte[ProtocolConstants.SignatureLength];
-        rs.Slice(0, P256Curve.FieldBytes).CopyTo(normalized);
-        P256Curve.WriteFixed32(P256Curve.N - s, normalized.Slice(P256Curve.FieldBytes));
         return FromBytes(normalized);
     }
 

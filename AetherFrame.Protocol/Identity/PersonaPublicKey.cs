@@ -26,7 +26,11 @@ public sealed class PersonaPublicKey : IEquatable<PersonaPublicKey>
     /// <summary>The 65 bytes of the uncompressed point.</summary>
     public ReadOnlySpan<byte> Bytes => bytes;
 
-    /// <summary>Reads the wire form, refusing anything that is not an uncompressed point on P-256.</summary>
+    /// <summary>
+    /// Reads the wire form, refusing anything that is not an uncompressed point on P-256. The bytes
+    /// are copied before they are checked, so the key this returns holds exactly the bytes that
+    /// passed, whatever happens to the caller's buffer meanwhile.
+    /// </summary>
     /// <exception cref="ProtocolException"><see cref="ProtocolError.InvalidKey"/>.</exception>
     public static PersonaPublicKey FromBytes(ReadOnlySpan<byte> uncompressedPoint)
     {
@@ -35,17 +39,18 @@ public sealed class PersonaPublicKey : IEquatable<PersonaPublicKey>
             throw new ProtocolException(ProtocolError.InvalidKey, $"A public key is {ProtocolText.Number(ProtocolConstants.PublicKeyLength)} bytes; this one is {ProtocolText.Number(uncompressedPoint.Length)}.");
         }
 
-        if (uncompressedPoint[0] != 0x04)
+        var copy = uncompressedPoint.ToArray();
+        if (copy[0] != 0x04)
         {
             throw new ProtocolException(ProtocolError.InvalidKey, "A public key must be an uncompressed point (0x04 prefix).");
         }
 
-        if (!P256Curve.IsOnCurve(uncompressedPoint.Slice(1, P256Curve.FieldBytes), uncompressedPoint.Slice(1 + P256Curve.FieldBytes, P256Curve.FieldBytes)))
+        if (!P256Curve.IsOnCurve(copy.AsSpan(1, P256Curve.FieldBytes), copy.AsSpan(1 + P256Curve.FieldBytes, P256Curve.FieldBytes)))
         {
             throw new ProtocolException(ProtocolError.InvalidKey, "The public key is not a point on P-256.");
         }
 
-        return new PersonaPublicKey(uncompressedPoint.ToArray());
+        return new PersonaPublicKey(copy);
     }
 
     /// <summary>Takes the public half of a platform key, which must be a named-curve P-256 key.</summary>
@@ -81,7 +86,13 @@ public sealed class PersonaPublicKey : IEquatable<PersonaPublicKey>
     /// <summary>A copy of the 65 bytes.</summary>
     public byte[] ToArray() => (byte[])bytes.Clone();
 
-    /// <summary>A platform key holding only this public point, for verification. The caller disposes it.</summary>
+    /// <summary>
+    /// A platform key holding only this public point, for verification. The caller disposes it. The
+    /// point already passed the protocol's own on-curve check, so the platform refusing it is a
+    /// disagreement between the two and is reported as an invalid key, whatever exception the
+    /// platform uses: Windows CNG reports an invalid point as <see cref="PlatformNotSupportedException"/>
+    /// ("the curve or its parameters are not valid"), OpenSSL as <see cref="CryptographicException"/>.
+    /// </summary>
     internal ECDsa CreateEcdsa()
     {
         try
@@ -96,7 +107,7 @@ public sealed class PersonaPublicKey : IEquatable<PersonaPublicKey>
                 },
             });
         }
-        catch (CryptographicException)
+        catch (Exception e) when (e is CryptographicException or PlatformNotSupportedException or ArgumentException)
         {
             throw new ProtocolException(ProtocolError.InvalidKey, "The platform refused the public key.");
         }

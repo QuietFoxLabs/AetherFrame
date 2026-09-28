@@ -7,8 +7,9 @@ namespace AetherFrame.Protocol.Encoding;
 /// Reads the canonical encoding written by <see cref="CanonicalWriter"/>, treating the input as
 /// hostile: every value is checked against what remains before it is read, every declared length
 /// or count is checked against its limit before anything is allocated or copied, and the caller
-/// must call <see cref="ExpectEnd"/> so trailing bytes are refused. It never allocates more than
-/// the input it was given, and all it can throw is <see cref="ProtocolException"/>.
+/// must call <see cref="ExpectEnd"/> so trailing bytes are refused. It allocates nothing itself and
+/// hands out slices of its input, so nothing is ever sized by a declared length that has not
+/// passed its limit; all it can throw is <see cref="ProtocolException"/>.
 /// </summary>
 internal ref struct CanonicalReader
 {

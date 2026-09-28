@@ -28,7 +28,9 @@ public static class SignedDocumentCodec
     /// <summary>
     /// Reads a document from hostile bytes: framing, version, type, key, lengths and trailing bytes
     /// are checked, then the signature, and only then is the payload decoded. Everything refused
-    /// throws <see cref="ProtocolException"/>.
+    /// throws <see cref="ProtocolException"/>. The input is copied once before anything is read from
+    /// it, so a buffer another thread writes to meanwhile can make the document invalid but can never
+    /// make a value that was checked differ from the value that is used.
     /// </summary>
     public static VerifiedDocument Verify(ReadOnlySpan<byte> document)
     {
@@ -37,7 +39,11 @@ public static class SignedDocumentCodec
             throw new ProtocolException(ProtocolError.LimitExceeded, $"The document is {ProtocolText.Number(document.Length)} bytes; the limit is {ProtocolText.Number(ProtocolLimits.MaxDocumentBytes)}.");
         }
 
-        var reader = new CanonicalReader(document);
+        // One private copy of the whole input (at most 1 MiB, in proportion to the input, never to a
+        // declared length), taken before the first byte is read: every check below, the signature
+        // verification and the payload decoding all see exactly these bytes.
+        var bytes = document.ToArray();
+        var reader = new CanonicalReader(bytes);
         if (!reader.ReadFixed(ProtocolConstants.DocumentMagic.Length, "magic").SequenceEqual(ProtocolConstants.DocumentMagic))
         {
             throw new ProtocolException(ProtocolError.InvalidFraming, "The input does not start with the signed document magic.");
@@ -68,18 +74,13 @@ public static class SignedDocumentCodec
         // Structural checks are done; from here each step costs more, and each is fail-closed.
         var key = PersonaPublicKey.FromBytes(keyBytes);
         var signature = ProtocolSignature.FromBytes(signatureBytes);
-
-        // The payload is verified and decoded from one private copy, so a caller whose buffer is
-        // shared with another thread can never have the bytes that were verified differ from the
-        // bytes that are decoded. The key and the header were already copied out above.
-        var payloadCopy = payload.ToArray();
-        var input = SigningInput.Create(type, key, payloadCopy);
+        var input = SigningInput.Create(type, key, payload);
         if (!SignatureVerifier.Verify(input, signature))
         {
             throw new ProtocolException(ProtocolError.SignatureMismatch, "The signature does not verify over the document with the key it names.");
         }
 
-        return new VerifiedDocument(key, PayloadCodec.Decode(type, payloadCopy));
+        return new VerifiedDocument(key, PayloadCodec.Decode(type, payload));
     }
 
     /// <summary>Lays out the envelope. Internal so tests can build documents whose parts disagree.</summary>

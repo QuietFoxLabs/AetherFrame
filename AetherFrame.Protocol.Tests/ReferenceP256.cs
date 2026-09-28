@@ -59,6 +59,25 @@ internal static class ReferenceP256
         return !point.Infinity && point.X % N == r;
     }
 
+    /// <summary>True when (x, y) satisfies y^2 = x^3 + ax + b with both coordinates in [0, p), straight from the specification.</summary>
+    public static bool IsOnCurve(BigInteger x, BigInteger y) =>
+        x.Sign >= 0 && y.Sign >= 0 && x < P && y < P && Mod((y * y) - (x * x * x) - (A * x) - B).IsZero;
+
+    /// <summary>True when the 65 bytes are an uncompressed encoding of a point on the curve (section 3 of the specification).</summary>
+    public static bool IsOnCurve(ReadOnlySpan<byte> publicKey65) =>
+        publicKey65.Length == 65 && publicKey65[0] == 0x04 && IsOnCurve(Unsigned(publicKey65.Slice(1, 32)), Unsigned(publicKey65.Slice(33, 32)));
+
+    /// <summary>
+    /// The y with y^2 = x^3 + ax + b for <paramref name="x"/>, or null when there is none. Because
+    /// p = 3 (mod 4), a square root is a^((p+1)/4); the other root is p - y.
+    /// </summary>
+    public static BigInteger? LiftX(BigInteger x)
+    {
+        var rhs = Mod((x * x * x) + (A * x) + B);
+        var y = BigInteger.ModPow(rhs, (P + 1) / 4, P);
+        return Mod(y * y) == rhs ? y : null;
+    }
+
     public static byte[] ToBytes32(BigInteger value)
     {
         var bytes = new byte[32];
