@@ -589,7 +589,7 @@ internal sealed class TemplateLibraryService
             {
                 if (record.Status == TemplateStatus.Ready)
                 {
-                    AssetReferenceScanner.Collect(record.Template!.Document, referenced);
+                    CollectTemplate(record.Template!, referenced);
                 }
                 else
                 {
@@ -604,7 +604,7 @@ internal sealed class TemplateLibraryService
                     var result = await ReadTemplateFileAsync(path).ConfigureAwait(false);
                     if (result.Status == TemplateStatus.Ready)
                     {
-                        AssetReferenceScanner.Collect(result.Template!.Document, referenced);
+                        CollectTemplate(result.Template!, referenced);
                     }
                     else
                     {
@@ -622,6 +622,15 @@ internal sealed class TemplateLibraryService
 
             return new AssetReferenceScan(problems.Count == 0, referenced, problems);
         });
+
+    /// <summary>A Template's embedded document plus the envelope's own preserved unknown data,
+    /// where a newer build may keep an image (a cover, say) this build can't know about.</summary>
+    private static void CollectTemplate(PlateTemplate template, ISet<Guid> into)
+    {
+        AssetReferenceScanner.Collect(template.Document, into);
+        AssetReferenceScanner.CollectUnknown(template.ExtensionData, into);
+        AssetReferenceScanner.CollectUnknown(template.Origin?.ExtensionData, into);
+    }
 
     // ---------------------------------------------------------------- internals
 

@@ -1220,6 +1220,33 @@ internal sealed class PlateLibraryService
                 }
             }
 
+            // What is in the Plates folder now, not only what was loaded: a Plate put back from the
+            // trash by hand (the only restore there is yet) or a file whose name isn't a Plate's
+            // (a "- Copy" made in Explorer) may reference images too. Conservatively every GUID
+            // string in such a file counts; one that can't be read leaves the scan incomplete.
+            var loaded = snapshot.Select(r => r.Id).ToHashSet();
+            foreach (var path in store.ListFiles(paths.PlatesDirectory, "*.json"))
+            {
+                if (PlateStoragePaths.TryParsePlateFileName(path, out var fileId) && loaded.Contains(fileId))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await store.ReadTextAsync(path, text =>
+                    {
+                        using var json = JsonDocument.Parse(text);
+                        AssetReferenceScanner.CollectAllGuidStrings(json.RootElement, referenced);
+                    }).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!IsInterruption(ex))
+                {
+                    log.Error(ex, $"AetherFrame could not read {Path.GetFileName(path)} in the Plates folder while scanning image references.");
+                    problems.Add($"Plate file {Path.GetFileName(path)} is unreadable ({ex.GetType().Name}).");
+                }
+            }
+
             foreach (var path in store.ListFiles(paths.PlateTrashDirectory, "*.json"))
             {
                 try
