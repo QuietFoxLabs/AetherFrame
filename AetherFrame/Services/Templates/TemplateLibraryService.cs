@@ -48,6 +48,13 @@ internal sealed class TemplateLibraryService
     private readonly Func<Func<Task>, Task> dispatch;
     private readonly OwnedOperations operations;
 
+    /// <summary>An unreadable Template's problem when its content is damaged.</summary>
+    internal const string DamagedTemplateProblem = "This Template's file is damaged and couldn't be read. It has been left untouched.";
+
+    /// <summary>An unreadable Template's problem when its file couldn't be opened at all: likely intact.</summary>
+    internal const string UnavailableTemplateProblem =
+        "This Template's file couldn't be opened; another program may be using it. It has been left untouched. Restart the game to try again.";
+
     private readonly Dictionary<Guid, TemplateRecord> templates = new();
 
     // Template files read from the store's backup copy whose damaged on-disk bytes could not be
@@ -275,9 +282,13 @@ internal sealed class TemplateLibraryService
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
         {
-            log.Error(ex, $"AetherFrame could not read Template {templateId}; it is listed as unreadable and its file is left untouched.");
+            // As for Plates: a file that merely couldn't be opened is likely intact, so it isn't called damaged.
+            var damaged = ex is InvalidDataException or JsonException;
+            log.Error(ex, damaged
+                ? $"AetherFrame could not read Template {templateId}; it is listed as unreadable and its file is left untouched."
+                : $"AetherFrame could not open Template {templateId}; it is listed as unreadable for this session and its file is left untouched.");
             return new TemplateRecord(templateId, TemplateStatus.Unreadable, null, null, "Unreadable Template", DateTime.MinValue, DateTime.MinValue,
-                "This Template's file is damaged and couldn't be read. It has been left untouched.");
+                damaged ? DamagedTemplateProblem : UnavailableTemplateProblem);
         }
     }
 
@@ -707,6 +718,7 @@ internal sealed class TemplateLibraryService
         {
             TemplateStatus.Ready => record,
             TemplateStatus.NewerVersion => throw new TemplateLibraryException($"This Template was saved by a newer version of AetherFrame and can't be {action}."),
+            _ when record.Problem == UnavailableTemplateProblem => throw new TemplateLibraryException($"This Template's file couldn't be opened, so it can't be {action}. Restart the game to try again."),
             _ => throw new TemplateLibraryException($"This Template's file is damaged and it can't be {action}."),
         };
     }

@@ -444,9 +444,15 @@ internal sealed class PlateLibraryService
         }
         catch (Exception ex) when (!IsInterruption(ex))
         {
-            log.Error(ex, $"AetherFrame could not read Plate {plateId}; it is listed as unreadable and its file is left untouched.");
+            // Both are left untouched, but only damaged content is damage: a file that merely
+            // couldn't be opened (locked, access denied) is likely intact, and a player told it is
+            // damaged might give up on it.
+            var damaged = IsContentDamage(ex);
+            log.Error(ex, damaged
+                ? $"AetherFrame could not read Plate {plateId}; it is listed as unreadable and its file is left untouched."
+                : $"AetherFrame could not open Plate {plateId}; it is listed as unreadable for this session and its file is left untouched.");
             return new PlateRecord(plateId, PlateStatus.Unreadable, null, null, "Unreadable Plate", DateTime.MinValue, DateTime.MinValue, 0, 0,
-                "This Plate's file is damaged and couldn't be read. It has been left untouched.");
+                damaged ? DamagedPlateProblem : UnavailablePlateProblem);
         }
     }
 
@@ -1350,6 +1356,13 @@ internal sealed class PlateLibraryService
 
     private static PlateLibraryException Closing() => new("AetherFrame is closing, so nothing was changed.");
 
+    /// <summary>An unreadable Plate's problem when its content is damaged.</summary>
+    internal const string DamagedPlateProblem = "This Plate's file is damaged and couldn't be read. It has been left untouched.";
+
+    /// <summary>An unreadable Plate's problem when its file couldn't be opened at all: likely intact.</summary>
+    internal const string UnavailablePlateProblem =
+        "This Plate's file couldn't be opened; another program may be using it. It has been left untouched. Restart the game to try again.";
+
     /// <summary>What the player is told when a write is refused because its result wouldn't load again.</summary>
     internal const string UnloadableWriteMessage = "AetherFrame couldn't save this change: the result wouldn't load again, so nothing was written.";
 
@@ -1387,6 +1400,7 @@ internal sealed class PlateLibraryService
         {
             PlateStatus.Ready => record,
             PlateStatus.NewerVersion => throw new PlateLibraryException($"This Plate was saved by a newer version of AetherFrame and can't be {action}."),
+            _ when record.Problem == UnavailablePlateProblem => throw new PlateLibraryException($"This Plate's file couldn't be opened, so it can't be {action}. Restart the game to try again."),
             _ => throw new PlateLibraryException($"This Plate's file is damaged and it can't be {action}."),
         };
     }
