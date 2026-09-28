@@ -37,10 +37,40 @@ internal sealed class SystemFileStore : IPlateFileStore
         File.Move(sourcePath, destinationPath, overwrite: false);
     }
 
+    /// <summary>
+    /// Copies and flushes the copy to disk before returning. Every copy the Libraries make is a
+    /// Recovery copy of a damaged file or a backup taken before a migration, made right before the
+    /// original is written over — and that write is flushed (by the storage in game, or by
+    /// <see cref="WriteAtomically"/>), while <see cref="File.Copy(string, string, bool)"/> may leave
+    /// the copy's data in the system's cache. A copy that fails partway is removed again, so a
+    /// half-written file never stands in for the original.
+    /// </summary>
     public void CopyFile(string sourcePath, string destinationPath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-        File.Copy(sourcePath, destinationPath, overwrite: false);
+
+        using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var created = false;
+        try
+        {
+            using var destination = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            created = true;
+            source.CopyTo(destination);
+            destination.Flush(flushToDisk: true);
+        }
+        catch when (created)
+        {
+            try
+            {
+                File.Delete(destinationPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The copy's own failure is the one worth reporting.
+            }
+
+            throw;
+        }
     }
 
     public void DeleteFile(string path)
