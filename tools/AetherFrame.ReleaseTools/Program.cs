@@ -30,6 +30,15 @@ public static class Program
                                [--download-url-template <template>]
           checksums            --output <SHA256SUMS.txt> <file>...
           verify-checksums     --checksums <SHA256SUMS.txt> [--directory <dir>]
+          plan-publication     --config <repository.json> --branch <publication branch>
+                               (--current <published pluginmaster.json> | --no-current)
+                               --version <X.Y.Z> --channel <testing|stable> [--rollback]
+                               [--github-output <file>]
+          prepare-publication  --config <repository.json> --branch <publication branch>
+                               (--current <published pluginmaster.json> [--current-commit <sha>] | --no-current)
+                               --version <X.Y.Z> --channel <testing|stable> [--rollback]
+                               --releases <dir> --branch-readme <README.md> --output <new dir>
+                               [--run-url <workflow run URL>] [--github-output <file>]
 
         Exit codes: 0 all checks passed, 1 a check failed, 2 usage error.
         """;
@@ -54,6 +63,8 @@ public static class Program
                 "validate-repository" => ValidateRepository(rest, stdout),
                 "checksums" => WriteChecksums(rest, stdout),
                 "verify-checksums" => VerifyChecksums(rest, stdout),
+                "plan-publication" => PlanPublication(rest, stdout),
+                "prepare-publication" => PreparePublication(rest, stdout),
                 _ => throw new UsageException($"unknown command '{args[0]}'."),
             };
         }
@@ -260,6 +271,222 @@ public static class Program
 
         stdout.WriteLine($"Checksums OK: {checksumsPath}");
         return 0;
+    }
+
+    private static int PlanPublication(List<string> args, TextWriter stdout)
+    {
+        var options = Arguments.Parse(args, new[] { "config", "branch", "current", "version", "channel", "github-output" }, new[] { "no-current", "rollback" });
+        options.NoPositionals();
+        var inputs = PublicationInputs.Read(options);
+
+        var checks = new CheckList();
+        var (config, version, channel, current) = inputs.Load(checks);
+        PublicationPlan? plan = null;
+        if (config is not null && version is not null && channel is not null && !checks.HasFailures)
+        {
+            checks.Attempt("publication target", () => PublicationTarget.Resolve(config, inputs.Branch), t => $"branch {t.Branch}, served at {t.Url}");
+            if (!checks.HasFailures)
+            {
+                try
+                {
+                    var state = Publication.ReadCurrent(current, config, checks);
+                    plan = checks.Attempt("plan", () => PublicationPlan.Compute(state, version.Value, channel.Value, inputs.Rollback), p => $"{p.Title}: {p.Current.Describe()} -> {p.Target.Describe()}");
+                }
+                catch (ReleaseCheckException e)
+                {
+                    if (!checks.HasFailures)
+                    {
+                        checks.Fail("published file", e.Message);
+                    }
+                }
+            }
+        }
+
+        checks.Print(stdout);
+        if (plan is null || checks.HasFailures)
+        {
+            return Failed(checks, stdout);
+        }
+
+        var releases = string.Join(" ", plan.Releases);
+        stdout.WriteLine($"Plan OK: {plan.Title}. Releases to fetch and verify: {releases}");
+        if (options.Optional("github-output") is { } output)
+        {
+            AppendGitHubOutputs(output, ("releases", releases), ("internal-name", config!.InternalName));
+        }
+
+        return 0;
+    }
+
+    private static int PreparePublication(List<string> args, TextWriter stdout)
+    {
+        var options = Arguments.Parse(
+            args,
+            new[] { "config", "branch", "current", "current-commit", "version", "channel", "releases", "branch-readme", "output", "run-url", "github-output" },
+            new[] { "no-current", "rollback" });
+        options.NoPositionals();
+        var inputs = PublicationInputs.Read(options);
+        var releasesPath = options.Required("releases");
+        var readmePath = options.Required("branch-readme");
+        var outputPath = options.Required("output");
+        if (options.Optional("current-commit") is not null && inputs.CurrentPath is null)
+        {
+            throw new UsageException("--current-commit goes with --current.");
+        }
+
+        var checks = new CheckList();
+        var (config, version, channel, current) = inputs.Load(checks);
+        var readme = checks.Attempt("branch README file", () => ReadSmallFile(readmePath, Publication.MaxReadmeBytes), _ => Path.GetFileName(readmePath));
+        checks.Attempt("releases directory", () => Directory.Exists(releasesPath) ? releasesPath : throw new ReleaseCheckException($"not found at {releasesPath}."), p => p);
+        checks.Attempt("output directory", () => Directory.Exists(outputPath) || File.Exists(outputPath)
+            ? throw new ReleaseCheckException($"{outputPath} already exists; the output must be a new directory, so that no earlier file is ever published by mistake.")
+            : outputPath, p => p);
+
+        PreparedPublication? prepared = null;
+        if (config is not null && version is not null && channel is not null && readme is not null && !checks.HasFailures)
+        {
+            try
+            {
+                prepared = Publication.Prepare(new PublicationRequest
+                {
+                    Configuration = config,
+                    Branch = inputs.Branch,
+                    Current = current,
+                    CurrentCommit = options.Optional("current-commit"),
+                    Version = version.Value,
+                    Channel = channel.Value,
+                    Rollback = inputs.Rollback,
+                    ReleasesDirectory = releasesPath,
+                    BranchReadme = readme,
+                    RunUrl = options.Optional("run-url"),
+                }, checks);
+            }
+            catch (ReleaseCheckException e)
+            {
+                if (!checks.HasFailures)
+                {
+                    checks.Fail("publication", e.Message);
+                }
+            }
+        }
+
+        checks.Print(stdout);
+        if (prepared is null || checks.HasFailures)
+        {
+            return Failed(checks, stdout);
+        }
+
+        var utf8 = new System.Text.UTF8Encoding(false);
+        var summary = StrictJson.Serialize(prepared.Summary);
+        var files = Publication.BranchFiles(prepared).Select(f => (Path.Combine(Publication.BranchDirectory, f.Name), f.Content)).ToList();
+        files.Add((Publication.SummaryFileName, summary));
+        files.Add((Publication.ReportFileName, utf8.GetBytes(prepared.Report)));
+        files.Add((Publication.CommitMessageFileName, utf8.GetBytes(prepared.CommitMessage)));
+        WriteDirectoryAtomically(outputPath, files);
+
+        var sha256 = prepared.Summary.Next!.Sha256!;
+        stdout.WriteLine(prepared.Changed
+            ? $"Publication prepared: {prepared.Summary.Title}. pluginmaster.json SHA-256 {sha256} ({prepared.Document.Length} bytes) for branch {prepared.Target.Branch}, in {outputPath}. Nothing has been published."
+            : $"Nothing to publish: branch {prepared.Target.Branch} already serves exactly this pluginmaster.json (SHA-256 {sha256}).");
+        if (options.Optional("github-output") is { } githubOutput)
+        {
+            // summary_sha256 covers everything the reviewer approves: each release's id, publish time and
+            // package hash, the branch commit built upon, and the new file's hash.
+            AppendGitHubOutputs(githubOutput, ("changed", prepared.Changed ? "true" : "false"), ("sha256", sha256), ("summary_sha256", Checksums.Sha256Hex(summary)));
+        }
+
+        return 0;
+    }
+
+    /// <summary>The options plan-publication and prepare-publication share.</summary>
+    private sealed record PublicationInputs(string ConfigPath, string Branch, string? CurrentPath, string VersionText, string ChannelText, bool Rollback)
+    {
+        /// <summary>A published pluginmaster.json holds one entry of a few kilobytes.</summary>
+        private const long MaxPublishedBytes = 1024 * 1024;
+
+        public static PublicationInputs Read(Arguments options)
+        {
+            var current = options.Optional("current");
+            if (current is not null && options.Has("no-current"))
+            {
+                throw new UsageException("give --current or --no-current, not both.");
+            }
+
+            if (current is null && !options.Has("no-current"))
+            {
+                throw new UsageException("--current <published pluginmaster.json> is required, or --no-current when nothing has been published yet.");
+            }
+
+            return new PublicationInputs(options.Required("config"), options.Required("branch"), current, options.Required("version"), options.Required("channel"), options.Has("rollback"));
+        }
+
+        public (RepositoryConfiguration? Config, ProductVersion? Version, ReleaseChannel? Channel, byte[]? Current) Load(CheckList checks)
+        {
+            var config = LoadConfiguration(ConfigPath, null, checks);
+            var version = checks.Attempt("requested version", () => (ProductVersion?)ProductVersion.Parse(VersionText, "--version"), v => v!.Value.ToString());
+            var channel = checks.Attempt("requested channel", () => (ReleaseChannel?)ReleaseChannels.Parse(ChannelText), c => c!.Value.Name() + (Rollback ? ", rollback" : string.Empty));
+            var current = CurrentPath is null ? null : checks.Attempt("published pluginmaster.json", () => ReadSmallFile(CurrentPath, MaxPublishedBytes), b => $"{b.Length} bytes");
+            return (config, version, channel, current);
+        }
+    }
+
+    private static byte[] ReadSmallFile(string path, long limit)
+    {
+        if (!File.Exists(path))
+        {
+            throw new ReleaseCheckException($"not found at {path}.");
+        }
+
+        if (new FileInfo(path).Length > limit)
+        {
+            throw new ReleaseCheckException($"{path} is larger than {limit} bytes.");
+        }
+
+        return File.ReadAllBytes(path);
+    }
+
+    /// <summary>Appends name=value lines to a GitHub Actions output file. Every value is generated here and fits on one line.</summary>
+    private static void AppendGitHubOutputs(string path, params (string Name, string Value)[] outputs)
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (var (name, value) in outputs)
+        {
+            if (value.Any(c => c < ' ' || c == (char)0x7F))
+            {
+                throw new InvalidOperationException($"the output {name} is not a single line.");
+            }
+
+            text.Append(name).Append('=').Append(value).Append('\n');
+        }
+
+        File.AppendAllText(path, text.ToString(), new System.Text.UTF8Encoding(false));
+    }
+
+    /// <summary>Writes a new directory whole or not at all: into a sibling temporary directory first, then moved into place.</summary>
+    private static void WriteDirectoryAtomically(string path, IReadOnlyList<(string RelativePath, byte[] Content)> files)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var parent = Path.GetDirectoryName(full)!;
+        Directory.CreateDirectory(parent);
+        var temporary = Path.Combine(parent, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            foreach (var (relative, content) in files)
+            {
+                var file = Path.Combine(temporary, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                File.WriteAllBytes(file, content);
+            }
+
+            Directory.Move(temporary, full);
+        }
+        finally
+        {
+            if (Directory.Exists(temporary))
+            {
+                Directory.Delete(temporary, recursive: true);
+            }
+        }
     }
 
     private static RepositoryConfiguration? LoadConfiguration(string configPath, string? templateOverride, CheckList checks)

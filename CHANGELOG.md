@@ -7,6 +7,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 ### Added
 
 - Release tooling for a public custom Dalamud repository ([docs/CustomRepository.md](docs/CustomRepository.md)): `tools/AetherFrame.ReleaseTools` checks a release package against the full rule set (x64, built from the released commit, one version and one Dalamud API level everywhere, only the three plugin files, safe entry names), generates and checks the repository metadata Dalamud reads (`pluginmaster.json`, stable and testing channels), and writes and verifies SHA-256 checksum files. The Build and Release workflows run it; the Release dry run keeps the generated metadata as an artifact. Nothing is published to a repository yet, and the plugin itself is unchanged.
+- A manual **Publish custom repository** workflow ([docs/CustomRepository.md](docs/CustomRepository.md#publishing)) that puts a published GitHub Release into the custom repository's testing or stable channel after the owner's approval, or rolls a channel back. It verifies every release it describes from scratch, never publishes a draft, never moves a channel to an older version by accident, and writes only `pluginmaster.json` and a README to its own branch. It has not been used yet.
 
 ## [0.1.6] - 2026-09-27
 

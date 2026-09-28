@@ -2,11 +2,11 @@
 
 How a version becomes a GitHub Release, and what AetherFrame needs for the official Dalamud plugin repository. Version numbers and tags follow [Versioning](Versioning.md).
 
-Nothing described here happens on its own. The release workflow only ever creates a **draft**, and submitting to Dalamud is a pull request made by hand.
+Nothing described here happens on its own. The release workflow only ever creates a **draft**, the custom repository changes only when you run its publication workflow by hand, and submitting to Dalamud is a pull request made by hand.
 
 ## Distribution plan
 
-1. **A public custom Dalamud repository, hosted from GitHub.** The intended route for players: one URL added in `/xlsettings`, then install and updates from `/xlplugins` like any other plugin. The releases stay GitHub Releases; the repository is one generated `pluginmaster.json` that points at them. How it works, how it is validated and how publishing will run: [CustomRepository](CustomRepository.md). Nothing is published there yet.
+1. **A public custom Dalamud repository, hosted from GitHub.** The intended route for players: one URL added in `/xlsettings`, then install and updates from `/xlplugins` like any other plugin. The releases stay GitHub Releases; the repository is one generated `pluginmaster.json` that points at them, published by a workflow you run by hand. How it works, how it is validated and how publishing runs: [CustomRepository](CustomRepository.md). Nothing is published there yet.
 2. **GitHub Release ZIPs**, loaded as dev plugins, for testers until the repository is live.
 3. **Official Dalamud repository.** Welcome, and prepared for below, but not required for distribution. If AetherFrame is accepted there at a higher version, Dalamud moves players over from the custom repository automatically.
 
@@ -27,7 +27,8 @@ Testers follow [Testing](Testing.md).
 
 6. The **Release** workflow runs. When it succeeds, a draft pre-release is waiting under **Releases**.
 7. Download the ZIP from the draft and load it in game as a dev plugin ([Testing](Testing.md#from-a-github-release-zip-dev-plugin)). `/af version` should print the new version and the tag's commit.
-8. Publish the draft by hand when you're happy with it, or delete it.
+8. Publish the draft by hand when you're happy with it, or delete it. Keep **Set as a pre-release** ticked for a release that goes to the testing channel first.
+9. Put it in the custom repository: **Actions → Publish custom repository → Run workflow** on `master`, with the version and a channel (`testing` for a pre-release). Run it once with **publish** unticked to see the change, then with **publish** ticked, and approve it when the run pauses. The channel rules, promotion to stable and rollback: [CustomRepository](CustomRepository.md#publishing).
 
 ### What the workflow checks
 
@@ -44,6 +45,8 @@ Testers follow [Testing](Testing.md).
 | Draft release | a release for the tag already exists, draft or published. Nothing is ever replaced |
 
 The draft gets the ZIP as `AetherFrame-<version>.zip`, a `SHA256SUMS.txt`, and the CHANGELOG section as its notes. The ZIP is exactly what DalamudPackager built. The workflow artifact also holds `package-summary.json` and the generated `pluginmaster.json` (stable and testing-exclusive shapes) for inspection.
+
+The custom repository is published separately and by hand, from the published GitHub Release (step 9); that workflow downloads the release's own assets and checks them all again ([CustomRepository](CustomRepository.md#publishing)).
 
 Only the draft job can write to the repository (`contents: write`), and it runs in the `release` environment. Adding yourself as a required reviewer of that environment (**Settings → Environments → release**) makes every draft wait for your approval too.
 
