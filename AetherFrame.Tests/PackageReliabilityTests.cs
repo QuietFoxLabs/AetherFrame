@@ -57,14 +57,15 @@ public class PackageReliabilityTests
     }
 
     [Fact]
-    public void SelfCheckRefusal_NeverQuotesADetailThatNamesAPath_AndWordsOtherRefusalsForExport()
+    public void SelfCheckRefusal_NeverQuotesADetailThatNamesAPath_AndKeepsTheCheckersOwnAdviceOtherwise()
     {
         var withPath = PackageExporter.DescribeSelfCheckRefusal([new PackageError(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", @"unreadable C:\Users\Someone\x")]);
         Assert.Equal("This Plate holds a value a Plate file can't carry. Change it in the editor and save, then export again.", Assert.Single(withPath).Message);
 
-        var other = PackageExporter.DescribeSelfCheckRefusal([new PackageError(PackageErrorCode.AssetUndeclared, "The file contains an image the Plate doesn't use.")]);
-        Assert.Equal("The Plate couldn't be exported.", Assert.Single(other).Message);
-        Assert.Equal(PackageErrorCode.ExportFailed, other[0].Code);
+        // "Too many elements" already says what to change; it is passed on as it is.
+        PackageError[] tooLarge = [new PackageError(PackageErrorCode.PackageTooLarge, "The Plate has too many elements (the limit is 256).")];
+        Assert.Equal(tooLarge, PackageExporter.DescribeSelfCheckRefusal(tooLarge));
+        Assert.Equal("The Plate couldn't be exported.", Assert.Single(PackageExporter.DescribeSelfCheckRefusal([])).Message);
     }
 
     [Fact]

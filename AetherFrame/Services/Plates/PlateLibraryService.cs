@@ -447,7 +447,7 @@ internal sealed class PlateLibraryService
             // Both are left untouched, but only damaged content is damage: a file that merely
             // couldn't be opened (locked, access denied) is likely intact, and a player told it is
             // damaged might give up on it.
-            var damaged = IsContentDamage(ex);
+            var damaged = !IsUnopenable(ex);
             log.Error(ex, damaged
                 ? $"AetherFrame could not read Plate {plateId}; it is listed as unreadable and its file is left untouched."
                 : $"AetherFrame could not open Plate {plateId}; it is listed as unreadable for this session and its file is left untouched.");
@@ -1368,7 +1368,7 @@ internal sealed class PlateLibraryService
 
     /// <summary>What the player is told when <see cref="PreserveBeforeOverwrite"/> refuses a write.</summary>
     internal const string UnpreservedDamagedFileMessage =
-        "A damaged file couldn't be copied to AetherFrame's Recovery folder, so it wasn't written over. Free some disk space and try again.";
+        "A damaged file couldn't be copied to AetherFrame's Recovery folder, so it wasn't written over. Check that the drive isn't full and the AetherFrame folder isn't read-only, then try again.";
 
     /// <summary>
     /// Between reading and writing during load: stops (with nothing written) when the load was
@@ -1605,6 +1605,13 @@ internal sealed class PlateLibraryService
     /// opened at all and may be perfectly intact, so it must never be written over as damaged.
     /// </summary>
     private static bool IsContentDamage(Exception ex) => ex is InvalidDataException or JsonException;
+
+    /// <summary>
+    /// A read that failed because the file couldn't be opened at all (locked, access denied, gone
+    /// since it was listed), as opposed to content that was read and rejected: only what to tell
+    /// the player hangs on it, never whether anything is written.
+    /// </summary>
+    internal static bool IsUnopenable(Exception ex) => ex is IOException or UnauthorizedAccessException;
 
     /// <summary>An operation stopped by cancellation or by unloading — never a fault in a file, so never handled as one.</summary>
     private static bool IsInterruption(Exception ex) => ex is OperationCanceledException or OperationAbandonedException;

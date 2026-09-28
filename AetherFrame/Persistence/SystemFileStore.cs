@@ -43,13 +43,15 @@ internal sealed class SystemFileStore : IPlateFileStore
     /// original is written over — and that write is flushed (by the storage in game, or by
     /// <see cref="WriteAtomically"/>), while <see cref="File.Copy(string, string, bool)"/> may leave
     /// the copy's data in the system's cache. A copy that fails partway is removed again, so a
-    /// half-written file never stands in for the original.
+    /// half-written file never stands in for the original. Like <c>File.Copy</c>, it keeps the
+    /// source's modified time (for a damaged file, the evidence of whether it is newer than the
+    /// storage's backup) and lets other programs keep the source open.
     /// </summary>
     public void CopyFile(string sourcePath, string destinationPath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
 
-        using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var created = false;
         try
         {
@@ -57,6 +59,7 @@ internal sealed class SystemFileStore : IPlateFileStore
             created = true;
             source.CopyTo(destination);
             destination.Flush(flushToDisk: true);
+            File.SetLastWriteTimeUtc(destination.SafeFileHandle, File.GetLastWriteTimeUtc(source.SafeFileHandle));
         }
         catch when (created)
         {

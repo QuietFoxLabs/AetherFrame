@@ -150,7 +150,7 @@ internal sealed class PackageImportWindow : Window, IDisposable
         DrawVerdict(package);
         ImGui.Spacing();
 
-        if (package.CanImport && package.Summary is { } summary && package.PreviewDocument is { } document)
+        if ((package.CanImport || package.IsCommitted) && package.Summary is { } summary && package.PreviewDocument is { } document)
         {
             DrawPreview(document);
             ImGui.Spacing();
@@ -166,6 +166,13 @@ internal sealed class PackageImportWindow : Window, IDisposable
     {
         var title = package.Summary?.PlateName ?? fileName ?? "Plate file";
         ImGui.TextUnformatted(title);
+
+        // Its Plate is already on disk (see StagedPackage.IsCommitted): no longer "ready to import".
+        if (package.IsCommitted)
+        {
+            ImGui.TextDisabled("Already imported");
+            return;
+        }
 
         var color = package.Compatibility switch
         {

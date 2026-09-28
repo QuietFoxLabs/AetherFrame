@@ -28,6 +28,21 @@ public class SystemFileStoreCopyTests
     }
 
     [Fact]
+    public void Copy_KeepsTheSourcesModifiedTime()
+    {
+        using var directory = new TempDirectory();
+        var source = Path.Combine(directory.Path, "damaged.json");
+        File.WriteAllText(source, "{ truncated");
+        var modified = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(source, modified);
+        var destination = Path.Combine(directory.Path, "Recovery", "damaged.damaged-1.json");
+
+        new SystemFileStore().CopyFile(source, destination);
+
+        Assert.Equal(modified, File.GetLastWriteTimeUtc(destination));
+    }
+
+    [Fact]
     public void Copy_NeverReplacesAnExistingFile()
     {
         using var directory = new TempDirectory();

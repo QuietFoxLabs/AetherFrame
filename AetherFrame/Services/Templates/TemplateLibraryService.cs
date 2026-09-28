@@ -283,7 +283,7 @@ internal sealed class TemplateLibraryService
         catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
         {
             // As for Plates: a file that merely couldn't be opened is likely intact, so it isn't called damaged.
-            var damaged = ex is InvalidDataException or JsonException;
+            var damaged = !PlateLibraryService.IsUnopenable(ex);
             log.Error(ex, damaged
                 ? $"AetherFrame could not read Template {templateId}; it is listed as unreadable and its file is left untouched."
                 : $"AetherFrame could not open Template {templateId}; it is listed as unreadable for this session and its file is left untouched.");

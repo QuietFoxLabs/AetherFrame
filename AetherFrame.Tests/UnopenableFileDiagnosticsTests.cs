@@ -44,6 +44,28 @@ public class UnopenableFileDiagnosticsTests
     }
 
     [Fact]
+    public async Task TemplateWhoseContentFailsToMaterialize_IsCalledDamaged_NotUnopenable()
+    {
+        using var fixture = new TemplateLibraryFixture();
+        var seeded = await fixture.LoadAsync();
+        var plate = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.Blank, null, "Source");
+        var templateId = await seeded.SaveAsTemplateAsync(plate.PlateId, "Odd");
+        var path = fixture.Paths.GetTemplatePath(templateId);
+
+        // A lone surrogate, escaped: the text parses, but reading the object's values throws
+        // something other than a JSON error.
+        File.WriteAllText(path, File.ReadAllText(path).Replace("\"Name\": \"Odd\"", "\"Name\": \"Odd\", \"Future\": \"a\\ud800b\"", StringComparison.Ordinal));
+        Assert.Contains("\\ud800", File.ReadAllText(path), StringComparison.Ordinal);
+
+        var templates = fixture.CreateService();
+        await templates.InitializeAsync();
+
+        var summary = templates.FindTemplate(templateId)!;
+        Assert.Equal(TemplateStatus.Unreadable, summary.Status);
+        Assert.Equal(TemplateLibraryService.DamagedTemplateProblem, summary.Problem);
+    }
+
+    [Fact]
     public async Task LockedTemplate_IsListedAsUnopenable_NotDamaged()
     {
         var store = new FaultInjectingStore();
