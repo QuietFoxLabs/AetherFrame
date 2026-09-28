@@ -160,11 +160,18 @@ public class BuiltInArtLoaderTests
     [Fact]
     public async Task Dispose_InTheSameFrameAsTheFirstRequest_NeverLeaksOrDraws()
     {
-        // The load is either cancelled while still queued (nothing is made) or runs and has what it
-        // made released as it finishes: either way nothing leaks and nothing is drawn.
+        // The frame ends before the load does: the load is held until after Dispose, so the first
+        // request always finds it unfinished. Then it is either cancelled while still queued (nothing
+        // is made) or runs and has what it made released as it finishes: either way nothing leaks
+        // and nothing is drawn. A load that finishes before Dispose is the case of
+        // Dispose_ReleasesEveryLoadedTexture_Once_AndStopsLoading. Without the gate, a load this
+        // fast could finish between the first request starting it and checking it (about 2 % of
+        // runs), and the first request then correctly returned the texture, failing this test.
+        using var gate = new ManualResetEventSlim();
         var made = new List<FakeTexture>();
         var loader = new BuiltInArtLoader<FakeTexture>((art, _) =>
         {
+            gate.Wait(TimeSpan.FromSeconds(10));
             var levels = Levels(64);
             lock (made)
             {
@@ -176,6 +183,7 @@ public class BuiltInArtLoaderTests
 
         Assert.Null(loader.GetLevelOrNull(Frame, 10f));
         loader.Dispose();
+        gate.Set();
         await loader.ReleasesAfterDispose.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Null(loader.GetLevelOrNull(Frame, 10f));
