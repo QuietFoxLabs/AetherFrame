@@ -11,7 +11,7 @@ namespace AetherFrame.Protocol.Tests;
 /// <summary>The committed test vectors (Fixtures/vectors-v1.json), documented in docs/networking/ProtocolSpecification-v1.md.</summary>
 internal sealed class VectorFixture
 {
-    private static readonly JsonSerializerOptions Options = new()
+    internal static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
         NewLine = "\n",
@@ -35,6 +35,9 @@ internal sealed class VectorFixture
     public List<DocumentVector> Documents { get; set; } = [];
 
     public List<RejectedVector> Rejected { get; set; } = [];
+
+    /// <summary>Valid documents that verify but oblige a server to do something in particular (docs/networking/ProtocolSpecification-v1.md, "Server obligations").</summary>
+    public List<ServerObligationVector> ServerObligations { get; set; } = [];
 
     public static VectorFixture Load()
     {
@@ -136,6 +139,21 @@ internal sealed class RejectedVector
 
     /// <summary>False when the vector embeds a fresh signature and so differs on every regeneration.</summary>
     public bool Deterministic { get; set; } = true;
+}
+
+internal sealed class ServerObligationVector
+{
+    public string Name { get; set; } = "";
+
+    public string Document { get; set; } = "";
+
+    /// <summary>The persona the document verifies as: the only persona whose profile it can be about.</summary>
+    public string Persona { get; set; } = "";
+
+    /// <summary>The profile id the document carries; together with <see cref="Persona"/>, the profile it is about.</summary>
+    public string ProfileId { get; set; } = "";
+
+    public string Obligation { get; set; } = "";
 }
 
 internal static class VectorPaths

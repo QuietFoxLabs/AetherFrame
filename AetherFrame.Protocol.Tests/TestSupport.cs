@@ -60,6 +60,7 @@ internal static class TestPersonas
 internal static class Samples
 {
     public static readonly ProfileId Profile = ProfileId.Parse("prf_a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1");
+    public static readonly ProfileId ProfileB = ProfileId.Parse("prf_e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5");
     public static readonly RevisionId Revision = RevisionId.Parse("rev_b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2");
     public static readonly AssetId Asset1 = AssetId.Parse("ast_c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3");
     public static readonly AssetId Asset2 = AssetId.Parse("ast_d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4");

@@ -84,8 +84,8 @@ public sealed class ProfileSnapshot : RemoteDocument
     /// <inheritdoc />
     public override DocumentType DocumentType => DocumentType.ProfileSnapshot;
 
-    /// <summary>The remote profile this revision belongs to.</summary>
-    public ProfileId ProfileId { get; }
+    /// <summary>The id of the profile this revision belongs to; the profile itself is (signing persona, this id).</summary>
+    public override ProfileId ProfileId { get; }
 
     /// <summary>This revision's own id.</summary>
     public RevisionId RevisionId { get; }

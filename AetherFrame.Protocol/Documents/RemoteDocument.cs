@@ -1,3 +1,5 @@
+using AetherFrame.Protocol.Identity;
+
 namespace AetherFrame.Protocol.Documents;
 
 /// <summary>
@@ -14,6 +16,13 @@ public abstract class RemoteDocument
 
     /// <summary>The wire type of this document.</summary>
     public abstract DocumentType DocumentType { get; }
+
+    /// <summary>
+    /// The profile the document is about. On its own it names nothing: a document only ever refers
+    /// to a profile of the persona that signed it, so the profile is (persona, profile id), which a
+    /// verified document exposes as <see cref="VerifiedDocument.Profile"/>.
+    /// </summary>
+    public abstract ProfileId ProfileId { get; }
 
     /// <summary>The canonical payload bytes (docs/networking/ProtocolSpecification-v1.md, "Payloads").</summary>
     internal abstract byte[] EncodePayload();

@@ -89,11 +89,15 @@ public class AssemblyBoundaryTests
     [Fact]
     public void PublicSurface_MatchesTheApprovedList()
     {
+        // A change to the public surface is approved by regenerating the list on purpose, with a
+        // switch of its own: AETHERFRAME_PROTOCOL_REGENERATE_PUBLIC_API=1 (the vectors have theirs).
         var actual = DescribePublicSurface();
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "public-api.txt");
-        if (Environment.GetEnvironmentVariable("AETHERFRAME_PROTOCOL_REGENERATE_VECTORS") is { Length: > 0 })
+        if (Environment.GetEnvironmentVariable("AETHERFRAME_PROTOCOL_REGENERATE_PUBLIC_API") is { Length: > 0 })
         {
-            File.WriteAllText(Path.Combine(VectorPaths.SourceFixtures(), "public-api.txt"), actual);
+            var source = Path.Combine(VectorPaths.SourceFixtures(), "public-api.txt");
+            File.WriteAllText(source, actual);
+            Assert.Equal(actual, File.ReadAllText(source));
             return;
         }
 

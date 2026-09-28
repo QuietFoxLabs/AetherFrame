@@ -234,6 +234,15 @@ The withdrawal of a remote profile from publication: every revision of the profi
 
 After `issuedAt` the payload ends.
 
+### 8.4 Profile identity and ownership
+
+A remote profile is identified by the pair **(persona, profileId)**: the persona whose key signed the document (section 7.2) together with the profile id the payload carries. A profile id alone identifies nothing. Two personas may use the same 16 bytes for unrelated profiles, and a document can only ever refer to a profile of the persona that signed it:
+
+- A `ProfileSnapshot` signed by persona P is a revision of the profile (P, profileId), whether or not that profile existed before.
+- A `ProfileRetraction` signed by persona P withdraws the profile (P, profileId) and nothing else. A retraction that names a profile id another persona uses is a retraction of P's own profile of that id (which may never have been published); it has no effect on any other persona's profile.
+
+Only the owner of a profile can therefore publish to it or retract it, because only the owner holds the key that signs for it. A server, a viewer or any other consumer keys its records by the pair and never by the profile id alone (section 13). The library exposes the pair as `RemoteProfileKey` on every verified document. The `serverObligations` test vectors (section 11) are valid documents signed by one persona that carry another persona's profile id: each verifies, as its signer, and is about the signer's profile only.
+
 ## 9. Errors
 
 Every refusal is one of these codes. A reader that wants to react to the kind of failure switches on the code; the accompanying message names fields, lengths and limits and never repeats key, signature or payload bytes.
@@ -272,6 +281,7 @@ A reader never returns a partially decoded document: either every step of sectio
 - `personas`: two synthetic identities, A and B. Each private scalar is `SHA-256(label) mod n` for the label given, so an implementation can derive the private key, the public key (`d·G`) and the persona identity and compare all three. These keys exist only for testing and must never be used for anything else.
 - `documents`: for each sample, the canonical payload, the signing input, the digest, one valid signature and the complete document as hex, with the decoded field values expected from it. `profile-snapshot-maximal` is at the limits (a 128,000-byte name of 32,000 four-byte scalars, eight images totalling 40 MiB); its bytes are omitted for size and its `construction` says how to rebuild them, with the digest and signature over exactly that.
 - `rejected`: documents that must be refused, each with the error code expected, derived from `profile-snapshot` by one change (a flipped bit, an extreme length, a substituted key, a high-S signature, and so on) or validly signed over a payload that breaks one schema rule.
+- `serverObligations`: valid documents that verify, each with the persona it verifies as, the profile id it carries and what a server is obliged to do with it (section 13). Both are signed by persona B and carry the profile id of persona A's snapshots: they are about (B, that id) and touch nothing of A's.
 
 An implementation is right when it (1) derives the same keys and identities, (2) produces the same payload and signing-input bytes for the sample models, (3) verifies every stored signature, (4) accepts every stored document and decodes the expected values, and (5) refuses every rejected document with the stated error. ECDSA signatures are randomized, so a regeneration of the file (set `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1` and run the tests) yields different signatures; every other value is stable. The test project also contains `ReferenceP256.cs`, an independent affine-arithmetic implementation of key derivation and ECDSA verification written from this document alone, which every vector is checked against.
 
@@ -280,3 +290,16 @@ Worked example, persona A: label `AetherFrame.Protocol test persona A`; the publ
 ## 12. Not in version 1
 
 Deliberately absent, so that nothing has to be removed later: any transport (HTTP or otherwise), request and response messages, request authentication, encryption, key rotation or revocation statements, share grants or capability tokens, the profile layout (elements, Components, canvas, fonts, colours), image bytes themselves, persona display names, timestamps with sub-second precision, floating-point values, optional fields, and any form of unknown-field passthrough.
+
+## 13. Server obligations
+
+The protocol verifies bytes; this section says what a server that accepts version 1 documents must do with a verified document. A valid document is an authorization by its signer for exactly what this section allows, and a server that applies it any other way lets a signature authorize something its signer never signed for. Rules 1 to 3 and 8 follow from the byte format and are settled. Rules 4 to 7 are the **baseline** a backend implements unless the owner decides otherwise (NETWORK0.md, "Open product decisions"); they are policy, can change without a new protocol version, and are marked with the decision they depend on.
+
+1. **Scope by owner.** A server keys every profile by (persona, profileId) (section 8.4). A snapshot is applied to the signing persona's profile of that id, creating the profile if it does not exist; a retraction is applied to the signing persona's profile of that id. Neither is ever looked up, matched or applied by profile id alone. The `serverObligations` vectors are the conformance cases.
+2. **Identity comes from the key.** The persona of a document is the identity of the key that verified it (section 7.2). Persona ids carried in requests, sessions, URLs or headers never attribute a document; at most they are compared with the verified persona and the request refused when they differ.
+3. **Nothing is repaired or rewritten.** A server stores and serves the exact bytes it verified, or nothing. It never re-encodes, trims, normalizes or fills in a document.
+4. **Revision uniqueness** (decision D1). Within one profile, a revision id names exactly one document. Resubmitting a document whose bytes equal the stored one is idempotent: accepted, nothing changes. A document that carries a stored revision id with different bytes is refused.
+5. **Retraction** (decision D1). Once a retraction of (persona, profileId) is applied, no revision of that profile is served. Baseline: a retraction is terminal. The server keeps a minimal permanent record (persona, profileId, its own receipt time) and refuses every later snapshot of that profile whatever its `createdAt`; to publish again, the client uses a new profile id. Ordering snapshots against retractions by `createdAt` and `issuedAt` alone is not sufficient, because both are client clocks.
+6. **Timestamps** (decisions D1 and D7). `createdAt` and `issuedAt` are the client's claims. A server records its own receipt time and uses that for ordering and retention; it refuses a document whose timestamp is more than a bounded skew ahead of its receipt time (baseline: 300 seconds) and keeps, but does not trust, timestamps in the past.
+7. **Image declarations** (decision D5). An `ImageReference` is a claim about bytes the server has yet to receive. Before serving an asset the server verifies the received bytes against the declared digest, sniffed format, byte length and dimensions, and serves nothing that fails. What it serves after processing (downscaling) is attested by the server, not signed by the creator.
+8. **Limits a document cannot carry** (`ProtocolLimits.FuturePolicy`: profiles per persona, storage per persona, active shares) are enforced by the server with a server-side refusal, never by altering or dropping part of a document.

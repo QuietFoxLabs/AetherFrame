@@ -1,4 +1,5 @@
 using AetherFrame.Protocol.Identity;
+using AetherFrame.Protocol.Remote;
 
 namespace AetherFrame.Protocol.Documents;
 
@@ -20,6 +21,14 @@ public sealed class VerifiedDocument
 
     /// <summary>The persona that signed the document.</summary>
     public PersonaId Persona => PublicKey.Id;
+
+    /// <summary>
+    /// The profile the document is about: the signing persona's profile of the id the document
+    /// carries (docs/networking/ProtocolSpecification-v1.md, "Profile identity and ownership"). A
+    /// snapshot is a revision of this profile and a retraction withdraws this profile; neither can
+    /// touch a profile of any other persona, whatever id it carries.
+    /// </summary>
+    public RemoteProfileKey Profile => new(Persona, Document.ProfileId);
 
     /// <summary>The wire type of <see cref="Document"/>.</summary>
     public DocumentType DocumentType => Document.DocumentType;

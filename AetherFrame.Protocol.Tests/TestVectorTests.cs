@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
@@ -11,8 +12,10 @@ namespace AetherFrame.Protocol.Tests;
 
 /// <summary>
 /// The committed vectors (Fixtures/vectors-v1.json) hold what an independent implementation
-/// needs: the personas, the canonical bytes, the digests, valid signatures, and documents that
-/// must be refused. Set AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1 to rewrite them deliberately.
+/// needs: the personas, the canonical bytes, the digests, valid signatures, documents that must be
+/// refused, and valid documents a server must apply in a particular way. Set
+/// AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1 to rewrite them deliberately (the approved public API
+/// list has its own switch, in AssemblyBoundaryTests).
 /// </summary>
 public class TestVectorTests
 {
@@ -26,6 +29,24 @@ public class TestVectorTests
         Assert.Equal(["A", "B"], fixture.Personas.Select(p => p.Name));
         Assert.Equal(VectorBuilder.Models().Select(m => m.Name), fixture.Documents.Select(d => d.Name));
         Assert.True(fixture.Rejected.Count >= 40);
+        Assert.Equal(["retraction-by-another-persona", "snapshot-by-another-persona"], fixture.ServerObligations.Select(o => o.Name));
+    }
+
+    [Fact]
+    public void ServerObligationDocuments_AreAboutTheSigningPersonasProfile_NotTheOtherPersonas()
+    {
+        var fixture = VectorFixture.Load();
+        var ownerA = PersonaId.Parse(fixture.Personas.Single(p => p.Name == "A").PersonaId);
+        foreach (var vector in fixture.ServerObligations)
+        {
+            var verified = SignedDocumentCodec.Verify(Hex.Parse(vector.Document));
+            var signer = PersonaId.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PersonaId);
+            var profileId = ProfileId.Parse(vector.ProfileId);
+            Assert.Equal(signer, verified.Persona);
+            Assert.Equal(new RemoteProfileKey(signer, profileId), verified.Profile);
+            Assert.NotEqual(new RemoteProfileKey(ownerA, profileId), verified.Profile);
+            Assert.NotEqual(ownerA, verified.Persona);
+        }
     }
 
     [Fact]
@@ -152,6 +173,14 @@ public class TestVectorTests
 
         var fixtures = VectorPaths.SourceFixtures();
         Directory.CreateDirectory(fixtures);
-        VectorBuilder.Build().Save(Path.Combine(fixtures, "vectors-v1.json"));
+        var path = Path.Combine(fixtures, "vectors-v1.json");
+        VectorBuilder.Build().Save(path);
+
+        // What was written must read back as a fixture this build accepts, so a regeneration run is
+        // never green on the strength of having written a file.
+        var written = JsonSerializer.Deserialize<VectorFixture>(File.ReadAllBytes(path), VectorFixture.Options)!;
+        Assert.Equal(ProtocolConstants.ProtocolVersion, written.ProtocolVersion);
+        Assert.All(written.Documents.Where(d => d.Document is not null), d => SignedDocumentCodec.Verify(Hex.Parse(d.Document!)));
+        Assert.All(written.Rejected, r => ProtocolAssert.Rejects(() => SignedDocumentCodec.Verify(Hex.Parse(r.Document))));
     }
 }

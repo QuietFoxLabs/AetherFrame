@@ -4,6 +4,7 @@ enum AetherFrame.Protocol.Documents.DocumentType
     const DocumentType ProfileSnapshot
 abstract class AetherFrame.Protocol.Documents.RemoteDocument
     DocumentType DocumentType { get; }
+    ProfileId ProfileId { get; }
 static class AetherFrame.Protocol.Documents.SignedDocumentCodec
     Byte[] Sign(RemoteDocument document, IPersonaSigner signer)
     VerifiedDocument Verify(ReadOnlySpan<Byte> document)
@@ -12,6 +13,7 @@ sealed class AetherFrame.Protocol.Documents.VerifiedDocument
     PersonaId Persona { get; }
     PersonaPublicKey PublicKey { get; }
     RemoteDocument Document { get; }
+    RemoteProfileKey Profile { get; }
 struct AetherFrame.Protocol.Identity.AssetId
     AssetId FromBytes(ReadOnlySpan<Byte> bytes)
     AssetId NewId()
@@ -159,6 +161,15 @@ sealed class AetherFrame.Protocol.Remote.ProfileSnapshot
     String Name { get; }
     const UInt16 SchemaVersion
     new(ProfileId profileId, RevisionId revisionId, Int64 createdAtUnixSeconds, String name, IEnumerable<ImageReference> images)
+struct AetherFrame.Protocol.Remote.RemoteProfileKey
+    Boolean Equals(Object obj)
+    Boolean Equals(RemoteProfileKey other)
+    Boolean IsEmpty { get; }
+    Int32 GetHashCode()
+    PersonaId Persona { get; }
+    ProfileId ProfileId { get; }
+    String ToString()
+    new(PersonaId persona, ProfileId profileId)
 sealed class AetherFrame.Protocol.Signing.EcdsaPersonaSigner
     EcdsaPersonaSigner CreateEphemeral()
     PersonaPublicKey PublicKey { get; }

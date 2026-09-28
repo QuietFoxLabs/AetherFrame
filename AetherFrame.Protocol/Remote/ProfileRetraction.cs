@@ -6,11 +6,13 @@ using AetherFrame.Protocol.Identity;
 namespace AetherFrame.Protocol.Remote;
 
 /// <summary>
-/// A persona's signed withdrawal of a remote profile from publication: every revision of the
-/// profile is to be taken down. The counterpart of <see cref="ProfileSnapshot"/>, so that a client
-/// can unpublish with the same key-first mechanism it published with and no session or account.
-/// How a server orders a retraction against later snapshots is server policy (docs/networking/NETWORK0.md).
-/// Validated on construction; immutable.
+/// A persona's signed withdrawal of one of its own remote profiles from publication: every
+/// revision of the profile (signing persona, profile id) is to be taken down. A retraction can name
+/// no other persona's profile, whatever id it carries (docs/networking/ProtocolSpecification-v1.md,
+/// "Profile identity and ownership"). The counterpart of <see cref="ProfileSnapshot"/>, so that a
+/// client can unpublish with the same key-first mechanism it published with and no session or
+/// account. What a server does after a retraction is stated in the specification's server
+/// obligations. Validated on construction; immutable.
 /// </summary>
 public sealed class ProfileRetraction : RemoteDocument
 {
@@ -34,8 +36,8 @@ public sealed class ProfileRetraction : RemoteDocument
     /// <inheritdoc />
     public override DocumentType DocumentType => DocumentType.ProfileRetraction;
 
-    /// <summary>The remote profile to withdraw.</summary>
-    public ProfileId ProfileId { get; }
+    /// <summary>The id of the signing persona's profile to withdraw.</summary>
+    public override ProfileId ProfileId { get; }
 
     /// <summary>When the retraction was issued, in Unix seconds (0 to <see cref="ProtocolLimits.MaxUnixSeconds"/>).</summary>
     public long IssuedAtUnixSeconds { get; }
