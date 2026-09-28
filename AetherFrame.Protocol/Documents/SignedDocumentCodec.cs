@@ -13,16 +13,51 @@ namespace AetherFrame.Protocol.Documents;
 /// </summary>
 public static class SignedDocumentCodec
 {
-    /// <summary>Encodes <paramref name="document"/> and signs it as <paramref name="signer"/>'s persona.</summary>
+    /// <summary>
+    /// Encodes <paramref name="document"/> and signs it as <paramref name="signer"/>'s persona. The
+    /// signer's public key is read once, for the signing input and the envelope alike, and the
+    /// finished document is verified before it is returned: a signer that misreports its key, signs
+    /// with another key or signs other bytes produces no document.
+    /// </summary>
+    /// <exception cref="ProtocolException">
+    /// <see cref="ProtocolError.SignatureMismatch"/> when the signer's signature does not verify over the
+    /// document with the key the signer reported, <see cref="ProtocolError.InvalidKey"/> or
+    /// <see cref="ProtocolError.InvalidSignature"/> when the signer returns nothing. The signer's own
+    /// exceptions pass through unchanged.
+    /// </exception>
     public static byte[] Sign(RemoteDocument document, IPersonaSigner signer)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(signer);
 
+        var publicKey = signer.PublicKey;
+        if (publicKey is null)
+        {
+            throw new ProtocolException(ProtocolError.InvalidKey, "The signer reports no public key.");
+        }
+
         var payload = document.EncodePayload();
-        var input = SigningInput.Create(document.DocumentType, signer.PublicKey, payload);
+        var input = SigningInput.Create(document.DocumentType, publicKey, payload);
         var signature = signer.Sign(input);
-        return Assemble(document.DocumentType, signer.PublicKey, payload, signature);
+        if (signature is null)
+        {
+            throw new ProtocolException(ProtocolError.InvalidSignature, "The signer returned no signature.");
+        }
+
+        var bytes = Assemble(document.DocumentType, publicKey, payload, signature);
+
+        // The reader decides what a document is: bytes it would refuse never leave here as one. The
+        // cost is one verification per document signed.
+        try
+        {
+            Verify(bytes);
+        }
+        catch (ProtocolException e)
+        {
+            throw new ProtocolException(e.Error, $"The signer's output is not a valid document, so none was produced: {e.Message}");
+        }
+
+        return bytes;
     }
 
     /// <summary>

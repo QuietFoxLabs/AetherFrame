@@ -41,16 +41,18 @@ internal static class TestPersonas
         return scalar.IsZero ? BigInteger.One : scalar;
     }
 
-    public static EcdsaPersonaSigner Create(BigInteger scalar)
+    public static EcdsaPersonaSigner Create(BigInteger scalar) => new(CreateEcdsa(scalar));
+
+    /// <summary>The platform key of a test persona, for tests that sign around the protocol's signer.</summary>
+    public static ECDsa CreateEcdsa(BigInteger scalar)
     {
         var (x, y) = ReferenceP256.PublicKey(scalar);
-        var key = ECDsa.Create(new ECParameters
+        return ECDsa.Create(new ECParameters
         {
             Curve = ECCurve.NamedCurves.nistP256,
             D = ReferenceP256.ToBytes32(scalar),
             Q = new ECPoint { X = x, Y = y },
         });
-        return new EcdsaPersonaSigner(key);
     }
 }
 
