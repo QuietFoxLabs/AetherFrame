@@ -301,50 +301,56 @@ internal sealed class TemplateLibraryService
         await store.ReadTextAsync(path, text =>
         {
             // A second invocation is the store retrying from its backup after the first copy failed.
-            var recoveredFromBackup = ++attempts > 1;
-
-            VersionedJson.RejectUndecodableText(text, "Template");
-            if (JsonNode.Parse(text) is not JsonObject raw)
-            {
-                throw new InvalidDataException("Template is not a JSON object.");
-            }
-
-            var envelopeMigration = PersistenceSchemas.Template.Migrate(raw);
-            if (envelopeMigration.Outcome == SchemaMigrationOutcome.NewerVersion)
-            {
-                result = new TemplateFileReadResult(raw, null, TemplateStatus.NewerVersion,
-                    "This Template was saved by a newer version of AetherFrame. Update AetherFrame to open it.", recoveredFromBackup, false);
-                return;
-            }
-
-            if (!envelopeMigration.IsUsable)
-            {
-                throw new InvalidDataException(envelopeMigration.Error ?? "Template is unreadable.");
-            }
-
-            if (raw[nameof(PlateTemplate.Document)] is not JsonObject documentRaw)
-            {
-                throw new InvalidDataException("Template has no embedded document.");
-            }
-
-            var documentMigration = PersistenceSchemas.ProfileDocument.Migrate(documentRaw);
-            if (documentMigration.Outcome == SchemaMigrationOutcome.NewerVersion)
-            {
-                result = new TemplateFileReadResult(raw, null, TemplateStatus.NewerVersion,
-                    "This Template's content was saved by a newer version of AetherFrame. Update AetherFrame to open it.", recoveredFromBackup, false);
-                return;
-            }
-
-            if (!documentMigration.IsUsable)
-            {
-                throw new InvalidDataException(documentMigration.Error ?? "Template's content is unreadable.");
-            }
-
-            var template = TemplateDocuments.Materialize(raw, out var repairedValues);
-            result = new TemplateFileReadResult(raw, template, TemplateStatus.Ready, null, recoveredFromBackup, repairedValues);
+            result = ParseTemplateText(text, recoveredFromBackup: ++attempts > 1);
         }).ConfigureAwait(false);
 
         return result ?? throw new InvalidDataException("Template could not be read.");
+    }
+
+    /// <summary>
+    /// One Template file's text as the loader reads it: damage throws (so a store with backups
+    /// retries from its backup copy), and a newer envelope or embedded document comes back as
+    /// NewerVersion, untouched. Also how a write proves its text loads again before writing it.
+    /// </summary>
+    private static TemplateFileReadResult ParseTemplateText(string text, bool recoveredFromBackup)
+    {
+        VersionedJson.RejectUndecodableText(text, "Template");
+        if (JsonNode.Parse(text) is not JsonObject raw)
+        {
+            throw new InvalidDataException("Template is not a JSON object.");
+        }
+
+        var envelopeMigration = PersistenceSchemas.Template.Migrate(raw);
+        if (envelopeMigration.Outcome == SchemaMigrationOutcome.NewerVersion)
+        {
+            return new TemplateFileReadResult(raw, null, TemplateStatus.NewerVersion,
+                "This Template was saved by a newer version of AetherFrame. Update AetherFrame to open it.", recoveredFromBackup, false);
+        }
+
+        if (!envelopeMigration.IsUsable)
+        {
+            throw new InvalidDataException(envelopeMigration.Error ?? "Template is unreadable.");
+        }
+
+        if (raw[nameof(PlateTemplate.Document)] is not JsonObject documentRaw)
+        {
+            throw new InvalidDataException("Template has no embedded document.");
+        }
+
+        var documentMigration = PersistenceSchemas.ProfileDocument.Migrate(documentRaw);
+        if (documentMigration.Outcome == SchemaMigrationOutcome.NewerVersion)
+        {
+            return new TemplateFileReadResult(raw, null, TemplateStatus.NewerVersion,
+                "This Template's content was saved by a newer version of AetherFrame. Update AetherFrame to open it.", recoveredFromBackup, false);
+        }
+
+        if (!documentMigration.IsUsable)
+        {
+            throw new InvalidDataException(documentMigration.Error ?? "Template's content is unreadable.");
+        }
+
+        var template = TemplateDocuments.Materialize(raw, out var repairedValues);
+        return new TemplateFileReadResult(raw, template, TemplateStatus.Ready, null, recoveredFromBackup, repairedValues);
     }
 
     // ---------------------------------------------------------------- operations
@@ -386,12 +392,12 @@ internal sealed class TemplateLibraryService
                 Document = embeddedDocument,
             };
 
-            var raw = TemplateDocuments.ToJson(template);
-            await WriteTemplateAsync(templateId, raw).ConfigureAwait(false);
+            var record = PrepareTemplateWrite(templateId, TemplateDocuments.ToJson(template));
+            await WriteTemplateAsync(record).ConfigureAwait(false);
 
             lock (gate)
             {
-                templates[templateId] = ReadyRecord(templateId, raw);
+                templates[templateId] = record;
                 Changed();
             }
 
@@ -424,9 +430,9 @@ internal sealed class TemplateLibraryService
                 TemplateDocuments.SetName(renamed, name, now);
             }
 
-            await WriteTemplateAsync(templateId, renamed).ConfigureAwait(false);
+            var updated = PrepareTemplateWrite(templateId, renamed);
+            await WriteTemplateAsync(updated).ConfigureAwait(false);
 
-            var updated = ReadyRecord(templateId, renamed);
             lock (gate)
             {
                 if (templates.ContainsKey(templateId))
@@ -463,11 +469,12 @@ internal sealed class TemplateLibraryService
                 copy = TemplateDocuments.CreateDuplicate(ParseObject(source.RawJson!), newId, name, now);
             }
 
-            await WriteTemplateAsync(newId, copy).ConfigureAwait(false);
+            var record = PrepareTemplateWrite(newId, copy);
+            await WriteTemplateAsync(record).ConfigureAwait(false);
 
             lock (gate)
             {
-                templates[newId] = ReadyRecord(newId, copy);
+                templates[newId] = record;
                 Changed();
             }
 
@@ -695,11 +702,12 @@ internal sealed class TemplateLibraryService
         };
     }
 
-    private async Task WriteTemplateAsync(Guid templateId, JsonObject raw)
+    /// <summary>Writes exactly the text <see cref="PrepareTemplateWrite"/> proved readable.</summary>
+    private async Task WriteTemplateAsync(TemplateRecord record)
     {
-        var path = paths.GetTemplatePath(templateId);
+        var path = paths.GetTemplatePath(record.Id);
         PreserveBeforeOverwrite(path);
-        await store.WriteTextAsync(path, VersionedJson.Serialize(raw)).ConfigureAwait(false);
+        await store.WriteTextAsync(path, record.RawJson!).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -791,11 +799,31 @@ internal sealed class TemplateLibraryService
         orderedSummaries = null;
     }
 
-    private static TemplateRecord ReadyRecord(Guid templateId, JsonObject raw)
+    /// <summary>
+    /// The record of a Template about to be written, holding the exact text the write puts on disk
+    /// — proven first to load again as a Ready Template through the loader's own reader
+    /// (<see cref="ParseTemplateText"/>), so a write that couldn't be read back is refused before
+    /// anything is written, as for Plates.
+    /// </summary>
+    private TemplateRecord PrepareTemplateWrite(Guid templateId, JsonObject raw)
     {
-        var rawJson = VersionedJson.Serialize(raw);
-        var template = TemplateDocuments.Materialize(ParseObject(rawJson));
-        return new TemplateRecord(templateId, TemplateStatus.Ready, rawJson, template, template.Name, template.CreatedAtUtc, template.UpdatedAtUtc, null);
+        var json = VersionedJson.Serialize(raw);
+        try
+        {
+            var parsed = ParseTemplateText(json, recoveredFromBackup: false);
+            if (parsed.Status != TemplateStatus.Ready)
+            {
+                throw new InvalidDataException("It would read as a newer version's Template.");
+            }
+
+            var template = parsed.Template!;
+            return new TemplateRecord(templateId, TemplateStatus.Ready, json, template, template.Name, template.CreatedAtUtc, template.UpdatedAtUtc, null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
+        {
+            log.Error(ex, $"AetherFrame did not write Template {templateId}: what it would have written couldn't be read back.");
+            throw new TemplateLibraryException(PlateLibraryService.UnloadableWriteMessage);
+        }
     }
 
     private static JsonObject ParseObject(string json) =>

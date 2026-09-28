@@ -716,11 +716,12 @@ internal sealed class PlateLibraryService
     /// </summary>
     private async Task<PlateCreationResult> InsertNewPlateAsync(Guid plateId, JsonObject raw, CharacterContext? character, DateTime now)
     {
-        await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+        var record = PreparePlateWrite(plateId, raw);
+        await WritePlateAsync(record).ConfigureAwait(false);
 
         lock (gate)
         {
-            plates[plateId] = ReadyRecord(plateId, raw);
+            plates[plateId] = record;
             PlateOrdering.InsertAtFront(library.OrderedPlateIds, plateId);
             Changed();
         }
@@ -809,11 +810,12 @@ internal sealed class PlateLibraryService
                 copy = PlateDocuments.CreateDuplicate(ParseObject(source.RawJson!), newId, name, now);
             }
 
-            await WritePlateAsync(newId, copy).ConfigureAwait(false);
+            var record = PreparePlateWrite(newId, copy);
+            await WritePlateAsync(record).ConfigureAwait(false);
 
             lock (gate)
             {
-                plates[newId] = ReadyRecord(newId, copy);
+                plates[newId] = record;
                 PlateOrdering.InsertAfter(library.OrderedPlateIds, sourcePlateId, newId);
                 Changed();
             }
@@ -848,7 +850,17 @@ internal sealed class PlateLibraryService
                 }
             }
 
-            await WriteLibraryAsync().ConfigureAwait(false);
+            try
+            {
+                await WriteLibraryAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!IsInterruption(ex))
+            {
+                // The copy is saved and listed; only its position isn't, and startup re-lists it.
+                // Reporting a failure here would invite a retry, and so a second copy.
+                log.Error(ex, $"AetherFrame duplicated Plate {sourcePlateId} but could not save the Library order.");
+            }
+
             log.Information($"AetherFrame duplicated Plate {sourcePlateId} as {newId}.");
 
             if (failedAssociations > 0)
@@ -884,9 +896,9 @@ internal sealed class PlateLibraryService
                 PlateDocuments.SetName(renamed, name, now);
             }
 
-            await WritePlateAsync(plateId, renamed).ConfigureAwait(false);
+            var updated = PreparePlateWrite(plateId, renamed);
+            await WritePlateAsync(updated).ConfigureAwait(false);
 
-            var updated = ReadyRecord(plateId, renamed);
             lock (gate)
             {
                 if (plates.ContainsKey(plateId))
@@ -1069,10 +1081,10 @@ internal sealed class PlateLibraryService
             }
 
             // Read back before writing, so nothing after the write (the commit point) can fail on content.
-            var record = ReadyRecord(plateId, raw);
+            var record = PreparePlateWrite(plateId, raw);
             try
             {
-                await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+                await WritePlateAsync(record).ConfigureAwait(false);
             }
             catch (Exception ex) when (!IsInterruption(ex))
             {
@@ -1161,14 +1173,14 @@ internal sealed class PlateLibraryService
             }
 
             snapshot.Version = ProfileDocument.CurrentSchemaVersion;
-            var raw = PlateDocuments.ToJson(snapshot);
-            await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+            var saved = PreparePlateWrite(plateId, PlateDocuments.ToJson(snapshot));
+            await WritePlateAsync(saved).ConfigureAwait(false);
 
             lock (gate)
             {
                 if (plates.ContainsKey(plateId))
                 {
-                    plates[plateId] = ReadyRecord(plateId, raw);
+                    plates[plateId] = saved;
                 }
 
                 Changed();
@@ -1311,6 +1323,9 @@ internal sealed class PlateLibraryService
 
     private static PlateLibraryException Closing() => new("AetherFrame is closing, so nothing was changed.");
 
+    /// <summary>What the player is told when a write is refused because its result wouldn't load again.</summary>
+    internal const string UnloadableWriteMessage = "AetherFrame couldn't save this change: the result wouldn't load again, so nothing was written.";
+
     /// <summary>What the player is told when <see cref="PreserveBeforeOverwrite"/> refuses a write.</summary>
     internal const string UnpreservedDamagedFileMessage =
         "A damaged file couldn't be copied to AetherFrame's Recovery folder, so it wasn't written over. Free some disk space and try again.";
@@ -1416,11 +1431,12 @@ internal sealed class PlateLibraryService
         }
     }
 
-    private async Task WritePlateAsync(Guid plateId, JsonObject raw)
+    /// <summary>Writes exactly the text <see cref="PreparePlateWrite"/> proved readable.</summary>
+    private async Task WritePlateAsync(PlateRecord record)
     {
-        var path = paths.GetPlatePath(plateId);
+        var path = paths.GetPlatePath(record.Id);
         PreserveBeforeOverwrite(path);
-        await store.WriteTextAsync(path, VersionedJson.Serialize(raw)).ConfigureAwait(false);
+        await store.WriteTextAsync(path, record.RawJson!).ConfigureAwait(false);
     }
 
     private async Task WriteBindingAsync(CharacterBinding binding)
@@ -1620,12 +1636,34 @@ internal sealed class PlateLibraryService
         orderedSummaries = null;
     }
 
-    private static PlateRecord ReadyRecord(Guid plateId, JsonObject raw)
+    /// <summary>
+    /// The record of a Plate about to be written, holding the exact text the write puts on disk —
+    /// proven first to load again as a Ready Plate through the reader startup uses (the same text
+    /// check, schema check, deserialization and in-memory repairs). Text that couldn't be read
+    /// back would make the Plate unreadable at the next startup, and in game the write replaces
+    /// the storage's backup copy too, so it is refused here, before anything is written.
+    /// </summary>
+    private PlateRecord PreparePlateWrite(Guid plateId, JsonObject raw)
     {
-        var rawJson = VersionedJson.Serialize(raw);
-        var document = PlateDocuments.Materialize(ParseObject(rawJson));
-        return new PlateRecord(plateId, PlateStatus.Ready, rawJson, document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc, document.Revision,
-            document.Version, null);
+        var json = VersionedJson.Serialize(raw);
+        try
+        {
+            VersionedJson.RejectUndecodableText(json, PersistenceSchemas.ProfileDocument.Name);
+            var parsed = VersionedJson.Parse(json, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+            if (!parsed.IsUsable)
+            {
+                throw new InvalidDataException(parsed.IsNewerVersion ? "It would read as a newer version's Plate." : parsed.Migration.Error ?? "It is unreadable.");
+            }
+
+            var document = PlateDocuments.Materialize(parsed.Raw!);
+            return new PlateRecord(plateId, PlateStatus.Ready, json, document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc, document.Revision,
+                document.Version, null);
+        }
+        catch (Exception ex) when (!IsInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame did not write Plate {plateId}: what it would have written couldn't be read back.");
+            throw new PlateLibraryException(UnloadableWriteMessage);
+        }
     }
 
     private static JsonObject ParseObject(string json) =>
