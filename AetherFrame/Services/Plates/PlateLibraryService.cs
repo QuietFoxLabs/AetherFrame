@@ -73,6 +73,11 @@ internal sealed class PlateLibraryService
     // Bindings saved by a newer AetherFrame: never interpreted and never written by this build.
     private readonly HashSet<ulong> newerVersionBindings = new();
 
+    // Files read from the store's backup copy whose damaged on-disk bytes could not be copied to
+    // Recovery at load (a full disk, say). Those bytes may be newer than the backup, so nothing is
+    // written over them until the copy succeeds (see PreserveBeforeOverwrite).
+    private readonly HashSet<string> unpreservedDamagedFiles = new(StringComparer.OrdinalIgnoreCase);
+
     private PlateLibraryState library = new();
 
     // False when library.json must not be written this session — written by a newer build, or not
@@ -252,6 +257,11 @@ internal sealed class PlateLibraryService
         // no thread affinity, and the writes below keep their ordering on whatever thread the
         // reads finished on.
         ThrowIfLoadCanceled(cancellationToken);
+        lock (gate)
+        {
+            unpreservedDamagedFiles.Clear();
+        }
+
         var loadedPlates = await Task.Run(LoadPlatesAsync).ConfigureAwait(false);
         ThrowIfLoadCanceled(cancellationToken);
         var (loadedBindings, badBindings, missingBindings, newerBindings, migratedBindings) = await Task.Run(LoadBindingsAsync).ConfigureAwait(false);
@@ -1301,6 +1311,10 @@ internal sealed class PlateLibraryService
 
     private static PlateLibraryException Closing() => new("AetherFrame is closing, so nothing was changed.");
 
+    /// <summary>What the player is told when <see cref="PreserveBeforeOverwrite"/> refuses a write.</summary>
+    internal const string UnpreservedDamagedFileMessage =
+        "A damaged file couldn't be copied to AetherFrame's Recovery folder, so it wasn't written over. Free some disk space and try again.";
+
     /// <summary>
     /// Between reading and writing during load: stops (with nothing written) when the load was
     /// canceled or the plugin is shutting down. Past this point a load always finishes its writes.
@@ -1402,8 +1416,12 @@ internal sealed class PlateLibraryService
         }
     }
 
-    private async Task WritePlateAsync(Guid plateId, JsonObject raw) =>
-        await store.WriteTextAsync(paths.GetPlatePath(plateId), VersionedJson.Serialize(raw)).ConfigureAwait(false);
+    private async Task WritePlateAsync(Guid plateId, JsonObject raw)
+    {
+        var path = paths.GetPlatePath(plateId);
+        PreserveBeforeOverwrite(path);
+        await store.WriteTextAsync(path, VersionedJson.Serialize(raw)).ConfigureAwait(false);
+    }
 
     private async Task WriteBindingAsync(CharacterBinding binding)
     {
@@ -1427,6 +1445,7 @@ internal sealed class PlateLibraryService
             }
         }
 
+        PreserveBeforeOverwrite(path);
         await store.WriteTextAsync(path, json).ConfigureAwait(false);
     }
 
@@ -1444,6 +1463,7 @@ internal sealed class PlateLibraryService
             json = VersionedJson.Serialize(library);
         }
 
+        PreserveBeforeOverwrite(paths.LibraryFile);
         await store.WriteTextAsync(paths.LibraryFile, json).ConfigureAwait(false);
     }
 
@@ -1464,8 +1484,9 @@ internal sealed class PlateLibraryService
     /// A file the store could only read from its backup copy: the copy on disk is damaged, and the
     /// next write to that path would replace it. So the player learns about it once, and the
     /// on-disk bytes go to Recovery first (a copy only — the file itself is never rewritten here,
-    /// and an existing Recovery copy is never overwritten). A failed copy is logged and ignored:
-    /// the record is used either way.
+    /// and an existing Recovery copy is never overwritten). A failed copy doesn't stop the load —
+    /// the record is used either way — but the path is remembered, and nothing is written over it
+    /// until a later copy succeeds (see <see cref="PreserveBeforeOverwrite"/>).
     /// </summary>
     private void KeepRecoveredFile(string path)
     {
@@ -1482,7 +1503,42 @@ internal sealed class PlateLibraryService
         }
         catch (Exception ex) when (!IsInterruption(ex))
         {
-            log.Error(ex, $"AetherFrame could not keep a copy of damaged file {fileName} in Recovery.");
+            log.Error(ex, $"AetherFrame could not keep a copy of damaged file {fileName} in Recovery; it won't be written over until a copy can be kept.");
+            lock (gate)
+            {
+                unpreservedDamagedFiles.Add(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Before any write to <paramref name="path"/>: if its damaged on-disk bytes still have no
+    /// Recovery copy (see <see cref="KeepRecoveredFile"/>), keeps one now, and refuses the write
+    /// when that still fails, so the only copy of what may be the newest content is never replaced.
+    /// </summary>
+    private void PreserveBeforeOverwrite(string path)
+    {
+        lock (gate)
+        {
+            if (!unpreservedDamagedFiles.Contains(path))
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            PreserveDamagedFile(path);
+        }
+        catch (Exception ex) when (!IsInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame did not write {LogPrivacy.FileName(path)}: its damaged copy still couldn't be kept in Recovery.");
+            throw new PlateLibraryException(UnpreservedDamagedFileMessage);
+        }
+
+        lock (gate)
+        {
+            unpreservedDamagedFiles.Remove(path);
         }
     }
 

@@ -50,6 +50,11 @@ internal sealed class TemplateLibraryService
 
     private readonly Dictionary<Guid, TemplateRecord> templates = new();
 
+    // Template files read from the store's backup copy whose damaged on-disk bytes could not be
+    // copied to Recovery at load. Nothing is written over them until that copy succeeds (see
+    // PreserveBeforeOverwrite).
+    private readonly HashSet<string> unpreservedDamagedFiles = new(StringComparer.OrdinalIgnoreCase);
+
     private bool isLoaded;
     private bool loadFailed;
     private int generation;
@@ -155,6 +160,11 @@ internal sealed class TemplateLibraryService
 
     private async Task InitializeCoreAsync(CancellationToken cancellationToken)
     {
+        lock (gate)
+        {
+            unpreservedDamagedFiles.Clear();
+        }
+
         List<TemplateRecord> loaded;
         try
         {
@@ -684,15 +694,56 @@ internal sealed class TemplateLibraryService
         };
     }
 
-    private async Task WriteTemplateAsync(Guid templateId, JsonObject raw) =>
-        await store.WriteTextAsync(paths.GetTemplatePath(templateId), VersionedJson.Serialize(raw)).ConfigureAwait(false);
+    private async Task WriteTemplateAsync(Guid templateId, JsonObject raw)
+    {
+        var path = paths.GetTemplatePath(templateId);
+        PreserveBeforeOverwrite(path);
+        await store.WriteTextAsync(path, VersionedJson.Serialize(raw)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Before any write to <paramref name="path"/>: if its damaged on-disk bytes still have no
+    /// Recovery copy (see <see cref="KeepRecoveryCopy"/>), keeps one now, and refuses the write
+    /// when that still fails, so what may be the newest content is never replaced uncopied.
+    /// </summary>
+    private void PreserveBeforeOverwrite(string path)
+    {
+        lock (gate)
+        {
+            if (!unpreservedDamagedFiles.Contains(path))
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            if (store.FileExists(path))
+            {
+                var destination = paths.GetRecoveryPath(path, utcNow());
+                store.CopyFile(path, destination);
+                log.Warning($"AetherFrame kept a copy of the damaged Template file {Path.GetFileName(path)} in its Recovery folder as {Path.GetFileName(destination)}.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationAbandonedException)
+        {
+            log.Error(ex, $"AetherFrame did not write the Template file {Path.GetFileName(path)}: its damaged copy still couldn't be kept in Recovery.");
+            throw new TemplateLibraryException(PlateLibraryService.UnpreservedDamagedFileMessage);
+        }
+
+        lock (gate)
+        {
+            unpreservedDamagedFiles.Remove(path);
+        }
+    }
 
     /// <summary>
     /// Copies the damaged on-disk bytes of <paramref name="path"/> under Recovery (never
     /// overwriting anything there) so the next write of that Template, which replaces them,
-    /// destroys nothing the player might still want. Best effort: a failure is logged and the
-    /// load goes on, since the Template itself was read fine; only abandonment by unloading
-    /// propagates.
+    /// destroys nothing the player might still want. A failure is logged and the load goes on,
+    /// since the Template itself was read fine, but the path is remembered and never written over
+    /// until a copy succeeds (see <see cref="PreserveBeforeOverwrite"/>); only abandonment by
+    /// unloading propagates.
     /// </summary>
     private void KeepRecoveryCopy(string path)
     {
@@ -709,7 +760,11 @@ internal sealed class TemplateLibraryService
         }
         catch (Exception ex) when (ex is not OperationAbandonedException)
         {
-            log.Error(ex, $"AetherFrame couldn't keep a Recovery copy of the damaged Template file {Path.GetFileName(path)}; the Template still loaded from its backup copy.");
+            log.Error(ex, $"AetherFrame couldn't keep a Recovery copy of the damaged Template file {Path.GetFileName(path)}; the Template still loaded from its backup copy, and its file won't be written over until a copy can be kept.");
+            lock (gate)
+            {
+                unpreservedDamagedFiles.Add(path);
+            }
         }
     }
 
