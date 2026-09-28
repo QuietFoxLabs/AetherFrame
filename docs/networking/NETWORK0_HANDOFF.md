@@ -6,6 +6,20 @@ Written on the night of 2026-09-27, at the end of the overnight NETWORK0 run, fo
 - Worktree: `AetherFrame/.claude/worktrees/network0-protocol-foundation`. The primary checkout, the stashes, the tags, the releases, the plugin-repository branch and the plugin's AppData were not touched. Nothing was pushed or merged.
 - Documents: [NETWORK0.md](NETWORK0.md) (architecture, threat model, privacy, limits, decisions), [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) (the normative wire format), this file.
 
+## Remediation (2026-09-28)
+
+An independent review of `568c137` (the state this handoff describes) found no forgery, no signature bypass and no crash from hostile bytes, and confirmed every committed vector with an implementation in another language plus OpenSSL. It also found two code defects, one specification gap and several overstated claims, fixed on the same branch in the commits after `568c137`. The sections below are left as written that night; where a statement was wrong it is marked `[corrected 2026-09-28]` in place, and this section is the current state.
+
+What changed:
+
+1. **Every reader copies its input before checking it** (`SignedDocumentCodec.Verify` copies the whole document; `PersonaPublicKey.FromBytes`, `ProtocolSignature.FromBytes`, the identifiers and the image digest copy or read once). The night's versions checked the caller's span and copied afterwards, so a buffer another thread rewrote between the two yielded keys holding off-curve points and signatures with a high s, and on Windows the platform's `PlatformNotSupportedException` for such a point escaped `Verify`. Platform refusals of a key the protocol already validated are now `InvalidKey`. Tests race each reader against a rewriting thread.
+2. **`Sign` verifies what it produced.** The signer's key is read once, a signer that returns nothing is refused, and bytes the reader would refuse never leave `Sign`. Fault-injecting signers are the regression tests.
+3. **A profile is (persona, profileId).** Stated normatively (specification, section 8.4) with the server obligations that follow (section 13), exposed as `RemoteProfileKey` on every `VerifiedDocument`, and the retraction vector, which had persona B retracting persona A's profile id, is now B's retraction of B's own profile. Two `serverObligations` vectors hold the cross-persona documents with what a server must do with them.
+4. **The coordinate range rule is tested** with the point x = 5 encoded as x + p and a point with y = 1 encoded as y + p (both satisfy the curve equation modulo p, so only the range rule refuses them); the low-S boundary is pinned on both sides; the unit-only negatives are conformance vectors (65 rejected documents, up from 40); the reference checks build the signing input, identity input and envelope from the specification instead of taking the library's digest; platform DER signatures in both halves are exercised; `FromEcdsa` checks the curve identifier; and the image reader validates in schema order, which the specification now defines for input with several faults.
+5. **The specification is marked DRAFT** and NETWORK0.md lists the open product decisions (section 11) with the baseline each currently has, without deciding any of them.
+
+Results after remediation: solution builds with 0 warnings; `AetherFrame.Protocol.Tests` 145 passed (112 that night); the plugin's 2739 and the release tooling's 439 unchanged and passing; the regenerated vectors reproduced by the review's independent Python implementation (all 65 rejected documents with the same codes, all 5 documents verified by it and by OpenSSL 3.5.7). The mutation review was repeated on the repaired guards; see "Mutation review" below.
+
 ## What was built
 
 - `AetherFrame.Protocol`, a standalone net10.0 assembly (no packages, no Dalamud, no plugin reference, no `System.Net`, no file or process APIs; a test enforces this). 36 KB compiled, 0 warnings with warnings as errors and XML docs on every public member.
@@ -18,7 +32,7 @@ Written on the night of 2026-09-27, at the end of the overnight NETWORK0 run, fo
   - `ProtocolError` (13 codes) and `ProtocolException`, the only exception the assembly throws.
   - `IPersonaKeyProvider`: the seam for NETWORK1's protected key storage. Nothing implements it.
 - `AetherFrame.Protocol.Tests`: 112 tests (xunit, same package versions as the other test projects), plus an independent affine-arithmetic P-256 implementation (`ReferenceP256.cs`) written from the specification, used to check every vector.
-- `AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json` (synthetic personas, canonical bytes, digests, signatures, 40 rejected documents) and `public-api.txt` (the approved public surface, compared on every run). Both regenerate deliberately with `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1`.
+- `AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json` (synthetic personas, canonical bytes, digests, signatures, 40 rejected documents) and `public-api.txt` (the approved public surface, compared on every run). Both regenerate deliberately with `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1`. `[corrected 2026-09-28: 65 rejected documents and a serverObligations section; the public API list regenerates with its own switch, AETHERFRAME_PROTOCOL_REGENERATE_PUBLIC_API=1, and a regeneration run reads back what it wrote.]`
 - Solution and CI: both projects in `AetherFrame.slnx`; `build.yml` and `release.yml` run the protocol tests after the release tooling tests. `CHANGELOG.md` has an Unreleased entry.
 
 ## What was deliberately not built
@@ -32,13 +46,13 @@ No server contact, HTTP, authentication, sessions, capability tokens, shares, Cl
 3. Signatures have exactly one encoding (P1363, low-S, r and s range-checked); the signer normalizes, the verifier requires it.
 4. Keys are checked against the curve by the protocol itself, so Windows and Linux refuse the same material for the same reason.
 5. Every length and count is compared with its limit before allocation; a hostile length costs about 700 bytes and 2 µs to refuse. The whole document is capped at 1 MiB before parsing.
-6. The payload is decoded only after the signature verifies, from a private copy, so a shared buffer cannot change between check and use.
-7. Nothing exports, formats or logs private material; exception messages never repeat bytes (a test scans every message thrown by tens of thousands of hostile inputs).
+6. The payload is decoded only after the signature verifies, from a private copy, so a shared buffer cannot change between check and use. `[corrected 2026-09-28: the key and the signature were still checked on the caller's buffer before being copied, so this held for the payload only; every reader now copies its whole input first.]`
+7. Nothing exports, formats or logs private material; exception messages never repeat bytes (a test scans every message thrown by tens of thousands of hostile inputs). `[corrected 2026-09-28: on Windows a PlatformNotSupportedException could escape Verify for a key that changed under it; platform refusals are now InvalidKey.]`
 
 ## Findings from the adversarial review, fixed during the night
 
 - `ProfileSnapshot.Images` exposed the backing array through `IReadOnlyList<T>`; a cast to `IList<T>` could replace elements of a verified document. Now a `ReadOnlyCollection` view; regression test in `SignedDocumentTests`.
-- `SignedDocumentCodec.Verify` decoded the caller's span after verifying it, a time-of-check to time-of-use gap for a buffer shared across threads. Now verifies and decodes one private copy of the payload.
+- `SignedDocumentCodec.Verify` decoded the caller's span after verifying it, a time-of-check to time-of-use gap for a buffer shared across threads. Now verifies and decodes one private copy of the payload. `[corrected 2026-09-28: the payload copy closed the gap for the payload only; the key and signature had the same gap, closed by copying the whole input first.]`
 - `ProfileSnapshot`'s constructor materialized the caller's enumerable before checking the count; now stops at nine.
 - Two test expectations were wrong rather than the code: swapping r and s is refused as non-canonical when the old r lands in the high half (deterministic per document, now computed), and a snapshot payload presented under the retraction type fails on the timestamp, not on trailing bytes.
 
@@ -85,7 +99,28 @@ The 112 protocol tests include: 8 encoding primitives; 6 identity; 7 signature; 
 | 23 | Signature r range | 3 |
 | 24 | 0x04 key prefix requirement | 4 |
 
-Every removal was detected. Mutations 18 and 19 first appeared undetected because git had restored the file with CRLF after an earlier mutation and the multi-line pattern no longer matched, so nothing had changed; re-applied on a normalized file they failed 8 and 5 tests. No missing test had to be added.
+Every removal was detected. Mutations 18 and 19 first appeared undetected because git had restored the file with CRLF after an earlier mutation and the multi-line pattern no longer matched, so nothing had changed; re-applied on a normalized file they failed 8 and 5 tests. No missing test had to be added. `[corrected 2026-09-28: the 24 guards above were detected, but the review's own mutations found guards outside that list with no test: the coordinate range check (x < p, y < p) could be removed with the suite green, as could the low-S boundary (off by one) and the private payload copy. Each now has tests and, where a vector can express it, a vector; the "Mutation review, repeated" section below has the results.]`
+
+## Mutation review, repeated (2026-09-28)
+
+The guards the review found untested, and the guards the remediation added, removed one at a time in a scratch clone of the remediated branch (never in this worktree), with the suite run each time:
+
+| Guard removed | Suite |
+|---|---|
+| Coordinate range check (x < p, y < p) | fails (was green that night) |
+| Low-S bound off by one (s = floor(n/2) + 1 accepted) | fails (was green that night) |
+| Whole-input copy in `Verify` (check on the caller's span again) | fails (the race tests) |
+| Copy-then-check in `PersonaPublicKey.FromBytes` | fails (the race tests) |
+| Copy-then-check in `ProtocolSignature.FromBytes` | fails (the race tests) |
+| Platform exception mapping in `CreateEcdsa` | fails |
+| Output verification in `Sign` | fails (the signer fault tests) |
+| Single read of the signer's key in `Sign` | fails |
+| Curve identifier check in `FromEcdsa` | fails (message check) |
+| Set-order check at the key (moved to after the item) | fails (the precedence tests) |
+| `RemoteProfileKey` equality on the persona | fails |
+| Signer high-S normalization, unknown type refusal, empty payload check (from the original list, re-run) | fails |
+
+The exact results, with failure counts, are in the remediation report delivered with the branch.
 
 ## Performance
 
@@ -117,11 +152,13 @@ No quadratic behaviour was found; everything is linear in the input. Two things 
 
 ## Product decisions still needed
 
-1. Keep `ProfileRetraction` as a signed document, or unpublish through an authenticated request? (NETWORK0.md, section 10, decision 2.)
-2. Is a metadata-only snapshot the right first remote model, with the layout as schema 2, or should the layout come first?
-3. Persona display name: none, or a field in a future persona document?
-4. Whether the 32,000-character text limit should be tightened per field (the name) at the protocol level, or left to server policy.
-5. How the protocol assembly ships in the plugin package (fourth file versus linked sources).
+`[superseded 2026-09-28 by NETWORK0.md, section 11, "Open product decisions" (D1 to D9), which lists these five and the review's additions with the baseline each has today. Nothing there is decided.]`
+
+1. Keep `ProfileRetraction` as a signed document, or unpublish through an authenticated request? (NETWORK0.md, section 10, decision 2; now D1.)
+2. Is a metadata-only snapshot the right first remote model, with the layout as schema 2, or should the layout come first? (D8.)
+3. Persona display name: none, or a field in a future persona document? (D9.)
+4. Whether the 32,000-character text limit should be tightened per field (the name) at the protocol level, or left to server policy. (D4.)
+5. How the protocol assembly ships in the plugin package (fourth file versus linked sources). (D9.)
 
 ## Recommended NETWORK1 scope
 

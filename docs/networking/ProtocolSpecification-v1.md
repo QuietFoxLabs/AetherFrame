@@ -1,8 +1,10 @@
-# AetherFrame remote protocol, version 1
+# AetherFrame remote protocol, version 1 (DRAFT)
 
-This is the normative description of the wire format that `AetherFrame.Protocol` reads and writes: enough to build a second implementation, in any language, that produces byte-identical documents and verifies the same signatures, without reading the C# source. The committed test vectors (`AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json`, section 11) are the check that such an implementation is right. [NETWORK0.md](NETWORK0.md) explains why the protocol looks like this; this document only says what it is.
+**Status: DRAFT.** This document describes the wire format that `AetherFrame.Protocol` reads and writes today, precisely enough to build a second implementation, in any language, that produces byte-identical documents and verifies the same signatures without reading the C# source. It is not yet frozen. Version 1 becomes final only when the open product decisions in [NETWORK0.md](NETWORK0.md), "Open product decisions", are settled, because some of them change bytes that are signed (the `name` rules, D4; what an image digest covers, D5; whether a document is bound to a deployment, D7; what a retraction means, D1). Until then every document produced under this draft is a test document: no server accepts one, and none is to be treated as a version 1 document after the freeze. What is not expected to change: the envelope, the signing input and its tag, the signature form, the key format and the persona identity derivation.
 
-Version 1 is the NETWORK0 foundation: signed, identity-bearing documents. It has no transport, no request or response messages, no encryption and no discovery. Everything a server or a client does with these bytes is outside this document.
+The committed test vectors (`AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json`, section 11) are the check that a second implementation is right. [NETWORK0.md](NETWORK0.md) explains why the protocol looks like this; this document only says what it is. Section 13 states what a server that accepts these documents is obliged to do with them.
+
+Version 1 is the NETWORK0 foundation: signed, identity-bearing documents. It has no transport, no request or response messages, no encryption and no discovery. Everything else a server or a client does with these bytes is outside this document.
 
 ## 1. Notation
 
@@ -185,6 +187,8 @@ A reader performs these steps in this order and stops at the first failure with 
 
 The persona of a verified document is the identity (section 4) of the key in the document. A reader never accepts a persona identity from anywhere else and never compares the document against an identity a caller supplied before the signature has verified.
 
+Implementation note: a reader takes a private copy of the input before step 2 and performs every step on the copy, so that a value it checked is the value it uses even when the caller's buffer changes meanwhile. The same holds for a key or a signature parsed on its own.
+
 ### 7.3 Signing procedure
 
 A writer encodes the payload (section 8), builds the signing input (section 5) with its own public key, signs the digest, normalizes the signature to low-S (section 6), and lays out the document per the table above. A writer that cannot produce a payload within the limits produces no document.
@@ -297,7 +301,9 @@ The rejected test vectors each contain one fault. The library's adversarial test
 - `rejected`: documents that must be refused, each with the error code expected, derived from `profile-snapshot` by one change (a flipped bit, an extreme length, a substituted key, a high-S signature, and so on) or validly signed over a payload that breaks one schema rule.
 - `serverObligations`: valid documents that verify, each with the persona it verifies as, the profile id it carries and what a server is obliged to do with it (section 13). Both are signed by persona B and carry the profile id of persona A's snapshots: they are about (B, that id) and touch nothing of A's.
 
-An implementation is right when it (1) derives the same keys and identities, (2) produces the same payload and signing-input bytes for the sample models, (3) verifies every stored signature, (4) accepts every stored document and decodes the expected values, and (5) refuses every rejected document with the stated error. ECDSA signatures are randomized, so a regeneration of the file (set `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1` and run the tests) yields different signatures; every other value is stable. The test project also contains `ReferenceP256.cs`, an independent affine-arithmetic implementation of key derivation and ECDSA verification written from this document alone, which every vector is checked against.
+An implementation is right when it (1) derives the same keys and identities, (2) produces the same payload and signing-input bytes for the sample models, (3) verifies every stored signature, (4) accepts every stored document and decodes the expected values, (5) refuses every rejected document with the stated error, and (6) verifies each `serverObligations` document as the stated persona. ECDSA signatures are randomized, so a regeneration of the file (set `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1` and run the tests; the approved public API list has its own switch) yields different signatures; every other value is stable, and one rejected vector's error code (`signature-r-s-swapped`) depends on the signature and is recomputed.
+
+The test project contains two pieces written from this document rather than from the library: `ReferenceP256.cs`, an affine-arithmetic implementation of key derivation, the curve equation and ECDSA verification, and `ReferenceProtocol.cs`, the signing input, persona identity input and envelope built from the tables above. The vector tests check the personas, the five documents' signing inputs, digests, signatures and layouts against both. The rejected vectors are checked against the library only; an independent verifier written in another language during the 2026-09-28 review reproduced all of them.
 
 Worked example, persona A: label `AetherFrame.Protocol test persona A`; the public key and identity are in the fixture; the sample snapshot's payload begins `0001` (schema 1), then `a1a1…` (the profile id), `b2b2…` (the revision id), `00000000 6553f100` (createdAt 1,700,000,000), `0000000c` and `Sample Plate` in UTF-8, then `00000002` and two image references in ascending asset id order.
 

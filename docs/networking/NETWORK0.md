@@ -1,5 +1,7 @@
 # NETWORK0: the remote protocol foundation
 
+**Status (2026-09-28): the code is reviewed and remediated; the wire format is a DRAFT** until the open product decisions in section 11 are settled, some of which change signed bytes. Nothing here is published, referenced by the plugin, or accepted by any server.
+
 NETWORK0 is the first networking milestone of AetherFrame, and it builds no network. It is the isolated protocol, identity, signing, verification, serialization and hostile-input foundation that the later milestones (NETWORK1, the client that talks to a backend; the backend itself) depend on, so that those milestones can be built without revisiting how bytes are framed, how a persona is identified, or what a signature covers. This document explains what was built and why; [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) is the normative wire format; [NETWORK0_HANDOFF.md](NETWORK0_HANDOFF.md) is the morning handoff with results and open questions.
 
 Everything described here lives in the `AetherFrame.Protocol` assembly and its tests. **The plugin does not reference it, nothing here opens a connection, reads or writes a file, or needs an account, and the plugin's behaviour is unchanged.**
@@ -25,7 +27,7 @@ AetherFrame.Protocol            net10.0, BCL only, no packages, no Dalamud, no p
   Identity/                     PersonaPublicKey, PersonaId, ProfileId, RevisionId, AssetId, P256Curve
   Signing/                      SigningInput, ProtocolSignature, IPersonaSigner, EcdsaPersonaSigner, SignatureVerifier
   Documents/                    DocumentType, RemoteDocument, SignedDocumentCodec, VerifiedDocument
-  Remote/                       ProfileSnapshot, ImageReference, ImageFormat, ProfileRetraction
+  Remote/                       ProfileSnapshot, ImageReference, ImageFormat, ProfileRetraction, RemoteProfileKey
   Integration/                  IPersonaKeyProvider (the seam NETWORK1 fills; nothing implements it)
 AetherFrame.Protocol.Tests      xunit; vectors, canonicalization, adversarial, fuzz, boundary, benchmark
 ```
@@ -38,7 +40,7 @@ Why the plugin's own tests project is not reused: `AetherFrame.Tests` compiles t
 
 Publishing (a NETWORK1 client, not built): build a `ProfileSnapshot` from the local Plate through a builder that lives on the plugin side; `SignedDocumentCodec.Sign(snapshot, signer)` encodes the payload, builds the signing input, signs, and lays out the document. The only thing the plugin will need from its side is an `IPersonaSigner`, obtained from an `IPersonaKeyProvider` that keeps the key in protected local storage.
 
-Receiving (a viewer or a server): `SignedDocumentCodec.Verify(bytes)` checks the framing, the version, the type, the lengths and the trailing bytes, then the key, then the signature, and only then decodes the payload. The result is a `VerifiedDocument` whose persona is derived from the key that verified; the caller cannot supply one.
+Receiving (a viewer or a server): `SignedDocumentCodec.Verify(bytes)` copies the input, then checks the framing, the version, the type, the lengths and the trailing bytes, then the key, then the signature, and only then decodes the payload. The result is a `VerifiedDocument` whose persona is derived from the key that verified; the caller cannot supply one. Its `Profile` is the pair (persona, profile id): the only thing a server may key a profile by.
 
 ### 2.2 The signing approach, exactly
 
@@ -64,14 +66,16 @@ Every byte a client will one day receive from a server, and every byte a server 
 | A signature transplanted under another key (key substitution, duplicate-signature-key selection) | The key is inside the signed bytes. |
 | Two encodings of one signature (malleability) | Low-S required; r and s range-checked; fixed 64-byte form, no DER. |
 | Two encodings of one document (canonicalization ambiguity) | One binary encoding; no optionals; sets sorted on the wire and refused otherwise; text never normalized, so what was signed is what is shown. |
-| Invalid curve material (off-curve or compressed points, coordinates at or above p, other curves) | The protocol's own on-curve check before the platform sees the key, so behaviour is the same on Windows and Linux. |
-| Oversized or hostile lengths driving allocation | The whole document is capped at 1 MiB before parsing; every length and count is compared with its limit before allocation; a reader never allocates more than its input. Measured: a hostile length costs about 700 bytes and 2 µs to refuse. |
+| Invalid curve material (off-curve or compressed points, coordinates at or above p, other curves) | The protocol's own range and on-curve check before the platform sees the key, so behaviour is the same on Windows and Linux; the range rule is tested with the same point encoded as x + p and as y + p, which the curve equation alone would accept. A platform key is checked by curve identifier before its point. Whatever exception the platform uses for a point it dislikes (Windows CNG: `PlatformNotSupportedException`) is reported as `InvalidKey`. |
+| Oversized or hostile lengths driving allocation | The whole document is capped at 1 MiB before parsing; every length and count is compared with its limit before allocation; nothing is ever sized by a declared length that has not passed its limit. A reader's allocations are proportional to the input it was given (one copy of the input, the signing input, and the decoded model), never to what the input claims. Measured: a hostile length costs about 700 bytes and 2 µs to refuse. |
 | Truncation, trailing bytes, nested-count abuse, malformed UTF-8, U+0000 | Refused with a typed error at the exact boundary; covered by truncation at every offset, a flipped bit at every position, and seeded fuzz campaigns. |
-| Exceptions leaking bytes or crashing the host | The only exception type is `ProtocolException`; messages name fields and numbers, never content; tests assert no other exception type escapes for tens of thousands of hostile inputs. |
-| A verified object changed afterwards (time-of-check to time-of-use) | Verification and decoding work on one private copy of the payload; every model and result type is immutable, and list views cannot reach their storage. |
+| Exceptions leaking bytes or crashing the host | For hostile bytes, the only exception type is `ProtocolException`; messages name fields and numbers, never content; tests assert no other exception type escapes for tens of thousands of hostile inputs, including inputs rewritten by another thread while they are read. Misuse of the API by its caller (a null argument, a destination span that is too short, a disposed signer) throws the usual .NET argument and object-disposed exceptions, as documented per member. |
+| A value that passed a check differing from the value used (time-of-check to time-of-use) | Every reader copies its input before the first check and uses only the copy: `Verify` copies the whole document, `PersonaPublicKey.FromBytes` and `ProtocolSignature.FromBytes` copy their bytes, identifiers and digests are read once. Every model and result type is immutable, and list views cannot reach their storage. Tests race each reader against a rewriting thread. |
+| A signer that misbehaves (misreports its key, signs with another key, signs other bytes) | `Sign` reads the signer's key once and verifies the finished document before returning it; bytes the reader would refuse never leave `Sign`. |
+| A document applied to a profile its signer does not own | A profile is (persona, profileId); a document names the signing persona's profile and nobody else's (specification, sections 8.4 and 13), and `VerifiedDocument.Profile` exposes exactly that pair. |
 | Private key exposure through the protocol | No API exports, serializes, logs or formats private material; the signer signs only protocol-built signing inputs; a test asserts the public surface returns no platform key type. |
 
-Out of scope for NETWORK0, and named so nothing is assumed: transport security, server compromise, replay of a whole document (a server decides how it orders snapshots and retractions; section 9), denial of service at the network layer, moderation, key loss and rotation, and the strength of the platform's ECDSA implementation.
+Out of scope for NETWORK0, and named so nothing is assumed: transport security, server compromise, replay of a whole document and the ordering of snapshots and retractions (server obligations, specification section 13; the baseline is stated there and depends on decision D1), denial of service at the network layer, moderation, key loss and rotation, and the strength of the platform's ECDSA implementation.
 
 ## 5. Privacy guarantees
 
@@ -85,6 +89,14 @@ What the protocol can promise on its own, because it is a property of the bytes:
 What it deliberately does not do, matching the product's privacy direction: viewer identities, "last seen", location, social graphs, discovery and nearby scraping have no representation. They cannot be added by extending a schema; they would need a new document type, which is a visible design decision.
 
 What only NETWORK1 and the backend can promise: that the key never leaves the machine (protected local storage), that a persona is not linked to game identifiers server-side, that shares are intentional, and that a retraction is honoured.
+
+Known open points, each an owner decision (section 11), none of them settled by the bytes as they are:
+
+- An image reference's digest is over the source bytes. If NETWORK1 uploads and digests the player's original files, photo metadata (EXIF location and device data, XMP edit history) travels with them, and the digest is a public fingerprint that links two personas publishing the same file (D5).
+- The remote `name` allows control and format characters and 32,000 scalars, where the local Plate name rules fold those characters and stop at 64. A modified client can publish names the official client cannot (D4).
+- A signed snapshot is transferable proof that a persona published it, even after a retraction; whether viewers receive signed envelopes or server-attested content is undecided (D6).
+- One key per install would link every character's published profiles; persona granularity is undecided (D3).
+- User-scoped platform key protection (DPAPI) keeps a key from other Windows accounts and from offline copies, not from other plugins in the same game process or from software running as the user; its behaviour under Wine is unverified (D2, NETWORK1).
 
 ## 6. Remote model versus local model
 
@@ -112,19 +124,19 @@ Declared only, as `ProtocolLimits.FuturePolicy`, because no document can carry t
 
 ## 8. Error behaviour
 
-A reader either returns a fully verified and decoded document or throws `ProtocolException` with one of thirteen codes (specification, section 9). It never returns a partial result, never repairs input, never logs, and never includes content in a message. The order of checks is fixed so that cheap structural refusals come before the on-curve check and the signature computation, and the payload is decoded only after the signature verified. Errors on the writing side are the same type: a model outside the limits cannot be constructed, so a document that exists is always encodable and always within the limits.
+A reader either returns a fully verified and decoded document or throws `ProtocolException` with one of thirteen codes (specification, section 9). It never returns a partial result, never repairs input, never logs, and never includes content in a message. The order of checks is fixed so that cheap structural refusals come before the on-curve check and the signature computation, and the payload is decoded only after the signature verified; an input with several faults is refused for the first fault in reading order (specification, section 9.1). Errors on the writing side are the same type: a model outside the limits cannot be constructed, so a document that exists is always encodable and always within the limits, and `Sign` verifies what it produced before returning it. These guarantees are about bytes and models; passing a null argument, a too-short destination span or a disposed signer is a programming error and throws the exception .NET uses for it.
 
 ## 9. NETWORK1 integration points
 
 - `IPersonaKeyProvider` → `IPersonaSigner`: NETWORK1 implements a provider over a key generated once and kept in protected local storage (user-scoped platform protection), and decides how the active persona is chosen. `EcdsaPersonaSigner` wraps whatever `ECDsa` the provider produces. A signer is not thread-safe; serialize access to it.
 - A snapshot builder on the plugin side: `ProfileDocument` → `ProfileSnapshot`, choosing the name and the images (asset id per remote copy, source digest, format, size, dimensions). The protocol never sees the Plate.
 - Transport: the document bytes are the request body (or base64 in JSON if an API prefers text); `SignedDocumentCodec.Verify` is the server's entry point, and the same assembly runs on both sides.
-- Server policy the protocol leaves open on purpose: ordering of snapshots and retractions for one profile (a retraction must not take down a snapshot created after it; process per profile in `createdAt` and `issuedAt` order and refuse regressions), uniqueness of profile and revision ids per persona, storage accounting, and creating a persona from the key of its first document.
-- Not yet defined, and each needs its own signing tag when it is: request authentication or proofs, share grants, key rotation.
+- Server obligations (specification, section 13): profiles keyed by (persona, profileId), identity from the key, nothing rewritten; and, as the baseline until decision D1, a retraction that is terminal for its profile, revision ids unique within a profile with byte-identical resubmission idempotent, and timestamps treated as client claims bounded against the server's own receipt time. Ordering by `createdAt` and `issuedAt` alone is not enough, since both are client clocks. Storage accounting and creating a persona from the key of its first document remain server policy.
+- Not yet defined, and each needs its own signing tag when it is: request authentication or proofs, share grants, key rotation. Any future signing input starts with a one-byte length and an ASCII tag, and nothing AetherFrame signs is ever server-supplied bytes outside such a tagged input.
 
 ## 10. Decisions made without the owner
 
-Each was chosen as the safest, simplest option that preserves flexibility; each is easy to revisit before NETWORK1 builds on it.
+Each was chosen as the safest, simplest option that preserves flexibility; each is easy to revisit before NETWORK1 builds on it. Where the 2026-09-28 review found that a decision should be the owner's, it is listed again in section 11 with what depends on it.
 
 1. **Binary rather than JSON** for the whole wire format. The brief allowed JSON as an outer transport if the signed bytes were built independently; a single canonical binary form removes every canonicalization question and every "which bytes were signed" question, and the same assembly serves a C# backend. A JSON presentation for debugging can be added later without touching what is signed.
 2. **Two document types**, `ProfileSnapshot` and `ProfileRetraction`. A second real type was needed to prove domain separation; a retraction is the smallest one that is certainly needed, since a player must be able to unpublish with the same key-first mechanism and no session. If NETWORK1 prefers unpublishing through an authenticated request, the type can be dropped; it is a few dozen lines.
@@ -135,3 +147,19 @@ Each was chosen as the safest, simplest option that preserves flexibility; each 
 7. **No optional fields**: "not set" is the empty text; every other field is required.
 8. **The plugin does not reference the assembly.** Doing so is a packaging change (four files in the release) that belongs to NETWORK1.
 9. **Persona display names and RP metadata are not represented.** Nothing in the approved direction defined them precisely enough to freeze into a signed schema.
+
+## 11. Open product decisions
+
+These are the owner's to make. None is decided here, and none is frozen: the specification is a draft until they are, because D1, D4, D5 and D7 change what is signed or what a signature means. For each, the baseline is what the code and the specification do today, so that NETWORK1 can be built against something definite; changing a baseline before the freeze costs a schema edit and a vector regeneration, nothing more.
+
+| # | Decision | Baseline today | What changes if decided otherwise |
+|---|---|---|---|
+| D1 | What a retraction means, and whether it stays a signed document at all. | A signed `ProfileRetraction` withdraws the signer's own profile; the server obligations make it terminal (a permanent minimal record, no later snapshot of that profile) and key revisions by id with idempotent resubmission. | Unpublishing through an authenticated request instead removes the type (a few dozen lines) and its vectors. A non-terminal retraction needs an ordering rule that does not rest on client clocks, such as a server-assigned sequence. |
+| D2 | Recovery from key loss. Without the key nothing can be retracted, and there is no account. | None; NETWORK1's key provider is undefined. | A passphrase-protected export or backup, a support takedown path, or accepting loss as final. Non-exportable platform keys prevent theft and backup alike. |
+| D3 | Persona granularity: one per install, one per character, or the player's choice. | Undefined; the protocol does not care. | Affects only NETWORK1's key provider and UI. |
+| D4 | The rules for schema-1 `name`. | Any text without U+0000, up to 32,000 scalars, nothing normalized. | Matching the local Plate name rules (1 to 64 scalars, no control or format characters, no surrounding whitespace) changes the payload schema's rules and the unicode vector. Leaving it to server policy requires every consumer to sanitize before display. |
+| D5 | What an image reference's digest covers, and whether metadata is stripped. | The source image bytes, whatever they contain. | Digesting the bytes actually uploaded after a client re-encode (metadata gone) changes nothing on the wire but changes the snapshot builder; a per-snapshot salt to stop cross-persona joins would change the schema. |
+| D6 | Whether viewers receive signed envelopes or server-attested content. | Undecided; only the server verifies in the baseline. | Signed envelopes give viewers proof of authorship that survives retraction. |
+| D7 | Whether a document is bound to a deployment (production versus staging). | Not bound: a document verifies anywhere. | A deployment identifier in the signing input or the payload is cheap now and impossible to add to existing documents later. |
+| D8 | Whether the metadata-only schema 1 is ever exposed to players, or waits for the layout (schema 2). | Schema 1 exists and is test-only. | Exposing publishing before the layout exists makes schema-1 documents real and freezes their rules. |
+| D9 | Persona display name, and how the assembly ships in the plugin package (fourth file versus linked sources). | Neither exists. | Neither affects NETWORK0's safety. |
