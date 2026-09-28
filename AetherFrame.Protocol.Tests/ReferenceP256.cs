@@ -149,5 +149,5 @@ internal static class ReferenceP256
         return result;
     }
 
-    private static BigInteger Parse(string hex) => BigInteger.Parse("0" + hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
+    public static BigInteger Parse(string hex) => BigInteger.Parse("0" + hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
 }

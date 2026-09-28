@@ -49,7 +49,8 @@ internal static class VectorBuilder
         }
 
         var baseDocument = Hex.Parse(fixture.Documents[0].Document!);
-        fixture.Rejected = RejectedVectorBuilder.Build(baseDocument, a, b.PublicKey);
+        var retractionDocument = Hex.Parse(fixture.Documents.Single(d => d.Name == "profile-retraction").Document!);
+        fixture.Rejected = RejectedVectorBuilder.Build(baseDocument, retractionDocument, a, b.PublicKey);
         fixture.ServerObligations = ServerObligations(b);
         return fixture;
     }

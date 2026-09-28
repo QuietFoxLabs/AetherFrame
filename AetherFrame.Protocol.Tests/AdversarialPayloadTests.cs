@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using AetherFrame.Protocol.Documents;
+using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
 using Xunit;
 
@@ -84,6 +85,34 @@ public class AdversarialPayloadTests
         };
         var document = PayloadBuilder.Signed(DocumentType.ProfileRetraction, signer, payload);
         ProtocolAssert.Throws(expected, () => SignedDocumentCodec.Verify(document));
+    }
+
+    [Theory]
+    [InlineData("images unsorted, second digest zero", ProtocolError.NotCanonical)]
+    [InlineData("image digest zero, then cut inside width", ProtocolError.InvalidValue)]
+    [InlineData("image format 9 and byte length 0", ProtocolError.InvalidValue)]
+    [InlineData("image byte length over max and width 0", ProtocolError.LimitExceeded)]
+    [InlineData("name with NUL after 32001 scalars", ProtocolError.InvalidText)]
+    [InlineData("image count 9 and trailing byte", ProtocolError.LimitExceeded)]
+    [InlineData("trailing byte and images totalling over max", ProtocolError.TrailingBytes)]
+    public void PayloadsWithSeveralFaults_AreRefusedForTheFirstInSchemaOrder(string name, ProtocolError expected)
+    {
+        // docs/networking/ProtocolSpecification-v1.md, "Errors": each rule is checked at the earliest
+        // point in reading order at which it can be, so the first fault in that order names the error.
+        var overMax = Enumerable.Range(1, 6).Select(i => PayloadBuilder.Image(AssetId.Parse("ast_" + i.ToString("x32", System.Globalization.CultureInfo.InvariantCulture)), byteLength: (ulong)ProtocolLimits.MaxImageBytes)).ToArray();
+        var payload = name switch
+        {
+            "images unsorted, second digest zero" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset2), PayloadBuilder.Image(Samples.Asset1, digest: new byte[32])]),
+            "image digest zero, then cut inside width" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, digest: new byte[32])])[..^6],
+            "image format 9 and byte length 0" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, format: 9, byteLength: 0)]),
+            "image byte length over max and width 0" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, byteLength: (ulong)ProtocolLimits.MaxImageBytes + 1, width: 0)]),
+            "name with NUL after 32001 scalars" => PayloadBuilder.Snapshot(nameBytes: [.. ProtocolConstants.StrictUtf8.GetBytes(new string('a', ProtocolLimits.MaxTextScalars + 1)), 0x00]),
+            "image count 9 and trailing byte" => PayloadBuilder.Snapshot(imageCount: 9, trailing: [0]),
+            "trailing byte and images totalling over max" => PayloadBuilder.Snapshot(images: overMax, trailing: [0]),
+            _ => throw new ArgumentException(name),
+        };
+        using var signer = TestPersonas.CreateA();
+        ProtocolAssert.Throws(expected, () => SignedDocumentCodec.Verify(PayloadBuilder.Signed(DocumentType.ProfileSnapshot, signer, payload)));
     }
 
     [Fact]

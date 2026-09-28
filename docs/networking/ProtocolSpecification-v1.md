@@ -265,6 +265,20 @@ Every refusal is one of these codes. A reader that wants to react to the kind of
 
 A reader never returns a partially decoded document: either every step of section 7.2 succeeds or nothing is produced.
 
+### 9.1 Input with several faults
+
+A reader checks each rule at the earliest point in reading order at which it can be checked, and refuses the input for the first rule that fails:
+
+- the envelope's rules in the order of section 7.2;
+- a fixed-width field's rules as soon as the field has been read (an all-zero identifier, an unknown enumeration code, a timestamp out of range, a zero or over-limit dimension);
+- a length's or count's limit as soon as the length has been read, before the bytes or items it announces are looked at;
+- a text's byte limit, then its UTF-8 validity, then U+0000, then its scalar limit;
+- a set's ordering rule as soon as an item's key has been read, before the rest of the item;
+- a rule over several fields of one item (the pixel product) when the last of them has been read;
+- after the last field: trailing bytes, then the rules over the whole payload (the total of the image byte lengths).
+
+The rejected test vectors each contain one fault. The library's adversarial tests cover the order for inputs with two.
+
 ## 10. Versioning policy
 
 - **Protocol version** (envelope, `u16` at offset 4): changes only when the envelope layout, the signing input or the signature scheme changes. A reader implements a closed set of versions and refuses the rest; version 1 readers refuse everything but 1. A new version uses a **new signature domain tag** (for example `...SignedDocument.v2`) as well as a new number, so a version 1 signature can never verify under version 2 even if the layouts coincided.

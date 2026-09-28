@@ -125,11 +125,14 @@ public class CanonicalizationTests
     [Fact]
     public void Encoding_UsesNoPlatformDependentValues()
     {
-        // Nothing in the payload comes from Environment: the bytes are the same whether the line
-        // ending, the directory separator or the endianness of the machine differ.
-        var payload = Samples.Snapshot().EncodePayload();
-        Assert.DoesNotContain(System.Text.Encoding.UTF8.GetBytes(Environment.NewLine), payload);
-        Assert.True(BitConverter.IsLittleEndian ? payload[0] == 0 && payload[1] == 1 : true, "the schema version is written big-endian on this little-endian machine");
+        // A line break inside a name is content: "\n" is the one byte 0x0A whatever the platform's
+        // newline is, "\r\n" is two bytes, and the schema version is big-endian on every machine.
+        // (The name starts at offset 42 of the payload: schema, two ids and the timestamp.)
+        var lineFeed = Encode("a\nb");
+        Assert.Equal(new byte[] { 0, 0, 0, 3, (byte)'a', 0x0A, (byte)'b' }, lineFeed.AsSpan(42, 7).ToArray());
+        Assert.Equal(new byte[] { 0, 0, 0, 4, (byte)'a', 0x0D, 0x0A, (byte)'b' }, Encode("a\r\nb").AsSpan(42, 8).ToArray());
+        Assert.Equal(new byte[] { 0x00, 0x01 }, lineFeed.AsSpan(0, 2).ToArray());
+        Assert.Equal(new byte[] { 0x00, 0x00, 0x00, 0x00, 0x65, 0x53, 0xF1, 0x00 }, Samples.Snapshot().EncodePayload().AsSpan(34, 8).ToArray());
     }
 
     private static byte[] Encode(string text) => new ProfileSnapshot(Samples.Profile, Samples.Revision, 0, text, []).EncodePayload();

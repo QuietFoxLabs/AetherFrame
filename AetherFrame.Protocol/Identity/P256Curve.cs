@@ -30,6 +30,26 @@ internal static class P256Curve
     /// <summary>floor(N / 2): a signature's s must not exceed this (docs/networking/ProtocolSpecification-v1.md, "Signature").</summary>
     public static readonly BigInteger HalfN = N >> 1;
 
+    /// <summary>
+    /// True when a platform curve is P-256 by its identifier: the OID, or one of the names platforms
+    /// give it when they report no OID value. A point on it is still checked against the curve
+    /// equation afterwards; this only stops a key on another 256-bit curve from getting that far.
+    /// </summary>
+    public static bool IsP256(System.Security.Cryptography.ECCurve curve)
+    {
+        if (!curve.IsNamed || curve.Oid is not { } oid)
+        {
+            return false;
+        }
+
+        if (oid.Value is { } value)
+        {
+            return value == Oid;
+        }
+
+        return oid.FriendlyName is "nistP256" or "ECDSA_P256" or "prime256v1" or "secp256r1" or "P-256";
+    }
+
     /// <summary>Reads a big-endian unsigned integer.</summary>
     public static BigInteger ToUnsigned(ReadOnlySpan<byte> bigEndian) => new(bigEndian, isUnsigned: true, isBigEndian: true);
 

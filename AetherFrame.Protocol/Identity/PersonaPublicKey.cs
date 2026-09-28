@@ -69,7 +69,9 @@ public sealed class PersonaPublicKey : IEquatable<PersonaPublicKey>
             throw new ProtocolException(ProtocolError.InvalidKey, "The key's public parameters could not be exported.");
         }
 
-        if (!parameters.Curve.IsNamed
+        // The curve is checked by its identifier first (a 256-bit key on another curve has the right
+        // coordinate lengths), and the point against the P-256 equation afterwards in FromBytes.
+        if (!P256Curve.IsP256(parameters.Curve)
             || parameters.Q.X is not { Length: P256Curve.FieldBytes } x
             || parameters.Q.Y is not { Length: P256Curve.FieldBytes } y)
         {

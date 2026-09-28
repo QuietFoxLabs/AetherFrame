@@ -75,9 +75,31 @@ public class IdentityTests
     [Fact]
     public void PublicKey_RefusesKeysOnOtherCurves()
     {
-        using var p384 = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => PersonaPublicKey.FromEcdsa(p384));
-        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => new EcdsaPersonaSigner(p384));
+        // Including the 256-bit curves whose coordinates have the right length: they fail the curve
+        // identifier check before any point arithmetic. Not every platform has every curve.
+        foreach (var oid in new[] { "1.3.132.0.34", "1.3.36.3.3.2.8.1.1.7", "1.3.36.3.3.2.8.1.1.8", "1.3.132.0.10" })
+        {
+            ECDsa other;
+            try
+            {
+                other = ECDsa.Create(ECCurve.CreateFromValue(oid));
+            }
+            catch (Exception e) when (e is PlatformNotSupportedException or CryptographicException)
+            {
+                continue;
+            }
+
+            using (other)
+            {
+                Assert.Equal("The key is not a named-curve P-256 key.", ProtocolAssert.Throws(ProtocolError.InvalidKey, () => PersonaPublicKey.FromEcdsa(other)).Message);
+                ProtocolAssert.Throws(ProtocolError.InvalidKey, () => new EcdsaPersonaSigner(other));
+            }
+        }
+
+        using var p256 = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Assert.False(PersonaPublicKey.FromEcdsa(p256).Id.IsEmpty);
+        using var byOid = ECDsa.Create(ECCurve.CreateFromValue("1.2.840.10045.3.1.7"));
+        Assert.False(PersonaPublicKey.FromEcdsa(byOid).Id.IsEmpty);
     }
 
     [Fact]

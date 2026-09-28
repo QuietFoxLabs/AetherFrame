@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
@@ -59,6 +60,7 @@ public class TestVectorTests
             var (x, y) = ReferenceP256.PublicKey(scalar);
             Assert.Equal("04" + Hex.Of(x) + Hex.Of(y), persona.PublicKey);
             Assert.Equal(persona.PersonaId, PersonaPublicKey.FromBytes(Hex.Parse(persona.PublicKey)).Id.ToString());
+            Assert.Equal(persona.PersonaId, ReferenceProtocol.PersonaId(Hex.Parse(persona.PublicKey)));
             using var signer = TestPersonas.Create(scalar);
             Assert.Equal(persona.PublicKey, Hex.Of(signer.PublicKey.Bytes));
         }
@@ -74,17 +76,25 @@ public class TestVectorTests
             var key = PersonaPublicKey.FromBytes(Hex.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PublicKey));
             var payload = vector.Payload is null ? model.EncodePayload() : Hex.Parse(vector.Payload);
             var input = SigningInput.Create((DocumentType)vector.DocumentType, key, payload);
+
+            // The reference builds the signing input and the digest from the specification's tables;
+            // the library must produce the same bytes, and the vector must hold them.
+            var referenceInput = ReferenceProtocol.SigningInput((byte)vector.DocumentType, key.Bytes, payload);
+            var referenceDigest = SHA256.HashData(referenceInput);
+            Assert.Equal(referenceInput, input.Bytes.ToArray());
             if (vector.SigningInput is not null)
             {
-                Assert.Equal(vector.SigningInput, Hex.Of(input.Bytes));
+                Assert.Equal(vector.SigningInput, Hex.Of(referenceInput));
             }
 
-            Assert.Equal(vector.Digest, Hex.Of(input.ComputeDigest()));
+            Assert.Equal(vector.Digest, Hex.Of(referenceDigest));
+            Assert.Equal(referenceDigest, input.ComputeDigest());
             var signature = ProtocolSignature.FromBytes(Hex.Parse(vector.Signature));
             Assert.True(SignatureVerifier.Verify(input, signature), vector.Name + " (library)");
-            Assert.True(ReferenceP256.Verify(key.Bytes, input.ComputeDigest(), signature.Bytes), vector.Name + " (reference)");
+            Assert.True(ReferenceP256.Verify(key.Bytes, referenceDigest, signature.Bytes), vector.Name + " (reference)");
 
             var document = SignedDocumentCodec.Assemble((DocumentType)vector.DocumentType, key, payload, signature);
+            Assert.Equal(ReferenceProtocol.Document((byte)vector.DocumentType, key.Bytes, payload, signature.Bytes), document);
             if (vector.Document is not null)
             {
                 Assert.Equal(vector.Document, Hex.Of(document));
@@ -150,7 +160,8 @@ public class TestVectorTests
         var fixture = VectorFixture.Load();
         using var signer = TestPersonas.CreateA();
         var otherKey = PersonaPublicKey.FromBytes(Hex.Parse(fixture.Personas.Single(p => p.Name == "B").PublicKey));
-        var rebuilt = RejectedVectorBuilder.Build(Hex.Parse(fixture.Documents[0].Document!), signer, otherKey);
+        var retraction = Hex.Parse(fixture.Documents.Single(d => d.Name == "profile-retraction").Document!);
+        var rebuilt = RejectedVectorBuilder.Build(Hex.Parse(fixture.Documents[0].Document!), retraction, signer, otherKey);
         Assert.Equal(rebuilt.Select(r => r.Name), fixture.Rejected.Select(r => r.Name));
         foreach (var (expected, actual) in rebuilt.Zip(fixture.Rejected))
         {

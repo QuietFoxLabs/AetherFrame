@@ -140,13 +140,11 @@ public sealed class ProfileSnapshot : RemoteDocument
         var name = reader.ReadText("name");
         var count = reader.ReadCount(ProtocolLimits.MaxImagesPerProfile, "images");
         var images = new ImageReference[count];
+        AssetId? previous = null;
         for (var index = 0; index < count; index++)
         {
-            images[index] = ImageReference.Read(ref reader);
-            if (index > 0 && images[index - 1].AssetId.CompareTo(images[index].AssetId) >= 0)
-            {
-                throw new ProtocolException(ProtocolError.NotCanonical, "A snapshot's images must be in strictly ascending asset id order.");
-            }
+            images[index] = ImageReference.Read(ref reader, previous);
+            previous = images[index].AssetId;
         }
 
         reader.ExpectEnd("The profile snapshot payload");
