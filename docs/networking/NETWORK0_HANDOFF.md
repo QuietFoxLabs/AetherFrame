@@ -1,6 +1,6 @@
 # NETWORK0 handoff
 
-Written 2026-09-28 at the end of the overnight NETWORK0 run, for the owner's morning review.
+Written on the night of 2026-09-27, at the end of the overnight NETWORK0 run, for the owner's morning review.
 
 - Branch: `claude/network0-protocol-foundation`, started from `origin/master` at `9934650` (Merge AetherFrame custom repository publication workflow).
 - Worktree: `AetherFrame/.claude/worktrees/network0-protocol-foundation`. The primary checkout, the stashes, the tags, the releases, the plugin-repository branch and the plugin's AppData were not touched. Nothing was pushed or merged.
@@ -44,7 +44,7 @@ No server contact, HTTP, authentication, sessions, capability tokens, shares, Cl
 
 ## Test results
 
-Run on 2026-09-28 from a Release build of `AetherFrame.slnx` (0 errors, 0 warnings, locked restore):
+Run on the night of 2026-09-27 from a Release build of `AetherFrame.slnx` (0 errors, 0 warnings, locked restore):
 
 | Suite | Result |
 |---|---|
