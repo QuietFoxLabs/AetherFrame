@@ -61,6 +61,8 @@ internal static class PackageImporter
         {
             if (DocumentRemains(library, plateId))
             {
+                // Whole and listed at the next load: importing this package again would add it twice.
+                package.MarkCommitted();
                 log.Error(ex, $"AetherFrame could not finish importing {package.DescribeForLog()}, but its Plate file stayed in the Plates folder; its {created.Count} new image(s) are kept with it, and it is listed the next time AetherFrame loads.");
                 return PackageImportResult.Failed(PackageErrorCode.CommitFailed, UnfinishedMessage, ex.GetType().Name);
             }
@@ -71,6 +73,7 @@ internal static class PackageImporter
             return PackageImportResult.Failed(PackageErrorCode.CommitFailed, message, ex.GetType().Name);
         }
 
+        package.MarkCommitted();
         return new PackageImportResult(true, plateId, summary.PlateName, null);
     }
 

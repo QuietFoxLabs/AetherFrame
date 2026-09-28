@@ -27,6 +27,9 @@ internal sealed class StagedPackage : IDisposable
     private readonly IAetherFrameLog log;
     private bool disposed;
 
+    // Set by the import on a background thread, read by the Import window's draw.
+    private volatile bool committed;
+
     internal StagedPackage(string sourceFileName, string stagingDirectory, IAetherFrameLog log)
     {
         SourceFileName = sourceFileName;
@@ -55,7 +58,17 @@ internal sealed class StagedPackage : IDisposable
 
     internal PackageCompatibility Compatibility => Diagnostics.Compatibility;
 
-    internal bool CanImport => !disposed && Compatibility is PackageCompatibility.Supported or PackageCompatibility.SupportedWithWarnings && PreparedProfile is not null;
+    internal bool CanImport => !disposed && !committed && Compatibility is PackageCompatibility.Supported or PackageCompatibility.SupportedWithWarnings && PreparedProfile is not null;
+
+    /// <summary>
+    /// Whether an import already put this package's Plate on disk: it succeeded, or it failed after
+    /// its Plate file landed and stayed there (the next load lists it). Importing the same package
+    /// again would then add a second copy, so it can't be imported any more (see <see cref="CanImport"/>).
+    /// </summary>
+    internal bool IsCommitted => committed;
+
+    /// <summary>Called by the importer once this package's Plate file is on disk to stay.</summary>
+    internal void MarkCommitted() => committed = true;
 
     internal PackageManifest? Manifest { get; set; }
 
