@@ -1,0 +1,30 @@
+using System;
+
+namespace AetherFrame.Personas;
+
+/// <summary>
+/// The seam for the portable <c>.afpersona</c> backup (docs/networking/DecisionRegister.md, D2:
+/// approved in principle). Nothing implements it in this assembly: the container format, the key
+/// derivation, the cipher and the secret policy all await security approval, and until a reviewed
+/// codec exists the only implementations are test doubles that carry no key material at all. The
+/// shape fixes what any codec must offer: a look at the container that needs no secret, so that an
+/// unsupported or malformed file is refused before a secret is typed; a writer that takes material
+/// only as <see cref="PersonaKeyMaterial"/>; and a reader that gives material back the same way, so
+/// that no plaintext key crosses this boundary as bytes. The manager calls a codec outside its own
+/// lock, so an implementation is a function of its inputs, safe to call from several threads.
+/// </summary>
+public interface IPersonaBackupCodec
+{
+    /// <summary>Reads only what identifies the container. It needs no secret and is never given one.</summary>
+    PersonaBackupInspection Inspect(ReadOnlySpan<byte> backup);
+
+    /// <summary>The portable form of <paramref name="material"/>, protected under <paramref name="secret"/>. The material stays the caller's.</summary>
+    byte[] Write(PersonaKeyMaterial material, PersonaBackupSecret secret);
+
+    /// <summary>Opens <paramref name="backup"/> under <paramref name="secret"/>. The caller owns the material.</summary>
+    /// <exception cref="PersonaException">
+    /// <see cref="PersonaError.BackupUnsupported"/>, <see cref="PersonaError.BackupMalformed"/>,
+    /// <see cref="PersonaError.BackupCannotBeOpened"/> or <see cref="PersonaError.InvalidKeyMaterial"/>.
+    /// </exception>
+    PersonaKeyMaterial Open(ReadOnlySpan<byte> backup, PersonaBackupSecret secret);
+}

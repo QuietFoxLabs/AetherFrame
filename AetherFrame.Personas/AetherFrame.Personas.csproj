@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    AetherFrame's local persona management foundation (docs/networking/NETWORK1_PersonaFoundation.md):
+    the in-memory model of the personas an installation holds, the deliberate selection of one
+    active persona, and the narrow seams that a later increment fills with protected key storage
+    and an encrypted .afpersona backup format.
+
+    Plain .NET with no NuGet packages, no Dalamud reference, no game state, no files and no network
+    access. It generates no persistent key, persists nothing, and knows nothing about characters,
+    Content IDs or Plates. The plugin does not reference it: how the networking assemblies ship in
+    the release package is decision D9b (docs/networking/DecisionRegister.md), still open.
+  -->
+
+  <Import Project="..\Version.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AetherFrame.Personas</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <IsPackable>false</IsPackable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AetherFrame.Personas.Tests" />
+  </ItemGroup>
+
+</Project>
