@@ -68,7 +68,13 @@ internal sealed class TestLog : IAetherFrameLog
 /// </summary>
 internal sealed class BackupSimulatingStore : IPlateFileStore
 {
-    private readonly SystemFileStore files = new();
+    private readonly SystemFileStore files;
+
+    /// <param name="files">The plain store underneath (a fault-injecting one in some tests).</param>
+    internal BackupSimulatingStore(SystemFileStore? files = null)
+    {
+        this.files = files ?? new SystemFileStore();
+    }
 
     /// <summary>Keyed by the exact path, as Dalamud keys its backup rows.</summary>
     internal Dictionary<string, string> Backups { get; } = new(StringComparer.Ordinal);
@@ -82,7 +88,7 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
     /// <summary>Exactly as <c>ReliablePlateFileStore</c> reads in game (<see cref="ReliableReads"/>):
     /// the file on disk first, its backup row only when the reader rejects that, and content damage
     /// when the backup is unusable too; a file that can't be read at all is an I/O error, never the backup.</summary>
-    public Task ReadTextAsync(string path, Action<string> reader) =>
+    public Task ReadTextAsync(string path, Action<StoredText> reader) =>
         ReliableReads.ReadTextAsync(
             path,
             text =>
@@ -90,7 +96,8 @@ internal sealed class BackupSimulatingStore : IPlateFileStore
                 ReaderInvocations++;
                 reader(text);
             },
-            () => Backups.TryGetValue(path, out var backup) ? Task.FromResult(backup) : throw new FileNotFoundException("no backup row", path));
+            // Dalamud keeps the bytes it wrote, encoded with Encoding.UTF8 (see WriteTextAsync).
+            () => Backups.TryGetValue(path, out var backup) ? Task.FromResult(Encoding.UTF8.GetBytes(backup)) : throw new FileNotFoundException("no backup row", path));
 
     public async Task WriteTextAsync(string path, string contents)
     {
@@ -127,7 +134,7 @@ internal sealed class HeldWriteStore : IPlateFileStore
 
     public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-    public Task ReadTextAsync(string path, Action<string> reader) => files.ReadTextAsync(path, reader);
+    public Task ReadTextAsync(string path, Action<StoredText> reader) => files.ReadTextAsync(path, reader);
 
     public async Task WriteTextAsync(string path, string contents)
     {
@@ -206,7 +213,7 @@ internal sealed class FaultInjectingStore : IPlateFileStore
         return files.ListFiles(directory, searchPattern);
     }
 
-    public Task ReadTextAsync(string path, Action<string> reader)
+    public Task ReadTextAsync(string path, Action<StoredText> reader)
     {
         if (FailRead?.Invoke(path) == true)
         {

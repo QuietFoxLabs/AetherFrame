@@ -641,7 +641,7 @@ internal static class PackageProfileValidator
         private void Fail(string detail)
         {
             Failed = true;
-            diagnostics.Error(PackageErrorCode.ProfileInvalid, Damaged, detail);
+            diagnostics.Error(PackageErrorCode.ProfileInvalid, Damaged, detail, fieldValue: true);
         }
 
         private static bool InRange(float value, float min, float max) => float.IsFinite(value) && value >= min && value <= max;

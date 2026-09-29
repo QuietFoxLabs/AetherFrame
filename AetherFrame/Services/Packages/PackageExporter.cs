@@ -64,6 +64,36 @@ internal static class PackageExporter
     /// <summary>The earliest timestamp a ZIP entry can hold; every entry gets it.</summary>
     private static readonly DateTimeOffset FixedEntryTime = new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>
+    /// What the player is told when the self-check refuses the package just written. The check
+    /// reads it exactly as an import would, so its own errors are worded for someone importing a
+    /// file ("The Plate in this file is damaged."), which misleads here: the file is this export's,
+    /// and what was refused is a value in the saved Plate that a Plate file can't carry — one an
+    /// earlier build let the editor save, or a hand edit. So that is what is said, with the
+    /// validator's fixed description of the value (never a path), but only for a typed value the
+    /// editor shows (<see cref="PackageError.IsFieldValue"/>): the document's raw structure, or
+    /// data the editor keeps without showing it (an unknown element, a number in a newer build's
+    /// data), can't be changed there, so that refusal gives no editor advice and keeps its detail
+    /// for the log. Any other refusal keeps the check's own messages, as before: they already say
+    /// what to change (too many elements, an image that can't be used).
+    /// </summary>
+    internal static IReadOnlyList<PackageError> DescribeSelfCheckRefusal(IReadOnlyList<PackageError> errors)
+    {
+        if (errors.FirstOrDefault(e => e.Code == PackageErrorCode.ProfileInvalid) is { } invalid)
+        {
+            if (!invalid.IsFieldValue)
+            {
+                return [new PackageError(PackageErrorCode.ExportFailed, "This Plate holds data a Plate file can't carry, so it can't be exported.", invalid.Detail)];
+            }
+
+            var what = invalid.Detail is { Length: > 0 } detail && !UserFacingError.ContainsPath(detail) ? $" ({detail})" : string.Empty;
+            return [new PackageError(PackageErrorCode.ExportFailed,
+                $"This Plate holds a value a Plate file can't carry{what}. Change it in the editor and save, then export again.", invalid.Detail)];
+        }
+
+        return errors.Count > 0 ? errors : [new PackageError(PackageErrorCode.ExportFailed, "The Plate couldn't be exported.")];
+    }
+
     internal static PackageExportResult Export(
         PackageExportRequest request, AssetStorageService assets, string stagingRoot, string generator,
         Func<string, bool>? isDecoderSupported = null, IAetherFrameLog? log = null)
@@ -135,9 +165,7 @@ internal static class PackageExporter
                 if (check.Compatibility is not (PackageCompatibility.Supported or PackageCompatibility.SupportedWithWarnings))
                 {
                     log.Warning("AetherFrame's export self-check refused its own package: " + check.DescribeForLog());
-                    return PackageExportResult.Failed(check.Diagnostics.Errors.Count > 0
-                        ? check.Diagnostics.Errors
-                        : [new PackageError(PackageErrorCode.ExportFailed, "The Plate couldn't be exported.")]);
+                    return PackageExportResult.Failed(DescribeSelfCheckRefusal(check.Diagnostics.Errors));
                 }
             }
 

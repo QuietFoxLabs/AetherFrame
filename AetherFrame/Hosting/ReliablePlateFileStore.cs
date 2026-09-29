@@ -37,8 +37,8 @@ internal sealed class ReliablePlateFileStore : IPlateFileStore
 
     public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-    public Task ReadTextAsync(string path, Action<string> reader) =>
-        ReliableReads.ReadTextAsync(path, reader, () => storage.ReadAllTextAsync(path, forceBackup: true));
+    public Task ReadTextAsync(string path, Action<StoredText> reader) =>
+        ReliableReads.ReadTextAsync(path, reader, () => storage.ReadAllBytesAsync(path, forceBackup: true));
 
     public Task WriteTextAsync(string path, string contents)
     {

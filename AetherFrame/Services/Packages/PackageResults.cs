@@ -57,6 +57,11 @@ internal enum PackageCompatibility
 /// <param name="Detail">Optional diagnostic detail for the log (safe entry names, numbers — never content).</param>
 internal sealed record PackageError(PackageErrorCode Code, string Message, string? Detail = null)
 {
+    /// <summary>A <see cref="PackageErrorCode.ProfileInvalid"/> refusal of one typed value the
+    /// editor shows (a font size, a canvas size), as opposed to the document's raw structure or data
+    /// the editor keeps without showing: only the former is something the player can change.</summary>
+    internal bool IsFieldValue { get; init; }
+
     public override string ToString() => Detail is null ? $"{Code}: {Message}" : $"{Code}: {Message} ({Detail})";
 }
 
@@ -89,7 +94,8 @@ internal sealed class PackageDiagnostics
 
     internal bool IsUnsupported => errors.Count > 0 && errors.All(e => e.Code is PackageErrorCode.UnsupportedVersion or PackageErrorCode.UnsupportedCapability);
 
-    internal void Error(PackageErrorCode code, string message, string? detail = null) => errors.Add(new PackageError(code, message, detail));
+    internal void Error(PackageErrorCode code, string message, string? detail = null, bool fieldValue = false) =>
+        errors.Add(new PackageError(code, message, detail) { IsFieldValue = fieldValue });
 
     internal void Warning(PackageWarningCode code, string message)
     {

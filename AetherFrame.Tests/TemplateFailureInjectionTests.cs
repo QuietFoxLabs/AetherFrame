@@ -463,7 +463,7 @@ public class TemplateLoadInterruptionTests
 
         public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-        public Task ReadTextAsync(string path, Action<string> reader)
+        public Task ReadTextAsync(string path, Action<StoredText> reader)
         {
             if (Interrupt?.Invoke(path) is { } interruption)
             {
@@ -577,7 +577,7 @@ public class TemplateLibraryThreadingTests
 
         public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-        public Task ReadTextAsync(string path, Action<string> reader)
+        public Task ReadTextAsync(string path, Action<StoredText> reader)
         {
             readStarted.TrySetResult();
             gate.Wait();

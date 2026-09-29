@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
+using AetherFrame.Domain.Assets;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Persistence;
 using AetherFrame.Services.Assets;
@@ -355,9 +356,16 @@ internal static class PackageReader
                 }
             }
 
-            // ...and every image in the package must be used by the Plate — anywhere in it, including
-            // data from newer builds this one can't interpret — so nothing rides along unused.
+            // ...and every image in the package must be used by the Plate, so nothing rides along
+            // unused: referenced where an image can be referenced, including anywhere in data from
+            // newer builds this one can't interpret (the reference scan asset cleanup and export
+            // use), and written in a form the import re-points. An id that only appears in a known
+            // text field (a name, a caption) is not a use: cleanup would never count it, and the
+            // image would sit in storage referenced by nothing.
+            var used = new HashSet<Guid>();
+            AssetReferenceScanner.Collect(validated.Document, used);
             var mentioned = PackageAssetIds.CollectGuidStrings(validated.Raw);
+            mentioned.IntersectWith(used);
             foreach (var asset in manifest.Assets)
             {
                 if (!mentioned.Contains(asset.AssetId))
@@ -415,6 +423,22 @@ internal static class PackageReader
             catch (Exception ex) when (ex is System.Text.Json.JsonException or NotSupportedException or InvalidOperationException or FormatException or ArgumentException or NullReferenceException)
             {
                 diagnostics.Error(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", "prepared document unreadable: " + ex.GetType().Name);
+                return;
+            }
+
+            // Step 4's check, again on what is actually imported: every new local image must be
+            // used where the reference scan looks. An id the scan finds in one place, but that is
+            // re-pointed only in another (a text field), would otherwise leave the new image
+            // referenced by nothing the scan counts.
+            var usedLocally = new HashSet<Guid>();
+            AssetReferenceScanner.Collect(previewDocument, usedLocally);
+            foreach (var asset in staged.Where(a => !usedLocally.Contains(a.LocalAssetId)))
+            {
+                diagnostics.Error(PackageErrorCode.AssetUndeclared, "The file contains an image the Plate doesn't use.", $"unused {asset.Declaration.Path}");
+            }
+
+            if (diagnostics.HasErrors)
+            {
                 return;
             }
 
