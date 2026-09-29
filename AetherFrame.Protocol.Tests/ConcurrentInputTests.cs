@@ -18,7 +18,8 @@ namespace AetherFrame.Protocol.Tests;
 /// network buffer, a mapped file). Every reader copies its input before checking it, so such a
 /// buffer can only make an input invalid: every accept is the genuine value, every refusal is a
 /// protocol exception, and a value that passed a check is the value used afterwards. These tests
-/// hammer each reader for a fraction of a second while another thread flips its input; they cannot
+/// hammer each reader for a fraction of a second (longer, up to a bound, where a race must be seen
+/// to have run) while another thread flips its input; they cannot
 /// prove the absence of a race, but the check-then-copy versions of these readers failed them
 /// within milliseconds (docs/networking/NETWORK0_HANDOFF.md, "Remediation").
 /// </summary>
