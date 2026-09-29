@@ -116,7 +116,7 @@ Every signature in version 1 is over a **signing input** built as follows, where
 ```
 SigningInput = u8(38) ‖ "AetherFrame.Protocol.SignedDocument.v1"
              ‖ u16(1)                      protocol version
-             ‖ u8(documentType)            section 6.1
+             ‖ u8(documentType)            section 7.1
              ‖ PublicKey[65]               the signer's key, section 3
              ‖ u32(len(Payload)) ‖ Payload
 ```
