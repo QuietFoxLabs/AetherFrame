@@ -68,7 +68,13 @@ internal sealed class TestLog : IAetherFrameLog
 /// </summary>
 internal sealed class BackupSimulatingStore : IPlateFileStore
 {
-    private readonly SystemFileStore files = new();
+    private readonly SystemFileStore files;
+
+    /// <param name="files">The plain store underneath (a fault-injecting one in some tests).</param>
+    internal BackupSimulatingStore(SystemFileStore? files = null)
+    {
+        this.files = files ?? new SystemFileStore();
+    }
 
     /// <summary>Keyed by the exact path, as Dalamud keys its backup rows.</summary>
     internal Dictionary<string, string> Backups { get; } = new(StringComparer.Ordinal);
