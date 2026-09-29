@@ -1,13 +1,14 @@
 # NETWORK1: planned architecture boundaries
 
-**Status (2026-09-28): planning only.**
-- Nothing in this document is implemented.
+**Status (2026-09-29): the boundaries are in force; the six systems are planned.**
+- Of this document, only the integration skeleton is implemented (increment 3: the preview flavour, the boundary tests and the log redaction). None of the six systems is.
 - No persona key exists.
 - Protocol Specification v1 is still a **DRAFT**.
-- The plugin still has no network code and does not reference `AetherFrame.Protocol`.
-- This document fixes *boundaries*, meaning what each part may and may not touch. It does not settle product decisions; those are recorded in [DecisionRegister.md](DecisionRegister.md). As of 2026-09-28:
+- The plugin still has no network code. A player build holds no `AetherFrame.Protocol` or `AetherFrame.Personas` type; only the networking preview flavour compiles them in (D9b, P2).
+- This document fixes *boundaries*, meaning what each part may and may not touch. It does not settle product decisions; those are recorded in [DecisionRegister.md](DecisionRegister.md). As of 2026-09-29:
   - **D3** (several independent personas, chosen manually) is **approved**, and this document follows it.
   - **D2** (encrypted, portable `.afpersona` backups; no plaintext key export) is **approved in principle**. Its technical details await security approval.
+  - **D9b** (the networking code ships as sources compiled into `AetherFrame.dll`) and **P2** (a compile-time preview flavour only) are **approved under the owner's delegation**.
   - Every other decision is unresolved.
 - Platform findings are in [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md). NETWORK0's approved behaviour is in [NETWORK0.md](NETWORK0.md) and [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md).
 
@@ -63,9 +64,9 @@ Future backend: consumes signed documents only; the plugin depends on it for not
 
 - **Arrows point from the user to the used.** Nothing points into local persistence except a read-only view of saved Plates and managed images.
 - **Nothing in local persistence refers to the other five systems.** The boundary tests (`AetherFrame.Tests/PluginAssemblyBoundaryTests.cs`, since the integration skeleton; they also hold the player build to no protocol or persona type at all, and both flavours to no networking API) enforce this:
-  - the plugin assembly has no `System.Net` reference;
-  - only the networking folders may name `AetherFrame.Protocol`;
-  - local folders never reference the networking folders;
+  - the plugin assembly, in either flavour, references no networking assembly and no `System.Net` type, and no plugin source uses a networking API;
+  - a player build holds no `AetherFrame.Protocol` or `AetherFrame.Personas` type, and the release tooling's package check refuses a DLL that does;
+  - only the networking folders (`Services/Network`, `Hosting/Network`, `Windows/Network`, which a player build does not compile) and lines inside `#if AETHERFRAME_NETWORK_PREVIEW` may name the protocol, the persona foundation or those folders;
   - `PluginConfiguration` has no persona members.
 
 ## 4. Safeguards that hold whatever is decided
@@ -80,7 +81,7 @@ Future backend: consumes signed documents only; the plugin depends on it for not
    - no telemetry;
    - no game identifiers in documents;
    - no persona ids in file names;
-   - persona, profile, revision and asset ids redacted from logs (done by the integration skeleton: `LogPrivacy` replaces each with a placeholder naming its kind, in every logged message and exception).
+   - persona, profile, revision and asset ids redacted from logs (done by the integration skeleton: `LogPrivacy` replaces each with a placeholder naming its kind, in every message and exception logged through the plugin's `IAetherFrameLog`, and in the exceptions the Plate and file code hands to Dalamud's log directly; the few direct calls that remain log fixed text, local names, or exceptions from reading game data and making textures, none of which can carry one).
 8. **Ownership belongs to the backend.** The plugin cannot enforce it and must not claim to.
 
 ## 5. What NETWORK1 does not include

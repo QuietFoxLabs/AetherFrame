@@ -153,10 +153,11 @@ public class PluginAssemblyBoundaryTests
     [Fact]
     public void LocalSources_NeverNameTheNetworkingCode()
     {
-        // Only the networking folders, and lines compiled only into the preview flavour, may name
-        // the protocol, the persona foundation or the networking services. Everything local stays
-        // ignorant of them, whichever flavour is built.
+        // Only the networking folders (which a player build does not compile) and lines compiled
+        // only into the preview flavour may name the protocol, the persona foundation or the
+        // networking services. Everything local stays ignorant of them, whichever flavour is built.
         var offending = new List<string>();
+        var scanned = 0;
         foreach (var (file, relative) in PluginSources())
         {
             if (NetworkingFolders.Any(folder => relative.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
@@ -164,44 +165,14 @@ public class PluginAssemblyBoundaryTests
                 continue;
             }
 
-            var previewDepth = 0;
-            var lineNumber = 0;
-            foreach (var line in File.ReadLines(file))
+            scanned++;
+            foreach (var lineNumber in PlayerBuildSourceScan.OffendingLines(File.ReadLines(file), NetworkingNames))
             {
-                lineNumber++;
-                var trimmed = line.TrimStart();
-                if (trimmed.StartsWith("#if AETHERFRAME_NETWORK_PREVIEW", StringComparison.Ordinal))
-                {
-                    previewDepth = 1;
-                    continue;
-                }
-
-                if (previewDepth > 0)
-                {
-                    if (trimmed.StartsWith("#if", StringComparison.Ordinal))
-                    {
-                        previewDepth++;
-                    }
-                    else if (trimmed.StartsWith("#endif", StringComparison.Ordinal))
-                    {
-                        previewDepth--;
-                    }
-
-                    continue;
-                }
-
-                if (trimmed.StartsWith("//", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (NetworkingNames.Any(name => line.Contains(name, StringComparison.Ordinal)))
-                {
-                    offending.Add($"{relative}:{lineNumber}");
-                }
+                offending.Add($"{relative}:{lineNumber}");
             }
         }
 
+        Assert.True(scanned > 0, "no plugin source was scanned");
         Assert.True(offending.Count == 0, "Local sources name the networking code at: " + string.Join(", ", offending));
     }
 
@@ -209,8 +180,10 @@ public class PluginAssemblyBoundaryTests
     public void PluginSources_UseNoNetworkingApi()
     {
         var offending = new List<string>();
+        var scanned = 0;
         foreach (var (file, relative) in PluginSources())
         {
+            scanned++;
             var lineNumber = 0;
             foreach (var line in File.ReadLines(file))
             {
@@ -227,6 +200,7 @@ public class PluginAssemblyBoundaryTests
             }
         }
 
+        Assert.True(scanned > 0, "no plugin source was scanned");
         Assert.True(offending.Count == 0, "Plugin sources use a networking API at: " + string.Join(", ", offending));
     }
 
@@ -246,5 +220,84 @@ public class PluginAssemblyBoundaryTests
 
             yield return (file, relative);
         }
+    }
+}
+
+/// <summary>
+/// Finds the lines of a plugin source that a player build compiles and that name something no
+/// local source may. Lines inside <c>#if AETHERFRAME_NETWORK_PREVIEW</c>, and in the <c>#else</c>
+/// of <c>#if !AETHERFRAME_NETWORK_PREVIEW</c>, are compiled only into the preview flavour and are
+/// not scanned. The <c>#else</c> and <c>#elif</c> branches of a preview block, every other
+/// conditional block, and a compound condition that merely mentions the symbol are scanned,
+/// however deeply the blocks nest. Comment lines are not scanned.
+/// </summary>
+internal static class PlayerBuildSourceScan
+{
+    private const string Symbol = "AETHERFRAME_NETWORK_PREVIEW";
+
+    internal static IReadOnlyList<int> OffendingLines(IEnumerable<string> lines, IReadOnlyList<string> names)
+    {
+        var offending = new List<int>();
+        var blocks = new Stack<(bool Skipped, bool ElseSkipped)>();
+        var lineNumber = 0;
+        foreach (var line in lines)
+        {
+            lineNumber++;
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith('#'))
+            {
+                var directive = Directive(trimmed, out var condition);
+                if (directive == "if")
+                {
+                    blocks.Push((condition == Symbol, condition == "!" + Symbol));
+                    continue;
+                }
+
+                if (directive == "elif" && blocks.TryPop(out var open))
+                {
+                    blocks.Push((condition == Symbol, open.ElseSkipped));
+                    continue;
+                }
+
+                if (directive == "else" && blocks.TryPop(out var opened))
+                {
+                    blocks.Push((opened.ElseSkipped, opened.ElseSkipped));
+                    continue;
+                }
+
+                if (directive == "endif")
+                {
+                    blocks.TryPop(out _);
+                    continue;
+                }
+            }
+
+            if (blocks.Any(block => block.Skipped) || trimmed.StartsWith("//", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (names.Any(name => line.Contains(name, StringComparison.Ordinal)))
+            {
+                offending.Add(lineNumber);
+            }
+        }
+
+        return offending;
+    }
+
+    /// <summary>The name of a preprocessor directive, and its condition without any trailing comment.</summary>
+    private static string Directive(string trimmed, out string condition)
+    {
+        var text = trimmed[1..].TrimStart();
+        var comment = text.IndexOf("//", StringComparison.Ordinal);
+        if (comment >= 0)
+        {
+            text = text[..comment];
+        }
+
+        var space = text.IndexOf(' ');
+        condition = space < 0 ? string.Empty : text[(space + 1)..].Trim();
+        return space < 0 ? text.Trim() : text[..space];
     }
 }

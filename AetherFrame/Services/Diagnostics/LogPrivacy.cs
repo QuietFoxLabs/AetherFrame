@@ -80,8 +80,8 @@ internal static partial class LogPrivacy
 
     // The protocol's text forms exactly (docs/networking/ProtocolSpecification-v1.md): the prefix
     // and the lowercase hex digits, as a whole word. Nothing shorter, longer or uppercase is one,
-    // and a prefix inside another word is left alone.
-    [GeneratedRegex(@"(?<![\w-])(?:psn_[0-9a-f]{64}|(?:prf|rev|ast)_[0-9a-f]{32})(?![\w-])", RegexOptions.CultureInvariant)]
+    // and a prefix inside another word is left alone; one beside a hyphen, slash or bracket is hidden.
+    [GeneratedRegex(@"(?<!\w)(?:psn_[0-9a-f]{64}|(?:prf|rev|ast)_[0-9a-f]{32})(?!\w)", RegexOptions.CultureInvariant)]
     private static partial Regex NetworkIdentifier();
 
     // A whole file name (nothing but a separator, quote, bracket, space or the start of the text

@@ -58,4 +58,8 @@
     <Compile Include="..\AetherFrame.Protocol\**\*.cs" Exclude="..\AetherFrame.Protocol\obj\**;..\AetherFrame.Protocol\bin\**" Link="Network\Protocol\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\AetherFrame.Personas\**\*.cs" Exclude="..\AetherFrame.Personas\obj\**;..\AetherFrame.Personas\bin\**" Link="Network\Personas\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+  <!-- The plugin's own networking folders are preview-only too: a player build compiles nothing in them. -->
+  <ItemGroup Condition="'$(AetherFrameNetworkPreview)' != 'true'">
+    <Compile Remove="Services\Network\**;Hosting\Network\**;Windows\Network\**" />
+  </ItemGroup>
 </Project>

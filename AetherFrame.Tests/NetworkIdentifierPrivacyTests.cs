@@ -47,6 +47,14 @@ public class NetworkIdentifierPrivacyTests
     }
 
     [Fact]
+    public void Redact_HidesAnIdentifierBesidePunctuation()
+    {
+        Assert.Equal(
+            $"plate-{LogPrivacy.ProfileIdentifier}-copy ({LogPrivacy.PersonaIdentity}) /{LogPrivacy.AssetIdentifier}.png",
+            LogPrivacy.Redact($"plate-{Profile}-copy ({Persona}) /{Asset}.png"));
+    }
+
+    [Fact]
     public void Redact_StillHidesCharacterBindingFilesInTheSamePass()
     {
         var redacted = LogPrivacy.Redact($"read 1001.json for {Persona}");
