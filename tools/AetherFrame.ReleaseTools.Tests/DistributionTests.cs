@@ -14,7 +14,7 @@ namespace AetherFrame.ReleaseTools.Tests;
 /// </summary>
 public class DistributionTests
 {
-    private const string DryRunTemplate = "https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v{version}/{package}";
+    private const string DryRunTemplate = "https://dry-run.invalid/QuietFoxLabs/AetherFrame/releases/download/v{version}/{package}";
 
     [Fact]
     public void Configuration_AgreesWithThePluginProject()
@@ -26,7 +26,7 @@ public class DistributionTests
         Assert.Equal(configuration.SourceRepositoryUrl, project.Root!.Elements("PropertyGroup").Elements("RepoUrl").Single().Value.Trim());
         var sdk = (string)project.Root.Attribute("Sdk")!;
         Assert.Equal(configuration.DalamudApiLevel, int.Parse(Regex.Match(sdk, @"^Dalamud\.NET\.Sdk/(\d+)\.").Groups[1].Value));
-        Assert.StartsWith("https://github.com/richhiiee/AetherFrame/releases/download/", configuration.DownloadUrlTemplate.Text);
+        Assert.StartsWith("https://github.com/QuietFoxLabs/AetherFrame/releases/download/", configuration.DownloadUrlTemplate.Text);
         Assert.EndsWith("/pluginmaster.json", configuration.PluginMasterUrl);
     }
 
@@ -38,7 +38,7 @@ public class DistributionTests
         // here is a decision, not an edit: it would orphan every installation made from the old address.
         var configuration = RepositoryConfiguration.Load(RepositoryPaths.File(Path.Combine("distribution", "repository.json")));
 
-        Assert.Equal("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json", configuration.PluginMasterUrl);
+        Assert.Equal("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json", configuration.PluginMasterUrl);
         Assert.Equal("plugin-repository", PublicationTarget.FromConfiguration(configuration).Branch);
     }
 

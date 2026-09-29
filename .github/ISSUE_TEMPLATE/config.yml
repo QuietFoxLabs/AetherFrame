@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: Tester guide
-    url: https://github.com/richhiiee/AetherFrame/blob/master/docs/Testing.md
+    url: https://github.com/QuietFoxLabs/AetherFrame/blob/master/docs/Testing.md
     about: How to install a test build, what to test, and what to include in a report.
   - name: Problems with Dalamud or other plugins
     url: https://goatcorp.github.io/faq/

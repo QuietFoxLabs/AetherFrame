@@ -14,7 +14,7 @@
 # Checklist and PR description: docs/Releasing.md.
 
 [plugin]
-repository = "https://github.com/richhiiee/AetherFrame.git"
+repository = "https://github.com/QuietFoxLabs/AetherFrame.git"
 commit = "REPLACE_WITH_THE_FULL_SHA_OF_THE_RELEASE_TAG_COMMIT"
 owners = ["richhiiee"]
 project_path = "AetherFrame"

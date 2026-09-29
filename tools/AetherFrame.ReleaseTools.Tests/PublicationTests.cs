@@ -36,7 +36,7 @@ public class PublicationTests
         Assert.Equal("0.1.6.0", entry.AssemblyVersion);
         Assert.Equal("0.1.6.0", entry.TestingAssemblyVersion);
         Assert.Equal(15, entry.TestingDalamudApiLevel);
-        Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip", entry.DownloadLinkTesting);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip", entry.DownloadLinkTesting);
         Assert.Equal(DateTimeOffset.Parse("2026-09-28T12:00:00Z").ToUnixTimeSeconds(), entry.LastUpdate);
         var summaryBytes = File.ReadAllBytes(Path.Combine(publication, "summary.json"));
         Assert.Equal($"changed=true\nsha256={Checksums.Sha256Hex(document)}\nsummary_sha256={Checksums.Sha256Hex(summaryBytes)}\n", outputs);
@@ -65,11 +65,11 @@ public class PublicationTests
 
         var message = File.ReadAllText(Path.Combine(publication, "commit-message.txt"));
         Assert.StartsWith("Publish 0.1.6 to testing\n\nAetherFrame custom repository: testing-exclusive 0.1.6 (was: nothing published).\n", message);
-        Assert.Contains("Release v0.1.6 (testing-exclusive): https://github.com/richhiiee/AetherFrame/releases/tag/v0.1.6\n", message);
+        Assert.Contains("Release v0.1.6 (testing-exclusive): https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6\n", message);
         Assert.Contains($"  release id {TestReleases.ReleaseId}, published 2026-09-28T12:00:00Z, pre-release, not immutable\n", message);
         Assert.Contains($"  tagged commit {TestPackages.Commit}\n", message);
         Assert.Contains($"pluginmaster.json: sha256 {Checksums.Sha256Hex(document)}", message);
-        Assert.Contains("Workflow run: https://github.com/richhiiee/AetherFrame/actions/runs/123456789\n", message);
+        Assert.Contains("Workflow run: https://github.com/QuietFoxLabs/AetherFrame/actions/runs/123456789\n", message);
 
         // The record names files, releases and hashes, never a local path.
         foreach (var name in new[] { "commit-message.txt", "report.md", "summary.json" })
@@ -112,8 +112,8 @@ public class PublicationTests
         Assert.Equal("0.1.6.0", entry.TestingAssemblyVersion);
         Assert.Equal("### Fixed\n\n- Changes in 0.1.5.", entry.Changelog);
         Assert.Equal("### Fixed\n\n- Changes in 0.1.6.", entry.TestingChangelog);
-        Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", entry.DownloadLinkInstall);
-        Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip", entry.DownloadLinkTesting);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", entry.DownloadLinkInstall);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip", entry.DownloadLinkTesting);
         Assert.Equal(DateTimeOffset.Parse("2026-09-28T12:00:00Z").ToUnixTimeSeconds(), entry.LastUpdate);
     }
 
@@ -281,7 +281,7 @@ public class PublicationTests
 
     [Theory]
     [InlineData("\"IsHide\": false", "\"IsHide\": true", "[FAIL] published file: IsHide")]
-    [InlineData("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.6/", "https://example.com/v0.1.6/", "[FAIL] published file: DownloadLinkInstall")]
+    [InlineData("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.6/", "https://example.com/v0.1.6/", "[FAIL] published file: DownloadLinkInstall")]
     [InlineData("\"InternalName\": \"AetherFrame\"", "\"InternalName\": \"SomethingElse\"", "[FAIL] published file: InternalName")]
     public void AHandEditedPublishedFile_IsNotBuiltUpon(string original, string replacement, string failure)
     {
@@ -393,7 +393,7 @@ public class PublicationTests
             {
                 "prepare-publication", "--config", Config(directory), "--branch", branch, "--version", version, "--channel", channel,
                 "--releases", directory.File("releases"), "--branch-readme", Readme(directory), "--output", directory.File(publication),
-                "--run-url", "https://github.com/richhiiee/AetherFrame/actions/runs/123456789", "--github-output", outputs,
+                "--run-url", "https://github.com/QuietFoxLabs/AetherFrame/actions/runs/123456789", "--github-output", outputs,
             }
             .Concat(current is null ? new[] { "--no-current" } : new[] { "--current", current, "--current-commit", new string('e', 40) })
             .Concat(rollback ? new[] { "--rollback" } : Array.Empty<string>())

@@ -133,9 +133,9 @@ public class ChangelogSectionsTests
 
         - Older thing.
 
-        [Unreleased]: https://github.com/richhiiee/AetherFrame/compare/v0.1.6...HEAD
-        [0.1.6]: https://github.com/richhiiee/AetherFrame/compare/v0.1.5...v0.1.6
-        [0.1.5]: https://github.com/richhiiee/AetherFrame/releases/tag/v0.1.5
+        [Unreleased]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.6...HEAD
+        [0.1.6]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.5...v0.1.6
+        [0.1.5]: https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.5
         """;
 
     [Fact]

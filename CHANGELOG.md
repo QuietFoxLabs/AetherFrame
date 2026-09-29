@@ -11,6 +11,10 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 - Release tooling for a public custom Dalamud repository ([docs/CustomRepository.md](docs/CustomRepository.md)): `tools/AetherFrame.ReleaseTools` checks a release package against the full rule set (x64, built from the released commit, one version and one Dalamud API level everywhere, only the three plugin files, safe entry names), generates and checks the repository metadata Dalamud reads (`pluginmaster.json`, stable and testing channels), and writes and verifies SHA-256 checksum files. The Build and Release workflows run it; the Release dry run keeps the generated metadata as an artifact. Nothing is published to a repository yet, and the plugin itself is unchanged.
 - A manual **Publish custom repository** workflow ([docs/CustomRepository.md](docs/CustomRepository.md#publishing)) that puts a published GitHub Release into the custom repository's testing or stable channel after the owner's approval, or rolls a channel back. It verifies every release it describes from scratch, never publishes a draft, never moves a channel to an older version by accident, and writes only `pluginmaster.json` and a README to its own branch. It has not been used yet.
 
+### Changed
+
+- The project moved to [QuietFoxLabs/AetherFrame](https://github.com/QuietFoxLabs/AetherFrame). The plugin's repository link and release downloads use that address, and so does the custom repository address for new installs ([docs/CustomRepository.md](docs/CustomRepository.md)). The old `richhiiee/AetherFrame` addresses still redirect, so a custom repository URL added earlier keeps working.
+
 ### Fixed
 
 Plate Library reliability and data preservation ([docs/reliability/PlateLibraryReliability.md](docs/reliability/PlateLibraryReliability.md)). Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged.
@@ -137,11 +141,11 @@ The first versioned alpha.
 - **Plate Viewer** and the commands `/aetherframe` (`/af`), `/af view` and `/af version`.
 - Builds and tests on Windows and Linux in CI.
 
-[Unreleased]: https://github.com/richhiiee/AetherFrame/compare/v0.1.6...HEAD
-[0.1.6]: https://github.com/richhiiee/AetherFrame/compare/v0.1.5...v0.1.6
-[0.1.5]: https://github.com/richhiiee/AetherFrame/compare/v0.1.4...v0.1.5
-[0.1.4]: https://github.com/richhiiee/AetherFrame/compare/v0.1.3...v0.1.4
-[0.1.3]: https://github.com/richhiiee/AetherFrame/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/richhiiee/AetherFrame/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/richhiiee/AetherFrame/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/richhiiee/AetherFrame/releases/tag/v0.1.0
+[Unreleased]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.0

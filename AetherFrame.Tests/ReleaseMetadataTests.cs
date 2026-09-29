@@ -20,7 +20,7 @@ public class ReleaseMetadataTests
         var changelog = File.ReadAllText(RepositoryFile("CHANGELOG.md"));
 
         Assert.Matches(new Regex($@"^## \[{Regex.Escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}\s*$", RegexOptions.Multiline), changelog);
-        Assert.Contains($"[{version}]: https://github.com/richhiiee/AetherFrame/", changelog);
+        Assert.Contains($"[{version}]: https://github.com/QuietFoxLabs/AetherFrame/", changelog);
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class ReleaseMetadataTests
     {
         var manifest = File.ReadAllText(RepositoryFile("docs/dalamud-submission/manifest.toml"));
 
-        Assert.Contains("repository = \"https://github.com/richhiiee/AetherFrame.git\"", manifest);
+        Assert.Contains("repository = \"https://github.com/QuietFoxLabs/AetherFrame.git\"", manifest);
         var projectPath = Regex.Match(manifest, "^project_path = \"([^\"]+)\"", RegexOptions.Multiline).Groups[1].Value;
         Assert.True(File.Exists(RepositoryFile(Path.Combine(projectPath, "AetherFrame.csproj"))), $"project_path '{projectPath}' has no AetherFrame.csproj.");
         Assert.True(File.Exists(RepositoryFile(Path.Combine(projectPath, "packages.lock.json"))), $"project_path '{projectPath}' has no packages.lock.json.");

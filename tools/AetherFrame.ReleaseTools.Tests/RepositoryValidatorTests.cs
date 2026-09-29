@@ -57,7 +57,7 @@ public class RepositoryValidatorTests
     [Theory]
     [InlineData("InternalName", "\"Aetherframe\"", "InternalName", "expected 'AetherFrame'")]
     [InlineData("DalamudApiLevel", "14", "DalamudApiLevel", "is 14, expected 15")]
-    [InlineData("RepoUrl", "\"https://github.com/x/AetherFrame\"", "RepoUrl", "expected 'https://github.com/richhiiee/AetherFrame'")]
+    [InlineData("RepoUrl", "\"https://github.com/x/AetherFrame\"", "RepoUrl", "expected 'https://github.com/QuietFoxLabs/AetherFrame'")]
     [InlineData("ApplicableVersion", "\"7.0\"", "ApplicableVersion", "expected 'any'")]
     [InlineData("AssemblyVersion", "\"0.1.5\"", "AssemblyVersion", "not MAJOR.MINOR.PATCH.0")]
     [InlineData("AssemblyVersion", "\"0.1.5.1\"", "AssemblyVersion", "not MAJOR.MINOR.PATCH.0")]
@@ -66,12 +66,12 @@ public class RepositoryValidatorTests
     [InlineData("LastUpdate", "0", "LastUpdate", "between 2020 and 2100")]
     [InlineData("IsHide", "true", "IsHide", "rolled back rather than hidden")]
     [InlineData("Name", "\" \"", "installer fields", "empty: Name")]
-    [InlineData("DownloadLinkInstall", "\"http://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip\"", "DownloadLinkInstall", "expected 'https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip'")]
-    [InlineData("DownloadLinkInstall", "\"https://evil.invalid/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip\"", "DownloadLinkInstall", "from the configured template")]
-    [InlineData("DownloadLinkInstall", "\"https://github.com/richhiiee/AetherFrame/releases/download/v0.1.4/AetherFrame-0.1.5.zip\"", "DownloadLinkInstall", "from the configured template")]
-    [InlineData("DownloadLinkInstall", "\"https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.4.zip\"", "DownloadLinkInstall", "from the configured template")]
-    [InlineData("DownloadLinkUpdate", "\"https://github.com/richhiiee/AetherFrame/releases/download/v0.1.4/AetherFrame-0.1.4.zip\"", "DownloadLinkUpdate", "expected the install link")]
-    [InlineData("DownloadLinkTesting", "\"https://github.com/richhiiee/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip\"", "DownloadLinkTesting", "when there is no testing version")]
+    [InlineData("DownloadLinkInstall", "\"http://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip\"", "DownloadLinkInstall", "expected 'https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip'")]
+    [InlineData("DownloadLinkInstall", "\"https://evil.invalid/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip\"", "DownloadLinkInstall", "from the configured template")]
+    [InlineData("DownloadLinkInstall", "\"https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.4/AetherFrame-0.1.5.zip\"", "DownloadLinkInstall", "from the configured template")]
+    [InlineData("DownloadLinkInstall", "\"https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.4.zip\"", "DownloadLinkInstall", "from the configured template")]
+    [InlineData("DownloadLinkUpdate", "\"https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.4/AetherFrame-0.1.4.zip\"", "DownloadLinkUpdate", "expected the install link")]
+    [InlineData("DownloadLinkTesting", "\"https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip\"", "DownloadLinkTesting", "when there is no testing version")]
     [InlineData("IconUrl", "\"http://x.invalid/icon.png\"", "IconUrl", "must use https")]
     [InlineData("Tags", "[\"a\", \"a\"]", "Tags", "distinct")]
     [InlineData("Changelog", "\"\"", "Changelog", "empty")]
@@ -252,7 +252,7 @@ public class RepositoryValidatorTests
         TestPackages.AllPassed(validation);
         Assert.Equal(hostile, entries![0].Description);
         Assert.False(entries[0].IsHide);
-        Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", entries[0].DownloadLinkInstall);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", entries[0].DownloadLinkInstall);
         Assert.Equal(RepositoryEntry.KnownKeys.Count, RepositoryEntry.KnownKeys.Distinct().Count());
     }
 
