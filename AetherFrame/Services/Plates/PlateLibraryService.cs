@@ -1784,9 +1784,10 @@ internal sealed class PlateLibraryService
     /// </summary>
     private PlateRecord PreparePlateWrite(Guid plateId, JsonObject raw)
     {
-        var json = VersionedJson.Serialize(raw);
         try
         {
+            // Inside the refusal: text the serializer can't write is text that wouldn't load again.
+            var json = VersionedJson.Serialize(raw);
             var readBack = VersionedJson.RequireFaithfulReadBack(json, PersistenceSchemas.ProfileDocument.Name);
             var parsed = VersionedJson.Parse(readBack, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
             if (!parsed.IsUsable)

@@ -425,7 +425,20 @@ internal sealed class TemplateLibraryService
                 Document = embeddedDocument,
             };
 
-            var record = PrepareTemplateWrite(templateId, TemplateDocuments.ToJson(template));
+            JsonObject envelope;
+            try
+            {
+                envelope = TemplateDocuments.ToJson(template);
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or NotSupportedException)
+            {
+                // The Plate's content can't be carried in an envelope (it is nested past the
+                // serializer's limit, one level deeper than the Plate): nothing is written.
+                log.Error(ex, $"AetherFrame did not save Plate {sourcePlateId} as a Template: its content couldn't be written as one.");
+                throw new TemplateLibraryException(PlateLibraryService.UnloadableWriteMessage);
+            }
+
+            var record = PrepareTemplateWrite(templateId, envelope);
             await WriteTemplateAsync(record).ConfigureAwait(false);
 
             lock (gate)
@@ -888,9 +901,11 @@ internal sealed class TemplateLibraryService
     /// </summary>
     private TemplateRecord PrepareTemplateWrite(Guid templateId, JsonObject raw)
     {
-        var json = VersionedJson.Serialize(raw);
         try
         {
+            // Inside the refusal: text the serializer can't write (nested past its limit) is text
+            // that wouldn't load again either.
+            var json = VersionedJson.Serialize(raw);
             var parsed = ParseTemplateText(VersionedJson.RequireFaithfulReadBack(json, "Template"), recoveredFromBackup: false);
             if (parsed.Status != TemplateStatus.Ready)
             {
