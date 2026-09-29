@@ -48,7 +48,7 @@ public class StoredTextDecoderTests
     /// <summary>Well-formed text a strict decoder must still accept: a literal U+FFFD, the
     /// noncharacters U+FFFE and U+FFFF, an emoji (a surrogate pair in UTF-16), NUL, a right-to-left
     /// mark before Hebrew, a combining mark, and a U+FEFF inside the text.</summary>
-    private const string WellFormedText = "{ \"Name\": \"Ælfwyn � ￾ ￿ 🌸 \0 ‏א é ﻿!\" }";
+    private const string WellFormedText = "{ \"Name\": \"\u00C6lfwyn \uFFFD \uFFFE \uFFFF \U0001F338 \0 \u200F\u05D0 e\u0301 \uFEFF!\" }";
 
     private static readonly string[] EncodingNames = [Utf8Name, Utf16LeName, Utf16BeName, Utf32LeName, Utf32BeName];
 
@@ -250,11 +250,13 @@ public class StoredTextDecoderTests
     private static async Task<List<CheckedFile>> CheckAgainstReferencesAsync(IEnumerable<(string Name, byte[] Bytes)> cases)
     {
         using var directory = new TempDirectory();
-        var path = Path.Combine(directory.Path, "stored.json");
         var results = new List<CheckedFile>();
+        var index = 0;
 
         foreach (var (name, bytes) in cases)
         {
+            // A file of its own for each case: on Windows a scanner may still hold the previous one.
+            var path = Path.Combine(directory.Path, $"stored-{index++}.json");
             await File.WriteAllBytesAsync(path, bytes);
             var decoded = StoredTextDecoder.Decode(bytes);
             var (encoding, markLength) = Detect(bytes);
@@ -457,7 +459,7 @@ public class StoredTextDecoderTests
             ("surrogate pair", ['\uD83C', '\uDF38']),
             ("lone high surrogate", ['\uD83C', 'x']),
             ("lone low surrogate", ['\uDF38']),
-            ("U+FFFD", ['�']),
+            ("U+FFFD", ['\uFFFD']),
         ];
 
         (string Name, uint[] Values)[] utf32 =
@@ -615,7 +617,7 @@ public class StoredTextDecoderTests
     {
         var decoded = StoredTextDecoder.Decode(Hex(hex));
 
-        Assert.Equal("�", decoded.Text);
+        Assert.Equal("\uFFFD", decoded.Text);
         Assert.False(decoded.HasInvalidBytes);
     }
 
@@ -656,7 +658,7 @@ public class StoredTextDecoderTests
         Assert.Equal(encoding, decoded.EncodingName);
         Assert.Equal(ReadAsFile(bytes), decoded.Text);
         Assert.StartsWith("A", decoded.Text, StringComparison.Ordinal);
-        Assert.Contains("�", decoded.Text, StringComparison.Ordinal);
+        Assert.Contains("\uFFFD", decoded.Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -703,7 +705,7 @@ public class StoredTextDecoderTests
     [Fact]
     public void TextStartingWithAByteOrderMarkCharacter_WouldReadBackWithoutIt_AndIsRefusedByTheWriteCheck()
     {
-        const string json = "﻿{ \"Name\": \"Plain\" }";
+        const string json = "\uFEFF{ \"Name\": \"Plain\" }";
 
         Assert.Equal(json[1..], StoredTextDecoder.ReadBack(json).Text);
         Assert.Throws<InvalidDataException>(() => VersionedJson.RequireFaithfulReadBack(json, "Test"));
@@ -720,7 +722,7 @@ public class StoredTextDecoderTests
             var text = RandomText(random, random.Next(200), loneSurrogates: random.Next(2) == 0);
 
             // UTF-8 can't carry a lone surrogate, and a leading U+FEFF reads back as a byte order mark.
-            var faithful = IsWellFormed(text) && !text.StartsWith('﻿');
+            var faithful = IsWellFormed(text) && !text.StartsWith('\uFEFF');
             seen.Add(faithful);
 
             var kept = WriteCheck(text);

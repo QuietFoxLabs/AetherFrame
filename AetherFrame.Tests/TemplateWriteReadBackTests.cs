@@ -16,14 +16,19 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// A Template write puts on disk exactly the text the Template Library keeps, proven first to load
-/// again as a Ready Template through the loader's own reader, as a Plate write does (see
-/// <see cref="WriteReadBackTests"/>): after Save as Template, Rename or Duplicate, what the Library
-/// shows and uses is what the next startup reads, even when a name held half of a surrogate pair,
-/// which the file can't carry as given. A write that wouldn't load again is refused, with the same
-/// message as a Plate's, before any file is touched. A Template holds its Plate's document one level
-/// deeper than the Plate's own file does, so a Plate whose content (from a newer build, say) is
-/// nested to the JSON reader's depth limit is such a write when it is saved as a Template.
+/// A Template write is proven first to load again as a Ready Template through the loader's own
+/// reader, as a Plate write is (see <see cref="WriteReadBackTests"/>): after Save as Template,
+/// Rename or Duplicate, what the Library shows and uses is what the next startup reads, even when a
+/// name held half of a surrogate pair, which the file can't carry as given. A write that wouldn't
+/// load again is refused, with the same message as a Plate's, before any file is touched. A Template
+/// holds its Plate's document one level deeper than the Plate's own file does, so a Plate whose
+/// content (from a newer build, say) is nested to the JSON reader's depth limit is such a write when
+/// it is saved as a Template.
+///
+/// <para>What these can't observe: the byte-level round trip the write path also makes
+/// (<see cref="VersionedJson.RequireFaithfulReadBack"/>) never has anything to refuse here, since
+/// the serializer's output is always ASCII (a lone surrogate is written escaped). That check is
+/// covered at unit level by <see cref="StoredTextDecoderTests"/>.</para>
 /// </summary>
 public class TemplateWriteReadBackTests
 {
@@ -99,16 +104,16 @@ public class TemplateWriteReadBackTests
     }
 
     [Fact]
-    public async Task EveryWrite_PutsOnDiskTheTextTheLibraryKeeps()
+    public async Task EveryWrite_ShowsAndUsesWhatTheNextStartupReads()
     {
         using var fixture = new TemplateLibraryFixture();
         var templates = await fixture.LoadAsync();
-        var plate = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.AdventurePlateClassic, Characters.Alice, "Ælfwyn's Plate ✦");
+        var plate = await fixture.PlateLibrary.CreatePlateAsync(PlateStartingLayout.AdventurePlateClassic, Characters.Alice, "\u00C6lfwyn's Plate \u2726");
         var savedId = await templates.SaveAsTemplateAsync(plate.PlateId, null);
         fixture.Clock.Tick();
         var renamedId = await templates.SaveAsTemplateAsync(plate.PlateId, "Spare");
         fixture.Clock.Tick();
-        await templates.RenameTemplateAsync(renamedId, "Ælfwyn � 🌸 Template");
+        await templates.RenameTemplateAsync(renamedId, "\u00C6lfwyn \uFFFD \U0001F338 Template");
         fixture.Clock.Tick();
         var copyId = await templates.DuplicateTemplateAsync(renamedId);
 
@@ -131,7 +136,7 @@ public class TemplateWriteReadBackTests
                 nameof(ProfileDocument.Name));
         }
 
-        Assert.Equal("Ælfwyn � 🌸 Template", reloaded.FindTemplate(renamedId)!.DisplayName);
+        Assert.Equal("\u00C6lfwyn \uFFFD \U0001F338 Template", reloaded.FindTemplate(renamedId)!.DisplayName);
         Assert.All(reloaded.GetOrderedTemplates().Where(t => !t.IsBuiltIn), t =>
         {
             Assert.Equal(TemplateStatus.Ready, t.Status);
@@ -162,7 +167,7 @@ public class TemplateWriteReadBackTests
         else
         {
             // The copy's name is shortened to fit, between the two halves of the emoji.
-            var sourceName = new string('a', 58) + "🌸bbbb";
+            var sourceName = new string('a', 58) + "\U0001F338bbbb";
             Assert.False(IsWellFormed(TemplateNaming.MakeCopyName(sourceName, [])));
             var sourceId = await templates.SaveAsTemplateAsync(plate.PlateId, sourceName);
             templateId = await templates.DuplicateTemplateAsync(sourceId);
@@ -236,5 +241,6 @@ public class TemplateWriteReadBackTests
         Assert.Equal(plateFile, File.ReadAllBytes(fixture.Paths.GetPlatePath(plateId)));
         Assert.Equal(PlateLibraryService.UnloadableWriteMessage, UserFacingError.Describe(refused, "The Template couldn't be saved."));
         Assert.Equal(PlateLibraryService.UnloadableWriteMessage, Assert.IsType<TemplateLibraryException>(refused).Message);
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("did not", StringComparison.Ordinal) && m.Contains("Template", StringComparison.Ordinal));
     }
 }
