@@ -1,6 +1,6 @@
 # AetherFrame remote protocol, version 1 (DRAFT)
 
-**Status: DRAFT.** This document describes the wire format that `AetherFrame.Protocol` reads and writes today, precisely enough to build a second implementation, in any language, that produces byte-identical documents and verifies the same signatures without reading the C# source. It is not yet frozen. Version 1 becomes final only when the open product decisions in [NETWORK0.md](NETWORK0.md), "Open product decisions", are settled, because some of them change bytes that are signed (the `name` rules, D4; what an image digest covers, D5; whether a document is bound to a deployment, D7; what a retraction means, D1). Until then every document produced under this draft is a test document: no server accepts one, and none is to be treated as a version 1 document after the freeze. What is not expected to change: the envelope, the signing input and its tag, the signature form, the key format and the persona identity derivation.
+**Status: DRAFT.** This document describes the wire format that `AetherFrame.Protocol` reads and writes today, precisely enough to build a second implementation, in any language, that produces byte-identical documents and verifies the same signatures without reading the C# source. It is not yet frozen. Version 1 becomes final only when the open product decisions in [NETWORK0.md](NETWORK0.md), "Open product decisions", are settled, because some of them change bytes that are signed (the `name` rules, D4; what an image digest covers, D5; whether a document is bound to a deployment, D7; what a retraction means, D1). Until then every document is a **draft**, marked in its bytes (decision N3, [DecisionRegister.md](DecisionRegister.md)): `protocolVersion` is `0x8001` and the signature tag ends in `-draft` (sections 5, 7 and 10). A test server may accept drafts; after the freeze no reader accepts one, and a draft can never be read or verified as a final version 1 document. What is not expected to change at the freeze: the envelope layout, the signing input's layout, the signature form, the key format and the persona identity derivation. The version number and the tag change from the draft marker to the final one.
 
 The committed test vectors (`AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json`, section 11) are the check that a second implementation is right. [NETWORK0.md](NETWORK0.md) explains why the protocol looks like this; this document only says what it is. Section 13 states what a server that accepts these documents is obliged to do with them.
 
@@ -38,6 +38,8 @@ A `text` is UTF-8 with these rules, and no others:
 5. **Nothing is normalized.** No Unicode normalization form is applied, line endings are not converted, whitespace is not trimmed, and case is not changed. `Café` in NFC and `Café` in NFD are different texts with different bytes; `a\r\nb` and `a\nb` are different texts. A text decodes to exactly the scalar values that were encoded.
 
 An empty text is a `u32` zero and no bytes.
+
+A `name` field follows the stricter name rule of section 8.1.1 instead of these limits. The limits above apply to every other text; version 1 has none yet, and the unit tests keep covering them for the texts a later schema carries.
 
 ### 2.4 Enumerations
 
@@ -114,14 +116,15 @@ The identity carries nothing about the player, the character, the game account o
 Every signature in version 1 is over a **signing input** built as follows, where `Payload` is the exact payload bytes of the document (section 7):
 
 ```
-SigningInput = u8(38) ‖ "AetherFrame.Protocol.SignedDocument.v1"
-             ‖ u16(1)                      protocol version
+SigningInput = u8(44) ‖ "AetherFrame.Protocol.SignedDocument.v1-draft"
+             ‖ u16(0x8001)                 protocol version (the draft marker, section 10)
              ‖ u8(documentType)            section 7.1
              ‖ PublicKey[65]               the signer's key, section 3
              ‖ u32(len(Payload)) ‖ Payload
 ```
 
-- The tag is the 38 ASCII bytes `4165746865724672616d652e50726f746f636f6c2e5369676e6564446f63756d656e742e7631`, preceded by its length as one byte (`0x26`).
+- The tag is the 44 ASCII bytes `4165746865724672616d652e50726f746f636f6c2e5369676e6564446f63756d656e742e76312d6472616674`, preceded by its length as one byte (`0x2c`).
+- At the freeze the tag becomes the 38 ASCII bytes of `AetherFrame.Protocol.SignedDocument.v1` (length byte `0x26`) and the version `u16(1)`. A draft signature therefore never verifies as a final one, and the reverse.
 - `Digest = SHA-256(SigningInput)` is the value ECDSA signs and verifies.
 
 The signing input binds the protocol version, the document type, the key and the payload. A signature therefore verifies for exactly one (version, type, key, payload) and for nothing else: not for the same payload under another type, not for another version, not with another key, and not over the payload bytes alone. The tag separates document signatures from every other signature AetherFrame may ever define; any future signing context (a request proof, another document family) must use a different tag.
@@ -151,7 +154,7 @@ A signed document is the only top-level structure of version 1. It is at most **
 | Offset | Size | Field | Value |
 |---|---|---|---|
 | 0 | 4 | magic | ASCII `AFPD` (`41 46 50 44`) |
-| 4 | 2 | protocolVersion | `u16` = 1 |
+| 4 | 2 | protocolVersion | `u16` = `0x8001` while the protocol is a draft (section 10); `1` after the freeze |
 | 6 | 1 | documentType | `u8`, section 7.1 |
 | 7 | 65 | personaPublicKey | section 3 |
 | 72 | 4 | payloadLength | `u32`, 1 to 1,048,436 |
@@ -175,7 +178,7 @@ A reader performs these steps in this order and stops at the first failure with 
 
 1. If the input is longer than 1,048,576 bytes: `LimitExceeded`.
 2. Read the magic; if fewer than 4 bytes remain: `Truncated`; if they are not `AFPD`: `InvalidFraming`.
-3. Read `protocolVersion`; if it is not 1: `UnsupportedVersion`.
+3. Read `protocolVersion`; if it is not `0x8001` (a draft reader) or `1` (a reader after the freeze): `UnsupportedVersion`. No reader accepts both.
 4. Read `documentType`; if it is not listed in 7.1: `UnknownDocumentType`.
 5. Read the 65 key bytes (not yet validated).
 6. Read `payloadLength`; if over 1,048,436: `LimitExceeded`; if more than the remaining input: `Truncated`; if 0: `InvalidLength`. Read the payload.
@@ -207,10 +210,34 @@ One immutable published revision of a remote profile.
 | profileId | `bytes[16]` | not all zero |
 | revisionId | `bytes[16]` | not all zero |
 | createdAt | `u64` | timestamp, section 2.5 |
-| name | `text` | section 2.3; may be empty |
+| name | `text` | the name rule, section 8.1.1 |
 | images | `list<ImageReference>` | a **set** keyed by `assetId` (section 2.7); at most 8 |
 
 After `images` the payload ends; a byte more is `TrailingBytes`. The `byteLength` values of all images summed must not exceed 41,943,040 (40 MiB): `LimitExceeded`. The sum is computed in arithmetic that cannot overflow (8 values of at most 8,388,608 each).
+
+#### 8.1.1 The name rule
+
+A `name` (decision D4, [DecisionRegister.md](DecisionRegister.md)) is a `text` with these rules instead of section 2.3's limits:
+
+1. It holds **1 to 64 Unicode scalar values** in **at most 256 bytes** of UTF-8.
+2. It is valid UTF-8, as in section 2.3, rule 1.
+3. It contains none of these code points. The list is fixed code points, not Unicode properties, so what is valid never changes with the Unicode version:
+   - U+0000 to U+001F, U+007F to U+009F (the C0 and C1 controls and DEL);
+   - U+00AD, U+061C, U+180E;
+   - U+200B to U+200F, U+2028, U+2029, U+202A to U+202E;
+   - U+2060 to U+2064, U+2066 to U+206F;
+   - U+FEFF, U+FFF9 to U+FFFB;
+   - U+E0001, U+E0020 to U+E007F.
+4. **Nothing is normalized**, as in section 2.3, rule 5.
+
+A reader checks in this order and stops at the first fault:
+1. a declared length of 0: `InvalidLength`, as soon as the length is read;
+2. a declared length over 256: `LimitExceeded`, before the input's own length is consulted (section 2.2); a length within 256 but longer than the input: `Truncated`;
+3. invalid UTF-8: `InvalidText`;
+4. a refused code point (which includes U+0000): `InvalidText`;
+5. more than 64 scalar values: `LimitExceeded`.
+
+A writer refuses the same names, and an unpaired surrogate as `InvalidText`.
 
 ### 8.2 ImageReference
 
@@ -280,7 +307,7 @@ A reader checks each rule at the earliest point in reading order at which it can
 - the envelope's rules in the order of section 7.2;
 - a fixed-width field's rules as soon as the field has been read (an all-zero identifier, an unknown enumeration code, a timestamp out of range, a zero or over-limit dimension);
 - a length's or count's limit as soon as the length has been read, before the bytes or items it announces are looked at;
-- a text's byte limit, then its UTF-8 validity, then U+0000, then its scalar limit;
+- a text's byte limit, then its UTF-8 validity, then U+0000, then its scalar limit; a name's emptiness, byte limit, UTF-8 validity, refused code points and scalar limit, in the order of section 8.1.1;
 - a set's ordering rule as soon as an item's key has been read, before the rest of the item;
 - a rule over several fields of one item (the pixel product) when the last of them has been read;
 - after the last field: trailing bytes, then the rules over the whole payload (the total of the image byte lengths).
@@ -289,7 +316,8 @@ The rejected test vectors each contain one fault. The library's adversarial test
 
 ## 10. Versioning policy
 
-- **Protocol version** (envelope, `u16` at offset 4): changes only when the envelope layout, the signing input or the signature scheme changes. A reader implements a closed set of versions and refuses the rest; version 1 readers refuse everything but 1. A new version uses a **new signature domain tag** (for example `...SignedDocument.v2`) as well as a new number, so a version 1 signature can never verify under version 2 even if the layouts coincided.
+- **Protocol version** (envelope, `u16` at offset 4): changes only when the envelope layout, the signing input or the signature scheme changes. A reader implements a closed set of versions and refuses the rest.
+- **The draft marker** (decision N3). Until the owner freezes a version, its documents are drafts: the version has its high bit set (`0x8000`), the low fifteen bits name the version it drafts, and the signature tag ends in `-draft`. Version 1's drafts are `0x8001` with `AetherFrame.Protocol.SignedDocument.v1-draft`. A draft-period reader accepts only the draft marker and refuses `1`; after the freeze a reader accepts only `1` with the final tag and refuses `0x8001`. A draft is never read or verified as final. The persona identity derivation (section 4) has no marker: an identity is a hash of a key, not a signature, so it is the same before and after the freeze. A new version uses a **new signature domain tag** (for example `...SignedDocument.v2`) as well as a new number, so a version 1 signature can never verify under version 2 even if the layouts coincided.
 - **Document type** (`u8` at offset 6): new types get new codes; codes are never reused or renumbered. A reader refuses codes it does not know. The type is part of the signing input, so a signature never carries across types.
 - **Payload schema version** (`u16` at the start of each payload): a type's payload can evolve without touching the envelope. A reader implements a closed set of schemas per type and refuses the rest. Fields are never added to an existing schema; a new schema number is a new layout.
 - **Domain tags** are fixed strings that are part of the byte format. Any new signing context AetherFrame introduces (a request proof, a share grant, a key rotation statement) must use its own tag, never this document tag.
@@ -301,8 +329,8 @@ The rejected test vectors each contain one fault. The library's adversarial test
 `AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json` holds:
 
 - `personas`: two synthetic identities, A and B. Each private scalar is `SHA-256(label) mod n` for the label given, so an implementation can derive the private key, the public key (`d·G`) and the persona identity and compare all three. These keys exist only for testing and must never be used for anything else.
-- `documents`: for each sample, the canonical payload, the signing input, the digest, one valid signature and the complete document as hex, with the decoded field values expected from it. `profile-snapshot-maximal` is at the limits (a 128,000-byte name of 32,000 four-byte scalars, eight images totalling 40 MiB); its bytes are omitted for size and its `construction` says how to rebuild them, with the digest and signature over exactly that. Each snapshot vector has its own revision id (`rev_b2b2…`, `rev_b3b3…`, `rev_b4b4…`, `rev_b5b5…`): within one profile a revision id names exactly one document (section 13, rule 4), so vectors with different content never share one.
-- `rejected`: documents that must be refused, each with the error code expected, derived from `profile-snapshot` by one change (a flipped bit, an extreme length, a substituted key, a high-S signature, and so on) or validly signed over a payload that breaks one schema rule.
+- `documents`: for each sample, the canonical payload, the signing input, the digest, one valid signature and the complete document as hex, with the decoded field values expected from it. `profile-snapshot-maximal` is at the limits (a 256-byte name of 64 four-byte scalars, eight images totalling 40 MiB); its bytes are omitted for size and its `construction` says how to rebuild them, with the digest and signature over exactly that. `profile-snapshot-minimal` has a one-character name, the earliest timestamp and no images. Every document carries the draft marker. Each snapshot vector has its own revision id (`rev_b2b2…`, `rev_b3b3…`, `rev_b4b4…`, `rev_b5b5…`): within one profile a revision id names exactly one document (section 13, rule 4), so vectors with different content never share one.
+- `rejected`: documents that must be refused, each with the error code expected, derived from `profile-snapshot` by one change (a flipped bit, an extreme length, a substituted key, a high-S signature, and so on) or validly signed over a payload that breaks one schema rule. Every rule of the name (section 8.1.1) has an entry, including the three names the rule turned from valid samples into rejected ones (an empty name, a name with line breaks and invisible characters, and a 32,000-scalar name). Two entries carry the final version 1 marker instead of the draft one: a final document (`UnsupportedVersion`), and the same document with its version changed to the draft's (`SignatureMismatch`). The general 32,000-scalar text limit of section 2.3, which no version 1 field reaches any more, is covered by the library's unit tests, not by a vector.
 - `profiles`: the owner of each profile id the vectors use, as the record a backend would hold. The protocol cannot know owners; this table lets the tests check that every valid document is signed by the recorded owner of its profile id and that every `serverObligations` document is not.
 - `serverObligations`: valid documents that verify, each with the persona it verifies as, the profile id it carries, the recorded owner of that id (always another persona) and what a server is obliged to do with it (section 13). Both are signed by persona B and carry the profile id of persona A's snapshots: they are about (B, that id) and touch nothing of A's. Signature validity and authorization are different things: these verify, and a backend holding the `profiles` record refuses to treat them as A's acts.
 

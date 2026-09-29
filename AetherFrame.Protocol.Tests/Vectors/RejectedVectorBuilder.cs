@@ -12,13 +12,25 @@ namespace AetherFrame.Protocol.Tests;
 /// Documents that must be refused: each derived from the profile-snapshot or profile-retraction
 /// vector with one fault, or signed by a real key over a payload that breaks exactly one schema
 /// rule. These are the conformance negatives a second implementation checks against. Every
-/// envelope, key and signature rule has an entry; of the payload rules, the ones a small document
-/// can express have one, while the text limits (a name one scalar or one byte over the maximum is
-/// 32 to 128 KB of payload) are covered by the unit tests only: a second implementation must take
-/// those from the specification (section 2.3), not from this file.
+/// envelope, key and signature rule has an entry, and so does every rule of the name (decision D4):
+/// its limits, each family of refused code points, and the three names the rule turned from valid
+/// vectors into rejected ones. The general text limit of section 2.3 (32,000 scalars), which no
+/// version 1 field can reach any more, is covered by the unit tests only: a second implementation
+/// must take it from the specification, not from this file. Two documents carry the final version
+/// 1 marker instead of the draft one (decision N3): a draft reader refuses both.
 /// </summary>
 internal static class RejectedVectorBuilder
 {
+    /// <summary>Signs <paramref name="payload"/> as persona A with the final version 1 marker, around the library, which only writes drafts.</summary>
+    private static byte[] FinalSnapshot(PersonaPublicKey key, byte[] payload)
+    {
+        using var platform = TestPersonas.CreateEcdsa(TestPersonas.ScalarA);
+        var input = ReferenceProtocol.SigningInput(ReferenceProtocol.Final, (byte)DocumentType.ProfileSnapshot, key.Bytes, payload);
+        var rs = platform.SignData(input, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        var signature = ProtocolSignature.Normalize(rs).ToArray();
+        return ReferenceProtocol.Document(ReferenceProtocol.Final, (byte)DocumentType.ProfileSnapshot, key.Bytes, payload, signature);
+    }
+
     public static List<RejectedVector> Build(byte[] baseDocument, byte[] retractionDocument, IPersonaSigner signer, PersonaPublicKey otherKey)
     {
         var list = new List<RejectedVector>();
@@ -36,8 +48,8 @@ internal static class RejectedVectorBuilder
 
         // Framing.
         Add("bad-magic", Mutate(baseDocument, 0, (byte)'X'), ProtocolError.InvalidFraming, "first byte is not 'A'");
-        Add("wrong-protocol-version", Mutate(baseDocument, Layout.Version + 1, 2), ProtocolError.UnsupportedVersion, "protocol version 2");
-        Add("protocol-version-zero", Mutate(baseDocument, Layout.Version + 1, 0), ProtocolError.UnsupportedVersion, "protocol version 0");
+        Add("wrong-protocol-version", Mutate(baseDocument, Layout.Version + 1, 2), ProtocolError.UnsupportedVersion, "protocol version 0x8002: a draft of version 2");
+        Add("protocol-version-zero", Mutate(baseDocument, Layout.Version + 1, 0), ProtocolError.UnsupportedVersion, "protocol version 0x8000: the draft bit with no version");
         Add("unknown-document-type", Mutate(baseDocument, Layout.Type, 3), ProtocolError.UnknownDocumentType, "document type 3");
         Add("document-type-zero", Mutate(baseDocument, Layout.Type, 0), ProtocolError.UnknownDocumentType, "document type 0");
         Add("document-type-255", Mutate(baseDocument, Layout.Type, 255), ProtocolError.UnknownDocumentType, "document type 255");
@@ -87,6 +99,14 @@ internal static class RejectedVectorBuilder
             ("schema 2", ProtocolError.UnsupportedVersion), ("zero profile id", ProtocolError.InvalidValue), ("zero revision id", ProtocolError.InvalidValue),
             ("createdAt over max", ProtocolError.InvalidValue), ("name with NUL", ProtocolError.InvalidText), ("name invalid utf8", ProtocolError.InvalidText),
             ("name overlong utf8", ProtocolError.InvalidText), ("name encoded surrogate", ProtocolError.InvalidText), ("name length huge", ProtocolError.LimitExceeded),
+            // The name rule, decision D4: its limits, each refused family, and the names it turned into rejected vectors.
+            ("name empty", ProtocolError.InvalidLength), ("name one scalar over max", ProtocolError.LimitExceeded), ("name one byte over max bytes", ProtocolError.LimitExceeded),
+            ("name length claims more than present", ProtocolError.Truncated), ("name with line break", ProtocolError.InvalidText), ("name with tab", ProtocolError.InvalidText),
+            ("name with DEL", ProtocolError.InvalidText), ("name with C1 control", ProtocolError.InvalidText), ("name with line separator", ProtocolError.InvalidText),
+            ("name with paragraph separator", ProtocolError.InvalidText), ("name with byte order mark", ProtocolError.InvalidText), ("name with right-to-left override", ProtocolError.InvalidText),
+            ("name with right-to-left isolate", ProtocolError.InvalidText), ("name with arabic letter mark", ProtocolError.InvalidText), ("name with zero width space", ProtocolError.InvalidText),
+            ("name with soft hyphen", ProtocolError.InvalidText), ("name with interlinear annotation", ProtocolError.InvalidText), ("name with tag character", ProtocolError.InvalidText),
+            ("name of the old unicode vector", ProtocolError.InvalidText), ("name of the old maximal vector", ProtocolError.LimitExceeded),
             ("images unsorted", ProtocolError.NotCanonical), ("images duplicate", ProtocolError.NotCanonical), ("image zero digest", ProtocolError.InvalidValue),
             ("image format 4", ProtocolError.InvalidValue), ("image zero bytes", ProtocolError.InvalidValue), ("image bytes u64 max", ProtocolError.LimitExceeded),
             ("image zero width", ProtocolError.InvalidValue), ("image pixels over max", ProtocolError.LimitExceeded), ("images total bytes over max", ProtocolError.LimitExceeded),
@@ -108,6 +128,14 @@ internal static class RejectedVectorBuilder
         Add("signed-retraction-issuedAt-over-max", PayloadBuilder.Signed(DocumentType.ProfileRetraction, signer, PayloadBuilder.Retraction(issuedAt: (ulong)ProtocolLimits.MaxUnixSeconds + 1)), ProtocolError.InvalidValue, "validly signed retraction payload with issuedAt one over the maximum", deterministic: false);
         Add("signed-retraction-truncated", PayloadBuilder.Signed(DocumentType.ProfileRetraction, signer, PayloadBuilder.Retraction()[..20]), ProtocolError.Truncated, "validly signed retraction payload cut inside issuedAt", deterministic: false);
         Add("signed-retraction-trailing-byte", PayloadBuilder.Signed(DocumentType.ProfileRetraction, signer, PayloadBuilder.Retraction(trailing: [0])), ProtocolError.TrailingBytes, "validly signed retraction payload with a byte after issuedAt", deterministic: false);
+
+        // The draft marker, decision N3: the sample snapshot signed as a frozen version 1 document
+        // (version 1 and the tag without "-draft"). A draft reader refuses it by its version; with
+        // its version changed to the draft's, its signature is over the other tag and never verifies.
+        var payload = Samples.Snapshot().EncodePayload();
+        var final = FinalSnapshot(signer.PublicKey, payload);
+        Add("final-version-1-document", final, ProtocolError.UnsupportedVersion, "a validly signed final version 1 document (version 1, tag without -draft): refused by a draft reader", deterministic: false);
+        Add("final-signature-under-draft-version", Mutate(final, Layout.Version, 0x80), ProtocolError.SignatureMismatch, "the final document with its version changed to the draft's 0x8001: signed over the final tag, so it never verifies as a draft", deterministic: false);
         return list;
     }
 }

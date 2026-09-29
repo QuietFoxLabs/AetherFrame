@@ -31,6 +31,12 @@ public static class ProtocolLimits
     /// <summary>The most bytes one text field can occupy on the wire: <see cref="MaxTextScalars"/> four-byte UTF-8 sequences.</summary>
     public const int MaxTextBytes = MaxTextScalars * 4;
 
+    /// <summary>The most Unicode scalar values a Plate's remote name may hold (decision D4). A name holds at least one.</summary>
+    public const int MaxNameScalars = 64;
+
+    /// <summary>The most UTF-8 bytes a Plate's remote name may occupy on the wire (decision D4).</summary>
+    public const int MaxNameBytes = 256;
+
     /// <summary>The most images a remote profile references.</summary>
     public const int MaxImagesPerProfile = 8;
 

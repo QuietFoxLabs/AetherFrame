@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using AetherFrame.Protocol.Documents;
+using AetherFrame.Protocol.Encoding;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
 using Xunit;
@@ -74,10 +75,10 @@ public class CanonicalizationTests
         Assert.Equal(utc.ToUnixTimeSeconds(), tokyo.ToUnixTimeSeconds());
         Assert.Equal(utc.ToUnixTimeSeconds(), honolulu.ToUnixTimeSeconds());
 
-        var expected = new ProfileSnapshot(Samples.Profile, Samples.Revision, utc.ToUnixTimeSeconds(), "", []).EncodePayload();
-        Assert.Equal(expected, new ProfileSnapshot(Samples.Profile, Samples.Revision, tokyo.ToUnixTimeSeconds(), "", []).EncodePayload());
-        Assert.Equal(expected, new ProfileSnapshot(Samples.Profile, Samples.Revision, honolulu.ToUnixTimeSeconds(), "", []).EncodePayload());
-        Assert.Equal(utc, new ProfileSnapshot(Samples.Profile, Samples.Revision, honolulu.ToUnixTimeSeconds(), "", []).CreatedAt);
+        var expected = new ProfileSnapshot(Samples.Profile, Samples.Revision, utc.ToUnixTimeSeconds(), "n", []).EncodePayload();
+        Assert.Equal(expected, new ProfileSnapshot(Samples.Profile, Samples.Revision, tokyo.ToUnixTimeSeconds(), "n", []).EncodePayload());
+        Assert.Equal(expected, new ProfileSnapshot(Samples.Profile, Samples.Revision, honolulu.ToUnixTimeSeconds(), "n", []).EncodePayload());
+        Assert.Equal(utc, new ProfileSnapshot(Samples.Profile, Samples.Revision, honolulu.ToUnixTimeSeconds(), "n", []).CreatedAt);
     }
 
     [Fact]
@@ -99,22 +100,19 @@ public class CanonicalizationTests
     }
 
     [Fact]
-    public void Text_IsNeverNormalized()
+    public void Names_AreNeverNormalized()
     {
+        // Decision D4: a name refuses controls and invisible format characters, but every name it
+        // accepts is kept exactly: no normalization form, no trimming, no case folding.
         var composed = "Caf\u00e9";
         var decomposed = "Cafe\u0301";
         Assert.Equal(composed, decomposed.Normalize(NormalizationForm.FormC));
         Assert.NotEqual(Encode(composed), Encode(decomposed));
-
-        Assert.NotEqual(Encode("a\r\nb"), Encode("a\nb"));
-        Assert.NotEqual(Encode("a\nb"), Encode("a\rb"));
         Assert.NotEqual(Encode(" a"), Encode("a"));
         Assert.NotEqual(Encode("a "), Encode("a"));
-        Assert.NotEqual(Encode("\ufeffa"), Encode("a"));
         Assert.NotEqual(Encode("A"), Encode("a"));
-        Assert.NotEqual(Encode("\u200bx"), Encode("x"));
 
-        foreach (var text in new[] { composed, decomposed, "a\r\nb", "\ufeffa", "\u200b", "\U0001F600\U0001F3FD", "\u0301", "\u202ea", "\t\n\r" })
+        foreach (var text in new[] { composed, decomposed, " a ", "\U0001F600\U0001F3FD", "\u0301", "\u05e9\u05dc\u05d5\u05dd", "a  b" })
         {
             using var signer = TestPersonas.CreateA();
             var verified = SignedDocumentCodec.Verify(SignedDocumentCodec.Sign(new ProfileSnapshot(Samples.Profile, Samples.Revision, 0, text, []), signer));
@@ -123,15 +121,33 @@ public class CanonicalizationTests
     }
 
     [Fact]
+    public void Text_IsNeverNormalized()
+    {
+        // The general text rules (docs/networking/ProtocolSpecification-v1.md, section 2.3), which
+        // schema 2's texts use: line breaks, byte order marks and format characters are content.
+        Assert.NotEqual(ProtocolText.Encode("a\r\nb", "t"), ProtocolText.Encode("a\nb", "t"));
+        Assert.NotEqual(ProtocolText.Encode("a\nb", "t"), ProtocolText.Encode("a\rb", "t"));
+        Assert.NotEqual(ProtocolText.Encode("\ufeffa", "t"), ProtocolText.Encode("a", "t"));
+        Assert.NotEqual(ProtocolText.Encode("\u200bx", "t"), ProtocolText.Encode("x", "t"));
+
+        foreach (var text in new[] { "a\r\nb", "\ufeffa", "\u200b", "\u202ea", "\t\n\r", "Cafe\u0301" })
+        {
+            Assert.Equal(text, ProtocolText.Decode(ProtocolText.Encode(text, "t"), "t"));
+        }
+    }
+
+    [Fact]
     public void Encoding_UsesNoPlatformDependentValues()
     {
-        // A line break inside a name is content: "\n" is the one byte 0x0A whatever the platform's
-        // newline is, "\r\n" is two bytes, and the schema version is big-endian on every machine.
-        // (The name starts at offset 42 of the payload: schema, two ids and the timestamp.)
-        var lineFeed = Encode("a\nb");
-        Assert.Equal(new byte[] { 0, 0, 0, 3, (byte)'a', 0x0A, (byte)'b' }, lineFeed.AsSpan(42, 7).ToArray());
-        Assert.Equal(new byte[] { 0, 0, 0, 4, (byte)'a', 0x0D, 0x0A, (byte)'b' }, Encode("a\r\nb").AsSpan(42, 8).ToArray());
-        Assert.Equal(new byte[] { 0x00, 0x01 }, lineFeed.AsSpan(0, 2).ToArray());
+        // A line break inside a text is content: "\n" is the one byte 0x0A whatever the platform's
+        // newline is, "\r\n" is two bytes, and lengths and the schema version are big-endian on
+        // every machine. (A snapshot's name starts at offset 42 of the payload: schema, two ids and
+        // the timestamp.)
+        Assert.Equal(new byte[] { (byte)'a', 0x0A, (byte)'b' }, ProtocolText.Encode("a\nb", "t"));
+        Assert.Equal(new byte[] { (byte)'a', 0x0D, 0x0A, (byte)'b' }, ProtocolText.Encode("a\r\nb", "t"));
+        var name = Encode("a\u00e9b");
+        Assert.Equal(new byte[] { 0, 0, 0, 4, (byte)'a', 0xC3, 0xA9, (byte)'b' }, name.AsSpan(42, 8).ToArray());
+        Assert.Equal(new byte[] { 0x00, 0x01 }, name.AsSpan(0, 2).ToArray());
         Assert.Equal(new byte[] { 0x00, 0x00, 0x00, 0x00, 0x65, 0x53, 0xF1, 0x00 }, Samples.Snapshot().EncodePayload().AsSpan(34, 8).ToArray());
     }
 

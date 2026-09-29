@@ -23,8 +23,8 @@ public sealed class ProfileSnapshot : RemoteProfileDocument
     private readonly ImageReference[] images;
     private readonly ReadOnlyCollection<ImageReference> imagesView;
 
-    /// <summary>Builds a snapshot, refusing any value outside the limits and any repeated asset id.</summary>
-    /// <exception cref="ProtocolException"><see cref="ProtocolError.InvalidValue"/>, <see cref="ProtocolError.InvalidText"/> or <see cref="ProtocolError.LimitExceeded"/>.</exception>
+    /// <summary>Builds a snapshot, refusing any value outside the limits, a name the name rule refuses, and any repeated asset id.</summary>
+    /// <exception cref="ProtocolException"><see cref="ProtocolError.InvalidValue"/>, <see cref="ProtocolError.InvalidLength"/> (an empty name), <see cref="ProtocolError.InvalidText"/> or <see cref="ProtocolError.LimitExceeded"/>.</exception>
     public ProfileSnapshot(ProfileId profileId, RevisionId revisionId, long createdAtUnixSeconds, string name, IEnumerable<ImageReference> images)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -41,7 +41,7 @@ public sealed class ProfileSnapshot : RemoteProfileDocument
         }
 
         ProtocolTimestamps.Check(createdAtUnixSeconds, "createdAt");
-        ProtocolText.Encode(name, "name");
+        ProtocolName.Encode(name, "name");
 
         var sorted = new List<ImageReference>(ProtocolLimits.MaxImagesPerProfile);
         foreach (var image in images)
@@ -96,7 +96,7 @@ public sealed class ProfileSnapshot : RemoteProfileDocument
     /// <summary><see cref="CreatedAtUnixSeconds"/> as an instant.</summary>
     public DateTimeOffset CreatedAt => DateTimeOffset.FromUnixTimeSeconds(CreatedAtUnixSeconds);
 
-    /// <summary>The Plate's display name, exactly as authored (possibly empty).</summary>
+    /// <summary>The Plate's display name, exactly as authored: 1 to 64 characters under the name rule (decision D4).</summary>
     public string Name { get; }
 
     /// <summary>The referenced images, in ascending asset id order. A read-only view: no cast reaches the array behind it.</summary>
@@ -115,7 +115,7 @@ public sealed class ProfileSnapshot : RemoteProfileDocument
         RevisionId.WriteBytes(id);
         writer.WriteFixed(id);
         writer.WriteU64((ulong)CreatedAtUnixSeconds);
-        writer.WriteText(Name, "name");
+        writer.WriteName(Name, "name");
         writer.WriteCount(images.Length);
         foreach (var image in images)
         {
@@ -137,7 +137,7 @@ public sealed class ProfileSnapshot : RemoteProfileDocument
         var profileId = ProfileId.FromBytes(reader.ReadFixed(ProtocolConstants.OpaqueIdLength, "profileId"));
         var revisionId = RevisionId.FromBytes(reader.ReadFixed(ProtocolConstants.OpaqueIdLength, "revisionId"));
         var createdAt = ProtocolTimestamps.Read(ref reader, "createdAt");
-        var name = reader.ReadText("name");
+        var name = reader.ReadName("name");
         var count = reader.ReadCount(ProtocolLimits.MaxImagesPerProfile, "images");
         var images = new ImageReference[count];
         AssetId? previous = null;

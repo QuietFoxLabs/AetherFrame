@@ -66,6 +66,12 @@ internal sealed class CanonicalWriter
         WriteLengthPrefixed(ProtocolText.Encode(text, field));
     }
 
+    /// <summary>Writes a name field: a four-byte UTF-8 byte length followed by the UTF-8 bytes (see <see cref="ProtocolName"/>).</summary>
+    public void WriteName(string name, string field)
+    {
+        WriteLengthPrefixed(ProtocolName.Encode(name, field));
+    }
+
     /// <summary>Writes the number of items that follow.</summary>
     public void WriteCount(int count)
     {

@@ -59,6 +59,12 @@ internal ref struct CanonicalReader
     public string ReadText(string field) => ProtocolText.Decode(ReadLengthPrefixed(ProtocolLimits.MaxTextBytes, field), field);
 
     /// <summary>
+    /// Reads a name field (see <see cref="ProtocolName"/>): its byte length is checked against the
+    /// name's own limit before the input's length is consulted, like every length.
+    /// </summary>
+    public string ReadName(string field) => ProtocolName.Decode(ReadLengthPrefixed(ProtocolLimits.MaxNameBytes, field), field);
+
+    /// <summary>
     /// Reads the number of items that follow, refusing a count over <paramref name="maxCount"/>
     /// before any item is read, so a hostile count can never size an allocation.
     /// </summary>

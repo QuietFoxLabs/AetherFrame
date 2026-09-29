@@ -203,7 +203,7 @@ The entries below were decided together for [NETWORK2.md](NETWORK2.md)'s increme
 
 ### N3: draft documents are marked in the signed bytes. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
-**Option and scope.** Applied by N2-2. Until the owner freezes version 1, every document the library writes or accepts is a draft, marked in two places:
+**Option and scope.** Applied by N2-2 (the draft marker and the name rule, September 29, 2026). Until the owner freezes version 1, every document the library writes or accepts is a draft, marked in two places:
 - **The envelope and the signing input** carry `protocolVersion` = `0x8001` (32,769) instead of `1`. The high bit marks a draft, and the low fifteen bits name the version it drafts.
 - **The signing input's tag** is `AetherFrame.Protocol.SignedDocument.v1-draft` (44 ASCII bytes, length byte `0x2c`) instead of `…SignedDocument.v1`.
 
@@ -227,7 +227,7 @@ The two-player test's server accepts drafts. After the freeze, no document signe
 
 ### D4: the rule for a remote Plate's `name`. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
-**Option and scope.** Applied by N2-2 to schema 1's `name`, and by N2-3 to schema 2's. A `name` is valid when all of these hold:
+**Option and scope.** Applied by N2-2 to schema 1's `name` (`ProtocolName`, specification section 8.1.1), and by N2-3 to schema 2's. A `name` is valid when all of these hold:
 - it is **1 to 64 Unicode scalar values** and **at most 256 bytes** of UTF-8;
 - it contains none of these code points:
   - the C0 controls U+0000 to U+001F, U+007F, and the C1 controls U+0080 to U+009F (General_Category Cc in the Unicode Character Database);

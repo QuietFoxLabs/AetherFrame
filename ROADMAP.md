@@ -192,20 +192,13 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - NETWORK1 increment 3, the plugin integration skeleton: [#34](https://github.com/QuietFoxLabs/AetherFrame/pull/34) (D9b, P2), merged as `b80127b`, ahead of increment 2 on the owner's instruction to continue the persona foundation.
 - NETWORK1 increment 5, the key store core: [#35](https://github.com/QuietFoxLabs/AetherFrame/pull/35) (K1, K2, K6, K7, each with a security reviewer's concurrence), merged as `564e1b9`. A session outside the autopilot started it; Claude finished it on the owner's instruction.
 - NETWORK2 increment N2-0, the plan: [#36](https://github.com/QuietFoxLabs/AetherFrame/pull/36), merged as `8c58e34`.
-- NETWORK2 increment N2-1, decision batch A: this change. N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3 and K4, and the new R1 (share codes), R2 (the transport) and R3 (where network code may live), are APPROVED (Claude, under the owner's delegation of September 29, 2026) in the register. A security-focused reviewer concurred with each security and privacy entry, I1 and R3 after amendment, as each entry records.
+- NETWORK2 increment N2-1, decision batch A: [#37](https://github.com/QuietFoxLabs/AetherFrame/pull/37), merged as `d3fcb5b`. N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3 and K4, and the new R1 (share codes), R2 (the transport) and R3 (where network code may live), are APPROVED (Claude, under the owner's delegation of September 29, 2026) in the register. A security-focused reviewer concurred with each security and privacy entry, I1 and R3 after amendment, as each entry records.
+- NETWORK2 increment N2-2, the draft marker and the name rule: this change. Every document carries protocol version `0x8001` and the `…SignedDocument.v1-draft` tag until the owner's freeze; a name is 1 to 64 scalars in at most 256 bytes, refusing control, directional and invisible format characters. The vectors are regenerated; the owner approved this signed-byte change in advance (section 5), on its stated conditions.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
 
-1. **N2-2: the draft marker and the name rule** (NETWORK1 increments 2a and 2b). Prerequisites: N3 and D4, approved in batch A. It changes signed bytes, which NETWORK1.md's safeguard 3 reserves for the owner: the owner approved it in advance on September 29, 2026 (section 5), on condition that its decisions are recorded, an independent and a security review are clean, and CI is green. Acceptance:
-   - exactly the approved marker (`protocolVersion` `0x8001`, the `…SignedDocument.v1-draft` tag) and name rule are implemented;
-   - the vectors, the specification and the independent checker change together;
-   - documents with incompatible markers are proved to be refused;
-   - boundary and adversarial name cases are added, in D4's error order;
-   - the specification's status paragraph and section 10 say drafts exist and a test server accepts them;
-   - where the general 32,000-scalar text limit stays tested is stated (L2);
-   - the protocol stays DRAFT, and local Plate naming and files are unchanged.
-2. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: N2-2 merged first; D8, D5, D9a and I1 (approved in batch A); S1, D7 and L8, decided and recorded in this change with a security reviewer's concurrence; and, because it changes signed bytes, the owner's advance approval of September 29, 2026 under the same conditions (section 5). Acceptance:
+1. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: N2-2 (merged first); D8, D5, D9a and I1 (approved in batch A); S1, D7 and L8, decided and recorded in this change with a security reviewer's concurrence; and, because it changes signed bytes, the owner's advance approval of September 29, 2026 under the same conditions (section 5). Acceptance:
    - a canonical layout schema in fixed-point integers: canvas, background, text, images and Components, with a limit on every count, length and value;
    - the request proof in its own signing context, with its own domain tag;
    - vectors, the specification, the reference implementation in the tests, and adversarial cases;
@@ -213,19 +206,25 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
    - N7 written into the specification as a consumer obligation, D5's wording applied to section 8.2, and N1's scoping to sections 8.4 and 13;
    - schema 1 stays readable;
    - no plugin or server code.
-3. **N2-4: the Windows DPAPI protector and the capability probe** (NETWORK1 increment 7). Prerequisites: K2 (approved) and K3, with N2-2 merged first (NETWORK1's gate for increment 7). Acceptance:
+2. **N2-4: the Windows DPAPI protector and the capability probe** (NETWORK1 increment 7). Prerequisites: K2 (approved) and K3, with N2-2 merged first (NETWORK1's gate for increment 7). Acceptance:
    - crypt32 is called directly, with UI forbidden and the entropy taken from the envelope header;
    - the output is zeroed before `LocalFree`, and the prompt structure is never used;
    - the probe runs the full chain before persona features turn on, and decides by capability, never by operating system name; the protector claims protection only on native Windows (K3);
    - it compiles into the preview flavour only, and a security reviewer concurs;
    - no key is written outside tests before N2-5.
-4. **N2-5: the persisted persona registry and the persona window.** Prerequisites: G1 (complete for native Windows), K4 (approved), L10 and L12, decided and recorded in this change with a security reviewer's concurrence; N2-2 and N2-4 merged first. Acceptance:
+3. **N2-5: the persisted persona registry and the persona window.** Prerequisites: G1 (complete for native Windows), K4 (approved), L10 and L12, decided and recorded in this change with a security reviewer's concurrence; N2-2 and N2-4 merged first. Acceptance:
    - D3 as approved: several personas, created, selected and switched only by the player, one active for identity operations, never bound to a character, Content ID or account; switching alters no Plate and publishes nothing;
    - labels are private and local (D9a);
    - key files that no record names are detected and reported (L12), and the key file's move is written through;
    - K4's acknowledgement is recorded per persona before any first publish;
    - persona features turn on only as K3 says; every local feature is untouched;
    - preview flavour only; a security reviewer concurs; an **In game** section for the persona window.
+4. **N2-6: the snapshot builder for schema 2, image preparation, the publication index and the outbox** (NETWORK1 increments 4 and 8). Prerequisites: P1, D4, D5, D8 and I1 (approved); N2-3 and N2-5 merged first. Acceptance:
+   - the builder reads only the saved Plate and builds a schema 2 snapshot; a name the name rule refuses is not altered but refused with a message asking to rename;
+   - images are prepared as D5 and I1 say: decoded and encoded again through Dalamud's texture pipeline, metadata dropped, colour under fully transparent pixels cleared, over-limit images refused;
+   - Plates, bindings and packages gain no publication state; the publication index is per persona, named by slot, apart from Plates (P1);
+   - the outbox holds signed documents and sends nothing until N2-9; its tests sign with synthetic keys only;
+   - preview flavour only; an independent and a security review are clean.
 5. **Release 0.1.7 to the testing channel.** Prerequisite: the owner passes test build `01a14a5` in the Owner inbox, including #21's release-blocking checks. That build supersedes `1024490` and holds #21 as well as #33, but its inbox post lists only #33's 14 checks and leaves #21's (in the `1024490` post) for "if you get to them". A pass must therefore also cover checks 1, 2, 5 to 10 and 15 of the `1024490` post; if the owner passes only the `01a14a5` checks, ask in the inbox for those before starting this task. From then this task comes before the NETWORK2 tasks (AUTOPILOT.md, "One run", step 4, item 5). The release carries only player builds: no networking code (P2). Steps:
    - a release-prep PR: `Version.props` 0.1.7, the CHANGELOG section, and the dry-run fixture ([docs/Releasing.md](docs/Releasing.md), steps 1 to 3);
    - a release-candidate test build from its merge, with a short smoke check by the owner;
@@ -237,4 +236,4 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
    - the dry run passes, and the owner approves the publication run in GitHub;
    - `pluginmaster.json` on `plugin-repository` serves 0.1.7 in testing, with the pinned icon address.
 
-After these five come NETWORK2's N2-6 to N2-11: the snapshot builder, the server, the owner's hosting, the transport and sharing flow, the viewer, and the preview test kit with the two-player checklist. Known bugs 7 and 8 are fixed by #29 and #30. Test build `01a14a5` (#33, superseding `1024490`) waits for the owner's formal in-game verdict in the Owner inbox. The owner wrote in chat on September 29 that "all seems to work well in game", relayed in the inbox as the result for `01a14a5`. It is not yet a pass for releasing: it isn't a pass of that build's checks, and it doesn't cover #21's release-blocking checks. So task 5 still waits. Persistent keys outside tests, real backups and beta invitations follow only when their decisions and acceptance evidence are complete.
+After these five come NETWORK2's N2-7 to N2-11: the server, the owner's hosting, the transport and sharing flow, the viewer, and the preview test kit with the two-player checklist. Known bugs 7 and 8 are fixed by #29 and #30. Test build `01a14a5` (#33, superseding `1024490`) waits for the owner's formal in-game verdict in the Owner inbox. The owner wrote in chat on September 29 that "all seems to work well in game", relayed in the inbox as the result for `01a14a5`. It is not yet a pass for releasing: it isn't a pass of that build's checks, and it doesn't cover #21's release-blocking checks. So task 5 still waits. Persistent keys outside tests, real backups and beta invitations follow only when their decisions and acceptance evidence are complete.

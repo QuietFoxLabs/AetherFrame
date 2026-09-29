@@ -25,7 +25,8 @@ public class TestVectorTests
     {
         var fixture = VectorFixture.Load();
         Assert.Equal(ProtocolConstants.ProtocolVersion, fixture.ProtocolVersion);
-        Assert.Equal("AetherFrame.Protocol.SignedDocument.v1", fixture.SignatureDomainTag);
+        Assert.Equal(0x8001, fixture.ProtocolVersion);
+        Assert.Equal("AetherFrame.Protocol.SignedDocument.v1-draft", fixture.SignatureDomainTag);
         Assert.Equal("AetherFrame.Protocol.PersonaId.v1", fixture.PersonaIdDomainTag);
         Assert.Equal(["A", "B"], fixture.Personas.Select(p => p.Name));
         Assert.Equal(VectorBuilder.Models().Select(m => m.Name), fixture.Documents.Select(d => d.Name));

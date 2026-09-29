@@ -26,9 +26,26 @@ internal static class SnapshotPayloadCases
             "name invalid utf8" => PayloadBuilder.Snapshot(nameBytes: [0xFF, 0xFE]),
             "name overlong utf8" => PayloadBuilder.Snapshot(nameBytes: [0xC0, 0xAF]),
             "name encoded surrogate" => PayloadBuilder.Snapshot(nameBytes: [0xED, 0xA0, 0x80]),
-            "name one scalar over max" => PayloadBuilder.Snapshot(nameBytes: ProtocolConstants.StrictUtf8.GetBytes(new string('a', ProtocolLimits.MaxTextScalars + 1))),
+            "name one scalar over max" => PayloadBuilder.Snapshot(nameBytes: Utf8(new string('a', ProtocolLimits.MaxNameScalars + 1))),
             "name one byte over max bytes" => PayloadBuilder.Snapshot(nameBytes: [.. MaxName(), 0x61]),
-            "name length claims more than present" => Patch(PayloadBuilder.Snapshot(), NameLengthOffset, [0x00, 0x01, 0x00, 0x00]),
+            "name length claims more than present" => Patch(PayloadBuilder.Snapshot(), NameLengthOffset, [0x00, 0x00, 0x00, 0xC8]),
+            "name empty" => PayloadBuilder.Snapshot(nameBytes: []),
+            "name with line break" => PayloadBuilder.Snapshot(nameBytes: Utf8("line\r\nbreak")),
+            "name with tab" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\tb")),
+            "name with DEL" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u007fb")),
+            "name with C1 control" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u0085b")),
+            "name with line separator" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u2028b")),
+            "name with paragraph separator" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u2029b")),
+            "name with byte order mark" => PayloadBuilder.Snapshot(nameBytes: Utf8("\ufeffa")),
+            "name with right-to-left override" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u202eb")),
+            "name with right-to-left isolate" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u2067b")),
+            "name with arabic letter mark" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u061cb")),
+            "name with zero width space" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u200bb")),
+            "name with soft hyphen" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u00adb")),
+            "name with interlinear annotation" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\ufff9b")),
+            "name with tag character" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\U000E0041")),
+            "name of the old unicode vector" => PayloadBuilder.Snapshot(nameBytes: Utf8(VectorBuilder.SnapshotUnicodeNameBeforeD4)),
+            "name of the old maximal vector" => PayloadBuilder.Snapshot(nameBytes: Utf8(string.Concat(Enumerable.Repeat("\U0001F600", ProtocolLimits.MaxTextScalars)))),
             "name length huge" => Patch(PayloadBuilder.Snapshot(), NameLengthOffset, [0xFF, 0xFF, 0xFF, 0xFF]),
             "image count 9 declared" => PayloadBuilder.Snapshot(imageCount: 9),
             "image count huge" => PayloadBuilder.Snapshot(imageCount: 0xFFFFFFFF),
@@ -57,7 +74,9 @@ internal static class SnapshotPayloadCases
         };
     }
 
-    private static byte[] MaxName() => ProtocolConstants.StrictUtf8.GetBytes(string.Concat(Enumerable.Repeat("\U0001F600", ProtocolLimits.MaxTextScalars)));
+    private static byte[] MaxName() => Utf8(string.Concat(Enumerable.Repeat("\U0001F600", ProtocolLimits.MaxNameScalars)));
+
+    private static byte[] Utf8(string text) => ProtocolConstants.StrictUtf8.GetBytes(text);
 
     private static byte[] Patch(byte[] payload, int offset, byte[] bytes)
     {

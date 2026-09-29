@@ -87,7 +87,7 @@ public static class SignedDocumentCodec
         var version = reader.ReadU16("protocolVersion");
         if (version != ProtocolConstants.ProtocolVersion)
         {
-            throw new ProtocolException(ProtocolError.UnsupportedVersion, $"Protocol version {ProtocolText.Number(version)} is not supported; this build reads version {ProtocolText.Number(ProtocolConstants.ProtocolVersion)}.");
+            throw new ProtocolException(ProtocolError.UnsupportedVersion, $"Protocol version {DescribeVersion(version)} is not supported; this build reads only {DescribeVersion(ProtocolConstants.ProtocolVersion)}.");
         }
 
         var type = (DocumentType)reader.ReadU8("documentType");
@@ -130,4 +130,10 @@ public static class SignedDocumentCodec
         writer.WriteFixed(signature.Bytes);
         return writer.ToArray();
     }
+
+    /// <summary>A protocol version for a message: "1", or "0x8001 (a draft of version 1)" when the draft bit is set.</summary>
+    private static string DescribeVersion(ushort version) =>
+        (version & ProtocolConstants.DraftVersionFlag) != 0
+            ? $"0x{version.ToString("x4", System.Globalization.CultureInfo.InvariantCulture)} (a draft of version {ProtocolText.Number(version & ~ProtocolConstants.DraftVersionFlag)})"
+            : ProtocolText.Number(version);
 }

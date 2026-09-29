@@ -31,7 +31,7 @@ public class FuzzTests
             Samples.SignedSnapshot(signer),
             Samples.SignedRetraction(signer),
             SignedDocumentCodec.Sign(new ProfileSnapshot(Samples.Profile, Samples.Revision, 1, "Caf\u00e9 \U0001F600 \u65e5\u672c", [Samples.Image(Samples.Asset1)]), signer),
-            SignedDocumentCodec.Sign(new ProfileSnapshot(Samples.Profile, Samples.Revision, 0, "", []), signer),
+            SignedDocumentCodec.Sign(new ProfileSnapshot(Samples.Profile, Samples.Revision, 0, "n", []), signer),
         };
 
         var random = new Random(seed * 1_000_003);
