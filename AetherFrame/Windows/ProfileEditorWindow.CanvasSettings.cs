@@ -1,6 +1,8 @@
 using System;
 using System.Numerics;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
@@ -39,11 +41,12 @@ internal sealed partial class ProfileEditorWindow
     /// </summary>
     private void DrawCanvasSizeSection(ProfileDocument profile)
     {
-        if (!EditorWidgets.Section("Canvas"))
+        if (!EditorWidgets.Section("Canvas", [TutorialTarget.AdvancedCanvasSize]))
         {
             return;
         }
 
+        var canvasSizeMin = ImGui.GetCursorScreenPos();
         var currentSize = new Vector2(profile.CanvasWidth, profile.CanvasHeight);
         if (currentSize != lastSyncedCustomCanvasSize)
         {
@@ -76,6 +79,8 @@ internal sealed partial class ProfileEditorWindow
         ImGui.SameLine();
         ImGui.SetNextItemWidth(halfWidth);
         ImGui.InputFloat("##CustomCanvasHeight", ref customCanvasHeightInput, 0f, 0f, "H %.0f");
+        TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedCanvasSize, canvasSizeMin, ImGui.GetItemRectMax());
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedCanvasSize);
 
         var validCustomSize = customCanvasWidthInput is >= MinCanvasDimension and <= MaxCanvasDimension
             && customCanvasHeightInput is >= MinCanvasDimension and <= MaxCanvasDimension;
@@ -98,12 +103,16 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawBackgroundSection(ProfileDocument profile)
     {
-        if (!EditorWidgets.Section("Background"))
+        if (!EditorWidgets.Section("Background", [TutorialTarget.AdvancedBackground]))
         {
             return;
         }
 
+        var backgroundMin = ImGui.GetCursorScreenPos();
         backgroundPanel.Draw(profile, preset => editorSession.ApplyBackgroundEdit(preset.ApplyTo));
+        var right = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+        TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedBackground, backgroundMin, new Vector2(right, ImGui.GetItemRectMax().Y));
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedBackground);
     }
 
     /// <summary>

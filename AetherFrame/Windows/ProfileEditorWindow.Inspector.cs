@@ -5,6 +5,8 @@ using AetherFrame.Domain.Profiles;
 using AetherFrame.Services.Fonts;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
@@ -44,6 +46,8 @@ internal sealed partial class ProfileEditorWindow
             return;
         }
 
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.AdvancedInspector);
+
         // A new selection (from the canvas or Layers) brings the Element tab forward.
         if (editorSession.SelectedElementId != lastInspectedElementId)
         {
@@ -60,11 +64,14 @@ internal sealed partial class ProfileEditorWindow
             return;
         }
 
-        var elementTabFlags = selectElementTabPending ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+        // A tab the tutorial points into comes forward for as long as it does.
+        var elementTabFlags = selectElementTabPending || TutorialWantsElementTab() ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+        var canvasTabFlags = TutorialWantsCanvasTab() ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
         selectElementTabPending = false;
 
         using (var elementTab = ImRaii.TabItem("Element", elementTabFlags))
         {
+            TutorialAnchorMarks.Mark(TutorialTarget.AdvancedInspectorElementTab);
             if (elementTab.Success)
             {
                 using var scroll = ImRaii.Child("##ElementInspectorScroll", new Vector2(-1, -1), false);
@@ -75,8 +82,9 @@ internal sealed partial class ProfileEditorWindow
             }
         }
 
-        using (var canvasTab = ImRaii.TabItem("Canvas"))
+        using (var canvasTab = ImRaii.TabItem("Canvas", canvasTabFlags))
         {
+            TutorialAnchorMarks.Mark(TutorialTarget.AdvancedInspectorCanvasTab);
             if (canvasTab.Success)
             {
                 using var scroll = ImRaii.Child("##CanvasInspectorScroll", new Vector2(-1, -1), false);
@@ -87,6 +95,16 @@ internal sealed partial class ProfileEditorWindow
             }
         }
     }
+
+    private static bool TutorialWantsElementTab() =>
+        TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedTextContent) || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedTextFont)
+        || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedTextSize) || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedTextColor)
+        || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedElementPosition) || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedElementSize)
+        || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedLayerOrder);
+
+    private static bool TutorialWantsCanvasTab() =>
+        TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedBackground) || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedCanvasSize)
+        || TutorialAnchorMarks.IsWanted(TutorialTarget.AdvancedInspectorComponents);
 
     private void DrawSelectedElementInspector(ProfileDocument profile)
     {
@@ -143,7 +161,7 @@ internal sealed partial class ProfileEditorWindow
     /// </summary>
     private void DrawLayerSection(ProfileElement element)
     {
-        if (!EditorWidgets.Section("Layer"))
+        if (!EditorWidgets.Section("Layer", [TutorialTarget.AdvancedLayerOrder]))
         {
             return;
         }
@@ -165,6 +183,7 @@ internal sealed partial class ProfileEditorWindow
         }
 
         // The same moves as the Layers panel's right-click menu (and dragging in its list).
+        var orderMin = ImGui.GetCursorScreenPos();
         EditorWidgets.PropertyLabel("Order", 0f);
         OrderButton("ToBack", FontAwesomeIcon.AngleDoubleDown, "Move to Back", () => editorSession.SendToBack(element.Id));
         ImGui.SameLine(0f, 2f);
@@ -173,6 +192,8 @@ internal sealed partial class ProfileEditorWindow
         OrderButton("Forward", FontAwesomeIcon.AngleUp, "Move Forward", () => editorSession.BringForward(element.Id));
         ImGui.SameLine(0f, 2f);
         OrderButton("ToFront", FontAwesomeIcon.AngleDoubleUp, "Move to Front", () => editorSession.BringToFront(element.Id));
+        TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedLayerOrder, orderMin, ImGui.GetItemRectMax());
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedLayerOrder);
 
         EditorWidgets.PropertyLabel("Visible", 0f);
         var visible = element.Visible;
@@ -206,7 +227,7 @@ internal sealed partial class ProfileEditorWindow
     /// <summary>Where the element sits and how large it is (frozen while locked).</summary>
     private void DrawPositionAndSizeSection(ProfileDocument profile, ProfileElement element)
     {
-        if (!EditorWidgets.Section("Position & Size"))
+        if (!EditorWidgets.Section("Position & Size", [TutorialTarget.AdvancedElementPosition, TutorialTarget.AdvancedElementSize]))
         {
             return;
         }
@@ -218,6 +239,7 @@ internal sealed partial class ProfileEditorWindow
 
         // Position (clamped exactly like dragging on the canvas).
         var position = element.Position;
+        var positionMin = ImGui.GetCursorScreenPos();
         EditorWidgets.PropertyLabel("Position", halfWidth);
         var positionChanged = ImGui.DragFloat("##PosX", ref position.X, 1f, -canvas.X, canvas.X * 2f, "X %.0f");
         var positionDone = ImGui.IsItemDeactivatedAfterEdit();
@@ -225,6 +247,8 @@ internal sealed partial class ProfileEditorWindow
         ImGui.SetNextItemWidth(halfWidth);
         positionChanged |= ImGui.DragFloat("##PosY", ref position.Y, 1f, -canvas.Y, canvas.Y * 2f, "Y %.0f");
         positionDone |= ImGui.IsItemDeactivatedAfterEdit();
+        TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedElementPosition, positionMin, ImGui.GetItemRectMax());
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedElementPosition);
 
         if (positionChanged)
         {
@@ -240,6 +264,7 @@ internal sealed partial class ProfileEditorWindow
         // Size (an image with Preserve Ratio keeps its current aspect).
         var size = element.Size;
         var lockedAspect = element is ImageProfileElement { PreserveAspectRatio: true } && size.Y > 0f ? size.X / size.Y : (float?)null;
+        var sizeMin = ImGui.GetCursorScreenPos();
         EditorWidgets.PropertyLabel("Size", halfWidth);
         var widthChanged = ImGui.DragFloat("##SizeW", ref size.X, 1f, EditorSession.MinElementWidth, canvas.X, "W %.0f", ImGuiSliderFlags.AlwaysClamp);
         var sizeDone = ImGui.IsItemDeactivatedAfterEdit();
@@ -247,6 +272,8 @@ internal sealed partial class ProfileEditorWindow
         ImGui.SetNextItemWidth(halfWidth);
         var heightChanged = ImGui.DragFloat("##SizeH", ref size.Y, 1f, EditorSession.MinElementHeight, canvas.Y, "H %.0f", ImGuiSliderFlags.AlwaysClamp);
         sizeDone |= ImGui.IsItemDeactivatedAfterEdit();
+        TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedElementSize, sizeMin, ImGui.GetItemRectMax());
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedElementSize);
 
         if (widthChanged || heightChanged)
         {
@@ -373,7 +400,7 @@ internal sealed partial class ProfileEditorWindow
     /// <summary>What the text says, and the symbols drawn around it.</summary>
     private void DrawTextContentSection(TextProfileElement text)
     {
-        if (!EditorWidgets.Section("Content"))
+        if (!EditorWidgets.Section("Content", [TutorialTarget.AdvancedTextContent]))
         {
             return;
         }
@@ -405,6 +432,9 @@ internal sealed partial class ProfileEditorWindow
             ContinueTextEdit(text.Id, element => element.Text = content);
         }
 
+        TutorialAnchorMarks.Mark(TutorialTarget.AdvancedTextContent);
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedTextContent);
+
         if (ImGui.IsItemDeactivatedAfterEdit())
         {
             editorSession.CommitPendingEdit();
@@ -434,7 +464,7 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawTypographySection(TextProfileElement text)
     {
-        if (!EditorWidgets.Section("Typography"))
+        if (!EditorWidgets.Section("Typography", [TutorialTarget.AdvancedTextFont, TutorialTarget.AdvancedTextSize]))
         {
             return;
         }
@@ -456,6 +486,9 @@ internal sealed partial class ProfileEditorWindow
             ApplyImmediateTextEdit(text.Id, element => element.FontFamily = newFamily);
         }
 
+        TutorialAnchorMarks.Mark(TutorialTarget.AdvancedTextFont);
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedTextFont);
+
         var fontSize = text.FontSize;
         EditorWidgets.PropertyLabel("Size");
         // A typed size may go past the slider (see TypedSliderValues).
@@ -464,6 +497,9 @@ internal sealed partial class ProfileEditorWindow
             var value = TypedSliderValues.FontSize(fontSize, text.FontSize);
             ContinueTextEdit(text.Id, element => element.FontSize = value);
         }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.AdvancedTextSize);
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedTextSize);
 
         if (ImGui.IsItemDeactivatedAfterEdit())
         {
@@ -619,7 +655,7 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawTextAppearanceSection(TextProfileElement text)
     {
-        if (!EditorWidgets.Section("Appearance"))
+        if (!EditorWidgets.Section("Appearance", [TutorialTarget.AdvancedTextColor]))
         {
             return;
         }
@@ -633,6 +669,9 @@ internal sealed partial class ProfileEditorWindow
             var rgb = color;
             ContinueTextEdit(text.Id, element => element.Color = rgb with { W = element.Color.W });
         }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.AdvancedTextColor);
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedTextColor);
 
         CommitOnRelease();
 

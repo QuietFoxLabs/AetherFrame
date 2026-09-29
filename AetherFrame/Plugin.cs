@@ -13,9 +13,13 @@ using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
 using AetherFrame.Services.Templates;
 using AetherFrame.Services.Thumbnails;
+using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows;
+using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Interface.Windowing;
@@ -69,6 +73,16 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly AetherFrameCommandRegistration commands;
     private readonly IAetherFrameLog log;
 
+    // The interface's typography, the tutorial (its state, and the overlay windows that show it),
+    // and what the tutorial needs to know about this install once the Library has loaded.
+    private readonly AetherFonts fonts;
+    private readonly ProfileService profileService;
+    private readonly EditorSession editorSession;
+    private readonly OnboardingCoordinator onboarding;
+    private readonly TutorialOverlay tutorialOverlay;
+    private readonly bool configurationFound;
+    private readonly bool configurationUnreadable;
+
     // Every file-writing operation the plugin owns (Library, Templates, package import/export),
     // so unloading can let running ones finish before disposing what they use.
     private readonly OwnedOperations ownedOperations = new();
@@ -85,6 +99,22 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         var savedConfiguration = StartupGuard.TryLoad(
             () => PluginInterface.GetPluginConfig() as PluginConfiguration, "its configuration", log, out var configurationUnreadable);
         Configuration = savedConfiguration ?? new PluginConfiguration();
+        configurationFound = savedConfiguration is not null;
+        this.configurationUnreadable = configurationUnreadable;
+
+        // No configuration at all: the guidance below saves one right away, before the Library is
+        // read, so the tutorial's first-run decision (made after the load) is marked as pending in
+        // it. A later launch then judges this install by its Library, never by that file. A file
+        // that exists but can't be read is an established install's (only v0.1.6 or later ever
+        // wrote one): that is recorded at once, before the rewrite replaces the damaged file, so
+        // the tutorial is never offered unasked, whatever the Library holds.
+        if (savedConfiguration is null)
+        {
+            Configuration.Tutorial = new TutorialPreferences
+            {
+                Install = configurationUnreadable ? TutorialInstallKind.ExistingInstall : TutorialInstallKind.PendingDecision,
+            };
+        }
 
         // The one-time Basic suggestion: decided now from the configuration alone (a current one's
         // stored flag always wins), so it's ready before any window can ask for Advanced.
@@ -114,7 +144,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
             var jobCatalog = new JobCatalog();
             characterIdentityService = new CharacterIdentityService(jobCatalog);
-            var profileService = new ProfileService(plateLibrary);
+            profileService = new ProfileService(plateLibrary);
 
             assetStorageService = new AssetStorageService(
                 paths.AssetsDirectory, paths.AssetStagingDirectory, new AssetMetadataStore(paths.AssetMetadataDirectory, log), ImageFormatSupport.IsSupported, log);
@@ -142,7 +172,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             templateThumbnailTextures = new PlateThumbnailTextures(templateThumbnailService);
             startup.OnFailure("Template thumbnails", templateThumbnailService.Dispose);
 
-            var editorSession = new EditorSession(profileService, assetStorageService, imageTextureCache, log, () => ImGui.GetFrameCount());
+            editorSession = new EditorSession(profileService, assetStorageService, imageTextureCache, log, () => ImGui.GetFrameCount());
             editorSurfaces = new EditorSurfaceCoordinator(() =>
             {
                 editorSession.CommitPendingEdits();
@@ -187,6 +217,32 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             WindowSystem.AddWindow(profileEditorWindow);
             WindowSystem.AddWindow(profileViewWindow);
             WindowSystem.AddWindow(packageImportWindow);
+
+            // The interface's own fonts (the game's Axis face for headings; built by Dalamud when it can).
+            fonts = new AetherFonts(PluginInterface.UiBuilder.FontAtlas);
+            AetherFonts.Current = fonts;
+            startup.OnFailure("interface fonts", fonts.Dispose);
+
+            // The tutorial: its state lives in the configuration beside the guidance flag; its
+            // windows go after every other AetherFrame window, so the spotlight sees this frame's
+            // anchors. Whether to offer it is decided once the Library has loaded (see LoadAsync).
+            onboarding = new OnboardingCoordinator(new ConfigurationTutorialStore(Configuration, log), TutorialScript.Chapters, TutorialScript.Version);
+            var tutorialHost = new TutorialHost(this);
+            tutorialOverlay = new TutorialOverlay(
+                onboarding, tutorialHost, [plateLibraryWindow, basicProfileEditorWindow, profileEditorWindow, profileViewWindow, packageImportWindow]);
+
+            // A player taking the tour is being shown both editors: the one-time Basic suggestion
+            // would only get in the way of a step, so it counts as handled once the tour starts.
+            onboarding.Started += basicGuidance.MarkHandled;
+            var helpMenu = new HelpMenu(onboarding, tutorialHost);
+            plateLibraryWindow.Help = helpMenu;
+            basicProfileEditorWindow.Help = helpMenu;
+            profileEditorWindow.Help = helpMenu;
+            foreach (var window in tutorialOverlay.Windows)
+            {
+                WindowSystem.AddWindow(window);
+            }
+
             startup.OnFailure("windows", WindowSystem.RemoveAllWindows);
 
             // /aetherframe and its /af alias, both on this one handler.
@@ -204,12 +260,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 ClientState.Logout -= OnLogout;
             });
 
-            PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
+            PluginInterface.UiBuilder.Draw += DrawUi;
             PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
             PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
             startup.OnFailure("drawing", () =>
             {
-                PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
+                PluginInterface.UiBuilder.Draw -= DrawUi;
                 PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
                 PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
             });
@@ -261,6 +317,63 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // Nothing on disk is touched by a failed load; Templates says the saved ones couldn't
             // load, and built-in Templates stay usable, so Create Plate still works.
             Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not load the Template Library.");
+        }
+
+        // Now that the Library's state is known: is this a new player (offer the tutorial) or an
+        // established install (never offer unasked)? Decided on the framework thread, where the
+        // tutorial's state is read while drawing; reads the Library's counts only, changes nothing
+        // in it, and can never fail the load.
+        try
+        {
+            await Framework.RunOnTick(ResolveFirstRun, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // A stopped load tears the plugin down here, like the Library loads above; any other
+            // failure only means the offer isn't made this launch.
+            await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
+            Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not decide whether to offer the tutorial.");
+        }
+    }
+
+    private void ResolveFirstRun()
+    {
+        // Both Libraries must have loaded for their counts to mean anything: an install whose only
+        // saved work is a Template must not look new because the Template Library failed to load.
+        var libraryLoaded = plateLibrary.IsLoaded && templateLibrary.IsLoaded;
+        var plateCount = plateLibrary.IsLoaded ? plateLibrary.GetOrderedPlates().Count : 0;
+        var userTemplateCount = 0;
+        if (templateLibrary.IsLoaded)
+        {
+            foreach (var template in templateLibrary.GetOrderedTemplates())
+            {
+                if (!template.IsBuiltIn)
+                {
+                    userTemplateCount++;
+                }
+            }
+        }
+
+        onboarding.ResolveFirstRun(configurationFound, configurationUnreadable, libraryLoaded, plateCount, userTemplateCount);
+        Log.Information($"AetherFrame tutorial: {onboarding.LastDecision} (install {onboarding.Preferences.Install}, status {onboarding.Preferences.Status}).");
+    }
+
+    /// <summary>
+    /// Every frame: the tutorial's windows follow its state, then every window draws. Dalamud
+    /// guards each window's Draw but not its PreDraw, so if one throws there, whatever AetherFrame
+    /// style is still pushed is popped here before the exception reaches Dalamud, and no other
+    /// window is drawn in AetherFrame's colors.
+    /// </summary>
+    private void DrawUi()
+    {
+        try
+        {
+            tutorialOverlay.Update();
+            WindowSystem.Draw();
+        }
+        finally
+        {
+            AetherStyle.RecoverOutstanding();
         }
     }
 
@@ -320,7 +433,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
     private void StopNewWork()
     {
-        PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
+        PluginInterface.UiBuilder.Draw -= DrawUi;
+
+        // A running tutorial is remembered where it stopped; nothing else of it needs the game.
+        onboarding.Suspend();
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
 
@@ -349,6 +465,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         proceduralTextureCache.Dispose();
         builtInArtTextureCache.Dispose();
         fontService.Dispose();
+        fonts.Dispose();
     }
 
     /// <summary>The Plate thumbnail service: a save or delete still running calls into it (via
@@ -387,6 +504,83 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     }
 
     private void OpenAdvancedEditor() => editorSurfaces.Show(EditorSurfaceKind.Advanced);
+
+    /// <summary>
+    /// What the tutorial sees of the interface (a value, read fresh every frame) and the few safe
+    /// things a card may do: open or bring forward a window the player could open themselves.
+    /// Nothing here touches a Plate.
+    /// </summary>
+    private sealed class TutorialHost(Plugin plugin) : ITutorialHost
+    {
+        public TutorialContextSnapshot Snapshot()
+        {
+            var profile = plugin.profileService.CurrentProfile;
+            ProfileElement? selected = null;
+            if (profile is not null && plugin.editorSession.SelectedElementId is { } selectedId)
+            {
+                foreach (var element in profile.Elements)
+                {
+                    if (element.Id == selectedId)
+                    {
+                        selected = element;
+                        break;
+                    }
+                }
+            }
+
+            var library = plugin.plateLibraryWindow;
+            return new TutorialContextSnapshot(
+                MyPlatesOpen: library.IsOpen,
+                TemplatesViewOpen: library.IsOpen && library.TemplatesViewShowing,
+                TemplateChooserOpen: library.IsOpen && library.TemplateChooserShowing,
+                ActiveEditor: plugin.editorSurfaces.ActiveSurface,
+                PlateOpen: profile is not null,
+                PlateCount: plugin.plateLibrary.IsLoaded ? plugin.plateLibrary.GetOrderedPlates().Count : 0,
+                ElementSelected: selected is not null,
+                TextElementSelected: selected is TextProfileElement);
+        }
+
+        public void Perform(TutorialAction action)
+        {
+            switch (action)
+            {
+                case TutorialAction.OpenMyPlates:
+                    plugin.OpenMyPlates();
+                    break;
+                case TutorialAction.OpenBasicEditor when plugin.profileService.CurrentProfile is not null:
+                    plugin.OpenBasicEditor();
+                    break;
+                case TutorialAction.OpenAdvancedEditor when plugin.profileService.CurrentProfile is not null:
+                    plugin.OpenAdvancedEditor();
+                    break;
+                case TutorialAction.OpenBasicEditor:
+                case TutorialAction.OpenAdvancedEditor:
+                    // No Plate is open to edit: the way there is My Plates.
+                    plugin.OpenMyPlates();
+                    break;
+            }
+        }
+    }
+
+    /// <summary>The tutorial's preferences, persisted in the plugin configuration beside the guidance flag.</summary>
+    private sealed class ConfigurationTutorialStore(PluginConfiguration configuration, IAetherFrameLog log) : ITutorialPreferencesStore
+    {
+        public TutorialPreferences Preferences => configuration.Tutorial ??= new TutorialPreferences();
+
+        /// <summary>Never throws: failing to remember only means the offer may be shown again.</summary>
+        public void Save()
+        {
+            configuration.Version = Math.Max(configuration.Version, PluginConfiguration.CurrentVersion);
+            try
+            {
+                PluginInterface.SavePluginConfig(configuration);
+            }
+            catch (Exception ex)
+            {
+                log.Error(ex, "AetherFrame could not save its configuration.");
+            }
+        }
+    }
 
     /// <summary>The guidance flag, persisted in the plugin configuration.</summary>
     private sealed class ConfigurationGuidanceStore(PluginConfiguration configuration, IAetherFrameLog log) : IBasicGuidanceStore

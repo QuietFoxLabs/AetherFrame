@@ -5,6 +5,8 @@ using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
@@ -50,6 +52,7 @@ internal sealed partial class ProfileEditorWindow
             return;
         }
 
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.AdvancedLayers);
         ImGui.TextDisabled("LAYERS");
         ImGui.SameLine();
         var countText = $"{profile.Elements.Count}";

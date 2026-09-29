@@ -13,6 +13,10 @@ using AetherFrame.Services.Thumbnails;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Library;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Theme;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -49,7 +53,6 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     private static readonly Vector4 CardColor = new(1f, 1f, 1f, 0.04f);
     private static readonly Vector4 CardHoverColor = new(1f, 1f, 1f, 0.08f);
     private static readonly Vector4 FallbackBackdropColor = new(0.16f, 0.17f, 0.21f, 1f);
-    private static readonly Vector4 ActiveBadgeColor = new(0.95f, 0.78f, 0.30f, 1f);
 
     private readonly PlateLibraryService library;
     private readonly TemplateLibraryService templates;
@@ -77,6 +80,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     private readonly Action<string> beginImport;
 
     private readonly Dictionary<Guid, string> cardIds = new();
+
+    // AetherFrame's style around this window's frame, and the tutorial's window policy.
+    private readonly AetherWindowChrome chrome = new();
 
     private Guid? selectedPlateId;
     private string searchText = string.Empty;
@@ -131,6 +137,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         this.beginImport = beginImport;
     }
 
+    /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
+    internal HelpMenu? Help { get; set; }
+
     public void Dispose()
     {
     }
@@ -152,7 +161,14 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         activeView = LibraryView.MyPlates;
     }
 
-    public override void PreDraw() => EditorWidgets.SetFirstUseSize(FirstUseSize, MinimumWindowSize);
+    public override void PreDraw()
+    {
+        chrome.PushStyle();
+        EditorWidgets.SetFirstUseSize(FirstUseSize, MinimumWindowSize);
+        AetherWindowChrome.ApplyPolicy(this);
+    }
+
+    public override void PostDraw() => chrome.PopStyle();
 
     public override void Draw()
     {
@@ -215,8 +231,10 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             selectedPlateId = null;
         }
 
+        AetherBrand.Header("My Plates");
         DrawHeader(character, allPlates.Count);
         ImGui.Separator();
+        Help?.DrawReminder();
 
         // Two plain text lines now (status/info, then the right-click hint) — no button row.
         var footerHeight = (ImGui.GetTextLineHeightWithSpacing() * 2f) + EditorWidgets.Scaled(4f);
@@ -224,6 +242,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         {
             if (grid.Success)
             {
+                TutorialAnchorMarks.MarkWindow(TutorialTarget.LibraryPlateGrid);
                 DrawGrid(plates, allPlates.Count, activePlateId, character);
             }
         }
@@ -236,10 +255,13 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
     private void DrawHeader(CharacterContext? character, int plateCount)
     {
-        if (ImGui.Button("Create Plate"))
+        var headerMin = ImGui.GetCursorScreenPos();
+        if (AetherControls.PrimaryButton("Create Plate", tooltip: "Start a new Plate from a Template."))
         {
             pendingTemplateChooserPopup = true;
         }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.LibraryCreatePlate);
 
         ImGui.SameLine();
         if (ImGui.Button("Import"))
@@ -247,11 +269,20 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             OpenImportDialog();
         }
 
+        TutorialAnchorMarks.Mark(TutorialTarget.LibraryImport);
         EditorWidgets.Tooltip("Add a Plate from an .aetherframe file. It's checked and previewed first,\nand always added as a new Plate.");
 
         ImGui.SameLine();
         ImGui.SetNextItemWidth(EditorWidgets.Scaled(220f));
         ImGui.InputTextWithHint("##PlateSearch", "Search Plates...", ref searchText, 64);
+        TutorialAnchorMarks.Mark(TutorialTarget.LibrarySearch);
+        EditorWidgets.Tooltip("Filter the cards by name. Clear it to reorder cards again.");
+
+        if (Help is { } help)
+        {
+            ImGui.SameLine();
+            help.DrawButton("LibraryHelp", TutorialTarget.LibraryHelp);
+        }
 
         // Never the character's name or World (see MyPlatesCharacterText): only whether one is
         // logged in at all, since Set Active needs one.
@@ -269,6 +300,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize(countText).X));
             ImGui.TextDisabled(countText);
         }
+
+        var headerRight = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+        TutorialAnchorMarks.MarkRect(TutorialTarget.LibraryHeader, headerMin, new Vector2(headerRight, ImGui.GetItemRectMax().Y));
     }
 
     // ---------------------------------------------------------------- card grid
@@ -301,7 +335,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             }
 
             listedPlateIds.Add(plates[i].PlateId);
-            DrawCard(plates[i], plates[i].PlateId == activePlateId, canReorder, character, activePlateId);
+            DrawCard(plates[i], plates[i].PlateId == activePlateId, canReorder, character, activePlateId, first: i == 0);
         }
 
         // Card previews are kept only for the Plates this list shows (deleted or filtered-out ones are dropped).
@@ -320,18 +354,18 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
     private void DrawEmptyLibrary()
     {
-        ImGui.Spacing();
-        ImGui.TextUnformatted("You don't have any Plates yet.");
-        ImGui.TextDisabled("A Plate is a complete Adventure Plate style design. Make as many as you like;");
-        ImGui.TextDisabled("each character can choose one to be its Active Plate.");
-        ImGui.Spacing();
-        if (ImGui.Button("Create Your First Plate"))
+        if (AetherControls.EmptyState(
+                FontAwesomeIcon.IdCard,
+                "You don't have any Plates yet.",
+                "A Plate is a complete Adventure Plate style design. Make as many as you like; each character can choose one to be its Active Plate.",
+                "Create Your First Plate",
+                "Start a new Plate from a Template."))
         {
             pendingTemplateChooserPopup = true;
         }
     }
 
-    private void DrawCard(PlateSummary plate, bool isActive, bool canReorder, CharacterContext? character, Guid? activePlateId)
+    private void DrawCard(PlateSummary plate, bool isActive, bool canReorder, CharacterContext? character, Guid? activePlateId, bool first = false)
     {
         if (!cardIds.TryGetValue(plate.PlateId, out var id))
         {
@@ -347,6 +381,10 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         var max = ImGui.GetItemRectMax();
         var hovered = ImGui.IsItemHovered();
         var isSelected = selectedPlateId == plate.PlateId;
+        if (first)
+        {
+            TutorialAnchorMarks.MarkRect(TutorialTarget.LibraryFirstPlateCard, min, max);
+        }
 
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
@@ -386,11 +424,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         }
 
         var drawList = ImGui.GetWindowDrawList();
-        drawList.AddRectFilled(min, max, ImGui.GetColorU32(hovered ? CardHoverColor : CardColor), 6f);
-        if (isSelected)
-        {
-            drawList.AddRect(min, max, ImGui.GetColorU32(EditorWidgets.AccentColor), 6f, ImDrawFlags.None, 2f);
-        }
+        AetherControls.CardFrame(drawList, min, max, hovered, isSelected);
 
         var thumbnailMin = min + new Vector2(CardPadding);
         var thumbnailMax = thumbnailMin + thumbnailSize;
@@ -561,7 +595,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         var badgeMax = new Vector2(thumbnailMax.X - inset, thumbnailMin.Y + inset + textSize.Y + (padding.Y * 2f));
         var badgeMin = new Vector2(badgeMax.X - textSize.X - (padding.X * 2f), thumbnailMin.Y + inset);
 
-        drawList.AddRectFilled(badgeMin, badgeMax, ImGui.GetColorU32(ActiveBadgeColor), 4f);
-        drawList.AddText(badgeMin + padding, ImGui.GetColorU32(new Vector4(0.1f, 0.08f, 0.02f, 1f)), label);
+        drawList.AddRectFilled(badgeMin, badgeMax, ImGui.GetColorU32(AetherPalette.Gold), 4f);
+        drawList.AddText(badgeMin + padding, ImGui.GetColorU32(AetherPalette.TextOnGold), label);
     }
 }
