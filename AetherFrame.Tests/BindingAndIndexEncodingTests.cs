@@ -95,6 +95,7 @@ public class BindingAndIndexEncodingTests
 
     private static void AssertSavedBinding(LibraryFixture fixture, IEnumerable<Guid> plateIds, Guid active)
     {
+        Assert.True(Ascii.IsValid(File.ReadAllBytes(fixture.Paths.GetBindingPath(Characters.Alice.ContentId))));
         var saved = fixture.ReadBinding(Characters.Alice.ContentId);
         Assert.Equal(plateIds, saved.GetProperty("ProfileIds").EnumerateArray().Select(e => e.GetGuid()));
         Assert.Equal(active, saved.GetProperty("ActiveProfileId").GetGuid());
@@ -238,15 +239,18 @@ public class BindingAndIndexEncodingTests
         Assert.Equal(plates[1], reloaded.GetActivePlateId(Characters.Alice.ContentId));
     }
 
-    [Fact]
-    public async Task NewerVersionBinding_HoldingAReplacementCharacter_IsNeverReadFromItsOlderBackup_NorWritten()
+    [Theory]
+    [InlineData("literal-fffd")]
+    [InlineData("invalid-byte")]
+    [InlineData("utf8-bom")]
+    public async Task NewerVersionBinding_IsNeverReadFromItsOlderBackup_NorWritten_WhateverItsBytes(string text)
     {
         var store = new BackupSimulatingStore();
         using var fixture = new LibraryFixture(store);
         var (plates, olderBinding) = await SeedAliceAsync(fixture);
         var path = fixture.Paths.GetBindingPath(Characters.Alice.ContentId);
         store.Backups[path] = olderBinding;
-        var newer = Encoding.UTF8.GetBytes($$"""
+        var newerText = Encoding.UTF8.GetBytes($$"""
             {
               "Version": 99,
               "ContentId": {{Characters.Alice.ContentId}},
@@ -256,12 +260,20 @@ public class BindingAndIndexEncodingTests
               "Hologram": { "Shimmer": 3 }
             }
             """);
+        var newer = text switch
+        {
+            "invalid-byte" => [.. newerText[..newerText.AsSpan().IndexOf(EncodedReplacementCharacter)], .. InvalidByte,
+                .. newerText[(newerText.AsSpan().IndexOf(EncodedReplacementCharacter) + EncodedReplacementCharacter.Length)..]],
+            "utf8-bom" => [.. Encoding.UTF8.GetPreamble(), .. newerText],
+            _ => newerText,
+        };
         File.WriteAllBytes(path, newer);
 
         var library = await fixture.LoadAsync();
 
+        // The older backup row would make the first Plate Active; a newer binding is used for nothing.
         Assert.Null(library.GetBinding(Characters.Alice.ContentId));
-        Assert.DoesNotContain(fixture.Log.Messages, m => m.Contains("backup copy", StringComparison.Ordinal));
+        Assert.Null(library.GetActivePlateId(Characters.Alice.ContentId));
         Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
 
         var refused = await Assert.ThrowsAsync<PlateLibraryException>(() => library.SetActivePlateAsync(Characters.Alice, plates[2]));
@@ -312,12 +324,38 @@ public class BindingAndIndexEncodingTests
         Assert.Equal(moved, reloaded.GetOrderedPlates().Select(p => p.PlateId));
     }
 
+    /// <summary>Without any backup, an index with an invalid byte is still the player's order: it
+    /// is never taken for damage and rebuilt.</summary>
     [Fact]
-    public async Task NewerVersionIndex_HoldingAReplacementCharacter_IsUsedReadOnly_NeverItsOlderBackup()
+    public async Task IndexWithAnInvalidByte_AndNoBackup_KeepsTheManualOrder()
+    {
+        using var fixture = new LibraryFixture();
+        var plates = await SeedPlatesAsync(fixture);
+        var original = ManualIndex(plates, "invalid-byte");
+        File.WriteAllBytes(fixture.Paths.LibraryFile, original);
+
+        var library = await fixture.LoadAsync();
+
+        Assert.Equal(plates, library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
+        Assert.Equal(original, File.ReadAllBytes(fixture.Paths.LibraryFile));
+    }
+
+    [Theory]
+    [InlineData("literal-fffd")]
+    [InlineData("invalid-byte")]
+    [InlineData("utf8-bom")]
+    public async Task NewerVersionIndex_IsUsedReadOnly_NeverItsOlderBackup_WhateverItsBytes(string text)
     {
         using var fixture = new LibraryFixture(new BackupSimulatingStore());
         var plates = await SeedPlatesAsync(fixture);
-        var newer = Encoding.UTF8.GetBytes(IndexJson(99, plates, UnusualText));
+        var newerText = Encoding.UTF8.GetBytes(IndexJson(99, plates, "X" + UnusualText));
+        var newer = text switch
+        {
+            "invalid-byte" => ReplaceFirstLetter(newerText, "X" + UnusualText, InvalidByte),
+            "utf8-bom" => [.. Encoding.UTF8.GetPreamble(), .. newerText],
+            _ => newerText,
+        };
         File.WriteAllBytes(fixture.Paths.LibraryFile, newer);
 
         var library = await fixture.LoadAsync();
@@ -349,6 +387,12 @@ public class BindingAndIndexEncodingTests
         Assert.Equal(original, File.ReadAllBytes(path));
         Assert.Equal(plates[1], library.GetActivePlateId(Characters.Alice.ContentId));
 
+        // A new Plate for her is still created, but not linked while her file can't be kept.
+        await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice, "Fourth"));
+        Assert.Equal(4, library.GetOrderedPlates().Count);
+        Assert.Equal(plates, library.GetBinding(Characters.Alice.ContentId)!.PlateIds);
+        Assert.Equal(original, File.ReadAllBytes(path));
+
         UnblockRecovery(fixture.Paths);
         fixture.Clock.Tick();
         await library.SetActivePlateAsync(Characters.Alice, plates[2]);
@@ -373,6 +417,7 @@ public class BindingAndIndexEncodingTests
         var refused = await Assert.ThrowsAsync<PlateLibraryException>(() => library.MovePlateAsync(plates[2], plates[0], placeAfter: false));
         Assert.Equal(PlateLibraryService.UnpreservedDamagedFileMessage, refused.Message);
         Assert.Equal(original, File.ReadAllBytes(fixture.Paths.LibraryFile));
+        Assert.Equal(plates, library.GetOrderedPlates().Select(p => p.PlateId));
 
         UnblockRecovery(fixture.Paths);
         fixture.Clock.Tick();
