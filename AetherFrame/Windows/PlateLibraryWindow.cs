@@ -13,6 +13,7 @@ using AetherFrame.Services.Thumbnails;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Library;
 using AetherFrame.UI.Rendering;
+using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -77,6 +78,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     private readonly Action<string> beginImport;
 
     private readonly Dictionary<Guid, string> cardIds = new();
+
+    // AetherFrame's style around this window's frame, and the tutorial's window policy.
+    private readonly AetherWindowChrome chrome = new();
 
     private Guid? selectedPlateId;
     private string searchText = string.Empty;
@@ -152,7 +156,14 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         activeView = LibraryView.MyPlates;
     }
 
-    public override void PreDraw() => EditorWidgets.SetFirstUseSize(FirstUseSize, MinimumWindowSize);
+    public override void PreDraw()
+    {
+        chrome.PushStyle();
+        EditorWidgets.SetFirstUseSize(FirstUseSize, MinimumWindowSize);
+        AetherWindowChrome.ApplyPolicy(this);
+    }
+
+    public override void PostDraw() => chrome.PopStyle();
 
     public override void Draw()
     {

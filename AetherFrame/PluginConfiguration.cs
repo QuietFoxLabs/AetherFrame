@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AetherFrame.UI.Tutorial;
 using Dalamud.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -19,6 +20,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
     /// (see <c>BasicGuidance</c>). Once true it is never shown again.
     /// </summary>
     public bool BasicGuidanceHandled { get; set; }
+
+    /// <summary>
+    /// The interactive tutorial's own state (whether this install was new when the tutorial first
+    /// ran, how the first-run offer was answered, where a started tour stopped, which version was
+    /// completed). Null in a configuration written before the tutorial existed, which is not by
+    /// itself a sign of a new player: see <c>FirstRunDetector</c>. Kept apart from every Plate.
+    /// </summary>
+    public TutorialPreferences? Tutorial { get; set; }
 
     /// <summary>
     /// Whatever a newer version of AetherFrame stored here and this one doesn't know: kept as it

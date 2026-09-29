@@ -7,6 +7,7 @@ using AetherFrame.Services;
 using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Packages;
 using AetherFrame.UI.Rendering;
+using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -129,6 +130,17 @@ internal sealed class PackageImportWindow : Window, IDisposable
 
         Release();
     }
+
+    // AetherFrame's style around this window's frame, and the tutorial's window policy.
+    private readonly AetherWindowChrome chrome = new();
+
+    public override void PreDraw()
+    {
+        chrome.PushStyle();
+        AetherWindowChrome.ApplyPolicy(this);
+    }
+
+    public override void PostDraw() => chrome.PopStyle();
 
     public override void Draw()
     {

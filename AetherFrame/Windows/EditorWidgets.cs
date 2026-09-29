@@ -5,6 +5,7 @@ using AetherFrame.Domain.Components;
 using AetherFrame.Services;
 using Dalamud.Bindings.ImGui;
 using AetherFrame.UI.Editor;
+using AetherFrame.UI.Theme;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -23,12 +24,13 @@ internal static class EditorWidgets
     /// <summary>The property label column's width at the current UI scale.</summary>
     internal static float LabelColumnWidth => Scaled(BaseLabelColumnWidth);
 
-    internal static readonly Vector4 AccentColor = new(0.30f, 0.62f, 1.00f, 1f);
-    internal static readonly Vector4 ActiveToggleColor = new(0.26f, 0.46f, 0.78f, 1f);
-    internal static readonly Vector4 DimTextColor = new(1f, 1f, 1f, 0.45f);
-    internal static readonly Vector4 WarningColor = new(1f, 0.70f, 0.30f, 1f);
-    internal static readonly Vector4 ErrorColor = new(1f, 0.42f, 0.42f, 1f);
-    internal static readonly Vector4 SuccessColor = new(0.45f, 0.85f, 0.50f, 1f);
+    // The palette's roles under the names the editors have always used (see AetherPalette).
+    internal static readonly Vector4 AccentColor = AetherPalette.Aether;
+    internal static readonly Vector4 ActiveToggleColor = AetherPalette.Aether.WithOpacity(0.62f);
+    internal static readonly Vector4 DimTextColor = AetherPalette.TextMuted;
+    internal static readonly Vector4 WarningColor = AetherPalette.Warning;
+    internal static readonly Vector4 ErrorColor = AetherPalette.Danger;
+    internal static readonly Vector4 SuccessColor = AetherPalette.Success;
 
     /// <summary>A length in unscaled pixels at Dalamud's global UI scale.</summary>
     internal static float Scaled(float pixels) => pixels * ImGuiHelpers.GlobalScale;

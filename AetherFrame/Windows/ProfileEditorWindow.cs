@@ -5,6 +5,7 @@ using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -67,6 +68,9 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
 
     // Preview: the shared Clean Preview, which the Basic editor's Preview uses too.
     private readonly CleanPreviewPresenter cleanPreview;
+
+    // AetherFrame's style around this window's frame, and the tutorial's window policy.
+    private readonly AetherWindowChrome chrome = new();
 
     // Inspector tab and focus requests, raised by canvas/layers interactions.
     private bool selectElementTabPending;
@@ -192,11 +196,17 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     /// </summary>
     public override void PreDraw()
     {
+        chrome.PushStyle();
         EditorWidgets.SetFirstUseSize(AdvancedEditorLayout.FirstUseSize, AdvancedEditorLayout.MinimumWindowSize);
         cleanPreview.PreDraw();
+        AetherWindowChrome.ApplyPolicy(this);
     }
 
-    public override void PostDraw() => cleanPreview.PostDraw();
+    public override void PostDraw()
+    {
+        cleanPreview.PostDraw();
+        chrome.PopStyle();
+    }
 
     public override void Draw()
     {

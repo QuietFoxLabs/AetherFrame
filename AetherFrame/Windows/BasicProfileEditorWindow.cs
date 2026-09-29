@@ -7,6 +7,7 @@ using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -86,6 +87,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     // Preview: the same Clean Preview the Advanced editor's Preview shows.
     private readonly CleanPreviewPresenter cleanPreview;
 
+    // AetherFrame's style around this window's frame, and the tutorial's window policy.
+    private readonly AetherWindowChrome chrome = new();
+
     // Which category is shown, and the live view's zoom: view state only, never part of the Plate.
     private readonly BasicEditorNavigation navigation = new();
 
@@ -150,9 +154,18 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     }
 
     /// <summary>Clean Preview's presentation (see <see cref="CleanPreviewPresenter"/>), or the editor's own.</summary>
-    public override void PreDraw() => cleanPreview.PreDraw();
+    public override void PreDraw()
+    {
+        chrome.PushStyle();
+        cleanPreview.PreDraw();
+        AetherWindowChrome.ApplyPolicy(this);
+    }
 
-    public override void PostDraw() => cleanPreview.PostDraw();
+    public override void PostDraw()
+    {
+        cleanPreview.PostDraw();
+        chrome.PopStyle();
+    }
 
     /// <inheritdoc/>
     public void Show()

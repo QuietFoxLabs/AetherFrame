@@ -1,7 +1,7 @@
 namespace AetherFrame.UI.Tutorial;
 
 /// <summary>Where the player stands with the tutorial.</summary>
-internal enum TutorialStatus
+public enum TutorialStatus
 {
     /// <summary>Never asked, or asked and not answered.</summary>
     Undecided = 0,
@@ -22,7 +22,7 @@ internal enum TutorialStatus
 }
 
 /// <summary>What kind of installation the tutorial found when it first ran (decided once, then stored).</summary>
-internal enum TutorialInstallKind
+public enum TutorialInstallKind
 {
     Unknown = 0,
 
@@ -40,7 +40,7 @@ internal enum TutorialInstallKind
 /// serializes by convention; unknown future properties are preserved by the configuration that
 /// holds it.
 /// </summary>
-internal sealed class TutorialPreferences
+public sealed class TutorialPreferences
 {
     public TutorialInstallKind Install { get; set; }
 

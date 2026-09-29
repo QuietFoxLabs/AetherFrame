@@ -133,7 +133,7 @@ internal static class AetherPalette
     internal static Vector4 Rgb(byte r, byte g, byte b, float alpha = 1f) => new(r / 255f, g / 255f, b / 255f, alpha);
 
     /// <summary>The color with its alpha replaced.</summary>
-    internal static Vector4 WithAlpha(this Vector4 color, float alpha) => color with { W = alpha };
+    internal static Vector4 WithOpacity(this Vector4 color, float alpha) => color with { W = alpha };
 
     /// <summary>
     /// <paramref name="front"/> composited over <paramref name="back"/> (straight alpha), which is
