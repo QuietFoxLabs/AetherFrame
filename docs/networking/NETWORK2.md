@@ -4,7 +4,7 @@
 
 **Safeguards.** Safeguards 2 to 8 of [NETWORK1.md](NETWORK1.md), section 4, hold throughout NETWORK2:
 - no persistent key before G1 is complete;
-- signed bytes change only with an explicit approval, and the protocol stays a DRAFT until the owner freezes it;
+- in safeguard 3's words, "NETWORK0's signed bytes do not change except in an increment the owner explicitly approves", and the protocol stays a DRAFT until an explicit owner freeze. N2-2 and N2-3 change signed bytes, so each needs the owner's explicit approval as well as its recorded decisions;
 - capability tests, not operating system labels;
 - no hand-written cryptography;
 - platform validation never trusted alone;
@@ -32,7 +32,7 @@ Two players on native Windows, each running a **networking preview build**, and 
 1. **Identity.** Player A creates a persona in AetherFrame and selects it. Before the first publish, A meets whatever K4 decides. The recommendation is an acknowledgement that losing the key means the Plate can never be unpublished. The encrypted backup comes later (the D2 details).
 2. **Publish.** A picks a saved Plate and chooses Share. A consent screen shows what leaves the computer and what the server learns:
    - **The actual content to be published:** every text as it will appear, and the prepared copies of the images.
-   - **Game-filled text, flagged.** Adventure Plate Classic fills itself from the logged-in character (name, Home World, Data Center, job, Free Company tag). AetherFrame never adds a name, World or Content ID on its own, but a Plate may already contain them, and the screen says which texts came from the game.
+   - **Game-filled text, flagged.** Adventure Plate Classic fills itself from the logged-in character (name, Home World, Data Center, job, Free Company tag). Publishing adds no name, World or Content ID of its own, but a Plate may already contain them, and the screen says which texts came from the game.
    - **The persona's public key.** Every Plate one persona publishes can be tied together by anyone holding their codes, so a persona used for several characters links those characters.
    - **What the server sees:** the player's network address and when they publish, as well as the profile, revision and asset identifiers.
 
@@ -103,8 +103,8 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 |---|---|---|---|
 | N2-0 | This plan, and the roadmap | none | none |
 | N2-1 | Decision batch A: protocol, privacy and boundaries, researched and reviewed | N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3, K4; the lookup model; the transport; the boundary amendment | N2-0 |
-| N2-2 | Protocol: the draft marker and the name rule (NETWORK1 increments 2a and 2b) | N3, D4 | N2-1 |
-| N2-3 | Protocol: ProfileSnapshot schema 2 (the layout) and the request proof context | D8, D5, D9a, I1, S1, D7, L8 | N2-2 |
+| N2-2 | Protocol: the draft marker and the name rule (NETWORK1 increments 2a and 2b) | N3, D4; the owner's explicit approval (safeguard 3) | N2-1 |
+| N2-3 | Protocol: ProfileSnapshot schema 2 (the layout) and the request proof context | D8, D5, D9a, I1, S1, D7, L8; the owner's explicit approval (safeguard 3) | N2-2 |
 | N2-4 | Plugin: the Windows DPAPI protector and the capability probe (NETWORK1 increment 7) | K2 (approved), K3 | N2-2 (NETWORK1's gate for increment 7) |
 | N2-5 | Plugin: the persisted persona registry and the persona window; L12 detection; the written-through move; K4's step | G1 complete (with N3, K3 and P1 from batch A), K4, L10, L12 | N2-2 (the draft marker exists before any persistent key signs), N2-4 |
 | N2-6 | Plugin: the snapshot builder for schema 2, image preparation, the publication index and the outbox (NETWORK1 increments 4 and 8) | P1, D4, D5, D8, I1 | N2-3, N2-5 |

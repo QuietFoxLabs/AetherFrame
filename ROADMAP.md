@@ -205,13 +205,13 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
    - primary sources are cited where they matter;
    - a security reviewer concurs with every security, cryptography and privacy entry;
    - no code changes.
-2. **N2-2: the draft marker and the name rule** (NETWORK1 increments 2a and 2b). Prerequisites: N3 and D4. Acceptance:
+2. **N2-2: the draft marker and the name rule** (NETWORK1 increments 2a and 2b). Prerequisites: N3 and D4, and the owner's explicit approval, because it changes signed bytes (NETWORK1.md, safeguard 3). Acceptance:
    - exactly the approved marker and rule are implemented;
    - the vectors, the specification and the independent checker change together;
    - documents with incompatible markers are proved to be refused;
    - boundary and adversarial name cases are added;
    - the protocol stays DRAFT, and local Plate naming and files are unchanged.
-3. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: D8, D5 and I1 (batch A); S1, D7 and L8 (decided in this change or in batch A). Acceptance:
+3. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: D8, D5, D9a and I1 (batch A); S1, D7 and L8 (decided in this change or in batch A); and the owner's explicit approval, because it changes signed bytes (safeguard 3). Acceptance:
    - a canonical layout schema in fixed-point integers: canvas, background, text, images and Components, with a limit on every count, length and value;
    - the request proof in its own signing context, with its own domain tag;
    - vectors, the specification, the reference implementation in the tests, and adversarial cases;
