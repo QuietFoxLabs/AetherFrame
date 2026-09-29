@@ -20,6 +20,13 @@ public sealed class RepositoryValidationRequest
 
     /// <summary>CHANGELOG.md, when the entry's changelog fields must be its current sections.</summary>
     public string? ChangelogPath { get; init; }
+
+    /// <summary>
+    /// The document is the one already published, read as history: its RepoUrl and download links may
+    /// still use the source repository's previous address, for versions released there
+    /// (<see cref="RepositoryConfiguration.Previous"/>). Never set for a document about to be published.
+    /// </summary>
+    public bool AcceptPreviousAddress { get; init; }
 }
 
 /// <summary>
@@ -51,7 +58,11 @@ public static class RepositoryValidator
         checks.Require(empty.Count == 0, "installer fields", "Name, Author, Punchline, Description", $"empty: {string.Join(", ", empty)}.");
 
         var version = checks.Attempt("AssemblyVersion", () => (ProductVersion?)ProductVersion.FromAssemblyVersion(entry.AssemblyVersion, "AssemblyVersion"), v => v!.Value.AssemblyVersion.ToString());
-        checks.Require(entry.RepoUrl == config.SourceRepositoryUrl, "RepoUrl", entry.RepoUrl ?? string.Empty, $"is '{entry.RepoUrl}', expected '{config.SourceRepositoryUrl}'.");
+        checks.Require(
+            entry.RepoUrl == config.SourceRepositoryUrl || (request.AcceptPreviousAddress && version is not null && config.IsPreviousRepoUrl(entry.RepoUrl, version.Value)),
+            "RepoUrl",
+            entry.RepoUrl ?? string.Empty,
+            $"is '{entry.RepoUrl}', expected '{config.SourceRepositoryUrl}'.");
         checks.Require(entry.ApplicableVersion == "any", "ApplicableVersion", entry.ApplicableVersion ?? string.Empty, $"is '{entry.ApplicableVersion}', expected 'any'.");
         if (entry.MinimumDalamudVersion is not null)
         {
@@ -120,16 +131,21 @@ public static class RepositoryValidator
             throw new ReleaseCheckException("the entry's AssemblyVersion could not be read.");
         }
 
+        // A link is the configured template's, or, in a document published before the repository moved,
+        // the previous address's for a version released there.
+        bool Links(string? link, ProductVersion linked, string expected) =>
+            link == expected || (request.AcceptPreviousAddress && link is not null && link == config.PreviousDownloadUrl(linked));
+
         var stableVersion = version.Value;
         var install = checks.Attempt("DownloadLinkInstall", () =>
         {
             var expected = config.DownloadUrl(stableVersion);
-            if (entry.DownloadLinkInstall != expected)
+            if (!Links(entry.DownloadLinkInstall, stableVersion, expected))
             {
                 throw new ReleaseCheckException($"is '{entry.DownloadLinkInstall}', expected '{expected}' from the configured template.");
             }
 
-            return expected;
+            return entry.DownloadLinkInstall!;
         }, u => u);
         checks.Require(entry.DownloadLinkUpdate == entry.DownloadLinkInstall, "DownloadLinkUpdate", entry.DownloadLinkUpdate ?? string.Empty, $"is '{entry.DownloadLinkUpdate}', expected the install link.");
 
@@ -178,12 +194,12 @@ public static class RepositoryValidator
                     checks.Attempt("DownloadLinkTesting", () =>
                     {
                         var expected = config.DownloadUrl(testingVersion.Value);
-                        if (entry.DownloadLinkTesting != expected)
+                        if (!Links(entry.DownloadLinkTesting, testingVersion.Value, expected))
                         {
                             throw new ReleaseCheckException($"is '{entry.DownloadLinkTesting}', expected '{expected}' from the configured template.");
                         }
 
-                        return expected;
+                        return entry.DownloadLinkTesting!;
                     }, u => u);
                 }
             }
@@ -192,7 +208,7 @@ public static class RepositoryValidator
         if (request.StablePackage is not null)
         {
             var stableEntryVersion = entry.IsTestingExclusive == true && testingVersion is not null ? testingVersion.Value : stableVersion;
-            ComparePackage(entry, request.StablePackage, stableEntryVersion, entry.Changelog, entry.IsTestingExclusive == true ? "testing-exclusive package" : "stable package", checks);
+            ComparePackage(entry, request.StablePackage, stableEntryVersion, entry.Changelog, entry.IsTestingExclusive == true ? "testing-exclusive package" : "stable package", config, checks);
         }
 
         if (request.TestingPackage is not null && entry.IsTestingExclusive != true)
@@ -205,7 +221,7 @@ public static class RepositoryValidator
         {
             // A testing-exclusive entry serves its one package from both slots, so a package given as the
             // testing package (as generate-repository --testing-exclusive takes it) must be exactly that one.
-            ComparePackage(entry, request.TestingPackage, testingVersion ?? stableVersion, entry.TestingChangelog, "testing package", checks);
+            ComparePackage(entry, request.TestingPackage, testingVersion ?? stableVersion, entry.TestingChangelog, "testing package", config, checks);
         }
 
         if (request.ChangelogPath is not null)
@@ -230,7 +246,7 @@ public static class RepositoryValidator
         return entries;
     }
 
-    private static void ComparePackage(RepositoryEntry entry, PackageReport package, ProductVersion entryVersion, string? entryChangelog, string role, CheckList checks)
+    private static void ComparePackage(RepositoryEntry entry, PackageReport package, ProductVersion entryVersion, string? entryChangelog, string role, RepositoryConfiguration config, CheckList checks)
     {
         checks.Require(entryVersion == package.Version, $"{role} version", package.Version.ToString(), $"the entry says {entryVersion}, the package is {package.Version}.");
 
@@ -248,7 +264,13 @@ public static class RepositoryValidator
         Compare("Name", entry.Name, manifest.Name);
         Compare("Punchline", entry.Punchline, manifest.Punchline);
         Compare("Description", entry.Description, manifest.Description);
-        Compare("RepoUrl", entry.RepoUrl, manifest.RepoUrl);
+        // A package released before the source repository moved names the previous address; the entry
+        // names the current one, which is the same repository.
+        if (entry.RepoUrl != manifest.RepoUrl && !(entry.RepoUrl == config.SourceRepositoryUrl && config.IsPreviousRepoUrl(manifest.RepoUrl, package.Version)))
+        {
+            differences.Add("RepoUrl");
+        }
+
         Compare("IconUrl", entry.IconUrl, manifest.IconUrl);
         Compare("FeedbackMessage", entry.FeedbackMessage, manifest.FeedbackMessage);
         Compare("MinimumDalamudVersion", entry.MinimumDalamudVersion, manifest.MinimumDalamudVersion);

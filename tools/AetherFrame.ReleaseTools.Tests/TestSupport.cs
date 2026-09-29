@@ -292,6 +292,25 @@ internal static class TestPackages
         }
         """;
 
+    /// <summary>The address the source repository had before it moved, and its release download template.</summary>
+    internal const string PreviousRepoUrl = "https://github.com/richhiiee/AetherFrame";
+    internal const string PreviousDownloadTemplate = "https://github.com/richhiiee/AetherFrame/releases/download/v{version}/{package}";
+
+    /// <summary>A configuration that records the move from <see cref="PreviousRepoUrl"/> after <paramref name="lastVersion"/>.</summary>
+    internal static string ConfigJsonWithPrevious(string lastVersion = "0.1.6", string previousRepoUrl = PreviousRepoUrl, string previousTemplate = PreviousDownloadTemplate) => $$"""
+        {
+          "$comment": "test configuration after a move",
+          "internalName": "{{InternalName}}",
+          "dalamudApiLevel": 15,
+          "sourceRepositoryUrl": "{{RepoUrl}}",
+          "pluginMasterUrl": "{{PluginMasterUrl}}",
+          "downloadUrlTemplate": "{{DownloadTemplate}}",
+          "previousSourceRepositoryUrl": "{{previousRepoUrl}}",
+          "previousDownloadUrlTemplate": "{{previousTemplate}}",
+          "previousAddressLastVersion": "{{lastVersion}}"
+        }
+        """;
+
     internal static string Config(TempDirectory directory, string? json = null)
     {
         var path = directory.File("repository.json");
@@ -425,6 +444,9 @@ internal sealed class ReleaseOptions
 
     public bool OnDefaultBranch { get; init; } = true;
 
+    /// <summary>The RepoUrl the package's manifest and the tagged project name.</summary>
+    public string RepoUrl { get; init; } = TestPackages.RepoUrl;
+
     /// <summary>The version Version.props sets at the tag; the release's own when null.</summary>
     public string? TaggedVersion { get; init; }
 
@@ -461,7 +483,7 @@ internal static class TestReleases
             Path.Combine(directory, packageName),
             (TestPackages.InternalName + ".deps.json", TestPackages.Deps(version)),
             (TestPackages.InternalName + ".dll", TestPackages.Assembly(version: version, informationalVersion: version + "+" + options.BuildCommit)),
-            (TestPackages.InternalName + ".json", TestPackages.Manifest(version)));
+            (TestPackages.InternalName + ".json", TestPackages.Manifest(version, f => f["RepoUrl"] = options.RepoUrl)));
         var checksums = Path.Combine(directory, "SHA256SUMS.txt");
         File.WriteAllText(checksums, options.ChecksumsText ?? $"{Checksums.Sha256Hex(package)}  {packageName}\n");
 
@@ -497,7 +519,9 @@ internal static class TestReleases
         }.ToJsonString());
 
         File.WriteAllText(Path.Combine(source, "Version.props"), $"<Project>\n  <PropertyGroup>\n    <Version>{options.TaggedVersion ?? version}</Version>\n  </PropertyGroup>\n</Project>\n");
-        File.WriteAllText(Path.Combine(source, "AetherFrame.csproj"), TestPackages.CsprojText());
+        var projectFields = TestPackages.ManifestFields(version);
+        projectFields["RepoUrl"] = options.RepoUrl;
+        File.WriteAllText(Path.Combine(source, "AetherFrame.csproj"), TestPackages.CsprojText(fields: projectFields));
         File.WriteAllText(Path.Combine(source, "CHANGELOG.md"), TestPackages.ChangelogText((version, $"### Fixed\n\n- Changes in {version}.")));
         options.After?.Invoke(directory);
         return directory;
