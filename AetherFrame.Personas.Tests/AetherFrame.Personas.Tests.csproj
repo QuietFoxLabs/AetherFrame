@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests for the persona management foundation (docs/networking/NETWORK1_PersonaFoundation.md).
+    Every key here is a synthetic P-256 key made for the test process and discarded with it; the
+    key store and backup codec are in-memory test doubles that carry no key material in any bytes
+    they produce. Nothing reads or writes AetherFrame user data, saved Plates or the Dalamud
+    configuration, and nothing opens a connection.
+  -->
+
+  <Import Project="..\Version.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>AetherFrame.Personas.Tests</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AetherFrame.Personas\AetherFrame.Personas.csproj" />
+    <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
+  </ItemGroup>
+
+  <!-- The approved public surface, copied next to the test binaries byte for byte
+       (Fixtures/.gitattributes keeps git from rewriting its line endings). -->
+  <ItemGroup>
+    <None Update="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The same test packages, at the same versions, as the other test projects. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>

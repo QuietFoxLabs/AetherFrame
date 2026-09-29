@@ -120,7 +120,7 @@ internal sealed class ThreadRecordingStore : IPlateFileStore
         return inner.ListFiles(directory, searchPattern);
     }
 
-    public Task ReadTextAsync(string path, Action<string> reader)
+    public Task ReadTextAsync(string path, Action<StoredText> reader)
     {
         Record(nameof(ReadTextAsync), path);
         return inner.ReadTextAsync(path, reader);

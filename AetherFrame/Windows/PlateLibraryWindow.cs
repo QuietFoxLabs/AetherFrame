@@ -388,13 +388,11 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             }
         }
 
-        if (hovered && plate.Problem is { } problem)
+        // A Ready Plate can carry both a note (text that isn't valid) and elements this build can't
+        // show; the marker on its thumbnail is explained only here, so neither hides the other.
+        if (hovered && CardTooltip(plate.Problem, plate.HasUnsupportedElements) is { } tooltip)
         {
-            ImGui.SetTooltip(problem);
-        }
-        else if (hovered && plate.HasUnsupportedElements)
-        {
-            ImGui.SetTooltip(EditorWidgets.UnsupportedElementsWarning);
+            ImGui.SetTooltip(tooltip);
         }
 
         if (canReorder)
@@ -549,6 +547,12 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     }
 
     /// <summary>A small warning glyph in the thumbnail's lower-left corner (the card's tooltip explains it).</summary>
+    /// <summary>A card's hover text: its note, the unsupported-elements warning, or both.</summary>
+    private static string? CardTooltip(string? problem, bool hasUnsupportedElements) =>
+        !hasUnsupportedElements ? problem
+        : problem is null ? EditorWidgets.UnsupportedElementsWarning
+        : problem + "\n\n" + EditorWidgets.UnsupportedElementsWarning;
+
     private static void DrawCompatibilityMarker(ImDrawListPtr drawList, Vector2 thumbnailMin, Vector2 thumbnailMax)
     {
         var icon = EditorWidgets.GetIconString(FontAwesomeIcon.ExclamationTriangle);

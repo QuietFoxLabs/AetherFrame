@@ -221,7 +221,16 @@ public static class PackageValidator
             "manifest DalamudApiLevel",
             manifest.DalamudApiLevel?.ToString() ?? string.Empty,
             $"is {manifest.DalamudApiLevel?.ToString() ?? "missing"}, expected {config.DalamudApiLevel}.");
-        checks.Require(manifest.RepoUrl == config.SourceRepositoryUrl, "manifest RepoUrl", manifest.RepoUrl ?? string.Empty, $"is '{manifest.RepoUrl}', expected '{config.SourceRepositoryUrl}'.");
+        // A package released before the source repository moved names the address it had then; any later
+        // version must name the current one (RepositoryConfiguration.Previous).
+        var previousAddress = config.Previous is not null && manifest.RepoUrl == config.Previous.SourceRepositoryUrl;
+        checks.Require(
+            manifest.RepoUrl == config.SourceRepositoryUrl || config.IsPreviousRepoUrl(manifest.RepoUrl, version),
+            "manifest RepoUrl",
+            previousAddress ? $"{manifest.RepoUrl} (the address before the move, which {version} was released under)" : manifest.RepoUrl ?? string.Empty,
+            previousAddress
+                ? $"is '{manifest.RepoUrl}', the address before the move, which only packages up to {config.Previous!.LastVersion} carry; {version} must name '{config.SourceRepositoryUrl}'."
+                : $"is '{manifest.RepoUrl}', expected '{config.SourceRepositoryUrl}'.");
 
         var empty = new List<string>();
         if (string.IsNullOrWhiteSpace(manifest.Name))

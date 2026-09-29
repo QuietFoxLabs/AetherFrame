@@ -73,6 +73,13 @@ internal sealed class PlateLibraryService
     // Bindings saved by a newer AetherFrame: never interpreted and never written by this build.
     private readonly HashSet<ulong> newerVersionBindings = new();
 
+    // Files whose bytes on disk must be copied to Recovery before anything is written over them
+    // (see PreserveBeforeOverwrite): a damaged file read from the store's backup copy whose own
+    // bytes could not be copied at load (a full disk, say), which may be newer than the backup; and
+    // a file read with bytes that aren't valid text, whose text in memory (U+FFFD in their place)
+    // is not a faithful copy of it. Nothing is written over either until its copy succeeds.
+    private readonly HashSet<string> unpreservedFiles = new(StringComparer.OrdinalIgnoreCase);
+
     private PlateLibraryState library = new();
 
     // False when library.json must not be written this session — written by a newer build, or not
@@ -252,6 +259,11 @@ internal sealed class PlateLibraryService
         // no thread affinity, and the writes below keep their ordering on whatever thread the
         // reads finished on.
         ThrowIfLoadCanceled(cancellationToken);
+        lock (gate)
+        {
+            unpreservedFiles.Clear();
+        }
+
         var loadedPlates = await Task.Run(LoadPlatesAsync).ConfigureAwait(false);
         ThrowIfLoadCanceled(cancellationToken);
         var (loadedBindings, badBindings, missingBindings, newerBindings, migratedBindings) = await Task.Run(LoadBindingsAsync).ConfigureAwait(false);
@@ -407,6 +419,10 @@ internal sealed class PlateLibraryService
                     "This Plate was saved by a newer version of AetherFrame. Update AetherFrame to open it.");
             }
 
+            // Read as it is, never refused for its encoding (see VersionedJson.ReadAsync); the file
+            // is only kept in Recovery before it is next written over.
+            var problem = KeepInvalidTextFile(path, result) ? InvalidTextPlateProblem : null;
+
             // The file name is the Plate's identity: a document whose own id disagrees (e.g. a
             // hand-copied file) is treated as the Plate its file says, so saving it can never
             // overwrite a different Plate.
@@ -430,13 +446,19 @@ internal sealed class PlateLibraryService
             }
 
             return new PlateRecord(plateId, PlateStatus.Ready, VersionedJson.Serialize(raw), document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc,
-                document.Revision, result.Migration.Version, null);
+                document.Revision, result.Migration.Version, problem);
         }
         catch (Exception ex) when (!IsInterruption(ex))
         {
-            log.Error(ex, $"AetherFrame could not read Plate {plateId}; it is listed as unreadable and its file is left untouched.");
+            // Both are left untouched, but only damaged content is damage: a file that merely
+            // couldn't be opened (locked, access denied) is likely intact, and a player told it is
+            // damaged might give up on it.
+            var damaged = !IsUnopenable(ex);
+            log.Error(ex, damaged
+                ? $"AetherFrame could not read Plate {plateId}; it is listed as unreadable and its file is left untouched."
+                : $"AetherFrame could not open Plate {plateId}; it is listed as unreadable for this session and its file is left untouched.");
             return new PlateRecord(plateId, PlateStatus.Unreadable, null, null, "Unreadable Plate", DateTime.MinValue, DateTime.MinValue, 0, 0,
-                "This Plate's file is damaged and couldn't be read. It has been left untouched.");
+                damaged ? DamagedPlateProblem : UnavailablePlateProblem);
         }
     }
 
@@ -475,6 +497,7 @@ internal sealed class PlateLibraryService
                     continue;
                 }
 
+                KeepInvalidTextFile(path, result);
                 var binding = result.Value!;
                 binding.ContentId = contentId;
                 binding.PlateIds = binding.PlateIds.Where(id => id != Guid.Empty).Distinct().ToList();
@@ -523,6 +546,7 @@ internal sealed class PlateLibraryService
                 return false;
             }
 
+            KeepInvalidTextFile(paths.LibraryFile, result);
             lock (gate)
             {
                 library = result.Value!;
@@ -706,11 +730,12 @@ internal sealed class PlateLibraryService
     /// </summary>
     private async Task<PlateCreationResult> InsertNewPlateAsync(Guid plateId, JsonObject raw, CharacterContext? character, DateTime now)
     {
-        await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+        var record = PreparePlateWrite(plateId, raw);
+        await WritePlateAsync(record).ConfigureAwait(false);
 
         lock (gate)
         {
-            plates[plateId] = ReadyRecord(plateId, raw);
+            plates[plateId] = record;
             PlateOrdering.InsertAtFront(library.OrderedPlateIds, plateId);
             Changed();
         }
@@ -747,7 +772,7 @@ internal sealed class PlateLibraryService
                     // changed); the Plate itself is on disk and listed.
                     becameActive = false;
                     log.Error(ex, $"AetherFrame created Plate {plateId} but could not associate it with a character.");
-                    linkFailure = "The Plate was created, but it couldn't be linked to your character.";
+                    linkFailure = "The Plate was created, but it couldn't be linked to your character." + RecoveryAdvice(ex);
                 }
             }
             else if (refusal == BindingRefusal.Unavailable)
@@ -799,11 +824,12 @@ internal sealed class PlateLibraryService
                 copy = PlateDocuments.CreateDuplicate(ParseObject(source.RawJson!), newId, name, now);
             }
 
-            await WritePlateAsync(newId, copy).ConfigureAwait(false);
+            var record = PreparePlateWrite(newId, copy);
+            await WritePlateAsync(record).ConfigureAwait(false);
 
             lock (gate)
             {
-                plates[newId] = ReadyRecord(newId, copy);
+                plates[newId] = record;
                 PlateOrdering.InsertAfter(library.OrderedPlateIds, sourcePlateId, newId);
                 Changed();
             }
@@ -825,6 +851,7 @@ internal sealed class PlateLibraryService
             }
 
             var failedAssociations = 0;
+            var advice = string.Empty;
             foreach (var binding in associated)
             {
                 try
@@ -834,17 +861,28 @@ internal sealed class PlateLibraryService
                 catch (Exception ex)
                 {
                     failedAssociations++;
+                    advice = advice.Length > 0 ? advice : RecoveryAdvice(ex);
                     log.Error(ex, $"AetherFrame duplicated Plate {sourcePlateId} but could not associate the copy with a character.");
                 }
             }
 
-            await WriteLibraryAsync().ConfigureAwait(false);
+            try
+            {
+                await WriteLibraryAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!IsInterruption(ex))
+            {
+                // The copy is saved and listed; only its position isn't, and startup re-lists it.
+                // Reporting a failure here would invite a retry, and so a second copy.
+                log.Error(ex, $"AetherFrame duplicated Plate {sourcePlateId} but could not save the Library order.");
+            }
+
             log.Information($"AetherFrame duplicated Plate {sourcePlateId} as {newId}.");
 
             if (failedAssociations > 0)
             {
                 // The copy exists and is intact; only its character links are incomplete.
-                throw new PlateLibraryException("The copy was made, but it couldn't be linked to every character that uses the original.");
+                throw new PlateLibraryException("The copy was made, but it couldn't be linked to every character that uses the original." + advice);
             }
 
             return newId;
@@ -874,9 +912,9 @@ internal sealed class PlateLibraryService
                 PlateDocuments.SetName(renamed, name, now);
             }
 
-            await WritePlateAsync(plateId, renamed).ConfigureAwait(false);
+            var updated = PreparePlateWrite(plateId, renamed);
+            await WritePlateAsync(updated).ConfigureAwait(false);
 
-            var updated = ReadyRecord(plateId, renamed);
             lock (gate)
             {
                 if (plates.ContainsKey(plateId))
@@ -1004,15 +1042,23 @@ internal sealed class PlateLibraryService
             log.Information($"AetherFrame set Plate {plateId} Active for a character.");
         });
 
-    /// <summary>Moves a Plate next to another in the manual order and saves the order.</summary>
+    /// <summary>
+    /// Moves a Plate next to another in the manual order and saves the order. A failed or refused
+    /// write puts the previous order back: a move left in memory would make repeating it a no-op
+    /// that saves nothing. (Create, Duplicate, Import and Delete keep their order change in memory
+    /// when only the order file fails: it follows a Plate that did change, and startup derives it
+    /// again.)
+    /// </summary>
     internal Task MovePlateAsync(Guid plateId, Guid targetPlateId, bool placeAfter) =>
         RunExclusiveAsync(async () =>
         {
             RequireLoaded();
 
             bool moved;
+            List<Guid> previous;
             lock (gate)
             {
+                previous = library.OrderedPlateIds.ToList();
                 moved = PlateOrdering.Move(library.OrderedPlateIds, plateId, targetPlateId, placeAfter);
                 if (moved)
                 {
@@ -1020,9 +1066,24 @@ internal sealed class PlateLibraryService
                 }
             }
 
-            if (moved)
+            if (!moved)
+            {
+                return;
+            }
+
+            try
             {
                 await WriteLibraryAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!IsInterruption(ex))
+            {
+                lock (gate)
+                {
+                    library.OrderedPlateIds = previous;
+                    Changed();
+                }
+
+                throw;
             }
         });
 
@@ -1059,10 +1120,10 @@ internal sealed class PlateLibraryService
             }
 
             // Read back before writing, so nothing after the write (the commit point) can fail on content.
-            var record = ReadyRecord(plateId, raw);
+            var record = PreparePlateWrite(plateId, raw);
             try
             {
-                await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+                await WritePlateAsync(record).ConfigureAwait(false);
             }
             catch (Exception ex) when (!IsInterruption(ex))
             {
@@ -1151,14 +1212,14 @@ internal sealed class PlateLibraryService
             }
 
             snapshot.Version = ProfileDocument.CurrentSchemaVersion;
-            var raw = PlateDocuments.ToJson(snapshot);
-            await WritePlateAsync(plateId, raw).ConfigureAwait(false);
+            var saved = PreparePlateWrite(plateId, PlateDocuments.ToJson(snapshot));
+            await WritePlateAsync(saved).ConfigureAwait(false);
 
             lock (gate)
             {
                 if (plates.ContainsKey(plateId))
                 {
-                    plates[plateId] = ReadyRecord(plateId, raw);
+                    plates[plateId] = saved;
                 }
 
                 Changed();
@@ -1181,9 +1242,11 @@ internal sealed class PlateLibraryService
             var problems = new List<string>();
 
             List<PlateRecord> snapshot;
+            HashSet<string> unpreserved;
             lock (gate)
             {
                 snapshot = plates.Values.ToList();
+                unpreserved = new HashSet<string>(unpreservedFiles, StringComparer.OrdinalIgnoreCase);
             }
 
             foreach (var record in snapshot)
@@ -1195,6 +1258,44 @@ internal sealed class PlateLibraryService
                 else
                 {
                     problems.Add($"Plate {record.Id} is {record.Status}.");
+                }
+            }
+
+            // What is in the Plates folder now, not only what was loaded: a Plate put back from the
+            // trash by hand (the only restore there is yet) or a file whose name isn't a Plate's
+            // (a "- Copy" made in Explorer) may reference images too. Conservatively every GUID
+            // string in such a file counts; one that can't be read leaves the scan incomplete. So
+            // does a loaded Plate whose file on disk isn't what memory holds (read from its backup,
+            // or with bytes that aren't valid text) and still has no Recovery copy: that file may
+            // be the only copy of newer content.
+            var loaded = snapshot.Select(r => r.Id).ToHashSet();
+            foreach (var path in store.ListFiles(paths.PlatesDirectory, "*.json"))
+            {
+                if (PlateStoragePaths.TryParsePlateFileName(path, out var fileId) && loaded.Contains(fileId) && !unpreserved.Contains(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    // The file on disk is what counts: a second run is the store's backup copy,
+                    // which may be older, so a file only its backup can answer for is a problem.
+                    var runs = 0;
+                    await store.ReadTextAsync(path, text =>
+                    {
+                        if (++runs > 1)
+                        {
+                            throw new InvalidDataException("Only its backup copy could be read.");
+                        }
+
+                        using var json = JsonDocument.Parse(text.Text);
+                        AssetReferenceScanner.CollectAllGuidStrings(json.RootElement, referenced);
+                    }).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!IsInterruption(ex))
+                {
+                    log.Error(ex, $"AetherFrame could not read {Path.GetFileName(path)} in the Plates folder while scanning image references.");
+                    problems.Add($"Plate file {Path.GetFileName(path)} is unreadable ({ex.GetType().Name}).");
                 }
             }
 
@@ -1301,6 +1402,28 @@ internal sealed class PlateLibraryService
 
     private static PlateLibraryException Closing() => new("AetherFrame is closing, so nothing was changed.");
 
+    /// <summary>An unreadable Plate's problem when its content is damaged.</summary>
+    internal const string DamagedPlateProblem = "This Plate's file is damaged and couldn't be read. It has been left untouched.";
+
+    /// <summary>An unreadable Plate's problem when its file couldn't be opened at all: likely intact.</summary>
+    internal const string UnavailablePlateProblem =
+        "This Plate's file couldn't be opened; another program may be using it. It has been left untouched. Restart the game to try again.";
+
+    /// <summary>What the player is told when a write is refused because its result wouldn't load again.</summary>
+    internal const string UnloadableWriteMessage = "AetherFrame couldn't save this change: the result wouldn't load again, so nothing was written.";
+
+    /// <summary>What the player is told when <see cref="PreserveBeforeOverwrite"/> refuses a write.</summary>
+    internal const string UnpreservedDamagedFileMessage =
+        "AetherFrame couldn't keep a copy of the file this would replace in its Recovery folder, so nothing was written over it. Check that the drive isn't full and the AetherFrame folder isn't read-only, then try again.";
+
+    /// <summary>
+    /// A Ready Plate's note (shown when its card is hovered) when its file held bytes that aren't
+    /// valid text: they read as U+FFFD, exactly as before, and the file is kept in Recovery before
+    /// it is next saved (see <see cref="KeepInvalidTextFile"/>).
+    /// </summary>
+    internal const string InvalidTextPlateProblem =
+        "Part of this Plate's file isn't valid text, so some of its characters may not show correctly. The file is unchanged; AetherFrame keeps a copy of it in its Recovery folder before saving over it.";
+
     /// <summary>
     /// Between reading and writing during load: stops (with nothing written) when the load was
     /// canceled or the plugin is shutting down. Past this point a load always finishes its writes.
@@ -1331,6 +1454,7 @@ internal sealed class PlateLibraryService
         {
             PlateStatus.Ready => record,
             PlateStatus.NewerVersion => throw new PlateLibraryException($"This Plate was saved by a newer version of AetherFrame and can't be {action}."),
+            _ when record.Problem == UnavailablePlateProblem => throw new PlateLibraryException($"This Plate's file couldn't be opened, so it can't be {action}. Restart the game to try again."),
             _ => throw new PlateLibraryException($"This Plate's file is damaged and it can't be {action}."),
         };
     }
@@ -1383,6 +1507,14 @@ internal sealed class PlateLibraryService
         }
     }
 
+    /// <summary>
+    /// What to add to a "couldn't be linked" message when the binding's write was refused because
+    /// its file couldn't be kept in Recovery first (see <see cref="PreserveBeforeOverwrite"/>): that
+    /// refusal says what to check, so the player isn't left with only "couldn't be linked".
+    /// </summary>
+    private static string RecoveryAdvice(Exception failure) =>
+        failure is PlateLibraryException { Message: UnpreservedDamagedFileMessage } ? " " + UnpreservedDamagedFileMessage : string.Empty;
+
     /// <summary>The player-facing reason <see cref="PrepareBindingForWrite"/> refused a binding.</summary>
     private static string DescribeRefusal(BindingRefusal refusal) => refusal switch
     {
@@ -1402,8 +1534,13 @@ internal sealed class PlateLibraryService
         }
     }
 
-    private async Task WritePlateAsync(Guid plateId, JsonObject raw) =>
-        await store.WriteTextAsync(paths.GetPlatePath(plateId), VersionedJson.Serialize(raw)).ConfigureAwait(false);
+    /// <summary>Writes exactly the text <see cref="PreparePlateWrite"/> proved readable.</summary>
+    private async Task WritePlateAsync(PlateRecord record)
+    {
+        var path = paths.GetPlatePath(record.Id);
+        PreserveBeforeOverwrite(path);
+        await store.WriteTextAsync(path, record.RawJson!).ConfigureAwait(false);
+    }
 
     private async Task WriteBindingAsync(CharacterBinding binding)
     {
@@ -1419,14 +1556,25 @@ internal sealed class PlateLibraryService
         var path = paths.GetBindingPath(binding.ContentId);
         if (replacesDamaged)
         {
-            // Throws (aborting the write) if the damaged file can't be preserved first.
-            PreserveDamagedFile(path);
+            // Refuses the write if the damaged file can't be preserved first, with the same
+            // message as a file read from its backup (see PreserveBeforeOverwrite).
+            try
+            {
+                PreserveDamagedFile(path);
+            }
+            catch (Exception ex) when (!IsInterruption(ex))
+            {
+                log.Error(ex, $"AetherFrame did not write {LogPrivacy.FileName(path)}: a copy of its damaged content couldn't be kept in Recovery first.");
+                throw new PlateLibraryException(UnpreservedDamagedFileMessage);
+            }
+
             lock (gate)
             {
                 unreadableBindings.Remove(binding.ContentId);
             }
         }
 
+        PreserveBeforeOverwrite(path);
         await store.WriteTextAsync(path, json).ConfigureAwait(false);
     }
 
@@ -1444,6 +1592,7 @@ internal sealed class PlateLibraryService
             json = VersionedJson.Serialize(library);
         }
 
+        PreserveBeforeOverwrite(paths.LibraryFile);
         await store.WriteTextAsync(paths.LibraryFile, json).ConfigureAwait(false);
     }
 
@@ -1457,20 +1606,48 @@ internal sealed class PlateLibraryService
 
         var destination = paths.GetRecoveryPath(path, utcNow());
         store.CopyFile(path, destination);
-        log.Warning($"AetherFrame kept a copy of damaged file {LogPrivacy.FileName(path)} in Recovery as {LogPrivacy.FileName(destination)}.");
+        log.Warning($"AetherFrame kept a copy of {LogPrivacy.FileName(path)} in Recovery as {LogPrivacy.FileName(destination)} before writing over it.");
+    }
+
+    /// <summary>
+    /// A usable copy read from disk with bytes that aren't valid text (see
+    /// <see cref="StoredText.HasInvalidBytes"/>): it is used as read, like any other, and the file
+    /// is left exactly as it is. Its text in memory isn't a faithful copy of it, though, so the
+    /// path is remembered and its original bytes are copied to Recovery before the first write
+    /// that would replace them (see <see cref="PreserveBeforeOverwrite"/>), which is refused while
+    /// that copy fails. A copy read from the store's backup is never marked: its on-disk file is
+    /// already kept by <see cref="KeepRecoveredFile"/>.
+    /// </summary>
+    /// <returns>True when the file was marked.</returns>
+    private bool KeepInvalidTextFile<T>(string path, VersionedReadResult<T> result)
+        where T : class
+    {
+        if (!result.HasInvalidBytes || result.RecoveredFromBackup || !result.IsUsable)
+        {
+            return false;
+        }
+
+        log.Warning($"AetherFrame read {LogPrivacy.FileName(path)}, which holds bytes that aren't valid text; they read as U+FFFD, as before. The file is unchanged, and a copy of it is kept in Recovery before anything writes over it.");
+        lock (gate)
+        {
+            unpreservedFiles.Add(path);
+        }
+
+        return true;
     }
 
     /// <summary>
     /// A file the store could only read from its backup copy: the copy on disk is damaged, and the
     /// next write to that path would replace it. So the player learns about it once, and the
     /// on-disk bytes go to Recovery first (a copy only — the file itself is never rewritten here,
-    /// and an existing Recovery copy is never overwritten). A failed copy is logged and ignored:
-    /// the record is used either way.
+    /// and an existing Recovery copy is never overwritten). A failed copy doesn't stop the load —
+    /// the record is used either way — but the path is remembered, and nothing is written over it
+    /// until a later copy succeeds (see <see cref="PreserveBeforeOverwrite"/>).
     /// </summary>
     private void KeepRecoveredFile(string path)
     {
         var fileName = LogPrivacy.FileName(path);
-        log.Warning($"AetherFrame found {fileName} damaged and read it from the backup copy instead; the damaged file is kept in Recovery.");
+        log.Warning($"AetherFrame found {fileName} damaged and read it from the backup copy instead.");
 
         try
         {
@@ -1478,11 +1655,48 @@ internal sealed class PlateLibraryService
             if (store.FileExists(path) && !store.FileExists(destination))
             {
                 store.CopyFile(path, destination);
+                log.Warning($"AetherFrame kept a copy of damaged file {fileName} in Recovery as {LogPrivacy.FileName(destination)}.");
             }
         }
         catch (Exception ex) when (!IsInterruption(ex))
         {
-            log.Error(ex, $"AetherFrame could not keep a copy of damaged file {fileName} in Recovery.");
+            log.Error(ex, $"AetherFrame could not keep a copy of damaged file {fileName} in Recovery; it won't be written over until a copy can be kept.");
+            lock (gate)
+            {
+                unpreservedFiles.Add(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Before any write to <paramref name="path"/>: if its on-disk bytes still have no Recovery
+    /// copy (see <see cref="KeepRecoveredFile"/> and <see cref="KeepInvalidTextFile"/>), keeps one
+    /// now, and refuses the write when that fails, so the only copy of what may be the newest
+    /// content, or the only faithful one, is never replaced.
+    /// </summary>
+    private void PreserveBeforeOverwrite(string path)
+    {
+        lock (gate)
+        {
+            if (!unpreservedFiles.Contains(path))
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            PreserveDamagedFile(path);
+        }
+        catch (Exception ex) when (!IsInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame did not write {LogPrivacy.FileName(path)}: a copy of it couldn't be kept in Recovery first.");
+            throw new PlateLibraryException(UnpreservedDamagedFileMessage);
+        }
+
+        lock (gate)
+        {
+            unpreservedFiles.Remove(path);
         }
     }
 
@@ -1492,6 +1706,13 @@ internal sealed class PlateLibraryService
     /// opened at all and may be perfectly intact, so it must never be written over as damaged.
     /// </summary>
     private static bool IsContentDamage(Exception ex) => ex is InvalidDataException or JsonException;
+
+    /// <summary>
+    /// A read that failed because the file couldn't be opened at all (locked, access denied, gone
+    /// since it was listed), as opposed to content that was read and rejected: only what to tell
+    /// the player hangs on it, never whether anything is written.
+    /// </summary>
+    internal static bool IsUnopenable(Exception ex) => ex is IOException or UnauthorizedAccessException;
 
     /// <summary>An operation stopped by cancellation or by unloading — never a fault in a file, so never handled as one.</summary>
     private static bool IsInterruption(Exception ex) => ex is OperationCanceledException or OperationAbandonedException;
@@ -1564,12 +1785,37 @@ internal sealed class PlateLibraryService
         orderedSummaries = null;
     }
 
-    private static PlateRecord ReadyRecord(Guid plateId, JsonObject raw)
+    /// <summary>
+    /// The record of a Plate about to be written, holding the exact text the write puts on disk —
+    /// proven first to load again as a Ready Plate through the reader startup uses (the same text
+    /// check, schema check, deserialization and in-memory repairs). Text that couldn't be read
+    /// back would make the Plate unreadable at the next startup, and in game the write replaces
+    /// the storage's backup copy too, so it is refused here, before anything is written. The text
+    /// is first put through the byte-level round trip a file makes (see
+    /// <see cref="VersionedJson.RequireFaithfulReadBack"/>), so what is kept is what is read.
+    /// </summary>
+    private PlateRecord PreparePlateWrite(Guid plateId, JsonObject raw)
     {
-        var rawJson = VersionedJson.Serialize(raw);
-        var document = PlateDocuments.Materialize(ParseObject(rawJson));
-        return new PlateRecord(plateId, PlateStatus.Ready, rawJson, document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc, document.Revision,
-            document.Version, null);
+        try
+        {
+            // Inside the refusal: text the serializer can't write is text that wouldn't load again.
+            var json = VersionedJson.Serialize(raw);
+            var readBack = VersionedJson.RequireFaithfulReadBack(json, PersistenceSchemas.ProfileDocument.Name);
+            var parsed = VersionedJson.Parse(readBack, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+            if (!parsed.IsUsable)
+            {
+                throw new InvalidDataException(parsed.IsNewerVersion ? "It would read as a newer version's Plate." : parsed.Migration.Error ?? "It is unreadable.");
+            }
+
+            var document = PlateDocuments.Materialize(parsed.Raw!);
+            return new PlateRecord(plateId, PlateStatus.Ready, json, document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc, document.Revision,
+                document.Version, null);
+        }
+        catch (Exception ex) when (!IsInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame did not write Plate {plateId}: what it would have written couldn't be read back.");
+            throw new PlateLibraryException(UnloadableWriteMessage);
+        }
     }
 
     private static JsonObject ParseObject(string json) =>

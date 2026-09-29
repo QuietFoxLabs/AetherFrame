@@ -102,7 +102,6 @@ internal sealed class AssetStorageService
 
         var assetId = Guid.NewGuid();
         var stagingPath = GetStagingPath(assetId);
-        var destinationPath = Path.Combine(directory, assetId.ToString("N") + inspection!.Extension);
 
         try
         {
@@ -115,8 +114,11 @@ internal sealed class AssetStorageService
                 throw new InvalidOperationException(stagedError);
             }
 
+            // Named after the content actually stored and validated (the source may have changed
+            // since the first inspection), as package images are.
+            var destinationPath = Path.Combine(directory, assetId.ToString("N") + staged!.Extension);
             File.Move(stagingPath, destinationPath, overwrite: false);
-            RecordImport(assetId, sourceFilePath, staged!, byteLength, sha256);
+            RecordImport(assetId, sourceFilePath, staged, byteLength, sha256);
         }
         finally
         {

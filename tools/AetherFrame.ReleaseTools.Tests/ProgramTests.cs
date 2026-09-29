@@ -173,8 +173,8 @@ public class ProgramTests
         Assert.Equal(0, code);
         Assert.Contains("testing 0.1.6.0", text);
         var document = File.ReadAllText(output);
-        Assert.Contains("\"DownloadLinkTesting\": \"https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip\"", document);
-        Assert.DoesNotContain("github.com/richhiiee/AetherFrame/releases", document);
+        Assert.Contains("\"DownloadLinkTesting\": \"https://dry-run.invalid/QuietFoxLabs/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip\"", document);
+        Assert.DoesNotContain("github.com/QuietFoxLabs/AetherFrame/releases", document);
 
         var (validateCode, _, _) = Run("validate-repository", "--repository", output, "--config", TestPackages.Config(directory), "--download-url-template", TestPackages.DryRunTemplate);
         Assert.Equal(0, validateCode);

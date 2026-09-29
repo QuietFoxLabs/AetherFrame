@@ -90,10 +90,10 @@ internal static class TestPackages
 {
     internal const string InternalName = "AetherFrame";
     internal const string Commit = "ab26da043832712af955e92815f59fb517a7db46";
-    internal const string RepoUrl = "https://github.com/richhiiee/AetherFrame";
-    internal const string IconUrl = "https://raw.githubusercontent.com/richhiiee/AetherFrameAssets/master/images/icon.png";
-    internal const string DownloadTemplate = "https://github.com/richhiiee/AetherFrame/releases/download/v{version}/{package}";
-    internal const string DryRunTemplate = "https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v{version}/{package}";
+    internal const string RepoUrl = "https://github.com/QuietFoxLabs/AetherFrame";
+    internal const string IconUrl = "https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/8b716efece4a3077ed3345dfcf491ddcfcab52db/AetherFrame/images/icon.png";
+    internal const string DownloadTemplate = "https://github.com/QuietFoxLabs/AetherFrame/releases/download/v{version}/{package}";
+    internal const string DryRunTemplate = "https://dry-run.invalid/QuietFoxLabs/AetherFrame/releases/download/v{version}/{package}";
 
     internal static byte[] Assembly(
         string name = InternalName,
@@ -279,7 +279,7 @@ internal static class TestPackages
         return Zip(directory.File(fileName ?? $"{InternalName}-{version}.zip"), entries.ToArray());
     }
 
-    internal const string PluginMasterUrl = "https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json";
+    internal const string PluginMasterUrl = "https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json";
 
     internal static string ConfigJson(string template = DownloadTemplate, int apiLevel = 15, string internalName = InternalName, string sourceRepositoryUrl = RepoUrl, string pluginMasterUrl = PluginMasterUrl) => $$"""
         {
@@ -289,6 +289,25 @@ internal static class TestPackages
           "sourceRepositoryUrl": "{{sourceRepositoryUrl}}",
           "pluginMasterUrl": "{{pluginMasterUrl}}",
           "downloadUrlTemplate": "{{template}}"
+        }
+        """;
+
+    /// <summary>The address the source repository had before it moved, and its release download template.</summary>
+    internal const string PreviousRepoUrl = "https://github.com/richhiiee/AetherFrame";
+    internal const string PreviousDownloadTemplate = "https://github.com/richhiiee/AetherFrame/releases/download/v{version}/{package}";
+
+    /// <summary>A configuration that records the move from <see cref="PreviousRepoUrl"/> after <paramref name="lastVersion"/>.</summary>
+    internal static string ConfigJsonWithPrevious(string lastVersion = "0.1.6", string previousRepoUrl = PreviousRepoUrl, string previousTemplate = PreviousDownloadTemplate) => $$"""
+        {
+          "$comment": "test configuration after a move",
+          "internalName": "{{InternalName}}",
+          "dalamudApiLevel": 15,
+          "sourceRepositoryUrl": "{{RepoUrl}}",
+          "pluginMasterUrl": "{{PluginMasterUrl}}",
+          "downloadUrlTemplate": "{{DownloadTemplate}}",
+          "previousSourceRepositoryUrl": "{{previousRepoUrl}}",
+          "previousDownloadUrlTemplate": "{{previousTemplate}}",
+          "previousAddressLastVersion": "{{lastVersion}}"
         }
         """;
 
@@ -309,10 +328,10 @@ internal static class TestPackages
             builder.Append("## [").Append(version).Append("] - 2026-09-26\n\n").Append(body).Append("\n\n");
         }
 
-        builder.Append("[Unreleased]: https://github.com/richhiiee/AetherFrame/compare/v0.1.5...HEAD\n");
+        builder.Append("[Unreleased]: https://github.com/QuietFoxLabs/AetherFrame/compare/v0.1.5...HEAD\n");
         foreach (var (version, _) in sections)
         {
-            builder.Append('[').Append(version).Append("]: https://github.com/richhiiee/AetherFrame/releases/tag/v").Append(version).Append('\n');
+            builder.Append('[').Append(version).Append("]: https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v").Append(version).Append('\n');
         }
 
         return builder.ToString();
@@ -425,6 +444,9 @@ internal sealed class ReleaseOptions
 
     public bool OnDefaultBranch { get; init; } = true;
 
+    /// <summary>The RepoUrl the package's manifest and the tagged project name.</summary>
+    public string RepoUrl { get; init; } = TestPackages.RepoUrl;
+
     /// <summary>The version Version.props sets at the tag; the release's own when null.</summary>
     public string? TaggedVersion { get; init; }
 
@@ -461,7 +483,7 @@ internal static class TestReleases
             Path.Combine(directory, packageName),
             (TestPackages.InternalName + ".deps.json", TestPackages.Deps(version)),
             (TestPackages.InternalName + ".dll", TestPackages.Assembly(version: version, informationalVersion: version + "+" + options.BuildCommit)),
-            (TestPackages.InternalName + ".json", TestPackages.Manifest(version)));
+            (TestPackages.InternalName + ".json", TestPackages.Manifest(version, f => f["RepoUrl"] = options.RepoUrl)));
         var checksums = Path.Combine(directory, "SHA256SUMS.txt");
         File.WriteAllText(checksums, options.ChecksumsText ?? $"{Checksums.Sha256Hex(package)}  {packageName}\n");
 
@@ -469,8 +491,8 @@ internal static class TestReleases
         var place = options.Draft ? "untagged-0123456789abcdef0123" : tag;
         var release = new JsonObject
         {
-            ["url"] = $"https://api.github.com/repos/richhiiee/AetherFrame/releases/{ReleaseId}",
-            ["html_url"] = $"https://github.com/richhiiee/AetherFrame/releases/tag/{place}",
+            ["url"] = $"https://api.github.com/repos/QuietFoxLabs/AetherFrame/releases/{ReleaseId}",
+            ["html_url"] = $"https://github.com/QuietFoxLabs/AetherFrame/releases/tag/{place}",
             ["id"] = ReleaseId,
             ["author"] = new JsonObject { ["login"] = "richhiiee", ["id"] = 1 },
             ["tag_name"] = tag,
@@ -497,7 +519,9 @@ internal static class TestReleases
         }.ToJsonString());
 
         File.WriteAllText(Path.Combine(source, "Version.props"), $"<Project>\n  <PropertyGroup>\n    <Version>{options.TaggedVersion ?? version}</Version>\n  </PropertyGroup>\n</Project>\n");
-        File.WriteAllText(Path.Combine(source, "AetherFrame.csproj"), TestPackages.CsprojText());
+        var projectFields = TestPackages.ManifestFields(version);
+        projectFields["RepoUrl"] = options.RepoUrl;
+        File.WriteAllText(Path.Combine(source, "AetherFrame.csproj"), TestPackages.CsprojText(fields: projectFields));
         File.WriteAllText(Path.Combine(source, "CHANGELOG.md"), TestPackages.ChangelogText((version, $"### Fixed\n\n- Changes in {version}.")));
         options.After?.Invoke(directory);
         return directory;
@@ -512,7 +536,7 @@ internal static class TestReleases
         var name = Path.GetFileName(path);
         return new JsonObject
         {
-            ["url"] = $"https://api.github.com/repos/richhiiee/AetherFrame/releases/assets/{id}",
+            ["url"] = $"https://api.github.com/repos/QuietFoxLabs/AetherFrame/releases/assets/{id}",
             ["id"] = id,
             ["name"] = name,
             ["label"] = string.Empty,
@@ -521,7 +545,7 @@ internal static class TestReleases
             ["size"] = new FileInfo(path).Length,
             ["digest"] = "sha256:" + Checksums.Sha256Hex(path),
             ["download_count"] = 0,
-            ["browser_download_url"] = $"https://github.com/richhiiee/AetherFrame/releases/download/{place}/{name}",
+            ["browser_download_url"] = $"https://github.com/QuietFoxLabs/AetherFrame/releases/download/{place}/{name}",
         };
     }
 }

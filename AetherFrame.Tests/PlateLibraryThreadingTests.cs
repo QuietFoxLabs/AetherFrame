@@ -159,7 +159,7 @@ public class PlateLibraryThreadingTests
 
         public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => inner.ListFiles(directory, searchPattern);
 
-        public async Task ReadTextAsync(string path, Action<string> reader)
+        public async Task ReadTextAsync(string path, Action<StoredText> reader)
         {
             if (gate is { } held)
             {

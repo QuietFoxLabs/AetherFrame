@@ -22,16 +22,16 @@ namespace AetherFrame.Persistence;
 internal static class ReliableReads
 {
     /// <param name="reader">Reads the text; throwing is the signal that the content is unusable.</param>
-    /// <param name="readBackup">Reads the storage's backup copy of the file; throws
+    /// <param name="readBackup">Reads the storage's backup copy of the file, as bytes; throws
     /// <see cref="FileNotFoundException"/> when there is none.</param>
     /// <exception cref="InvalidDataException">The reader rejected the file and there is no backup,
     /// or it rejected the backup too: content damage, as the reader itself reports it. A failure
     /// to read the file (or the backup) at all is thrown as it is.</exception>
-    internal static async Task ReadTextAsync(string path, Action<string> reader, Func<Task<string>> readBackup)
+    internal static async Task ReadTextAsync(string path, Action<StoredText> reader, Func<Task<byte[]>> readBackup)
     {
-        // Decoded as the plain-file store decodes it (UTF-8, a byte order mark honoured rather than
-        // kept as text): what the storage writes has no mark, a hand-edited file may.
-        var text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+        // Decoded as the plain-file store decodes it (see StoredTextDecoder): what the storage
+        // writes is UTF-8 without a byte order mark, a hand-edited file may have one.
+        var text = await StoredTextDecoder.ReadFileAsync(path).ConfigureAwait(false);
 
         Exception rejected;
         try
@@ -44,10 +44,12 @@ internal static class ReliableReads
             rejected = ex;
         }
 
-        string backup;
+        // The backup row holds the bytes of the last write that went through the storage, decoded
+        // the same way as the file (the storage's own text read would keep a byte order mark as text).
+        StoredText backup;
         try
         {
-            backup = await readBackup().ConfigureAwait(false);
+            backup = StoredTextDecoder.Decode(await readBackup().ConfigureAwait(false));
         }
         catch (FileNotFoundException)
         {

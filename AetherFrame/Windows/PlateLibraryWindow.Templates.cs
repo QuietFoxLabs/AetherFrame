@@ -203,13 +203,9 @@ internal sealed partial class PlateLibraryWindow
             UseTemplate(template.TemplateId);
         }
 
-        if (hovered && template.Problem is { } problem)
+        if (hovered && CardTooltip(template.Problem, template.HasUnsupportedElements) is { } tooltip)
         {
-            ImGui.SetTooltip(problem);
-        }
-        else if (hovered && template.HasUnsupportedElements)
-        {
-            ImGui.SetTooltip(EditorWidgets.UnsupportedElementsWarning);
+            ImGui.SetTooltip(tooltip);
         }
 
         var drawList = ImGui.GetWindowDrawList();

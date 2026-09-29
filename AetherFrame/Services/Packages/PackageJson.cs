@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Unicode;
 
 namespace AetherFrame.Services.Packages;
 
@@ -143,6 +144,18 @@ internal static class PackageJson
                     }
 
                     continue;
+                case JsonTokenType.String:
+                    // The reader checks the UTF-8 of property names but not of string values, and
+                    // reading such a value later throws (or quietly becomes U+FFFD) partway through
+                    // validation. An escaped value is checked by unescaping it, which throws
+                    // InvalidOperationException (malformed, to the caller) for invalid UTF-8.
+                    if (reader.ValueIsEscaped ? reader.GetString() is null : !Utf8.IsValid(reader.ValueSpan))
+                    {
+                        return new PackageJsonProblem(PackageJsonProblemKind.Malformed, "a text value isn't valid UTF-8");
+                    }
+
+                    values++;
+                    break;
                 default:
                     values++;
                     break;

@@ -13,7 +13,7 @@ public class DownloadUrlTemplateTests
         var template = DownloadUrlTemplate.Parse(TestPackages.DownloadTemplate);
 
         Assert.Equal(
-            "https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
+            "https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
             template.Resolve("AetherFrame", new ProductVersion(0, 1, 5), "AetherFrame-0.1.5.zip"));
     }
 
@@ -40,8 +40,8 @@ public class DownloadUrlTemplateTests
     [InlineData("https://github.com/o/r/releases/download/v{{version}}/{package}", "characters that do not belong")]
     [InlineData("github.com/o/r/releases/download/v{version}/{package}", "not an absolute URL")]
     [InlineData("file:///C:/releases/v{version}/{package}", "must use https")]
-    [InlineData("https://github.com/richhiiee/AetherFrame/releases/download/../../../../someone-else/AetherFrame/releases/download/v{version}/{package}", "not written in canonical form")]
-    [InlineData("https://github.com/richhiiee/AetherFrame/releases/download/%2e%2e/%2e%2e/%2e%2e/%2e%2e/someone-else/v{version}/{package}", "not written in canonical form")]
+    [InlineData("https://github.com/QuietFoxLabs/AetherFrame/releases/download/../../../../someone-else/AetherFrame/releases/download/v{version}/{package}", "not written in canonical form")]
+    [InlineData("https://github.com/QuietFoxLabs/AetherFrame/releases/download/%2e%2e/%2e%2e/%2e%2e/%2e%2e/someone-else/v{version}/{package}", "not written in canonical form")]
     [InlineData("https://localhost/releases/v{version}/{package}", "dotted domain name")]
     public void BadTemplate_IsRefused(string template, string message)
     {
@@ -53,9 +53,9 @@ public class DownloadUrlTemplateTests
 public class UrlsTests
 {
     [Theory]
-    [InlineData("https://github.com/richhiiee/AetherFrame")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json")]
+    [InlineData("https://github.com/QuietFoxLabs/AetherFrame")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/plugin-repository/pluginmaster.json")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json")]
     [InlineData("https://dry-run.invalid/a/b.zip")]
     public void PlainHttpsUrls_Pass(string url) => Assert.Equal(url, Urls.ValidateHttps(url, "test").OriginalString);
 
@@ -197,20 +197,20 @@ public class RepositoryConfigurationTests
         Assert.Equal("AetherFrame", configuration.InternalName);
         Assert.Equal(15, configuration.DalamudApiLevel);
         Assert.Equal(TestPackages.RepoUrl, configuration.SourceRepositoryUrl);
-        Assert.Equal("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json", configuration.PluginMasterUrl);
+        Assert.Equal("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json", configuration.PluginMasterUrl);
         Assert.Equal("AetherFrame-0.1.5.zip", configuration.PackageFileName(new ProductVersion(0, 1, 5)));
-        Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", configuration.DownloadUrl(new ProductVersion(0, 1, 5)));
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", configuration.DownloadUrl(new ProductVersion(0, 1, 5)));
     }
 
     [Theory]
-    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\", \"extra\": 1}", "unknown key(s): extra")]
-    [InlineData("{\"internalName\": \"Aether Frame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "internalName")]
-    [InlineData("{\"internalName\": \"../AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "internalName")]
-    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 0, \"sourceRepositoryUrl\": \"https://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "dalamudApiLevel")]
-    [InlineData("{\"internalName\": \"AetherFrame\", \"sourceRepositoryUrl\": \"https://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "dalamudApiLevel")]
-    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"http://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "sourceRepositoryUrl")]
-    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/plugins\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "must point at a .json file")]
-    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/richhiiee/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/latest.zip\"}", "must end with '/{package}'")]
+    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\", \"extra\": 1}", "unknown key(s): extra")]
+    [InlineData("{\"internalName\": \"Aether Frame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "internalName")]
+    [InlineData("{\"internalName\": \"../AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "internalName")]
+    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 0, \"sourceRepositoryUrl\": \"https://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "dalamudApiLevel")]
+    [InlineData("{\"internalName\": \"AetherFrame\", \"sourceRepositoryUrl\": \"https://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "dalamudApiLevel")]
+    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"http://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "sourceRepositoryUrl")]
+    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/plugins\", \"downloadUrlTemplate\": \"https://x.invalid/v{version}/{package}\"}", "must point at a .json file")]
+    [InlineData("{\"internalName\": \"AetherFrame\", \"dalamudApiLevel\": 15, \"sourceRepositoryUrl\": \"https://github.com/QuietFoxLabs/AetherFrame\", \"pluginMasterUrl\": \"https://x.invalid/p.json\", \"downloadUrlTemplate\": \"https://x.invalid/latest.zip\"}", "must end with '/{package}'")]
     [InlineData("not json", "not valid JSON")]
     public void BadConfiguration_IsRefused(string json, string message)
     {

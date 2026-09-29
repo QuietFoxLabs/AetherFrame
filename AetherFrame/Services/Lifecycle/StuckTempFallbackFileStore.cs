@@ -46,7 +46,7 @@ internal sealed class StuckTempFallbackFileStore : IPlateFileStore
 
     public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => inner.ListFiles(directory, searchPattern);
 
-    public Task ReadTextAsync(string path, Action<string> reader) => inner.ReadTextAsync(path, reader);
+    public Task ReadTextAsync(string path, Action<StoredText> reader) => inner.ReadTextAsync(path, reader);
 
     public async Task WriteTextAsync(string path, string contents)
     {

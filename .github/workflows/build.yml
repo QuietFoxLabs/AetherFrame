@@ -59,6 +59,12 @@ jobs:
     - name: Test the protocol
       run: dotnet test AetherFrame.Protocol.Tests/AetherFrame.Protocol.Tests.csproj --configuration Release --no-build
 
+    # The local persona management foundation (docs/networking/NETWORK1_PersonaFoundation.md): a
+    # standalone assembly the plugin does not reference yet, holding the in-memory persona model and
+    # the seams for protected key storage and encrypted backups, with synthetic keys only.
+    - name: Test the persona foundation
+      run: dotnet test AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj --configuration Release --no-build
+
     # Every rule a release must pass, applied to every build (docs/CustomRepository.md): the DLL is
     # x64, built from this commit, at the Version.props version and the configured Dalamud API level,
     # and the package holds exactly the three plugin files.

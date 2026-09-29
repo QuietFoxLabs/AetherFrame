@@ -501,7 +501,7 @@ public class ShutdownLifecycleTests
 
         public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-        public Task ReadTextAsync(string path, Action<string> reader) => files.ReadTextAsync(path, reader);
+        public Task ReadTextAsync(string path, Action<StoredText> reader) => files.ReadTextAsync(path, reader);
 
         public async Task WriteTextAsync(string path, string contents)
         {

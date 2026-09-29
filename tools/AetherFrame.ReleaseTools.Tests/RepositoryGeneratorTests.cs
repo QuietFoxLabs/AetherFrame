@@ -34,18 +34,18 @@ public class RepositoryGeneratorTests
                 "IsHide": false,
                 "InternalName": "AetherFrame",
                 "AssemblyVersion": "0.1.5.0",
-                "RepoUrl": "https://github.com/richhiiee/AetherFrame",
+                "RepoUrl": "https://github.com/QuietFoxLabs/AetherFrame",
                 "ApplicableVersion": "any",
                 "DalamudApiLevel": 15,
                 "LastUpdate": 1700000000,
-                "DownloadLinkInstall": "https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
-                "DownloadLinkUpdate": "https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
-                "DownloadLinkTesting": "https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
+                "DownloadLinkInstall": "https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
+                "DownloadLinkUpdate": "https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
+                "DownloadLinkTesting": "https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip",
                 "LoadRequiredState": 0,
                 "LoadSync": false,
                 "LoadPriority": 0,
                 "CanUnloadAsync": false,
-                "IconUrl": "https://raw.githubusercontent.com/richhiiee/AetherFrameAssets/master/images/icon.png",
+                "IconUrl": "https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/8b716efece4a3077ed3345dfcf491ddcfcab52db/AetherFrame/images/icon.png",
                 "AcceptsFeedback": true,
                 "IsTestingExclusive": false
               }
@@ -222,10 +222,10 @@ public class RepositoryGeneratorTests
         var productionEntry = RepositoryGenerator.Build(production, productionReport!, null, false, LastUpdate);
         var dryRunEntry = RepositoryGenerator.Build(dryRun, dryRunReport!, null, false, LastUpdate);
 
-        Assert.Equal("https://dry-run.invalid/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", dryRunEntry.DownloadLinkInstall);
+        Assert.Equal("https://dry-run.invalid/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", dryRunEntry.DownloadLinkInstall);
         var productionText = Encoding.UTF8.GetString(RepositoryDocument.Serialize(new[] { productionEntry }));
         var dryRunText = Encoding.UTF8.GetString(RepositoryDocument.Serialize(new[] { dryRunEntry }));
-        Assert.Equal(productionText, dryRunText.Replace("https://dry-run.invalid/richhiiee/AetherFrame/releases/download/", "https://github.com/richhiiee/AetherFrame/releases/download/", StringComparison.Ordinal));
+        Assert.Equal(productionText, dryRunText.Replace("https://dry-run.invalid/QuietFoxLabs/AetherFrame/releases/download/", "https://github.com/QuietFoxLabs/AetherFrame/releases/download/", StringComparison.Ordinal));
     }
 
     [Fact]
