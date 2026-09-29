@@ -22,7 +22,7 @@ Every fix keeps the saved file formats, schema versions and package format as th
   - C: asset integrity, missing images, file ownership and cleanup safety.
   - D: migrations, backward compatibility, recovery and test coverage.
 - **Reconciliation.** Every claimed weakness was checked against the code before being fixed.
-- **Tests that prove each fix.** Every fix has a regression test. The tests that fail with their fix removed, and those that only pin behaviour that was already correct, are named per fix in section 3 and in section 6.
+- **Tests that prove each fix.** Every fix has a regression test. For fixes 1 to 5, 9 and 12, section 3 names which tests fail with the fix removed and which only pin behaviour that was already correct; for the others it names the test class. Section 6 gives what was measured against the audited code and against mutations.
 - **Adversarial review.** An independent review of the finished diff followed. It found no high- or medium-severity defect. Its five low-severity findings (a Recovery copy losing the damaged file's modified time, two wording issues, the Import window's verdict and the refusal message's advice) are fixed in `d575611`. A second, independent audit of the result followed (section 10).
 - **Baseline at `6384db6`**, built and run on Linux with .NET 10.0.401 and Dalamud's reference assemblies:
   - AetherFrame.Tests: 2739 passed.
@@ -50,7 +50,7 @@ What was already safe, and stays as it was.
 
 ### Damaged, locked and newer files
 
-- **Reads prefer the file on disk.** The file is read first, and the backup is used only when the content is unusable: not valid JSON, or not a usable object of its kind (`ReliableReads`). A file that is locked or missing is "unavailable": it is never written over and never silently replaced by the backup. The file's encoding is never a reason to use the backup (section 5).
+- **Reads prefer the file on disk.** The file is read first, and the backup is used only when the content is unusable: not valid JSON, or not a usable object of its kind (`ReliableReads`). A file that is locked or missing is "unavailable": it is never written over and never silently replaced by the backup. Bytes that aren't valid text are never on their own a reason to use the backup; a file in an encoding the reader doesn't detect (UTF-16 or UTF-32 without a byte order mark) doesn't parse, and is damage, as in 0.1.6 (section 5).
 - **The backup can be older than the file.** It holds the last write that went through Dalamud's storage. After a stuck-temp direct write, or a commit that failed after the move, it is older than the file. That is why a damaged file's own bytes are kept in Recovery before anything replaces them, and why nothing prefers the backup to a file that is usable.
 - **A damaged binding or `library.json`** is either copied to Recovery before being overwritten, or left read-only for the session.
 - **A newer version's files are never written.** This covers Plates, Templates, bindings, the index, asset metadata and configuration. They are listed read-only, deleting one moves it intact, and none of them is ever read from an older backup.
@@ -121,7 +121,7 @@ What stays safe around them:
    - **Tests:** `InvalidTextEncodingTests`, `EncodingRegressionTests`, `BindingAndIndexEncodingTests`, `VersionedDocumentEncodingTests` and `StoredTextDecoderTests`. Section 6 gives how many fail on `c724cd6`.
 
 3. **Unflushed or partial copies.**
-   - **Before:** `SystemFileStore.CopyFile` used `File.Copy`, which gives no durability guarantee, while the write that follows it over the original is flushed. `dc92e41` copied through streams and flushed, but still wrote straight to the copy's final name: a crash partway, or a failure whose cleanup couldn't delete the partial file, could leave a truncated file under the name the Plate loader takes as proof that a copy was kept.
+   - **Before:** `SystemFileStore.CopyFile` used `File.Copy`, which gives no durability guarantee, while the write that follows it over the original is flushed. `dc92e41` copied through streams and flushed, but still wrote straight to the copy's final name: a crash partway, or a failure whose cleanup couldn't delete the partial file, could leave a truncated file under a Recovery copy's name, where it looks like a kept copy. (The loader itself only skips a copy whose exact, millisecond-stamped name already exists, so in game it never took such a leftover for its own copy; the tests' frozen clock does.)
    - **Now (`17d9c4e`):** the copy is written to a temporary sibling (`.{name}.{id}.tmp`), flushed to disk, given the source's modified time, and only then renamed to its final name, never over an existing file. A copy that fails partway leaves nothing under the copy's name, and its temporary file, only ever the one that call created, is removed. Like `File.Copy`, it lets other programs keep the source open.
    - **Why the modified time matters:** for a damaged file, it is the evidence of whether the damaged bytes are newer than the backup.
    - **Tests:** `SystemFileStoreCopyTests` pins the exact bytes, the modified time, the no-overwrite rule and that a failed copy creates nothing. `RecoveryCopyFaultTests` injects a failure after part of the copy has been written, as a full disk does, through an internal constructor that supplies the copy's stream. It checks that the original stays untouched, the write is refused, nothing partial is left, a retry succeeds once the fault is gone, and the kept copy holds exactly the original bytes. It covers the store itself and each Library path: a damaged Plate read from its backup, a Plate, binding, Plate order and Template read with invalid bytes, and a reload after a failed copy. Replacing the copy with plain `File.Copy`, or with `dc92e41`'s, makes most of these tests fail (section 6). A flush can't be observed for durability, only that it was requested before the copy got its name.
@@ -175,14 +175,14 @@ Everything a player or an existing file can notice:
 |---|---|
 | A write to a file whose damaged bytes couldn't be kept in Recovery is refused, with a message, until a copy succeeds | Only after a damaged file was read from its backup and the Recovery copy failed at load: in practice, a full disk |
 | A Plate, Template, binding or `library.json` with bytes that aren't valid text loads as before, from the file itself, but its original bytes go to Recovery before the first write over it, and that write is refused, with a message, while the copy fails | Only files damaged in place or hand-edited in another encoding. AetherFrame writes only ASCII, so its own files never have invalid bytes |
-| A Plate or Template read with invalid bytes shows a note when its card is hovered | The same files |
+| A Plate or Template read with invalid bytes shows a note when its card is hovered, together with the unsupported-elements warning when that applies too | The same files |
 | A write whose text wouldn't load as Ready is refused, with a message | No known editor path; only direct internal misuse |
 | Duplicate succeeds even when the order file couldn't be written; the failure is logged | Only when writing `library.json` fails |
 | Exporting an over-limit Plate names the value instead of saying the file is damaged | Plates saved by 0.1.5's unbounded sliders, or hand edits |
 | Exporting a Plate refused for data the editor doesn't show (an element that isn't an object, a number in a newer build's data) says "This Plate holds data a Plate file can't carry, so it can't be exported." with no advice to change it in the editor | Hand edits |
 | A package whose image is used only in a form the import doesn't re-point, next to an exact spelling of its id in a text field, is refused ("The file contains an image the Plate doesn't use.") | Crafted packages; AetherFrame never exports one |
 | A Move whose order write fails or is refused puts the previous order back, so the same move can simply be made again | Only when writing `library.json` fails or is refused |
-| Set Active, or creating a Plate for a character, whose damaged binding can't be copied to Recovery shows the Recovery message instead of "See the Dalamud log" | Only a damaged binding with no backup, on a full disk |
+| Set Active on a character whose binding must first be kept in Recovery (damaged with no backup, or read with invalid bytes) shows the Recovery message instead of "See the Dalamud log" when that copy fails; Create, Use Template and Duplicate for that character still make the Plate and add the Recovery message to their "couldn't be linked" text | Only such a binding, on a full disk |
 | Save as Template of a Plate nested to the reader's limit is refused with "the result wouldn't load again, so nothing was written", not the serializer's own text | Only Plates holding a newer build's deeply nested data |
 | Recovery and trash file names are stamped in the Gregorian calendar | Players whose Windows culture uses another calendar (Thai, Saudi); before, those names held another year |
 | A package whose image is referenced only from text is refused ("The file contains an image the Plate doesn't use.") | Crafted packages; AetherFrame never exports one |
@@ -190,7 +190,7 @@ Everything a player or an existing file can notice:
 | A checked package can't be imported twice from the same Import window, which then says "Already imported" | Only after an unfinished import: the Plate file landed, the import reported a failure and the file couldn't be moved away. After a success the window closes, as before |
 | Add Image names the stored file after the stored content | Only if the source changed format while being added |
 | A locked Plate or Template is described as "couldn't be opened", not "damaged" | Files held by another program at load |
-| Recovery and migration backup copies are flushed to disk and given their name only when complete; like before, they keep the original's modified time | Not visible, apart from a hidden `.{name}.{id}.tmp` file in `Recovery` if the game crashes mid-copy |
+| Recovery and migration backup copies are flushed to disk and given their name only when complete; like before, they keep the original's modified time | Not visible, apart from a leftover `.{name}.{id}.tmp` file (visible in Explorer) in `Recovery`, or in `Backups/pre-plate-library` during a migration, if the game crashes mid-copy |
 | The dormant cleanup's scan protects more images: it also reads unloaded files in the Templates folder, and a loaded file whose bytes on disk aren't yet kept in Recovery; a file only its backup can answer for makes the scan incomplete | Not visible: cleanup doesn't run |
 
 Unchanged:
@@ -229,7 +229,7 @@ A sequence that isn't valid in the file's encoding is detected on the bytes: an 
 
 | | Before (`6384db6`) | At the audit (`c724cd6`) | After the corrections |
 |---|---|---|---|
-| AetherFrame.Tests | 2739 passed | 2798 passed | **3023 passed** |
+| AetherFrame.Tests | 2739 passed | 2798 passed | **3032 passed** |
 | AetherFrame.Protocol.Tests | 153 passed | 153 passed | 153 passed |
 | AetherFrame.ReleaseTools.Tests | 439 passed | 439 passed | 439 passed |
 | Solution build (Release, Dalamud plugin included) | 0 warnings, 0 errors | 0 warnings, 0 errors | 0 warnings, 0 errors |
@@ -237,16 +237,16 @@ A sequence that isn't valid in the file's encoding is detected on the bytes: an 
 
 - **Test files added by the first pass:** `DamagedFilePreservationTests`, `InvalidTextEncodingTests` (rewritten by the correction, see below), `SystemFileStoreCopyTests`, `WriteReadBackTests`, `PackageReliabilityTests`, `AssetReferenceCoverageTests`, `CompatibilityPreservationTests` and `UnopenableFileDiagnosticsTests`.
 - **Test files added by the correction:** `EncodingRegressionTests`, `BindingAndIndexEncodingTests`, `VersionedDocumentEncodingTests`, `RecoveryCopyFaultTests`, `StoredTextDecoderTests` and `TemplateWriteReadBackTests`. Existing files gained cases for the review's other findings.
-- **Against the audited code.** The three files that use only APIs `c724cd6` already had were run there. `EncodingRegressionTests` fails 25 of 27 cases, `BindingAndIndexEncodingTests` 19 of 19, and `VersionedDocumentEncodingTests` 20 of 56. The cases that pass there pin what must not change: real damage still reads the backup; a recovered Plate saves and renames with its damaged bytes kept once; and every historical fixture, re-encoded with each byte order mark, loads and saves exactly as its ASCII original (36 cases). `InvalidTextEncodingTests` uses the new note constants and the decoder, so it can't be built there; its old version asserted the withdrawn behaviour.
-- **Against mutations.** `RecoveryCopyFaultTests` injects a disk that fills up partway through a copy. Replacing the copy with plain `File.Copy` fails 14 of its 21 cases, and so does the previous stream copy of `dc92e41`, whose partial file a crash would have left under the copy's own name. A rename allowed to overwrite fails its mid-copy case. `StoredTextDecoderTests` compares the decoder with `File.ReadAllText` on 2000 seeded files and at every buffer boundary; relaxing any strict decoder, or keeping a byte order mark in the strict check, fails between 9 and 24 of its 80 cases.
-- **Negative checks, precisely.** For each fix, the tests named in section 3 were run with that fix removed. The ones that failed are named there. Those that pass either way pin behaviour that was already correct: `DamagedFilePreservationTests.DamagedPlateWhoseCopySucceedsAtLoad_SavesAsBefore`, `WriteReadBackTests.EveryWrite_PutsOnDiskTheTextTheLibraryKeeps`, `UnopenableFileDiagnosticsTests.TemplateWhoseContentFailsToMaterialize_IsCalledDamaged_NotUnopenable`, `SystemFileStoreCopyTests`, `CompatibilityPreservationTests` and the byte order mark cases above.
+- **Against the audited code.** The three files that use only APIs `c724cd6` already had were run there. `EncodingRegressionTests` fails 25 of 27 cases, `BindingAndIndexEncodingTests` 19 of 19, and `VersionedDocumentEncodingTests` 21 of 65. The cases that pass there pin what must not change: real damage still reads the backup; a recovered Plate saves and renames with its damaged bytes kept once; every historical fixture, re-encoded with a UTF-8, UTF-16 or UTF-32 byte order mark, loads and saves exactly as its ASCII original (40 cases, both byte orders of UTF-16 and UTF-32); and the legacy bindings without a U+FFFD and the guard that every fixture is covered pass too. `InvalidTextEncodingTests` uses the new note constants and the decoder, so it can't be built there; its old version asserted the withdrawn behaviour.
+- **Against mutations.** `RecoveryCopyFaultTests` injects a disk that fills up partway through a copy. Replacing the copy with plain `File.Copy` fails 18 of its 21 cases. The previous stream copies (`dc92e41`'s, and `c724cd6`'s, which also kept the modified time) each fail 14, because a crash at the fault would have left their partial file under the copy's own name. A rename allowed to overwrite fails its mid-copy case. `StoredTextDecoderTests` compares the decoder with `File.ReadAllText` on 2000 seeded files and at every buffer boundary. Making one strict decoder lenient fails 21 of its 80 cases for UTF-8, 9 for UTF-16 little-endian, 5 for UTF-16 big-endian, 6 for UTF-32 little-endian and 4 for UTF-32 big-endian; keeping a byte order mark in the strict check fails 24.
+- **Negative checks, precisely.** For fixes 1 to 5, 9 and 12, and for every correction, the tests named were run with that fix removed. The ones that failed are named in section 3 or in the commit that adds them. Those that pass either way pin behaviour that was already correct: `DamagedFilePreservationTests.DamagedPlateWhoseCopySucceedsAtLoad_SavesAsBefore`, `WriteReadBackTests.EveryWrite_PutsOnDiskTheTextTheLibraryKeeps`, `UnopenableFileDiagnosticsTests.TemplateWhoseContentFailsToMaterialize_IsCalledDamaged_NotUnopenable`, `SystemFileStoreCopyTests`, `CompatibilityPreservationTests` and the byte order mark cases above.
 - **Isolation.** All of them use isolated temporary directories and never touch a real Dalamud configuration.
-- **Where they ran.** Locally on Linux, and in CI on `windows-2022` and `ubuntu-24.04` (`build.yml`) for every pushed commit.
+- **Where they ran.** Locally on Linux for every commit, and in CI on `windows-2022` and `ubuntu-24.04` (`build.yml`) for each push to the pull request, on its merge with `master` (the tip of every push, not each commit).
 - **An independent reproduction** of the audit's six scenarios, written separately from these tests and not committed, fails all 7 of its cases on `c724cd6` and passes them all on the corrected branch.
 
 ## 7. Deferred findings
 
-None of these puts existing data at risk today. Each needs a product decision, touches Dalamud-side code that can't be tested here, or is only relevant once a dormant feature is switched on.
+D1 and D18 can lose data in the narrow cases they describe, and D16 an original's exact bytes; none of the others puts existing data at risk today. Each needs a product decision, touches Dalamud-side code that can't be tested here, or is only relevant once a dormant feature is switched on.
 
 | # | Finding | Why deferred |
 |---|---|---|
@@ -255,7 +255,7 @@ None of these puts existing data at risk today. Each needs a product decision, t
 | D3 | There is no v0.1.5 or v0.1.6 fixture set, and no fixture generator in the repository. | The formats are identical to v0.1.4 (section 5), so a new set adds little until a format changes. Suggestion: add an opt-in generator test (the protocol tests' `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS` pattern) and a Releasing step, before the next format change. |
 | D4 | Prerequisites before asset cleanup is ever switched on. See the list below the table. | Cleanup has no caller. Each of these must be settled when it is activated. |
 | D5 | A Plate with repeated element ids from a hand edit can't be exported until it is saved with the ids repaired. | Exporting the repaired ids would change export output. That is a product decision. |
-| D6 | When a Plate is served from a stale backup, only the log says so. | UI and product decision (a notice in My Plates). |
+| D6 | When a Plate is served from a stale backup, only the log says so. | UI and product decision (a notice in My Plates). The card note added for text that isn't valid (fix 2) could carry it, once its wording and when it clears are decided. |
 | D7 | No autosave, draft or version history: unsaved edits are lost on a crash, and each save replaces both the file and its backup. | Product decision. |
 | D8 | Two game clients sharing one configuration folder can overwrite each other's changes. | Needs a cross-process locking design. |
 | D9 | `WriteAtomically`'s cleanup can mask the original error if the delete itself fails. Hidden `.{name}.{guid}.tmp` leftovers from the stuck-temp fallback are swept only for thumbnails. | Cosmetic; no data risk. |
@@ -275,6 +275,7 @@ The D4 prerequisites, before asset cleanup is ever switched on:
 - **`Recovery/` and `Backups/` must be scanned.**
 - **The editor's `AssetsInUse` must be a required input to `Plan`.**
 - **Uppercase-named asset files need handling.** They can be trashed but not restored.
+- **A save that landed but reported failure (D17) must be scanned from disk.** Memory still holds the previous document, so the scan would miss images only the new file references. Reading every loaded Plate from disk instead would leave the scan incomplete for any Plate recovered from its backup.
 - **Stray files must not win.** `ResolveAssetPath` picks the first `{id}.*` file alphabetically, so a stray `{id}.bak` wins. It can also throw from Draw when the folder can't be listed.
 
 No specific change was stopped for being incompatible or destructive: none of the fixes needed a format change or a migration.
@@ -293,12 +294,12 @@ These need the game. Use Windows, Dalamud API 15, this branch's build installed 
    5. Save that Plate: the editor shows "AetherFrame couldn't keep a copy of the file this would replace in its Recovery folder…" and stays dirty, and the file is still truncated.
    6. Delete the `Recovery` file and save again: it succeeds, and `Recovery/<guid>.damaged-*.json` holds the truncated bytes.
 4. **Invalid bytes.**
-   1. With the plugin unloaded, hash a saved Plate's file, then use a hex editor to change one letter of its name to `FF`.
+   1. With the plugin unloaded, use a hex editor to change one letter of a saved Plate's name to `FF`, then hash the edited file.
    2. Load. The card shows the name with a replacement character in place of that letter, not the backup's name, and hovering the card shows the note about text that isn't valid. The log has a Warning. The file's hash still matches the edited file, and `Recovery` has nothing for it.
-   3. Create the `Recovery` file as in step 3, then save the Plate: it is refused with the Recovery message, and the file is unchanged.
-   4. Delete the `Recovery` file and save again: it succeeds, `Recovery/<guid>.damaged-*.json` holds exactly the edited bytes, and after a plugin reload the Plate has no note.
-5. **Valid unusual text.** With the plugin unloaded, hand-edit a Plate's name to hold a real `�` character (U+FFFD, saved as UTF-8), and save a second Plate's file as UTF-16 with a byte order mark (Notepad's "UTF-16 LE"). Load: both are Ready with the exact names, no note, and nothing in `Recovery`.
-6. **Newer version.** With the plugin unloaded, set a Plate's `"Version"` to 99 and add a `�` to its name. Load: it is listed as saved by a newer version, never shows the backup's content, and its file's hash is unchanged after trying to rename or set it Active.
+   3. Move the `Recovery` folder aside, create the `Recovery` file as in step 3, then save the Plate: it is refused with the Recovery message, and the file is unchanged.
+   4. Delete the `Recovery` file and save again: it succeeds, `Recovery/<guid>.damaged-*.json` holds exactly the edited bytes, and after a plugin reload the Plate has no note. Move step 3's copies back.
+5. **Valid unusual text.** With the plugin unloaded, hand-edit a Plate's name to hold a real `�` character (U+FFFD, saved as UTF-8), and save a second Plate's file as UTF-16 with a byte order mark (Notepad's "UTF-16 LE"). Load: both are Ready with the exact names, no note, and nothing new in `Recovery`.
+6. **Newer version.** With the plugin unloaded, set a Plate's `"Version"` to 99, add a `�` to its name, and hash the file. Load: it is listed as saved by a newer version and never shows the backup's content; Rename, Set Active, Duplicate, Save as Template and Export are disabled on its card; and after a plugin reload its file's hash is unchanged.
 7. **Character with invalid text.** With the plugin unloaded, change one letter of `LastKnownCharacterName` in `Characters/<id>.json` to `FF`. Load: every Plate still shows as associated with that character, and the Active Plate is unchanged. Set another Plate Active: the associations stay, and `Recovery` holds the edited binding.
 8. **Locked file.** With the plugin unloaded, hold a Plate file open with no sharing, for example in PowerShell: `$f=[IO.File]::Open("<path>",'Open','Read','None')`. Load: the card's hint says the file couldn't be opened and asks for a restart, not that it is damaged. Close the handle and reload: the Plate is Ready.
 9. **Import again.** Import a package: the window closes and the new Plate is listed. Choose the same file again: it imports as another new Plate, as before. (The "Already imported" verdict appears only after an unfinished import, which needs fault injection; `PackageReliabilityTests` covers it.)
@@ -347,7 +348,7 @@ The review also reported low-severity issues in the rest of the branch. Each was
 | A Move refused by the Recovery rule stayed applied in memory, so repeating it saved nothing | Fixed in `ac8d6e5`: the previous order is put back |
 | Export told the player to change "a value" in the editor for data the editor doesn't show, and could quote a log-only detail | Fixed in `d04d556`: only typed values get that advice |
 | A package's "every image is used" check ran before its images were re-pointed, so an id used only in an unmapped form passed | Fixed in `d04d556`: the check runs again on what is imported |
-| A damaged binding whose Recovery copy failed gave a generic error | Fixed in `a1c8d19` |
+| A damaged binding whose Recovery copy failed gave a generic error | Fixed in `a1c8d19` for Set Active, and in `f641dcf` for Create, Use Template and Duplicate |
 | The load logged "kept in Recovery" before the copy, even when it failed | Fixed in `a1c8d19` |
 | The dormant cleanup's scan skipped unloaded Template files, and trusted memory for a loaded file whose damaged bytes had no Recovery copy | Fixed in `a1c8d19`; cleanup stays inactive |
 | "A third start writes nothing" was checked by file hashes only | Fixed in `fc3d728`: every write is counted |
@@ -358,3 +359,15 @@ The review also reported low-severity issues in the rest of the branch. Each was
 | The Recovery copy could leave a partial file under its name after a crash | Fixed by `17d9c4e` (fix 3) |
 | Recovery and trash names were stamped with the player's calendar (found reviewing the new tests) | Fixed in `3e1ad14` |
 | Save as Template of a Plate nested to the reader's limit showed the serializer's own text (found writing the new tests) | Fixed in `dbad379` |
+
+### Fresh review of the correction
+
+A new adversarial review of the correction (`c724cd6..17ff3ea`), across data loss, Unicode, backups and schema versions, bindings and the Plate order, and the accuracy of this report, found no high- or medium-severity defect. Its Unicode reviewer found nothing. Each other finding was checked by a second reviewer:
+
+| Finding | Outcome |
+|---|---|
+| Create, Use Template and Duplicate replaced the Recovery refusal for a binding with a bare "couldn't be linked" | Fixed in `f641dcf` |
+| The card note for invalid text hid the unsupported-elements warning | Fixed in `2c90265` |
+| A Plate read from a stale backup gets no card note while one with invalid text does | Not a regression (unchanged from `c724cd6`); recorded under D6 |
+| The dormant scan trusts memory for a save that landed but reported failure | Latent; added to the D4 prerequisites |
+| Mutation counts, the byte order mark case count, CI coverage, manual steps 4 to 6, the Move comment, section 7's introduction and other wording | Corrected here; UTF-32 big-endian added to the fixture re-encodings |
