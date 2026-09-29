@@ -246,7 +246,7 @@ AetherFrame.Tests/      pure-logic tests that build without Dalamud
 - **Assets.** User images are copied into a local asset store, checked on import and tracked by reference. Unused images are not cleaned up automatically in this version.
 - **Packages.** `.aetherframe` files are ZIP-based packages containing a manifest, the Plate document and its images. They are validated in a staging area before anything is imported.
 
-Full-size source artwork for bundled Components lives in the separate [AetherFrameAssets](https://github.com/richhiiee/AetherFrameAssets) repository. The plugin only needs the optimized copies in `AetherFrame/Assets/`.
+The plugin's bundled Component artwork is the optimized copies in `AetherFrame/Assets/`, and its icon is [`AetherFrame/images/icon.png`](AetherFrame/images/icon.png).
 
 ---
 
@@ -278,7 +278,6 @@ Bundled fonts are licensed separately under the SIL Open Font License 1.1. See `
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Tester guide: [docs/Testing.md](docs/Testing.md)
 - Releasing and Dalamud submission: [docs/Releasing.md](docs/Releasing.md)
-- Assets: <https://github.com/richhiiee/AetherFrameAssets>
 
 ---
 
