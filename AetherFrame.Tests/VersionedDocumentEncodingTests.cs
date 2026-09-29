@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -84,6 +85,10 @@ public class VersionedDocumentEncodingTests
 
         Assert.All(ascii.Library.GetOrderedPlates(), p => Assert.Equal(PlateStatus.Ready, p.Status));
         Assert.All(ascii.Templates.GetOrderedTemplates(), t => Assert.Equal(TemplateStatus.Ready, t.Status));
+
+        // Every backup row is older and named so: nothing on either side came from one.
+        Assert.DoesNotContain(OlderBackupName, Names(ascii));
+        Assert.DoesNotContain(OlderBackupName, Names(encoded));
         Assert.Equal(Describe(ascii), Describe(encoded));
         Assert.Equal(ascii.Reads, encoded.Reads);
         Assert.Equal(ascii.ChangedFiles, encoded.ChangedFiles);
@@ -222,23 +227,33 @@ public class VersionedDocumentEncodingTests
         await templates.RenameTemplateAsync(templateId, "Renamed");
 
         var kept = Assert.Single(RecoveryFiles(fixture.Paths));
-        Assert.Equal($"{templateId}.damaged-{fixture.Clock.Now:yyyyMMdd-HHmmss-fff}.json", Path.GetFileName(kept));
+        Assert.Equal(string.Create(CultureInfo.InvariantCulture, $"{templateId}.damaged-{fixture.Clock.Now:yyyyMMdd-HHmmss-fff}.json"), Path.GetFileName(kept));
         Assert.Equal(damaged, File.ReadAllBytes(kept));
         Assert.True(Ascii.IsValid(File.ReadAllBytes(path)));
         Assert.Equal("Renamed", JsonNode.Parse(File.ReadAllText(path))!["Name"]!.GetValue<string>());
+        Assert.Null(templates.FindTemplate(templateId)!.Problem);
+
+        // Only the first write over the original keeps a copy: the file is now the Library's own.
+        fixture.Clock.Tick();
+        await templates.RenameTemplateAsync(templateId, "Renamed again");
+        Assert.Equal(kept, Assert.Single(RecoveryFiles(fixture.Paths)));
+        Assert.Equal(damaged, File.ReadAllBytes(kept));
+        Assert.Equal("Renamed again", JsonNode.Parse(File.ReadAllText(path))!["Name"]!.GetValue<string>());
 
         var reloaded = fixture.CreateService();
         await reloaded.InitializeAsync();
         Assert.Equal(TemplateStatus.Ready, reloaded.FindTemplate(templateId)!.Status);
-        Assert.Equal("Renamed", reloaded.FindTemplate(templateId)!.DisplayName);
+        Assert.Equal("Renamed again", reloaded.FindTemplate(templateId)!.DisplayName);
         Assert.Null(reloaded.FindTemplate(templateId)!.Problem);
         Assert.Single(RecoveryFiles(fixture.Paths));
     }
 
     [Theory]
-    [InlineData("envelope")]
-    [InlineData("document")]
-    public async Task NewerTemplateHoldingAReplacementCharacter_IsNewerVersion_FromTheFile_AndNeverWritten(string newerPart)
+    [InlineData("envelope", "literal")]
+    [InlineData("document", "literal")]
+    [InlineData("envelope", "invalid-byte")]
+    [InlineData("document", "utf16-bom")]
+    public async Task NewerTemplate_IsNewerVersion_FromTheFile_AndNeverWritten_WhateverItsBytes(string newerPart, string bytes)
     {
         var store = new BackupSimulatingStore();
         using var fixture = new TemplateLibraryFixture(store);
@@ -248,7 +263,13 @@ public class VersionedDocumentEncodingTests
         var versioned = newerPart == "envelope" ? raw : raw["Document"]!.AsObject();
         versioned["Version"] = 99;
         const string name = "Newer \uFFFD Template";
-        var newer = Encoding.UTF8.GetBytes(EditTopLevelStrings(VersionedJson.Serialize(raw), _ => name, "Name"));
+        var text = EditTopLevelStrings(VersionedJson.Serialize(raw), _ => name, "Name");
+        var newer = bytes switch
+        {
+            "invalid-byte" => ReplaceEncodedReplacementCharacter(Encoding.UTF8.GetBytes(text)),
+            "utf16-bom" => [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(text)],
+            _ => Encoding.UTF8.GetBytes(text),
+        };
         File.WriteAllBytes(path, newer);
 
         var templates = fixture.CreateService();
@@ -297,6 +318,19 @@ public class VersionedDocumentEncodingTests
         Assert.Equal(damaged, File.ReadAllBytes(kept));
         Assert.Equal("Renamed", templates.FindTemplate(templateId)!.DisplayName);
         Assert.Equal("Renamed", JsonNode.Parse(File.ReadAllText(path))!["Name"]!.GetValue<string>());
+
+        fixture.Clock.Tick();
+        await templates.RenameTemplateAsync(templateId, "Renamed again");
+        Assert.Equal(kept, Assert.Single(RecoveryFiles(fixture.Paths)));
+        Assert.Equal("Renamed again", templates.FindTemplate(templateId)!.DisplayName);
+    }
+
+    /// <summary>The file's first validly encoded U+FFFD (EF BF BD) as one byte that is never valid UTF-8, which reads back as the same character.</summary>
+    private static byte[] ReplaceEncodedReplacementCharacter(byte[] file)
+    {
+        var at = file.AsSpan().IndexOf("\uFFFD"u8);
+        Assert.True(at >= 0);
+        return [.. file[..at], 0xFF, .. file[(at + 3)..]];
     }
 
     // ---------------------------------------------------------------- scenes
