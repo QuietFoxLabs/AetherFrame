@@ -8,6 +8,7 @@ using AetherFrame.Services;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
 using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -141,6 +142,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         closeGuard = new EditorCloseGuard(editorSession, commands);
         cleanPreview = new CleanPreviewPresenter(this, editorSession, profileService, renderResources, ImGuiWindowFlags.None);
     }
+
+    /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
+    internal HelpMenu? Help { get; set; }
 
     public void Dispose()
     {

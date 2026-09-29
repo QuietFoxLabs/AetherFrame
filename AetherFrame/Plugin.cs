@@ -213,7 +213,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // windows go after every other AetherFrame window, so the spotlight sees this frame's
             // anchors. Whether to offer it is decided once the Library has loaded (see LoadAsync).
             onboarding = new OnboardingCoordinator(new ConfigurationTutorialStore(Configuration, log), TutorialScript.Chapters, TutorialScript.Version);
-            tutorialOverlay = new TutorialOverlay(onboarding, new TutorialHost(this));
+            var tutorialHost = new TutorialHost(this);
+            tutorialOverlay = new TutorialOverlay(onboarding, tutorialHost);
+            var helpMenu = new HelpMenu(onboarding, tutorialHost);
+            plateLibraryWindow.Help = helpMenu;
+            basicProfileEditorWindow.Help = helpMenu;
+            profileEditorWindow.Help = helpMenu;
             foreach (var window in tutorialOverlay.Windows)
             {
                 WindowSystem.AddWindow(window);

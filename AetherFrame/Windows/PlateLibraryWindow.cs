@@ -14,6 +14,7 @@ using AetherFrame.UI.Editor;
 using AetherFrame.UI.Library;
 using AetherFrame.UI.Rendering;
 using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -134,6 +135,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         this.fileDialogManager = fileDialogManager;
         this.beginImport = beginImport;
     }
+
+    /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
+    internal HelpMenu? Help { get; set; }
 
     public void Dispose()
     {

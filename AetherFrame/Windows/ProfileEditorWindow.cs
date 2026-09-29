@@ -6,6 +6,7 @@ using AetherFrame.Services;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
 using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -125,6 +126,9 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     /// (no close sound, no fade-out flicker). OnClose remains the fallback for anything else.
     /// </summary>
     public override void PreOpenCheck() => IsOpen = closeGuard.PreOpenCheck(IsOpen);
+
+    /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
+    internal HelpMenu? Help { get; set; }
 
     public void Dispose()
     {
