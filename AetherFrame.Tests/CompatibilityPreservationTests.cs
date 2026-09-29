@@ -231,9 +231,17 @@ public class CompatibilityPreservationTests
         Assert.All(owners, o => Assert.Equal(originals[o],
             File.ReadAllText(Path.Combine(fixture.Paths.MigrationBackupDirectory, "Characters", $"{o}.json"), Encoding.UTF8)));
 
-        // Idempotent from here: a third startup writes nothing.
+        // Idempotent from here: a third startup writes nothing, not even the same bytes again (in
+        // game every write also replaces the file's backup row).
         var snapshot = HistoricalFixtures.Snapshot(fixture.Root);
+        var writes = new List<string>();
+        store.FailWrite = path =>
+        {
+            writes.Add(Path.GetFileName(path));
+            return false;
+        };
         await fixture.LoadAsync();
+        Assert.Empty(writes);
         Assert.Equal(snapshot, HistoricalFixtures.Snapshot(fixture.Root));
     }
 }

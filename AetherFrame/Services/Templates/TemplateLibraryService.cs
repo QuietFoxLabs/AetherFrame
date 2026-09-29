@@ -245,9 +245,11 @@ internal sealed class TemplateLibraryService
     /// <summary>
     /// One Template's record from its file. A file the store had to serve from its backup copy is
     /// logged and its damaged on-disk bytes are kept under Recovery (a copy only: loading never
-    /// rewrites the file, and the next save of that Template replaces it as usual). A read that
-    /// unloading abandoned or canceled is not a damaged file, so it propagates instead of being
-    /// recorded as unreadable.
+    /// rewrites the file). The next save of that Template replaces it once a Recovery copy exists,
+    /// and is refused while that copy fails; a file read with bytes that aren't valid text is
+    /// copied right before that save instead (see <see cref="PreserveBeforeOverwrite"/>). A read
+    /// that unloading abandoned or canceled is not a damaged file, so it propagates instead of
+    /// being recorded as unreadable.
     /// </summary>
     private async Task<TemplateRecord> LoadTemplateAsync(string path, Guid templateId)
     {
