@@ -80,7 +80,11 @@ Two reviewers with no shared context examined `0c1cf96` on September 29, 2026: a
 The security reviewer **concurred** with K1, K2, K6 and K7 and with L4 as settled here; each register entry records its concurrence. It checked DPAPI's behaviour against Microsoft's documentation, which led to the qualification about roaming profiles and domain backup keys in K2, and to K7's explicit exemption for the protocol's managed checks over public values. It also mutated the code 17 ways. The tests caught the ones that matter, and two gaps it found are now tested: the moved-blob test, which decoded the second envelope after planting over it, and a lone temporary file read as a key. The mutations the tests still don't catch are these:
 - skipping the zeroing of the exported scalar in `AddKey`;
 - a fixed-time comparison that always passes (the import check after it still refuses a wrong scalar);
-- the file storage skipping its own temporary-file compare or flush, which only fault injection could observe.
+- the file storage skipping its own temporary-file compare or flush, or overwriting on the move while keeping its check that the final file doesn't exist, which only fault injection could observe;
+- narrowing the catches in `OpenSigner` and `OpenKey` back to `PersonaException` (no test can make the platform or the protocol refuse a key the managed checks already accepted);
+- removing the pause between read-back retries (timing only).
+
+Its recheck of the fix mutated the new code seven more ways; every mutation that changes behaviour was caught.
 
 Its non-blocking notes are recorded where they apply: the write-through move and the log text (section 5), `CryptUnprotectData`'s output zeroed before `LocalFree` and the deprecated prompt structure (K2, for increment 7), and exceptions that could escape `OpenSigner` and `OpenKey` (now caught, section 3).
 
