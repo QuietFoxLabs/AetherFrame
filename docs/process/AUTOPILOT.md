@@ -96,11 +96,11 @@ When a task needs an OPEN decision:
 
 1. **Build.** Make a detached worktree at the `master` commit and run the full CI-equivalent checks. The package is `AetherFrame/bin/x64/Release/AetherFrame/latest.zip` and holds three files.
 2. **Stage.** Extract it to `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>\`.
-3. **Install**, only while FFXIV is closed (no `ffxiv_dx11` process):
-   - back up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder;
-   - replace the three files in `E:\AetherFrame Test Build\`.
+3. **Install straight away, whether or not FFXIV is running.** The owner confirmed on September 29, 2026 that installing while the game is open doesn't affect it.
+   - Back up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder.
+   - Replace the three files in `E:\AetherFrame Test Build\`.
 
-   If the game is running, leave the build staged and install it on a later run. Never delete staged builds or backups.
+   If a file can't be replaced because it's locked, leave the build staged, say so in the inbox post, and install it on the next run. If the game is open, the post tells the owner to reload the dev plugin (`/xlplugins` → **Dev Tools**) to pick up the new build. Never delete staged builds or backups.
 4. **Post in the inbox:**
    - the build id (short sha) and the merged PRs it contains;
    - numbered in-game checks taken from those PRs' **In game** sections;
