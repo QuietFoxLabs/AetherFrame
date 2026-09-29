@@ -124,7 +124,7 @@ Enforced by the version 1 codecs (`ProtocolLimits`):
 | Declared image bytes per profile | 40 MiB | the sum, overflow-safe |
 | Timestamp | at most 253,402,300,799 | every timestamp |
 
-Declared only, because no document can carry the state they depend on: 256 elements and 32 Components per profile (the layout schema does not exist yet), 4,096 px processed images (the server downscales), 20 profiles per persona, 10 active shares, 250 MiB per persona and 50 MiB in the first week (server accounting). Nothing enforces them; nothing pretends to. `[updated 2026-09-29: until L6 these were also constants in ProtocolLimits.FuturePolicy. They are now documentation only, here and in the specification's server obligations, with their values unchanged. A backend enforces them with its own configuration (G4).]`
+Declared only, because no document can carry the state they depend on: 256 elements and 32 Components per profile (the layout schema does not exist yet), 4,096 px processed images (the server downscales), 20 profiles per persona, 10 active shares, 250 MiB per persona and 50 MiB in the first week (server accounting). Nothing enforces them; nothing pretends to. `[updated 2026-09-29: until L6 these were also constants in ProtocolLimits.FuturePolicy. They are now documentation only: their values are here, unchanged, and the specification's server obligation 8 points here. A backend enforces them with its own configuration (G4).]`
 
 ## 8. Error behaviour
 

@@ -55,7 +55,7 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 
 ### N5: the profile id belongs to profile documents only. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
-**Option and scope.** Applied by NETWORK1 increment 1, the protocol API tidy (branch `claude/protocol-api-tidy`).
+**Option and scope.** Applied by NETWORK1 increment 1, the protocol API tidy ([#32](https://github.com/QuietFoxLabs/AetherFrame/pull/32)).
 - `RemoteDocument` no longer has a `ProfileId`.
 - A new abstract `RemoteProfileDocument : RemoteDocument` carries it. `ProfileSnapshot` and `ProfileRetraction` derive from it. Its constructor is private protected, so the document hierarchy stays closed to other assemblies.
 - `VerifiedDocument.Profile` becomes `RemoteProfileKey?`:
@@ -72,6 +72,12 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 - which later document types exist (S1 request proofs, S4 persona revocation, share grants), and how each names its subject;
 - N1, the scope of revision and asset ids.
 
+**Independent concurrence.** The change touches the ownership key a server uses, so a security-focused reviewer with no shared context examined it at `96deff5` (September 29, 2026) and **concurred**. Its findings:
+- The profile pair is still derived only from the verified key and the decoded payload.
+- No other assembly can derive a document type or construct a `VerifiedDocument`. It checked this by compiling against the built DLL.
+- A null `Profile` fails closed: it doesn't compile where a key is expected, and it never compares equal to a real key.
+- No signed byte, codec, verification step or vector changed.
+
 ### L6: no key storage seam or server policy in the protocol. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Applied by the same change.
@@ -80,7 +86,7 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
   - `AetherFrame.Personas` (#23) already models that policy with `IPersonaKeyStore` and the manager's `TryOpenActiveSigner`, which returns a typed availability and a revocable lease. Nothing implemented or used the provider.
 - **The server limits.** `ProtocolLimits.FuturePolicy` is removed, and those limits become documentation only:
   - elements and Components per layout, processed image size, profiles per persona, active shares, and storage per persona;
-  - they are recorded in NETWORK0.md, section 7 ("Resource limits"), and the specification's server obligations, with their values unchanged;
+  - their values are recorded, unchanged, in NETWORK0.md, section 7 ("Resource limits"). The specification's server obligation 8 names the server-only limits and points there;
   - the protocol neither declares nor enforces them.
 - `ProtocolLimits` keeps every limit the codecs enforce, unchanged.
 
@@ -93,6 +99,8 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 - the key store's shape and storage (K2, K9, increment 5);
 - L4 (a public-only key accepted by the signer until its first `Sign`);
 - the limit values themselves, which a backend (G4) confirms and enforces with its own configuration.
+
+**Independent concurrence.** The same security-focused review concurred. Nothing referenced or enforced the provider or the limits, so removing them takes away no check or guarantee, and `IPersonaSigner` remains the only signing seam.
 
 ## Gates
 
