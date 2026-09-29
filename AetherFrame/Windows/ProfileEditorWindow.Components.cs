@@ -93,7 +93,7 @@ internal sealed partial class ProfileEditorWindow
         ImGui.TextDisabled(PlateComponentEditor.KindLabel(kind));
         foreach (var definition in BuiltInComponentCatalog.OfKind(kind))
         {
-            if (ImGui.Selectable($"   {definition.Name}##Add{definition.Id}") && editorSession.AddComponent(definition.Id) is { } added)
+            if (ImGui.Selectable($"   {definition.DisplayName}##Add{definition.Id}") && editorSession.AddComponent(definition.Id) is { } added)
             {
                 expandedComponentId = added;
             }
@@ -107,7 +107,7 @@ internal sealed partial class ProfileEditorWindow
         using var id = ImRaii.PushId(component.Id.ToString());
 
         var status = ComponentPaintPlan.Resolve(component, BuiltInComponentCatalog.Instance, out var definition);
-        var styleName = definition?.Name ?? "Unavailable";
+        var styleName = definition?.DisplayName ?? "Unavailable";
         var label = $"{PlateComponentEditor.KindLabel(component.Kind)}: {styleName}";
 
         var visibility = component.Visible ? FontAwesomeIcon.Eye : FontAwesomeIcon.EyeSlash;
@@ -173,12 +173,12 @@ internal sealed partial class ProfileEditorWindow
         if (ComponentPaintPlan.IsKnownKind(component.Kind))
         {
             EditorWidgets.PropertyLabel("Style");
-            using var combo = ImRaii.Combo("##Style", definition?.Name ?? "Unavailable");
+            using var combo = ImRaii.Combo("##Style", definition?.DisplayName ?? "Unavailable");
             if (combo.Success)
             {
                 foreach (var candidate in BuiltInComponentCatalog.OfKind(component.Kind))
                 {
-                    if (ImGui.Selectable(candidate.Name, candidate.Id == component.DefinitionId) && candidate.Id != component.DefinitionId)
+                    if (ImGui.Selectable($"{candidate.DisplayName}##{candidate.Id}", candidate.Id == component.DefinitionId) && candidate.Id != component.DefinitionId)
                     {
                         var definitionId = candidate.Id;
                         editorSession.EditComponent(componentId, c => c.DefinitionId = definitionId, continuous: false);
@@ -213,27 +213,36 @@ internal sealed partial class ProfileEditorWindow
             }
         }
 
-        // Color: follows the theme until overridden.
-        var hasColor = component.Color is not null;
+        // Color: follows the theme until overridden. Artwork in its own colors takes no color (a stored
+        // one is kept, for switching back to a tintable style); only Opacity applies to it.
         EditorWidgets.PropertyLabel("Color");
-        if (ImGui.Checkbox("Custom##CustomColor", ref hasColor))
+        if (definition is { UsesAuthoredColor: true })
         {
-            var start = definition?.DefaultColor(profile) ?? Vector4.One;
-            editorSession.EditComponent(componentId, c => c.Color = hasColor ? start : null, continuous: false);
+            ImGui.TextDisabled("Authored colors");
+            EditorWidgets.Tooltip("This artwork keeps its own colors. Use Opacity to soften it.");
         }
-
-        EditorWidgets.Tooltip("Off: the color follows the Plate's theme.");
-        if (component.Color is { } color)
+        else
         {
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.ColorEdit4("##Color", ref color, ImGuiColorEditFlags.AlphaBar))
+            var hasColor = component.Color is not null;
+            if (ImGui.Checkbox("Custom##CustomColor", ref hasColor))
             {
-                var picked = color;
-                editorSession.EditComponent(componentId, c => c.Color = picked, continuous: true);
+                var start = definition?.DefaultColor(profile) ?? Vector4.One;
+                editorSession.EditComponent(componentId, c => c.Color = hasColor ? start : null, continuous: false);
             }
 
-            CommitComponentOnRelease();
+            EditorWidgets.Tooltip("Off: the color follows the Plate's theme.");
+            if (component.Color is { } color)
+            {
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.ColorEdit4("##Color", ref color, ImGuiColorEditFlags.AlphaBar))
+                {
+                    var picked = color;
+                    editorSession.EditComponent(componentId, c => c.Color = picked, continuous: true);
+                }
+
+                CommitComponentOnRelease();
+            }
         }
 
         var opacity = component.Opacity * 100f;

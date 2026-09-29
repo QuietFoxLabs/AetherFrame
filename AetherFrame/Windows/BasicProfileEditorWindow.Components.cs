@@ -37,7 +37,7 @@ internal sealed partial class BasicProfileEditorWindow
         var currentDefinition = current is null ? null : BuiltInComponentCatalog.Find(current.DefinitionId);
         var preview = current is null
             ? "None"
-            : status is ComponentStatus.Ready or ComponentStatus.MissingImage && currentDefinition is not null ? currentDefinition.Name : "Unavailable";
+            : status is ComponentStatus.Ready or ComponentStatus.MissingImage && currentDefinition is not null ? currentDefinition.DisplayName : "Unavailable";
 
         EditorWidgets.PropertyLabel(PlateComponentEditor.KindLabel(kind));
         using (var combo = ImRaii.Combo("##Style", preview))
@@ -56,7 +56,7 @@ internal sealed partial class BasicProfileEditorWindow
                         continue; // needs an image: Advanced only
                     }
 
-                    if (ImGui.Selectable(definition.Name, current?.DefinitionId == definition.Id) && current?.DefinitionId != definition.Id)
+                    if (ImGui.Selectable($"{definition.DisplayName}##{definition.Id}", current?.DefinitionId == definition.Id) && current?.DefinitionId != definition.Id)
                     {
                         editorSession.SetComponentSlot(kind, definition.Id);
                     }

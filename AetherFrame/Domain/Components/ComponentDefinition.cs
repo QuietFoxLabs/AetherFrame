@@ -38,6 +38,17 @@ public sealed record ComponentDefinition(
     /// other shape. Chosen at compile time, so a Plate stores only <see cref="Id"/>.</summary>
     public BuiltInArtAsset? Art { get; init; }
 
+    /// <summary>The visual family of a graphical definition ("Astral Gold"), or null for procedural ones.</summary>
+    public string? Family => Art?.Family;
+
+    /// <summary>What pickers show: the name, followed by its family for graphical definitions
+    /// ("Equator Line (Astral Gold)"), so same-named styles of different families stay distinct.</summary>
+    public string DisplayName => Family is { } family ? $"{Name} ({family})" : Name;
+
+    /// <summary>True for artwork drawn in its own colors (<see cref="ArtColorMode.AuthoredColor"/>): the
+    /// Component's color doesn't apply to it, only its opacity.</summary>
+    public bool UsesAuthoredColor => Art is { ColorMode: ArtColorMode.AuthoredColor };
+
     /// <summary>A graphical definition drawing <paramref name="art"/>, tinted from <paramref name="colorSource"/>.</summary>
     public static ComponentDefinition ForArt(string id, string description, BuiltInArtAsset art, ComponentColorSource colorSource) =>
         new(id, art.Kind, art.Name, description, ComponentShape.Art, art.Tintable ? colorSource : ComponentColorSource.White, art.DefaultOpacity) { Art = art };

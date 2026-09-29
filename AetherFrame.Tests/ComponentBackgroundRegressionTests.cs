@@ -151,7 +151,36 @@ public class ComponentBackgroundRegressionTests
         ComponentGeometry.Build(document, step.Component!, step.Definition!, step.Placement, primitives);
 
         var center = new Vector2(document.CanvasWidth, document.CanvasHeight) / 2f;
-        Assert.DoesNotContain(primitives, p => BoundsContain(p, center));
+        Assert.DoesNotContain(primitives, p => p.Kind != ComponentPrimitiveKind.Art && BoundsContain(p, center));
+
+        // Bundled artwork is one textured quad that may span the Plate (a frame designed around it),
+        // so the same guarantee is checked where it lives: the artwork is fully transparent around
+        // the texel the canvas center falls on.
+        foreach (var art in primitives.Where(p => p.Kind == ComponentPrimitiveKind.Art && BoundsContain(p, center)))
+        {
+            AssertArtIsClearAround(step.Definition!.Art!, art, center);
+        }
+    }
+
+    /// <summary>The artwork of axis-aligned art quad <paramref name="quad"/> has no visible coverage
+    /// (alpha above 2 of 255, i.e. 1%) within 10% of its size around the texel under
+    /// <paramref name="point"/>. The approved sources carry a few invisible alpha-1 specks, kept as authored.</summary>
+    private static void AssertArtIsClearAround(BuiltInArtAsset art, ComponentPrimitive quad, Vector2 point)
+    {
+        var image = Domain.Rendering.BundledArtImage.DecodePng(BuiltInArtTests.ReadResource(art.ResourceName));
+        var u = (point.X - quad.A.X) / (quad.B.X - quad.A.X);
+        var v = (point.Y - quad.A.Y) / (quad.D.Y - quad.A.Y);
+        var x0 = (int)((u - 0.1f) * image.Width);
+        var x1 = (int)((u + 0.1f) * image.Width);
+        var y0 = (int)((v - 0.1f) * image.Height);
+        var y1 = (int)((v + 0.1f) * image.Height);
+        for (var y = Math.Max(0, y0); y < Math.Min(image.Height, y1); y++)
+        {
+            for (var x = Math.Max(0, x0); x < Math.Min(image.Width, x1); x++)
+            {
+                Assert.True(image.Rgba[(((y * image.Width) + x) * 4) + 3] <= 2, $"{art.Id} has coverage at ({x}, {y}), under the canvas center");
+            }
+        }
     }
 
     /// <summary>Axis-aligned bounding box of the primitive's four corners contains <paramref name="point"/>.

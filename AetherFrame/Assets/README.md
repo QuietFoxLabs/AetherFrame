@@ -4,8 +4,8 @@ Runtime copies of built-in graphical Components, embedded into `AetherFrame.dll`
 resources (`AetherFrame.Assets.<path with dots>`, see `AetherFrame.csproj`). Nothing here is
 copied to the output folder, and nothing here is ever persisted: Plates, Templates and
 `.aetherframe` packages store only the stable definition id (`af.corner-ornament.astrolabe-pivot`,
-`af.divider.equator-line`), which the compile-time catalog maps to the logical asset id
-(`af.asset.celestial-dream.corner-ornament.astrolabe-pivot`, `af.asset.celestial-dream.divider.equator-line`)
+`af.divider.astral-gold-equator-line`...), which the compile-time catalog maps to the logical asset id
+(`af.asset.celestial-dream.corner-ornament.astrolabe-pivot`, `af.asset.astral-gold.divider.equator-line`...)
 and from there to the resource.
 
 The full-size approved sources live in the separate AetherFrameAssets repository and are never
@@ -13,17 +13,22 @@ needed at runtime or build time.
 
 ## Requirements for every runtime PNG
 
-- 8-bit RGBA, non-interlaced; the shorter side a power of two and the longer side a whole multiple
-  of it — square (512 x 512) or wide (1536 x 512) — so every halved level is exact (the only format
-  `BundledArtImage` decodes). Drawn at exactly this aspect ratio: the paint plan fits the artwork
-  inside its placement box, never stretching it.
+- 8-bit RGBA, non-interlaced, with sides divisible by every halving the level chain makes (until
+  the shorter side reaches 32 px): 512 x 512, 1536 x 512, 1536 x 864, 800 x 1280, 1152 x 384... —
+  so every level is an exact 2x2 reduction (the only format `BundledArtImage` decodes). Drawn at
+  exactly this aspect ratio: the paint plan fits the artwork inside its placement box, never
+  stretching it.
 - Real alpha transparency; no baked background or checkerboard.
-- White/greyscale when tintable (`R = G = B`); the Component color multiplies it at draw time.
-- Fully transparent texels stored white, so bilinear filtering never darkens a tint at line edges.
+- **Tintable** artwork (Celestial Dream): white/greyscale (`R = G = B`), the Component color
+  multiplies it at draw time; fully transparent texels stored white, so bilinear filtering never
+  darkens a tint at line edges.
+- **Authored color** artwork (Astral Gold): full color, drawn as authored — the Component color is
+  ignored, only Opacity applies; fully transparent texels carry the artwork's own nearby color, so
+  bilinear filtering never adds a dark or white fringe.
 - Drawn for the top-left corner (Corner Ornaments); the other corners are rotations of it.
 - Centered on the line (Dividers): the Divider's line runs through the image's vertical center.
 
-`BuiltInArtTests` checks all of this against the embedded bytes.
+`BuiltInArtTests`, `EquatorLineTests` and `AstralGoldTests` check all of this against the embedded bytes.
 
 ## Celestial Dream / Corner Ornaments / AstrolabePivot.png — 512 x 512
 
@@ -86,3 +91,50 @@ texels (alpha < 16) carry arbitrary, often black, RGB, so they count toward cove
 a texel with no other support takes the drawing's median grey. No texel with real coverage is dark,
 so tinted glow edges never pick up a dark fringe. The source's faint cool cast is dropped (the
 artwork is stored grey and takes the Component color exactly, like every tintable artwork).
+
+## Astral Gold — authored full-color family
+
+Seven full-color gold, navy and luminous blue drawings, kept as authored (never greyscaled or
+tinted). Sources: `AetherFrameAssets/source/CelestialDream/BlueGold/`, all unchanged. Each runtime
+PNG was made the same way: contain-fit into its runtime size by a Lanczos resample in float
+precision of the alpha-premultiplied color and of alpha, un-premultiplied (RGB kept), placed with
+transparent padding where noted, then the RGB of fully transparent texels filled from the nearby
+artwork (alpha-weighted averages at growing radii). Every source aspect ratio is kept.
+
+| Component (kind) | Runtime PNG (`Components/AstralGold/...`) | Size | Bytes | Runtime sha256 | Source (sha256) |
+|---|---|---|---|---|---|
+| Orbital Ring (Plate Frame) | `PlateFrames/OrbitalRing.png` | 1536 x 864 | 1,457,328 | `cb33dfe1…5dbfe` | 1672 x 941 (`0030721e…cc9504`) |
+| Crescent Cradle (Portrait Frame) | `PortraitFrames/CrescentCradle.png` | 800 x 1280 | 1,856,935 | `9fd41f24…d832cf` | 992 x 1586 (`f8f9f720…217cbc`) |
+| Falling Stardust (Portrait Overlay) | `PortraitOverlays/FallingStardust.png` | 640 x 1024 | 613,196 | `59174d5c…58cb2a` | 1086 x 1448 (`1e75097e…9982d`) |
+| Astrolabe Pivot (Corner Ornament) | `CornerOrnaments/AstrolabePivot.png` | 512 x 512 | 277,219 | `e89e508c…946534` | 1254 x 1254 (`82c61481…c691f`) |
+| Orbital Constellation Underlay (Name Backing) | `NameBackings/OrbitalConstellationUnderlay.png` | 1536 x 512 | 840,910 | `df845aea…6334d6e` | 2172 x 724 (`629864b4…403a5b`) |
+| Equator Line (Divider) | `Dividers/EquatorLine.png` | 1536 x 512 | 356,963 | `52cef713…751473` | 2172 x 724 (`69a8ae90…9614a4`) |
+| Star Pinned Underline (Section Header) | `SectionHeaders/StarPinnedUnderline.png` | 1152 x 384 | 363,980 | `f937ca13…40c` | 2172 x 724 (`399e84a3…65fd`) |
+
+**Per-image preparation.**
+- *Falling Stardust*: the 3:4 drawing across the full width, top-aligned, transparent below to the
+  portrait's 5:8, so it arches over the portrait's top.
+- *Astrolabe Pivot*: the source is drawn for the top-right corner; the runtime PNG is it turned a
+  quarter counter-clockwise (the top-left drawing the corner placement expects). Rotated, not
+  mirrored, so the top-right corner shows the source exactly as authored.
+
+**Where each is drawn.**
+- *Orbital Ring*: over the whole Plate (not the procedural frames' inset); 16:9 like the Plate.
+- *Crescent Cradle*, *Falling Stardust*: exactly over the portrait (5:8), following its rotation.
+- *Astrolabe Pivot*: a 100 px corner square (2.5x the procedural 40 px), rotated per corner.
+- *Orbital Constellation Underlay*: centered on the name and title, 1.15x the Name Backing's width
+  up to twice its height, painted behind the text.
+- *Equator Line*: centered on the Divider's line, in a band 5x the procedural Divider's height (the
+  drawing fills only ~40% of its height).
+- *Star Pinned Underline*: 2.5x the heading's height, its star medallion just before the heading
+  text and its line along the heading's bottom edge (pinned there by `Pivot`, so Scale grows it
+  around that point).
+
+**Why these sizes.** On-screen sizes at the default Scale are about the Plate (1280 x 720 logical),
+the portrait (400 x 640), a 100 px corner, a ~430 px underlay, a ~350 px divider and a 180 px
+heading underline, times `windowHeight / 720` and the Component's Scale. The Plate frame and
+portrait frame hold their detail to roughly 1.2x the Plate's reference size (sharp through a
+full-height 1440p view); the soft overlay, the 3:1 lines and the corner cover their smaller boxes
+with the same margin. Level chains cost about 4/3 of the top level: 7 MB for the Plate frame,
+5.5 MB for the portrait frame, 3.5 MB for the overlay, 4.2 MB for each 1536 x 512, 2.4 MB for the
+heading underline and 1.4 MB for the corner — each loaded only when a Plate first draws it.

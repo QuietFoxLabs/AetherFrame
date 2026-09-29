@@ -236,7 +236,7 @@ public class BuiltInArtTests
     public void NonTintableArt_KeepsItsOwnColors_OnlyOpacityApplies()
     {
         var document = ComponentDocuments.WithAnchors();
-        var art = BuiltInArtCatalog.AstrolabePivot with { Id = "af.asset.test.corner-ornament.colored", Tintable = false };
+        var art = BuiltInArtCatalog.AstrolabePivot with { Id = "af.asset.test.corner-ornament.colored", ColorMode = ArtColorMode.AuthoredColor };
         var definition = ComponentDefinition.ForArt("af.corner-ornament.test-colored", "test", art, ComponentColorSource.ThemeAccent);
         var component = new PlateComponent { Kind = PlateComponentKind.CornerOrnament, DefinitionId = definition.Id, Color = new Vector4(1f, 0f, 0f, 0.8f), Opacity = 0.5f };
         var placement = new ComponentPlacement(new ElementRect(new Vector2(0, 0), new Vector2(80, 80)), 0f, false, false);
@@ -244,8 +244,10 @@ public class BuiltInArtTests
         var output = new List<ComponentPrimitive>();
         ComponentGeometry.Build(document, component, definition, placement, output);
 
-        Assert.Equal(new Vector4(1f, 1f, 1f, 0.4f), Assert.Single(output).Color);
+        // The Component's color (hue and alpha) never applies to authored-color art: only its opacity.
+        Assert.Equal(new Vector4(1f, 1f, 1f, art.DefaultOpacity * 0.5f), Assert.Single(output).Color);
         Assert.Equal(ComponentColorSource.White, definition.ColorSource);
+        Assert.False(art.Tintable);
     }
 
     [Fact]
@@ -435,9 +437,9 @@ public class BuiltInArtTests
             Assert.Equal([(false, false), (true, false), (false, true), (true, true)], steps.Select(s => (s.Placement.MirrorX, s.Placement.MirrorY)));
         }
 
-        Assert.Equal(20, BuiltInComponentCatalog.All.Count);
+        Assert.Equal(27, BuiltInComponentCatalog.All.Count);
         Assert.Equal(18, BuiltInComponentCatalog.All.Count(d => d.Art is null));
-        Assert.Equal(3, BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Count());
+        Assert.Equal(4, BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Count());
     }
 
     [Fact]
@@ -463,7 +465,9 @@ public class BuiltInArtTests
         {
             Assert.StartsWith(BuiltInArtCatalog.ResourcePrefix, art.ResourceName);
             var bytes = ReadResource(art.ResourceName);
-            Assert.True(bytes.Length < 512 * 1024, $"{art.Id} runtime PNG is {bytes.Length} bytes");
+            // Greyscale art compresses far better than full-color art (Astral Gold's largest is ~1.8 MB).
+            var limit = art.Tintable ? 512 * 1024 : 2 * 1024 * 1024;
+            Assert.True(bytes.Length < limit, $"{art.Id} runtime PNG is {bytes.Length} bytes");
 
             var image = BundledArtImage.DecodePng(bytes);
             Assert.Equal(art.PixelWidth, image.Width);

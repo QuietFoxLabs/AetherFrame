@@ -64,8 +64,9 @@ public class EquatorLineTests
     [Fact]
     public void Catalog_AppendsEquatorLine_AfterTheProceduralDividers_ForDividersOnly()
     {
+        // Later families append after it (Astral Gold's own Equator Line is a separate definition).
         Assert.Equal(
-            [BuiltInComponentCatalog.DividerLine, BuiltInComponentCatalog.DividerDiamond, EquatorDefinition],
+            [BuiltInComponentCatalog.DividerLine, BuiltInComponentCatalog.DividerDiamond, EquatorDefinition, BuiltInComponentCatalog.DividerAstralGoldEquatorLine],
             BuiltInComponentCatalog.OfKind(PlateComponentKind.Divider).Select(d => d.Id));
         foreach (var kind in Enum.GetValues<PlateComponentKind>().Where(k => k != PlateComponentKind.Divider))
         {
@@ -75,7 +76,7 @@ public class EquatorLineTests
         Assert.Null(BuiltInComponentCatalog.Find("Equator Line"));
         Assert.Null(BuiltInComponentCatalog.Find(EquatorDefinition.ToUpperInvariant()));
         Assert.Null(BuiltInArtCatalog.Find(BuiltInArtCatalog.EquatorLine.ResourceName));
-        Assert.Equal([BuiltInArtCatalog.AstrolabePivot, BuiltInArtCatalog.EquatorLine], BuiltInArtCatalog.All);
+        Assert.Equal([BuiltInArtCatalog.AstrolabePivot, BuiltInArtCatalog.EquatorLine], BuiltInArtCatalog.All.Take(2));
     }
 
     [Fact]
@@ -446,12 +447,16 @@ public class EquatorLineTests
     [InlineData(1536, 512, true)]
     [InlineData(512, 1536, true)]
     [InlineData(64, 16, true)]
-    [InlineData(4, 4, true)]
-    [InlineData(1024, 768, false)] // 1024 isn't a whole multiple of 768
-    [InlineData(600, 200, false)] // 200 isn't a power of two
+    [InlineData(4, 4, true)] // below MinLevelSize: no halving needed
+    [InlineData(1536, 864, true)] // 16:9 (Astral Gold Plate Frame): halves exactly 4 times
+    [InlineData(800, 1280, true)] // 5:8 (Astral Gold Portrait Frame)
+    [InlineData(1152, 384, true)] // 3:1, halves exactly 3 times
+    [InlineData(1024, 768, true)] // every side divisible by the 16 its 4 halvings need
+    [InlineData(1000, 600, false)] // 600 needs 4 halvings, 1000 isn't divisible by 16
+    [InlineData(1536, 866, false)] // 866 isn't divisible by 16
     [InlineData(4096, 1024, false)] // larger than MaxSize
     [InlineData(0, 512, false)]
-    public void Decoder_AcceptsSquareAndWholeMultipleWideArt_Only(int width, int height, bool supported)
+    public void Decoder_AcceptsSizesWhoseLevelsHalveExactly_Only(int width, int height, bool supported)
     {
         Assert.Equal(supported, BundledArtImage.IsSupportedSize(width, height));
     }
@@ -465,7 +470,7 @@ public class EquatorLineTests
         Assert.Equal((12, 4), (decoded.Width, decoded.Height));
         Assert.Equal(pixels, decoded.Rgba);
 
-        Assert.Throws<InvalidDataException>(() => BundledArtImage.DecodePng(BuiltInArtTests.EncodePng(6, 4, new byte[6 * 4 * 4], 0)));
+        Assert.Throws<InvalidDataException>(() => BundledArtImage.DecodePng(BuiltInArtTests.EncodePng(65, 64, new byte[65 * 64 * 4], 0))); // 64 halves once, 65 doesn't
     }
 
     // ---- Persistence and portability ---------------------------------------------------------------

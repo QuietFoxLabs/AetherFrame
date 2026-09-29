@@ -47,34 +47,51 @@ public static class BuiltInComponentCatalog
     public const string SectionHeaderUnderline = "af.section-header.underline";
     public const string SectionHeaderTick = "af.section-header.tick";
 
+    // Astral Gold (authored full-color artwork). Family-qualified, so they never collide with the
+    // same-named Celestial Dream styles above.
+    public const string PlateFrameAstralGoldOrbitalRing = "af.plate-frame.astral-gold-orbital-ring";
+    public const string PortraitFrameAstralGoldCrescentCradle = "af.portrait-frame.astral-gold-crescent-cradle";
+    public const string PortraitOverlayAstralGoldFallingStardust = "af.portrait-overlay.astral-gold-falling-stardust";
+    public const string CornerOrnamentAstralGoldAstrolabePivot = "af.corner-ornament.astral-gold-astrolabe-pivot";
+    public const string NameBackingAstralGoldOrbitalConstellationUnderlay = "af.name-backing.astral-gold-orbital-constellation-underlay";
+    public const string DividerAstralGoldEquatorLine = "af.divider.astral-gold-equator-line";
+    public const string SectionHeaderAstralGoldStarPinnedUnderline = "af.section-header.astral-gold-star-pinned-underline";
+
     public static readonly IReadOnlyList<ComponentDefinition> All =
     [
         new(PlateFrameLine, PlateComponentKind.PlateFrame, "Line", "A thin border around the Plate.", ComponentShape.Border, ComponentColorSource.ThemeAccent, 0.85f),
         new(PlateFrameDouble, PlateComponentKind.PlateFrame, "Double Line", "A border with a fine inner line.", ComponentShape.DoubleBorder, ComponentColorSource.ThemeAccent, 0.85f),
         new(PlateFrameNotched, PlateComponentKind.PlateFrame, "Notched", "A border with cut corners.", ComponentShape.NotchedBorder, ComponentColorSource.ThemeAccent, 0.85f),
+        ComponentDefinition.ForArt(PlateFrameAstralGoldOrbitalRing, "Astral Gold: a gilded orbital frame with navy star medallions around the Plate.", BuiltInArtCatalog.AstralOrbitalRing, ComponentColorSource.White),
 
         new(PortraitFrameLine, PlateComponentKind.PortraitFrame, "Line", "A thin border around the portrait.", ComponentShape.Border, ComponentColorSource.ThemeAccent, 0.9f),
         new(PortraitFrameDouble, PlateComponentKind.PortraitFrame, "Double Line", "A portrait border with a fine inner line.", ComponentShape.DoubleBorder, ComponentColorSource.ThemeAccent, 0.9f),
         new(PortraitFrameBrackets, PlateComponentKind.PortraitFrame, "Corner Brackets", "Brackets on the portrait's corners.", ComponentShape.CornerBrackets, ComponentColorSource.ThemeAccent, 0.9f),
+        ComponentDefinition.ForArt(PortraitFrameAstralGoldCrescentCradle, "Astral Gold: a gilded frame with a crescent cradle and star crest around the portrait.", BuiltInArtCatalog.AstralCrescentCradle, ComponentColorSource.White),
 
         new(PortraitOverlayFade, PlateComponentKind.PortraitOverlay, "Bottom Fade", "Darkens the bottom of the portrait.", ComponentShape.BottomFade, ComponentColorSource.Shadow, 0.75f),
         new(PortraitOverlayVignette, PlateComponentKind.PortraitOverlay, "Vignette", "Softly darkens the portrait's edges.", ComponentShape.Vignette, ComponentColorSource.Shadow, 0.6f),
         new(PortraitOverlayImage, PlateComponentKind.PortraitOverlay, "Custom Image", "An image of your own over the portrait.", ComponentShape.Image, ComponentColorSource.White, 1f),
+        ComponentDefinition.ForArt(PortraitOverlayAstralGoldFallingStardust, "Astral Gold: golden stardust and crescents falling over the portrait's top.", BuiltInArtCatalog.AstralFallingStardust, ComponentColorSource.White),
 
         new(NameBackingBar, PlateComponentKind.NameBacking, "Bar", "A soft bar behind the name.", ComponentShape.Bar, ComponentColorSource.NameBackdrop, 0.35f),
         new(NameBackingRibbon, PlateComponentKind.NameBacking, "Ribbon", "A bar with pointed ends behind the name.", ComponentShape.Ribbon, ComponentColorSource.ThemeBackground, 0.8f),
         new(NameBackingFade, PlateComponentKind.NameBacking, "Fade", "A backing that fades out to the right.", ComponentShape.FadeBar, ComponentColorSource.NameBackdrop, 0.5f),
+        ComponentDefinition.ForArt(NameBackingAstralGoldOrbitalConstellationUnderlay, "Astral Gold: an open orbital cartouche with star medallions behind the name.", BuiltInArtCatalog.AstralOrbitalConstellationUnderlay, ComponentColorSource.White),
 
         new(CornerOrnamentBracket, PlateComponentKind.CornerOrnament, "Bracket", "An angled mark in each corner.", ComponentShape.CornerL, ComponentColorSource.ThemeAccent, 0.9f),
         new(CornerOrnamentDiamond, PlateComponentKind.CornerOrnament, "Diamond", "A small diamond in each corner.", ComponentShape.CornerDiamond, ComponentColorSource.ThemeAccent, 0.9f),
         ComponentDefinition.ForArt(CornerOrnamentAstrolabePivot, "Celestial Dream: an astrolabe's arcs and pivot star in each corner.", BuiltInArtCatalog.AstrolabePivot, ComponentColorSource.ThemeAccent),
+        ComponentDefinition.ForArt(CornerOrnamentAstralGoldAstrolabePivot, "Astral Gold: a gilded astrolabe arm with a blue pivot star in each corner.", BuiltInArtCatalog.AstralAstrolabePivot, ComponentColorSource.White),
 
         new(DividerLine, PlateComponentKind.Divider, "Line", "A rule under the name.", ComponentShape.Rule, ComponentColorSource.ThemeAccent, 0.7f),
         new(DividerDiamond, PlateComponentKind.Divider, "Diamond", "A rule with a center diamond under the name.", ComponentShape.DiamondRule, ComponentColorSource.ThemeAccent, 0.8f),
         ComponentDefinition.ForArt(DividerEquatorLine, "Celestial Dream: a glowing equator line with a compass star under the name.", BuiltInArtCatalog.EquatorLine, ComponentColorSource.ThemeAccent),
+        ComponentDefinition.ForArt(DividerAstralGoldEquatorLine, "Astral Gold: a fine gilded equator line with a blue star under the name.", BuiltInArtCatalog.AstralEquatorLine, ComponentColorSource.White),
 
         new(SectionHeaderUnderline, PlateComponentKind.SectionHeader, "Underline", "A fine line under each section heading.", ComponentShape.Underline, ComponentColorSource.ThemeAccent, 0.6f),
         new(SectionHeaderTick, PlateComponentKind.SectionHeader, "Accent Mark", "A short mark under each section heading.", ComponentShape.AccentTick, ComponentColorSource.ThemeAccent, 0.9f),
+        ComponentDefinition.ForArt(SectionHeaderAstralGoldStarPinnedUnderline, "Astral Gold: a gilded underline pinned by a star medallion under each section heading.", BuiltInArtCatalog.AstralStarPinnedUnderline, ComponentColorSource.White),
     ];
 
     /// <summary>The catalog view of the built-ins (the one <see cref="IComponentCatalog"/> in use today).</summary>

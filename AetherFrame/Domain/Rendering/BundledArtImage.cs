@@ -24,9 +24,9 @@ public sealed record ArtLevel(int Width, int Height, byte[] Rgba)
 /// <see cref="SelectLevel"/>), keeps thin lines continuous at every size from one bundled PNG.</para>
 ///
 /// <para>The decoder only accepts what the bundled art is required to be — 8-bit RGBA,
-/// non-interlaced, its shorter side a power of two and its longer side a whole multiple of it
-/// (square art, or wide/tall art such as a Divider's; every level then halves exactly) — and
-/// rejects anything else instead of guessing. It is never used for
+/// non-interlaced, and a size whose every level down to <see cref="MinLevelSize"/> halves exactly
+/// (see <see cref="IsSupportedSize"/>: square, 3:1, 16:9 or 5:8 art alike) — and rejects anything
+/// else instead of guessing. It is never used for
 /// user images (those go through Dalamud's decoders and <c>ImageSafety</c>).</para>
 /// </summary>
 public static class BundledArtImage
@@ -39,8 +39,8 @@ public static class BundledArtImage
 
     private static ReadOnlySpan<byte> Signature => [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-    /// <summary>Decodes an 8-bit RGBA, non-interlaced PNG whose shorter side is a power of two and whose
-    /// longer side is a whole multiple of it. Throws <see cref="InvalidDataException"/> otherwise.</summary>
+    /// <summary>Decodes an 8-bit RGBA, non-interlaced PNG of a supported size (<see cref="IsSupportedSize"/>).
+    /// Throws <see cref="InvalidDataException"/> otherwise.</summary>
     public static ArtLevel DecodePng(ReadOnlySpan<byte> png)
     {
         if (png.Length < Signature.Length || !png[..Signature.Length].SequenceEqual(Signature))
@@ -90,7 +90,7 @@ public static class BundledArtImage
 
                 if (!IsSupportedSize(width, height))
                 {
-                    throw new InvalidDataException("bundled art must have a power-of-two shorter side and a longer side that is a whole multiple of it");
+                    throw new InvalidDataException("bundled art must have a size whose levels halve exactly");
                 }
 
                 sawHeader = true;
@@ -155,7 +155,12 @@ public static class BundledArtImage
         return new ArtLevel(width, height, pixels);
     }
 
-    /// <summary>True for the sizes bundled art may have (see the type doc), up to <see cref="MaxSize"/>.</summary>
+    /// <summary>
+    /// True for the sizes bundled art may have, up to <see cref="MaxSize"/>: both sides divisible by
+    /// every halving <see cref="BuildLevels"/> makes (until the shorter side reaches
+    /// <see cref="MinLevelSize"/>), so every level is an exact 2x2 reduction of the one above — e.g.
+    /// 512 x 512 and 1536 x 512 (multiples of 16), 1536 x 864, 800 x 1280, 1152 x 384 (of 8).
+    /// </summary>
     public static bool IsSupportedSize(int width, int height)
     {
         if (width < 1 || height < 1 || width > MaxSize || height > MaxSize)
@@ -164,14 +169,22 @@ public static class BundledArtImage
         }
 
         var shorter = Math.Min(width, height);
-        return (shorter & (shorter - 1)) == 0 && Math.Max(width, height) % shorter == 0;
+        var step = 1;
+        while (shorter / (step * 2) >= MinLevelSize)
+        {
+            step *= 2;
+        }
+
+        return width % step == 0 && height % step == 0;
     }
 
     /// <summary>
     /// <paramref name="top"/> followed by successively halved levels, until the shorter side reaches <see cref="MinLevelSize"/>.
     /// Each texel averages its 2x2 source texels weighted by alpha (premultiplied), so soft glows keep
     /// their brightness and never pick up the color of fully transparent texels; a texel with no
-    /// coverage at all is stored as transparent white, so bilinear filtering never darkens a tint.
+    /// coverage at all keeps the average color of its fully transparent source texels — white for
+    /// tintable art (so bilinear filtering never darkens a tint), the artwork's own nearby color for
+    /// authored-color art (so its edges never pick up a foreign fringe).
     /// </summary>
     public static IReadOnlyList<ArtLevel> BuildLevels(ArtLevel top)
     {
@@ -189,6 +202,7 @@ public static class BundledArtImage
                 for (var x = 0; x < width; x++)
                 {
                     int r = 0, g = 0, b = 0, a = 0;
+                    int clearR = 0, clearG = 0, clearB = 0, clear = 0;
                     for (var dy = 0; dy < 2; dy++)
                     {
                         for (var dx = 0; dx < 2; dx++)
@@ -199,13 +213,23 @@ public static class BundledArtImage
                             g += source[s + 1] * alpha;
                             b += source[s + 2] * alpha;
                             a += alpha;
+                            if (alpha == 0)
+                            {
+                                clearR += source[s];
+                                clearG += source[s + 1];
+                                clearB += source[s + 2];
+                                clear++;
+                            }
                         }
                     }
 
                     var d = ((y * width) + x) * 4;
                     if ((a + 2) / 4 == 0)
                     {
-                        pixels[d] = pixels[d + 1] = pixels[d + 2] = 255;
+                        // Coverage rounds to zero, so at least three of the four are fully transparent.
+                        pixels[d] = (byte)((clearR + (clear / 2)) / clear);
+                        pixels[d + 1] = (byte)((clearG + (clear / 2)) / clear);
+                        pixels[d + 2] = (byte)((clearB + (clear / 2)) / clear);
                         pixels[d + 3] = 0;
                         continue;
                     }

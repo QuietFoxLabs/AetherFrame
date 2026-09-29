@@ -1,0 +1,162 @@
+[
+  {
+    "file": "CelestialSakura_PlateFrame.png",
+    "width": 1672,
+    "height": 941,
+    "mode": "RGBA",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "transparent_percent": 77.328,
+    "center_half_alpha_range": [
+      0,
+      1
+    ],
+    "artwork_bounds": [
+      0,
+      0,
+      1672,
+      941
+    ],
+    "sha256": "0c5c407d36dfd840142a5a8f58a13103f0348e0fb2daf8e5f8b8dab46af6dad9",
+    "intended_ratio": "16:9",
+    "ratio_error_percent": -0.0531
+  },
+  {
+    "file": "CelestialSakura_PortraitFrame.png",
+    "width": 992,
+    "height": 1586,
+    "mode": "RGBA",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "transparent_percent": 77.472,
+    "center_half_alpha_range": [
+      0,
+      1
+    ],
+    "artwork_bounds": [
+      0,
+      10,
+      992,
+      1586
+    ],
+    "sha256": "4278abbe91ebd11fcda78ed1670e440557cb19739794b704732667b423fa4dde",
+    "intended_ratio": "5:8",
+    "ratio_error_percent": 0.0757
+  },
+  {
+    "file": "CelestialSakura_Nameplate.png",
+    "width": 2172,
+    "height": 724,
+    "mode": "RGBA",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "transparent_percent": 58.634,
+    "center_half_alpha_range": [
+      0,
+      255
+    ],
+    "artwork_bounds": [
+      15,
+      23,
+      2158,
+      708
+    ],
+    "sha256": "57ef50f047181a5566f85838feca13c99b3d004b46694f0e7fa10c3b7f99af96"
+  },
+  {
+    "file": "CelestialSakura_Background.png",
+    "width": 1672,
+    "height": 941,
+    "mode": "RGB",
+    "alpha_range": [
+      255,
+      255
+    ],
+    "transparent_percent": 0.0,
+    "center_half_alpha_range": [
+      255,
+      255
+    ],
+    "artwork_bounds": [
+      0,
+      0,
+      1672,
+      941
+    ],
+    "sha256": "c7a939df17daad81db9786ae65d62b7ebd8f059d589a97e1c9cc2cb899bf7148",
+    "intended_ratio": "16:9",
+    "ratio_error_percent": -0.0531
+  },
+  {
+    "file": "CelestialSakura_Divider_01.png",
+    "width": 2172,
+    "height": 724,
+    "mode": "RGBA",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "transparent_percent": 83.377,
+    "center_half_alpha_range": [
+      0,
+      255
+    ],
+    "artwork_bounds": [
+      30,
+      55,
+      2141,
+      620
+    ],
+    "sha256": "099b678f1c29cdc0a4465e47857baadf582dc2534c9032bef268bfd7c94e442a"
+  },
+  {
+    "file": "CelestialSakura_Divider_02.png",
+    "width": 2172,
+    "height": 724,
+    "mode": "RGBA",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "transparent_percent": 96.029,
+    "center_half_alpha_range": [
+      0,
+      255
+    ],
+    "artwork_bounds": [
+      126,
+      174,
+      2136,
+      670
+    ],
+    "sha256": "a1798774be478f33de3fbf8edd74e14a1eebb900e7e38beecb394c031fab98f4"
+  },
+  {
+    "file": "CelestialSakura_CornerOrnament.png",
+    "width": 1254,
+    "height": 1254,
+    "mode": "RGBA",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "transparent_percent": 75.934,
+    "center_half_alpha_range": [
+      0,
+      255
+    ],
+    "artwork_bounds": [
+      0,
+      13,
+      1232,
+      1254
+    ],
+    "sha256": "e58f67f3bd596294aeafa245ed1c1c778c128724c2221459bdf2335bf928899e"
+  }
+]

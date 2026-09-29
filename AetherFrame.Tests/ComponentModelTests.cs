@@ -99,6 +99,13 @@ public class ComponentCatalogTests
         ("af.divider.equator-line", PlateComponentKind.Divider),
         ("af.section-header.underline", PlateComponentKind.SectionHeader),
         ("af.section-header.tick", PlateComponentKind.SectionHeader),
+        ("af.plate-frame.astral-gold-orbital-ring", PlateComponentKind.PlateFrame),
+        ("af.portrait-frame.astral-gold-crescent-cradle", PlateComponentKind.PortraitFrame),
+        ("af.portrait-overlay.astral-gold-falling-stardust", PlateComponentKind.PortraitOverlay),
+        ("af.corner-ornament.astral-gold-astrolabe-pivot", PlateComponentKind.CornerOrnament),
+        ("af.name-backing.astral-gold-orbital-constellation-underlay", PlateComponentKind.NameBacking),
+        ("af.divider.astral-gold-equator-line", PlateComponentKind.Divider),
+        ("af.section-header.astral-gold-star-pinned-underline", PlateComponentKind.SectionHeader),
     ];
 
     [Fact]

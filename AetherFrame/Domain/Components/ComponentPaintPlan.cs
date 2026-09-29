@@ -267,21 +267,18 @@ public static class ComponentPaintPlan
                     var divider = new ElementRect(
                         new Vector2(identity.Position.X, identity.Position.Y + identity.Size.Y + (DividerGap * unit)),
                         new Vector2(identity.Size.X, DividerHeight * unit));
-                    if (definition.Art is not null)
-                    {
-                        var grow = divider.Size.Y * (ArtSizeFactor(definition) - 1f) / 2f;
-                        divider = new ElementRect(divider.Position - new Vector2(0f, grow), divider.Size + new Vector2(0f, 2f * grow));
-                    }
-
-                    output.Add(ComponentStep(component, definition, divider, 0f, false, false));
+                    output.Add(ComponentStep(component, definition, ArtBand(divider, definition), 0f, false, false));
                     break;
 
                 case PlateComponentKind.SectionHeader:
+                    // Procedural marks use the heading's box; artwork gets its own band pinned to the
+                    // heading's start on its bottom line (see SectionHeaderArtAnchor).
                     foreach (var element in drawnElements)
                     {
-                        if (element is TextProfileElement && BasicSections.IsHeading(element.Role))
+                        if (element is TextProfileElement heading && BasicSections.IsHeading(element.Role))
                         {
-                            output.Add(ComponentStep(component, definition, new ElementRect(element.Position, element.Size), 0f, false, false));
+                            var anchor = definition.Art is not null ? SectionHeaderArtAnchor(heading, definition) : new ElementRect(element.Position, element.Size);
+                            output.Add(ComponentStep(component, definition, anchor, 0f, false, false));
                         }
                     }
 
@@ -291,9 +288,20 @@ public static class ComponentPaintPlan
 
         foreach (var (component, definition, _) in frameBand)
         {
-            var inset = PlateFrameInset * unit;
+            // Procedural frames sit inside an inset; artwork is designed around the whole Plate and
+            // carries its own margin, so it takes the full canvas.
             var canvas = CanvasRect(profile);
-            var rect = new ElementRect(canvas.Position + new Vector2(inset), Vector2.Max(Vector2.Zero, canvas.Size - new Vector2(2f * inset)));
+            ElementRect rect;
+            if (definition.Art is not null)
+            {
+                rect = ArtBand(canvas, definition);
+            }
+            else
+            {
+                var inset = PlateFrameInset * unit;
+                rect = new ElementRect(canvas.Position + new Vector2(inset), Vector2.Max(Vector2.Zero, canvas.Size - new Vector2(2f * inset)));
+            }
+
             output.Add(ComponentStep(component, definition, rect, 0f, false, false));
         }
     }
@@ -309,8 +317,47 @@ public static class ComponentPaintPlan
     {
         foreach (var (component, definition, _) in band)
         {
-            output.Add(ComponentStep(component, definition, anchor, anchorRotation, false, false));
+            output.Add(ComponentStep(component, definition, ArtBand(anchor, definition), anchorRotation, false, false));
         }
+    }
+
+    /// <summary>
+    /// A graphical definition's band: <paramref name="band"/> (its kind's standard box) grown around
+    /// its center by the artwork's <see cref="ArtWidthFactor"/> and <see cref="ArtSizeFactor"/>; the
+    /// artwork is then fitted inside it at its own aspect ratio (see <see cref="ComponentStep(PlateComponent, ComponentDefinition, ElementRect, float, bool, bool, bool)"/>).
+    /// Procedural definitions keep <paramref name="band"/> exactly.
+    /// </summary>
+    private static ElementRect ArtBand(ElementRect band, ComponentDefinition definition)
+    {
+        if (definition.Art is null)
+        {
+            return band;
+        }
+
+        var grow = new Vector2(band.Size.X * (ArtWidthFactor(definition) - 1f) / 2f, band.Size.Y * (ArtSizeFactor(definition) - 1f) / 2f);
+        return new ElementRect(band.Position - grow, band.Size + (2f * grow));
+    }
+
+    /// <summary>
+    /// Section Header artwork's box: <see cref="ArtSizeFactor"/> times the heading's height, at the
+    /// artwork's aspect ratio, with its <see cref="BuiltInArtAsset.Pivot"/> on the heading's bottom
+    /// line where the text starts (the left edge, the center or the right edge, by the heading's
+    /// alignment) — an underline with room for its ornaments, whatever the heading box's width.
+    /// </summary>
+    private static ElementRect SectionHeaderArtAnchor(TextProfileElement heading, ComponentDefinition definition)
+    {
+        var art = definition.Art!;
+        var height = heading.Size.Y * ArtSizeFactor(definition);
+        var size = new Vector2(height * art.AspectRatio, height);
+        var x = heading.Alignment switch
+        {
+            TextAlignment.Center => heading.Position.X + (heading.Size.X / 2f),
+            TextAlignment.Right => heading.Position.X + heading.Size.X,
+            _ => heading.Position.X,
+        };
+
+        var pin = new Vector2(x, heading.Position.Y + heading.Size.Y);
+        return new ElementRect(pin - (size * art.Pivot), size);
     }
 
     private static void AddCorners(List<PaintStep> output, ProfileDocument profile, PlateComponent component, ComponentDefinition definition, float unit)
@@ -367,10 +414,19 @@ public static class ComponentPaintPlan
     }
 
     /// <summary>A placement box's size relative to its kind's standard procedural box (a Corner
-    /// Ornament's <see cref="CornerSize"/>, a Divider's <see cref="DividerHeight"/>): 1 for procedural
-    /// shapes, the artwork's bounded <see cref="BuiltInArtAsset.SizeFactor"/> for bundled art.</summary>
+    /// Ornament's <see cref="CornerSize"/> square; otherwise the box's height, e.g. a Divider's
+    /// <see cref="DividerHeight"/>): 1 for procedural shapes, the artwork's bounded
+    /// <see cref="BuiltInArtAsset.SizeFactor"/> for bundled art.</summary>
     public static float ArtSizeFactor(ComponentDefinition definition) =>
-        definition.Art is { SizeFactor: var factor } && float.IsFinite(factor) ? Math.Clamp(factor, 0.25f, 4f) : 1f;
+        definition.Art is { SizeFactor: var factor } && float.IsFinite(factor) ? Math.Clamp(factor, 0.25f, MaxArtFactor) : 1f;
+
+    /// <summary>A placement box's width relative to its kind's standard box (kinds placed around a
+    /// center): 1 for procedural shapes, the artwork's bounded <see cref="BuiltInArtAsset.WidthFactor"/>.</summary>
+    public static float ArtWidthFactor(ComponentDefinition definition) =>
+        definition.Art is { WidthFactor: var factor } && float.IsFinite(factor) ? Math.Clamp(factor, 0.25f, MaxArtFactor) : 1f;
+
+    /// <summary>Largest art box factor (a sanity bound on compile-time metadata).</summary>
+    public const float MaxArtFactor = 8f;
 
     /// <summary>Applies the component's own (bounded) scale and offset to its anchored placement.</summary>
     private static PaintStep ComponentStep(PlateComponent component, ComponentDefinition definition, ElementRect anchor, float anchorRotation, bool mirrorX, bool mirrorY) =>
@@ -396,12 +452,20 @@ public static class ComponentPaintPlan
 
         var center = anchor.Position + (anchor.Size / 2f) + offset;
         var size = anchor.Size * scale;
+        var rect = new ElementRect(center - (size / 2f), size);
         if (definition.Art is { } art)
         {
             size = FitAspect(size, art.AspectRatio);
-        }
+            rect = new ElementRect(center - (size / 2f), size);
 
-        var rect = new ElementRect(center - (size / 2f), size);
+            // Artwork anchored at another point than its center (a Section Header's pinned start)
+            // scales and fits around that point, so it stays where it's pinned.
+            if (art.Pivot != new Vector2(0.5f) && IsFinite(art.Pivot))
+            {
+                var pin = anchor.Position + (anchor.Size * art.Pivot) + offset;
+                rect = new ElementRect(pin - (size * art.Pivot), size);
+            }
+        }
         var rotation = anchorRotation + PlateComponentLimits.ClampRotation(component.RotationDegrees);
 
         return new PaintStep(LayerOf(component.Kind), null, component, definition, new ComponentPlacement(rect, rotation, mirrorShape && mirrorX, mirrorShape && mirrorY));
@@ -459,6 +523,8 @@ public static class ComponentPaintPlan
         var pad = new Vector2(NameBackingPadX, NameBackingPadY) * unit;
         return new ElementRect(rect.Position - pad, rect.Size + (2f * pad));
     }
+
+    private static bool IsFinite(Vector2 value) => float.IsFinite(value.X) && float.IsFinite(value.Y);
 
     private static ElementRect CanvasRect(ProfileDocument profile) =>
         new(Vector2.Zero, new Vector2(Math.Max(0f, profile.CanvasWidth), Math.Max(0f, profile.CanvasHeight)));

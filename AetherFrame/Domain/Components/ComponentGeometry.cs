@@ -45,12 +45,12 @@ public static class ComponentGeometry
             return;
         }
 
-        var color = PlateComponentLimits.ClampColor(component.Color ?? definition.DefaultColor(profile));
+        // Artwork with its own colors ignores the Component's color entirely (a stored color is kept for
+        // a later switch back to a tintable style): white leaves the texture's colors as authored.
+        var color = definition.UsesAuthoredColor
+            ? new Vector4(1f, 1f, 1f, PlateComponentLimits.ClampOpacity(definition.DefaultAlpha))
+            : PlateComponentLimits.ClampColor(component.Color ?? definition.DefaultColor(profile));
         color.W *= PlateComponentLimits.ClampOpacity(component.Opacity);
-        if (definition.Art is { Tintable: false })
-        {
-            color = new Vector4(1f, 1f, 1f, color.W); // artwork with its own colors: only opacity applies
-        }
 
         if (color.W <= 0f)
         {
