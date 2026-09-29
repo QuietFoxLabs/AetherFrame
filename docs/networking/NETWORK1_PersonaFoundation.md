@@ -29,7 +29,7 @@ Everything lives in `AetherFrame.Personas` (net10.0, BCL plus `AetherFrame.Proto
 | `PersonaLabel` | The private label rule: trimmed, 1 to 64 UTF-16 code units, no control characters, nothing else rewritten. Never published, never logged by this assembly. **Provisional under D9a, which is unresolved** (section 7). |
 | `IPersonaKeyStore` | The seam for key custody: generate a key without holding it, commit a checked key under a slot, open a signer for one operation, open material for an export. Nothing in it deletes a key. No implementation in the product assembly. |
 | `PersonaKeyMaterial` | A private key while it is in memory: a platform key object that this type created itself, whose only public members are the public key and `CreateSigner`. Accepted only as a consistent P-256 key pair (section 4). No public constructor and no public member takes a platform key: only custody code in this assembly makes material. |
-| `PersonaSignerLease` | A borrowed signer for one operation. It signs only as its persona, and only while that persona is still the selection it was opened under; a switch revokes it (section 3, and section 7 for the owner decision this awaits). It never hands out the store's own signer. |
+| `PersonaSignerLease` | A borrowed signer for one operation. It signs only as its persona, and only while that persona is still the selection it was opened under; a switch revokes it (section 3, and section 7 for the decision this awaits, L10 in the register). It never hands out the store's own signer. |
 | `IPersonaBackupCodec` | The seam for the future `.afpersona` codec: inspect a container without a secret, write material under a secret, open a container under a secret. No implementation in the product assembly. |
 | `PersonaBackupSecret` | The player's secret as characters zeroed on disposal, printed as a placeholder. Applies no policy: K5 is open. |
 | `PersonaBackupInspection` | What inspection found: a defined status and a version coherent with it (1 or more when a version was read, 0 when the container is malformed). The constructor refuses anything else. |
@@ -44,7 +44,7 @@ Each rule is a test in `AetherFrame.Personas.Tests`.
 
 - **Several independent personas.** Each has its own slot, key and identity; the store holds one key per slot; nothing links two personas but their presence in the same list.
 - **One active persona, chosen by the player.** `Select` and `Deselect` are the only ways the selection changes. A table of every other public member of the manager, each in its succeeding and failing forms (create, a duplicate create, a failed commit, rename, list, open a signer, export, inspect, restore, a duplicate restore, an unsupported, malformed or undecodable backup, a wrong secret, a failed select), is run with and without a selection, and none of them changes it. The table is checked against the manager's public members by reflection, by full signature (so a new overload counts), and the manager is pinned to implement no interface and to have no base class but `object`, so a new way in fails the tests until it is classified. Without a selection, the answer to "sign as the active persona" is `NoActivePersona`, and nothing is chosen on the player's behalf.
-- **Switching changes only the selection, and revokes open leases.** The record list is the same objects in the same order and the store is not called. A lease opened before the switch stops signing: its signer refuses with `LeaseRevoked`, and stays revoked if the first persona is selected again. Selecting the persona that is already active is not a switch and revokes nothing. This follows NETWORK1.md, system 1: nothing signs for a persona that is not the active one. It is the interim policy; the owner decision it awaits is in section 7.
+- **Switching changes only the selection, and revokes open leases.** The record list is the same objects in the same order and the store is not called. A lease opened before the switch stops signing: its signer refuses with `LeaseRevoked`, and stays revoked if the first persona is selected again. Selecting the persona that is already active is not a switch and revokes nothing. This follows NETWORK1.md, system 1: nothing signs for a persona that is not the active one. It is the interim policy; the decision it awaits (L10 in the register) is in section 7.
 - **A lease signs only as its persona.** Its signer checks, under the manager's lock and for every signature, that the lease is open and current, that the signing input names its persona, and that the store's signer still reports that persona's key; the store's signer never leaves the lease. A test holds a signature in flight and shows that a switch waits for it and that the lease is revoked after it; another shows that disposing a lease waits for its signature and disposes the store's signer after it; a third shows that a store call waits while a store signer is being disposed. Revocation refuses signatures; it does not release the store's signer, which the caller releases by disposing the lease.
 - **Personas stay independent.** No operation associates two personas, and nothing links two records but their presence in the same list. A deliberate association, if the owner ever wants one, would be an explicit feature and never a side effect of anything here.
 - **An identity is unique, and checked before anything is committed.** A new key's identity, and a restored key's, is compared with every persona held before the store is asked to keep it. A duplicate from a store is refused with `DuplicateIdentity`; a duplicate restore reports `AlreadyPresent` and leaves the existing record, label, key and selection exactly as they were. Neither reaches the store. The check and the commit are one step under the manager's lock; a test holds one restore's commit open while a second restore of the same backup runs, and the backup is committed once.
@@ -153,13 +153,13 @@ dotnet test AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj -c Rele
 
 The Build workflow (`build.yml`) runs the suite on windows-2022 and ubuntu-24.04 after the protocol suite, on every push to master and every pull request. The plugin package check in that workflow (`validate-package`) confirms the release package still holds exactly the three plugin files, since the plugin does not reference the new assembly.
 
-The Release workflow (`release.yml`) is **not** changed. Whether the persona suite should also block a plugin release is a new question of the same kind as L9, which is unresolved (section 7).
+The Release workflow (`release.yml`) is **not** changed. Whether the persona suite should also block a plugin release is a new question of the same kind as L9, tracked in the register as L11 and unresolved (section 7).
 
-## 7. Decisions this increment needs from the owner
+## 7. Decisions this increment leaves open
 
-None of these is approved by this increment. Each is stated so it can be decided.
+None of these is approved by this increment, and none has to be decided before it merges: the plugin does not reference the assembly and nothing signs outside tests. Each is recorded in the register ([DecisionRegister.md](DecisionRegister.md)), where it is decided. Since the owner's delegation of September 29, 2026, the autopilot decides unresolved items there (ROADMAP.md, section 5), except the D3 wording below, which changes the owner's own approval.
 
-**Signer lease on a persona switch (new; not in the register yet).**
+**Signer lease on a persona switch (register L10, unresolved).**
 
 - **The question.** When the player switches personas while an operation holds a signer lease for the previous persona, may that operation still sign as the previous persona, or must it stop?
 - **What the code does now, as an interim.** The lease is revoked by any change of the active selection (select another persona, or deselect) and never revives. The operation fails with `LeaseRevoked` and must start again under the new selection.
@@ -168,7 +168,7 @@ None of these is approved by this increment. Each is stated so it can be decided
   - Let an operation finish under the persona it started with, which would need that boundary amended.
   - Refuse or defer a switch while a lease is open.
 - **What it affects.** Nothing player-facing exists yet: nothing signs outside tests. It must be decided before the preview wiring (NETWORK1.md, increment 9) lets a player start an operation that signs.
-- **Where to record it.** In the register as an unresolved item, or as part of D3's scope.
+- **Where it is recorded.** In the register as L10 (section 5), unresolved.
 
 **D9a, the persona display name (unresolved).** `PersonaLabel` implements the register's recommended option, a private local label only, so the model can be exercised. It is provisional, as the code and this document say. If D9a is decided otherwise, the label rule, `Create`'s and `RestoreBackup`'s label parameter, and `Rename` may change or go.
 
@@ -179,13 +179,13 @@ None of these is approved by this increment. Each is stated so it can be decided
 - It does not decide L6. If L6 keeps the provider in the protocol, an adapter over the manager would be needed; if it removes it, nothing here depends on it.
 - L4 (a public-only key accepted by `EcdsaPersonaSigner` until the first `Sign`) is untouched and stays open. `PersonaKeyMaterial` can never be public-only, and a signer made by its `CreateSigner` always holds the private half. But `IPersonaKeyStore.OpenSigner` returns any `IPersonaSigner`, and the manager checks only the public key it reports, so a store could still hand out a public-only signer: the lease would open and its first signature would fail. Whether the store must return material for the manager to make the signer, or the manager should probe the signer, is for the key store's design, which is where the register places L4.
 
-**L9 (the protocol suite in `release.yml`, unresolved) and a proposed persona gate.**
+**L9 (the protocol suite in `release.yml`, unresolved) and the persona gate (register L11, unresolved).**
 
 - The first version of this increment added the persona suite to `release.yml`. That would have extended an unresolved release policy without approval, so it was withdrawn; only `build.yml` runs the suite.
-- **The proposed change, for the owner to approve or refuse:** add a "Test the persona foundation" step to `release.yml` after "Test the protocol", running `dotnet test AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj --configuration Release --no-build`.
-- Approving it means a persona test failure blocks a plugin release even though the plugin does not use the assembly. Refusing it keeps release gating as it is today. The register scopes L9 to the protocol suite; the persona gate is a new question of the same kind, and L9 itself is unchanged. If the owner wants it tracked there, it needs its own register entry or an explicit widening of L9.
+- **The proposed change, to approve or refuse under L11:** add a "Test the persona foundation" step to `release.yml` after "Test the protocol", running `dotnet test AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj --configuration Release --no-build`.
+- Approving it means a persona test failure blocks a plugin release even though the plugin does not use the assembly. Refusing it keeps release gating as it is today. The register scopes L9 to the protocol suite; the persona gate is a new question of the same kind, and L9 itself is unchanged. It is tracked as its own register entry, L11, and L9 is not widened.
 
-**D3's wording.** The owner's D3 instruction to this increment included a point that the register's approved text does not quote: distinct personas remain independent unless the user deliberately associates them. The model enforces it: no operation associates two personas. The register's approved text is left exactly as approved; whether to add the clause there is the owner's call.
+**D3's wording.** The owner's D3 instruction to this increment included a point that the register's approved text does not quote: distinct personas remain independent unless the user deliberately associates them. The model enforces it: no operation associates two personas. The register now records the clause under D3 as wording the approved text does not quote, and leaves the approved text exactly as approved. Adding the clause to it changes the owner's own approval, so only the owner can do that.
 
 **Before any real key exists.** Every row of the register's G1 table other than the approved D2 and D3 must be approved: the D2 details, D9b, N3, N5, L6, K1, K2, K3, K6, K7, P1 and P2, plus K8 and K9 if persona features are pursued under Wine, Proton or macOS. The D2 details, with K5, also gate any `.afpersona` file written or restored outside tests ([DecisionRegister.md](DecisionRegister.md), section 1).
 
@@ -204,7 +204,7 @@ An independent security audit of the first version found the multiple-persona ar
 | A restore proceeded on anything but `UnsupportedVersion` or `Malformed`, including an undefined status, and failed on a null inspection | Explicit, coherent `Supported` required; incoherent inspections refused before the secret is used; the inspection type refuses incoherent values |
 | The bytes inspected and the bytes opened could differ if the caller's buffer changed | One private copy, inspected and opened, zeroed afterwards |
 | A lease opened for one persona kept signing after a switch, contrary to NETWORK1.md system 1 | Revoked on switch (interim, section 7); the store's signer is never exposed |
-| `release.yml` gated releases on the persona suite while L9 is unresolved | Withdrawn; presented for approval in section 7 |
+| `release.yml` gated releases on the persona suite while L9 is unresolved | Withdrawn; tracked as L11 (section 7) |
 | Labels, L6 and L9 were not marked as unresolved where the increment touches them | Section 7 |
 
 ### The review of the corrections (2026-09-29)

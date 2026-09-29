@@ -11,7 +11,8 @@ namespace AetherFrame.Personas;
 /// signer refuses with <see cref="PersonaError.LeaseRevoked"/>, even if the persona is selected
 /// again later, and the operation must open a new lease. That is the interim, fail-closed policy
 /// that follows NETWORK1.md's rule that nothing signs for a persona that is not the active one; the
-/// owner decision it awaits is recorded in docs/networking/NETWORK1_PersonaFoundation.md, section 7.
+/// decision it awaits is L10 in the decision register, described in
+/// docs/networking/NETWORK1_PersonaFoundation.md, section 7.
 /// <para>
 /// The store's own signer is never handed out: <see cref="Signer"/> is a guard that checks, under
 /// the manager's lock and for every signature, that the lease is open and current, that the input

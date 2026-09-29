@@ -40,7 +40,8 @@ public enum PersonaError
     /// A signer lease was used after the active selection changed (another persona selected, or the
     /// persona deselected): the lease no longer signs, and a new one must be opened for the persona
     /// that is active now. This is the interim, fail-closed policy; see
-    /// docs/networking/NETWORK1_PersonaFoundation.md, section 7, for the owner decision it awaits.
+    /// docs/networking/NETWORK1_PersonaFoundation.md, section 7, for the decision it awaits (L10 in
+    /// the decision register).
     /// </summary>
     LeaseRevoked,
 }
