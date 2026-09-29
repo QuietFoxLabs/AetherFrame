@@ -73,11 +73,15 @@ public class RecoveryCopyFaultTests
 
         var thrown = Assert.Throws<IOException>(() => new SystemFileStore(copies.Create).CopyFile(source, destination));
 
-        Assert.Same(Assert.Single(copies.Faults), thrown);
+        var fault = Assert.Single(copies.Faults);
+        Assert.True(ReferenceEquals(fault, thrown) || ReferenceEquals(fault, thrown.InnerException), thrown.ToString());
         Assert.InRange(Assert.Single(copies.PartialLengths), 1, original.Length - 1);
         var temporary = Assert.Single(copies.CreatedPaths);
         Assert.Equal(Path.GetDirectoryName(destination), Path.GetDirectoryName(temporary));
-        Assert.Matches($@"^\.{Regex.Escape(Path.GetFileName(destination))}\.[0-9a-f]{{32}}\.tmp$", Path.GetFileName(temporary));
+        Assert.Matches($@"^\.{Regex.Escape(Path.GetFileName(destination))}\.[0-9A-Fa-f-]{{32,36}}\.tmp$", Path.GetFileName(temporary));
+
+        // What a crash at that moment would have left: the partial copy under its temporary name only.
+        Assert.DoesNotContain(destination, Assert.Single(copies.NamesAtFault));
         Assert.False(File.Exists(destination));
         Assert.Empty(FilesIn(Path.GetDirectoryName(destination)!));
         Assert.Equal(original, File.ReadAllBytes(source));
@@ -136,10 +140,67 @@ public class RecoveryCopyFaultTests
 
         Assert.Throws<IOException>(() => new SystemFileStore(copies.Create).CopyFile(source, destination));
 
+        // Refused before anything is copied (see DestinationAppearingDuringTheCopy_... for later).
+        Assert.Empty(copies.CreatedPaths);
         Assert.Equal(kept, File.ReadAllBytes(destination));
         Assert.Equal(keptModified, File.GetLastWriteTimeUtc(destination));
         Assert.Equal([destination], FilesIn(Path.GetDirectoryName(destination)!));
         Assert.All(copies.CreatedPaths, path => Assert.False(File.Exists(path), $"Left behind: {path}"));
+    }
+
+    /// <summary>
+    /// A file that takes the copy's name while the copy is being written (another program, or a
+    /// copy of the same file in the same millisecond) is never replaced by the copy's rename, and
+    /// never deleted by a failed copy's cleanup.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DestinationAppearingDuringTheCopy_IsNeverReplacedOrRemoved(bool diskFull)
+    {
+        using var directory = new TempDirectory();
+        var (source, destination) = SeedSource(directory, NotText());
+        byte[] appeared = [.. "appeared meanwhile "u8, 0xFF];
+        var appearedModified = new DateTime(2022, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        var copies = new DiskFullCopies { FailAfterBytes = diskFull ? 100_000 : null };
+        copies.DuringWrite = () =>
+        {
+            if (!File.Exists(destination))
+            {
+                File.WriteAllBytes(destination, appeared);
+                File.SetLastWriteTimeUtc(destination, appearedModified);
+            }
+        };
+
+        Assert.Throws<IOException>(() => new SystemFileStore(copies.Create).CopyFile(source, destination));
+
+        Assert.NotEmpty(copies.CreatedPaths);
+        Assert.Equal(appeared, File.ReadAllBytes(destination));
+        Assert.Equal(appearedModified, File.GetLastWriteTimeUtc(destination));
+        Assert.Equal([destination], FilesIn(Path.GetDirectoryName(destination)!));
+    }
+
+    /// <summary>A full disk often shows only when the written data is flushed, or when the copy
+    /// can't even be created: either way nothing is left, and the source is untouched.</summary>
+    [Theory]
+    [InlineData("flush")]
+    [InlineData("create")]
+    public void CopyFailingOutsideItsWrites_LeavesNothingBehind(string where)
+    {
+        using var directory = new TempDirectory();
+        var original = NotText();
+        var (source, destination) = SeedSource(directory, original);
+        var copies = new DiskFullCopies { FailOnDiskFlush = where == "flush" };
+        Func<string, FileStream> create = where == "create"
+            ? _ => throw new IOException("There is not enough space on the disk.", unchecked((int)0x80070070))
+            : copies.Create;
+
+        Assert.Throws<IOException>(() => new SystemFileStore(create).CopyFile(source, destination));
+
+        Assert.False(File.Exists(destination));
+        Assert.Empty(FilesIn(Path.GetDirectoryName(destination)!));
+        Assert.Equal(original, File.ReadAllBytes(source));
+        Assert.Equal(SourceModified, File.GetLastWriteTimeUtc(source));
     }
 
     [Theory]
@@ -208,10 +269,16 @@ public class RecoveryCopyFaultTests
         ? library.SavePlateDocumentAsync(library.OpenDocumentForEditing(plateId))
         : library.RenamePlateAsync(plateId, "Renamed");
 
+    /// <summary>
+    /// At least <paramref name="attempts"/> copies failed partway, each with part of the file on
+    /// disk; and at each failure, what a crash would have left in Recovery was only temporary files:
+    /// never a partial file under a copy's own name, which the Libraries would take for a kept copy.
+    /// </summary>
     private static void AssertFailedPartway(DiskFullCopies copies, int attempts, int fileLength)
     {
-        Assert.Equal(attempts, copies.PartialLengths.Count);
+        Assert.True(copies.PartialLengths.Count >= attempts, $"{copies.PartialLengths.Count} copies failed partway, expected at least {attempts}.");
         Assert.All(copies.PartialLengths, length => Assert.InRange(length, 1, fileLength - 1));
+        Assert.All(copies.NamesAtFault.SelectMany(names => names), name => Assert.Matches(@"^\..*\.tmp$", Path.GetFileName(name)));
     }
 
     /// <summary>Nothing under Recovery, and none of the files a copy was written to left anywhere.</summary>
@@ -352,7 +419,11 @@ public class RecoveryCopyFaultTests
             await seeded.CreatePlateAsync(PlateStartingLayout.Blank, null, $"Plate {i}");
         }
 
+        // The player's own order, which a rebuild (newest first) wouldn't give.
+        var created = fixture.ReadLibraryOrder();
+        await seeded.MovePlateAsync(created[2], created[0], placeAfter: false);
         var order = fixture.ReadLibraryOrder();
+        Assert.NotEqual(created, order);
         var text = File.ReadAllText(fixture.Paths.LibraryFile);
         var at = text.IndexOf('{', StringComparison.Ordinal) + 1;
         byte[] damaged = [.. Encoding.UTF8.GetBytes(text[..at]), .. "\"Note\": \"x"u8, 0xFF, .. "y\","u8, .. Encoding.UTF8.GetBytes(text[at..])];
@@ -446,11 +517,26 @@ public class RecoveryCopyFaultTests
 
         AssertFailedPartway(copies, attempts: 1, damaged.Length);
 
+        // The game dies at the fault instead: every file a copy had created then stays, holding the
+        // partial bytes it held at that moment.
+        foreach (var (names, length) in copies.NamesAtFault.Zip(copies.PartialLengths))
+        {
+            foreach (var left in names)
+            {
+                File.WriteAllBytes(left, damaged[..(int)length]);
+            }
+        }
+
         copies.FailAfterBytes = null;
         var next = await fixture.LoadAsync();
         await next.SavePlateDocumentAsync(next.OpenDocumentForEditing(plateId));
 
-        AssertKeptExactly(fixture.Paths, fixture.Clock, path, damaged);
+        // The copy under the Recovery name is complete and exact; a crash's leftover is only ever a
+        // temporary file beside it.
+        var name = string.Create(CultureInfo.InvariantCulture, $"{Path.GetFileNameWithoutExtension(path)}.damaged-{fixture.Clock.Now:yyyyMMdd-HHmmss-fff}{Path.GetExtension(path)}");
+        var kept = Path.Combine(fixture.Paths.RecoveryDirectory, name);
+        Assert.Equal(damaged, File.ReadAllBytes(kept));
+        Assert.All(FilesIn(fixture.Paths.RecoveryDirectory).Where(f => f != kept), f => Assert.Matches(@"^\..*\.tmp$", Path.GetFileName(f)));
         Assert.NotEqual(damaged, File.ReadAllBytes(path));
         Assert.Equal(PlateStatus.Ready, (await fixture.LoadAsync()).FindPlate(plateId)!.Status);
     }
@@ -483,6 +569,12 @@ internal sealed class DiskFullCopies
 
     /// <summary>The failures thrown, in order.</summary>
     internal List<IOException> Faults { get; } = new();
+
+    /// <summary>At each failure, every file in the copy's folder: what a crash at that moment would leave.</summary>
+    internal List<string[]> NamesAtFault { get; } = new();
+
+    /// <summary>When true, a copy's flush to disk fails with the disk-full error (the data written until then stays).</summary>
+    internal bool FailOnDiskFlush { get; set; }
 
     internal List<DiskFlush> DiskFlushes { get; } = new();
 
@@ -530,9 +622,15 @@ internal sealed class DiskFullAfterStream : FileStream
         // Asked through this handle: on Windows a file held with no sharing may report a stale
         // size by name.
         copies.PartialLengths.Add(Length);
+        throw DiskFull();
+    }
+
+    private IOException DiskFull()
+    {
+        copies.NamesAtFault.Add(Directory.GetFiles(Path.GetDirectoryName(Name)!));
         var full = new IOException("There is not enough space on the disk.", unchecked((int)0x80070070));
         copies.Faults.Add(full);
-        throw full;
+        return full;
     }
 
     // Every other way of writing goes through the overload above, so all of them share its limit.
@@ -566,6 +664,11 @@ internal sealed class DiskFullAfterStream : FileStream
         if (flushToDisk)
         {
             copies.DiskFlushes.Add(new DiskFlush(written, copies.Destination is { } destination && File.Exists(destination)));
+            if (copies.FailOnDiskFlush)
+            {
+                base.Flush(flushToDisk: false);
+                throw DiskFull();
+            }
         }
 
         base.Flush(flushToDisk);
