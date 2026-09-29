@@ -387,9 +387,13 @@ public class BindingAndIndexEncodingTests
         Assert.Equal(original, File.ReadAllBytes(path));
         Assert.Equal(plates[1], library.GetActivePlateId(Characters.Alice.ContentId));
 
-        // A new Plate for her is still created, but not linked while her file can't be kept.
-        await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice, "Fourth"));
-        Assert.Equal(4, library.GetOrderedPlates().Count);
+        // A new Plate or a copy for her is still made, but not linked while her file can't be kept,
+        // and the player is told why, as Set Active tells them.
+        var created = await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice, "Fourth"));
+        Assert.EndsWith(PlateLibraryService.UnpreservedDamagedFileMessage, created.Message, StringComparison.Ordinal);
+        var duplicated = await Assert.ThrowsAsync<PlateLibraryException>(() => library.DuplicatePlateAsync(plates[0]));
+        Assert.EndsWith(PlateLibraryService.UnpreservedDamagedFileMessage, duplicated.Message, StringComparison.Ordinal);
+        Assert.Equal(5, library.GetOrderedPlates().Count);
         Assert.Equal(plates, library.GetBinding(Characters.Alice.ContentId)!.PlateIds);
         Assert.Equal(original, File.ReadAllBytes(path));
 

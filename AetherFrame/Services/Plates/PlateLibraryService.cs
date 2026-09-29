@@ -772,7 +772,7 @@ internal sealed class PlateLibraryService
                     // changed); the Plate itself is on disk and listed.
                     becameActive = false;
                     log.Error(ex, $"AetherFrame created Plate {plateId} but could not associate it with a character.");
-                    linkFailure = "The Plate was created, but it couldn't be linked to your character.";
+                    linkFailure = "The Plate was created, but it couldn't be linked to your character." + RecoveryAdvice(ex);
                 }
             }
             else if (refusal == BindingRefusal.Unavailable)
@@ -851,6 +851,7 @@ internal sealed class PlateLibraryService
             }
 
             var failedAssociations = 0;
+            var advice = string.Empty;
             foreach (var binding in associated)
             {
                 try
@@ -860,6 +861,7 @@ internal sealed class PlateLibraryService
                 catch (Exception ex)
                 {
                     failedAssociations++;
+                    advice = advice.Length > 0 ? advice : RecoveryAdvice(ex);
                     log.Error(ex, $"AetherFrame duplicated Plate {sourcePlateId} but could not associate the copy with a character.");
                 }
             }
@@ -880,7 +882,7 @@ internal sealed class PlateLibraryService
             if (failedAssociations > 0)
             {
                 // The copy exists and is intact; only its character links are incomplete.
-                throw new PlateLibraryException("The copy was made, but it couldn't be linked to every character that uses the original.");
+                throw new PlateLibraryException("The copy was made, but it couldn't be linked to every character that uses the original." + advice);
             }
 
             return newId;
@@ -1502,6 +1504,14 @@ internal sealed class PlateLibraryService
             return binding;
         }
     }
+
+    /// <summary>
+    /// What to add to a "couldn't be linked" message when the binding's write was refused because
+    /// its file couldn't be kept in Recovery first (see <see cref="PreserveBeforeOverwrite"/>): that
+    /// refusal says what to check, so the player isn't left with only "couldn't be linked".
+    /// </summary>
+    private static string RecoveryAdvice(Exception failure) =>
+        failure is PlateLibraryException { Message: UnpreservedDamagedFileMessage } ? " " + UnpreservedDamagedFileMessage : string.Empty;
 
     /// <summary>The player-facing reason <see cref="PrepareBindingForWrite"/> refused a binding.</summary>
     private static string DescribeRefusal(BindingRefusal refusal) => refusal switch
