@@ -1,6 +1,6 @@
 # AetherFrame
 
-[![Build and test](https://github.com/richhiiee/AetherFrame/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/richhiiee/AetherFrame/actions/workflows/build.yml)
+[![Build and test](https://github.com/QuietFoxLabs/AetherFrame/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/QuietFoxLabs/AetherFrame/actions/workflows/build.yml)
 
 **Enhanced character Plates for Final Fantasy XIV.**
 
@@ -162,7 +162,7 @@ Sharing Plates with other players is a possible future direction, not a current 
 
 AetherFrame is not in the Dalamud plugin installer yet.
 
-To test it now, download a test build from [GitHub Releases](https://github.com/richhiiee/AetherFrame/releases), starting with 0.1.5, and load it as a Dalamud dev plugin. The [tester guide](docs/Testing.md) has the steps, what to look at, and how to report problems. Test builds from GitHub don't update themselves, so check the Releases page for newer ones.
+To test it now, download a test build from [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases), starting with 0.1.5, and load it as a Dalamud dev plugin. The [tester guide](docs/Testing.md) has the steps, what to look at, and how to report problems. Test builds from GitHub don't update themselves, so check the Releases page for newer ones.
 
 The plan is a public custom Dalamud repository hosted from GitHub: one URL to add under **Custom Plugin Repositories** in `/xlsettings`, after which AetherFrame installs and updates from `/xlplugins` like any other plugin. The URL will be announced here when the first release is published there. The releases themselves stay on GitHub Releases, and the plugin still never connects to anything: Dalamud does the downloading. Submission to the official Dalamud repository is welcome but not required for this.
 
@@ -258,10 +258,10 @@ The plugin icon was generated with ChatGPT and then refined, and the bundled Cel
 
 ## Support and feedback
 
-AetherFrame is still taking shape, and feedback is very welcome on the [issue tracker](https://github.com/richhiiee/AetherFrame/issues):
+AetherFrame is still taking shape, and feedback is very welcome on the [issue tracker](https://github.com/QuietFoxLabs/AetherFrame/issues):
 
-- **Something broken?** Open a [bug report](https://github.com/richhiiee/AetherFrame/issues/new?template=bug_report.yml). Include what `/af version` prints.
-- **An idea?** Open a [feature request](https://github.com/richhiiee/AetherFrame/issues/new?template=feature_request.yml).
+- **Something broken?** Open a [bug report](https://github.com/QuietFoxLabs/AetherFrame/issues/new?template=bug_report.yml). Include what `/af version` prints.
+- **An idea?** Open a [feature request](https://github.com/QuietFoxLabs/AetherFrame/issues/new?template=feature_request.yml).
 - **Testing a build?** See the [tester guide](docs/Testing.md).
 
 Issues are public, so leave out character names and anything else you'd rather keep to yourself.
@@ -274,7 +274,7 @@ Bundled fonts are licensed separately under the SIL Open Font License 1.1. See `
 
 ## Links
 
-- Repository: <https://github.com/richhiiee/AetherFrame>
+- Repository: <https://github.com/QuietFoxLabs/AetherFrame>
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Tester guide: [docs/Testing.md](docs/Testing.md)
 - Releasing and Dalamud submission: [docs/Releasing.md](docs/Releasing.md)

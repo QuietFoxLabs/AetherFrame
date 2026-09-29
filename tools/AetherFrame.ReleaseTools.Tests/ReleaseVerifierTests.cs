@@ -22,7 +22,7 @@ public class ReleaseVerifierTests
         TestPackages.AllPassed(checks);
         Assert.NotNull(verified);
         Assert.Equal(TestReleases.ReleaseId, verified!.Release.Id);
-        Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/tag/v0.1.6", verified.Release.HtmlUrl);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6", verified.Release.HtmlUrl);
         Assert.Equal(TestPackages.Commit, verified.Commit);
         Assert.Equal(DateTimeOffset.Parse("2026-09-28T12:00:00Z"), verified.PublishedAt);
         Assert.Equal(Checksums.Sha256Hex(Path.Combine(release, "AetherFrame-0.1.6.zip")), verified.Package.Package.Sha256);

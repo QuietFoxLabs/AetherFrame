@@ -84,7 +84,7 @@ Every new plugin is submitted to `testing/live`, so this is the list for the fir
 
 | Requirement | AetherFrame |
 |---|---|
-| Public Git repository that clones over HTTP without authentication | Done. `richhiiee/AetherFrame` is public |
+| Public Git repository that clones over HTTP without authentication | Done. `QuietFoxLabs/AetherFrame` is public |
 | Latest `Dalamud.NET.Sdk` | Done. `Dalamud.NET.Sdk/15.0.0`, the newest on NuGet |
 | `.csproj` and `packages.lock.json` committed after a Release build | Done. `dotnet restore --locked-mode` passes |
 | Manifest `Name`, `Author`, `Punchline`, `Description` | Done, set in `AetherFrame.csproj` and written by DalamudPackager |
@@ -152,8 +152,8 @@ AetherFrame lets players design character Plates: an Adventure Plate-style Basic
 Advanced Editor, a local My Plates library, and a Plate Viewer (/af view). Everything is local:
 no networking, no account, no data collection. Plates are shared only as files the player exports.
 
-Source: https://github.com/richhiiee/AetherFrame
-Changelog: https://github.com/richhiiee/AetherFrame/blob/master/CHANGELOG.md
+Source: https://github.com/QuietFoxLabs/AetherFrame
+Changelog: https://github.com/QuietFoxLabs/AetherFrame/blob/master/CHANGELOG.md
 
 ## AI usage disclosure
 

@@ -3,7 +3,7 @@
 Thanks for helping test AetherFrame. This page covers how to install a test build, what to look at, and how to report what you find.
 
 > [!IMPORTANT]
-> **Current status:** AetherFrame is not in the Dalamud plugin installer yet. Test builds are published as [GitHub Releases](https://github.com/richhiiee/AetherFrame/releases), starting with 0.1.5, the first tester build. Install one as a dev plugin: see [From a GitHub Release ZIP](#from-a-github-release-zip-dev-plugin). These builds **do not update themselves**.
+> **Current status:** AetherFrame is not in the Dalamud plugin installer yet. Test builds are published as [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases), starting with 0.1.5, the first tester build. Install one as a dev plugin: see [From a GitHub Release ZIP](#from-a-github-release-zip-dev-plugin). These builds **do not update themselves**.
 
 AetherFrame is an early alpha. Expect rough edges, and keep a backup of anything you care about (see [Before you start](#before-you-start)).
 
@@ -13,7 +13,7 @@ There are two ways a test build can reach you. Right now only the GitHub Release
 
 ### From a GitHub Release ZIP (dev plugin)
 
-This is the current route. Test builds are attached to [GitHub Releases](https://github.com/richhiiee/AetherFrame/releases) and load through Dalamud's dev plugin loader. They **do not update themselves**: check the Releases page for newer builds.
+This is the current route. Test builds are attached to [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases) and load through Dalamud's dev plugin loader. They **do not update themselves**: check the Releases page for newer builds.
 
 1. Download `AetherFrame-<version>.zip` from the release.
 2. Optional: check it against the SHA-256 in the release notes. In PowerShell: `Get-FileHash .\AetherFrame-<version>.zip`.
@@ -61,7 +61,7 @@ Everything is useful, but these areas matter most right now:
 
 ## Reporting a problem
 
-Open a [bug report](https://github.com/richhiiee/AetherFrame/issues/new?template=bug_report.yml). The form asks for:
+Open a [bug report](https://github.com/QuietFoxLabs/AetherFrame/issues/new?template=bug_report.yml). The form asks for:
 
 - **Your version.** Type `/af version` in game and copy what it prints, for example `AetherFrame 0.1.6 (build 1a2b3c4)`.
 - **What happened, and how to make it happen again.**
@@ -69,7 +69,7 @@ Open a [bug report](https://github.com/richhiiee/AetherFrame/issues/new?template
 
 Issues are public. Before posting, remove anything you don't want to share: character and Free Company names in screenshots, and your Windows user name, which can appear in file paths in the log. A `.aetherframe` export helps with rendering bugs, but it contains that Plate's text and images, so only attach one you're happy to make public.
 
-Ideas are welcome too, as a [feature request](https://github.com/richhiiee/AetherFrame/issues/new?template=feature_request.yml).
+Ideas are welcome too, as a [feature request](https://github.com/QuietFoxLabs/AetherFrame/issues/new?template=feature_request.yml).
 
 ## Known limitations
 

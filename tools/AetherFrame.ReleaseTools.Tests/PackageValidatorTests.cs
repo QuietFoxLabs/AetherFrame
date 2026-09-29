@@ -33,7 +33,7 @@ public class PackageValidatorTests
         Assert.Equal(new ProductVersion(0, 1, 5), report!.Version);
         Assert.Equal(TestPackages.Commit, report.Commit);
         Assert.Equal("### Fixed\n\n- A thing.", report.ChangelogSection);
-        Assert.Equal("https://github.com/richhiiee/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", report.DownloadUrl);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.5/AetherFrame-0.1.5.zip", report.DownloadUrl);
         Assert.Equal("AetherFrame-0.1.5.zip", report.Package.FileName);
         Assert.Equal(Checksums.Sha256Hex(package), report.Package.Sha256);
         Assert.Equal(new[] { "AetherFrame.deps.json", "AetherFrame.dll", "AetherFrame.json" }, report.Package.Entries.Select(e => e.Name).OrderBy(n => n, StringComparer.Ordinal));
@@ -603,7 +603,7 @@ public class PackageValidatorTests
             Configuration = TestPackages.Configuration(),
         });
 
-        Assert.Contains("is 'https://github.com/someone-else/AetherFrame', expected 'https://github.com/richhiiee/AetherFrame'", TestPackages.Failure(checks, "manifest RepoUrl"));
+        Assert.Contains("is 'https://github.com/someone-else/AetherFrame', expected 'https://github.com/QuietFoxLabs/AetherFrame'", TestPackages.Failure(checks, "manifest RepoUrl"));
     }
 
     [Fact]

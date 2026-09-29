@@ -6,14 +6,14 @@ namespace AetherFrame.ReleaseTools.Tests;
 public class PublicationTargetTests
 {
     [Theory]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/pluginmaster.json")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/plugin-repository/pluginmaster.json")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json")]
     public void BothRawAddressForms_NameTheBranch(string url)
     {
         var target = PublicationTarget.FromConfiguration(TestPackages.Configuration(TestPackages.ConfigJson(pluginMasterUrl: url)));
 
         Assert.Equal("plugin-repository", target.Branch);
-        Assert.Equal("richhiiee", target.Owner);
+        Assert.Equal("QuietFoxLabs", target.Owner);
         Assert.Equal("AetherFrame", target.Repository);
         Assert.Equal(url, target.Url);
     }
@@ -21,20 +21,20 @@ public class PublicationTargetTests
     [Theory]
     // Another repository or owner: the workflow's token could not write there, and must not try.
     [InlineData("https://raw.githubusercontent.com/someone-else/AetherFrame/plugin-repository/pluginmaster.json", "the root of a branch in the source repository")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrameAssets/plugin-repository/pluginmaster.json", "the root of a branch in the source repository")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrameAssets/plugin-repository/pluginmaster.json", "the root of a branch in the source repository")]
     // A branch that holds source code.
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/master/pluginmaster.json", "never holds source code")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/main/pluginmaster.json", "never holds source code")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/master/pluginmaster.json", "never holds source code")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/main/pluginmaster.json", "never holds source code")]
     // Not a branch root, not the file the workflow writes, or not a branch at all.
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/repo/pluginmaster.json", "the root of a branch")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin-repository/repo.json", "the root of a branch")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/tags/plugin-repository/pluginmaster.json", "the root of a branch")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/pluginmaster.json", "never holds source code")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/plugin-repository/repo/pluginmaster.json", "the root of a branch")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/plugin-repository/repo.json", "the root of a branch")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/tags/plugin-repository/pluginmaster.json", "the root of a branch")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/pluginmaster.json", "never holds source code")]
     // A name that git, a URL and a shell might read differently.
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/Plugin_Repository/pluginmaster.json", "lowercase words joined by hyphens")]
-    [InlineData("https://raw.githubusercontent.com/richhiiee/AetherFrame/plugin--repository/pluginmaster.json", "lowercase words joined by hyphens")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/Plugin_Repository/pluginmaster.json", "lowercase words joined by hyphens")]
+    [InlineData("https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/plugin--repository/pluginmaster.json", "lowercase words joined by hyphens")]
     // Another host: the workflow has no way to publish there.
-    [InlineData("https://richhiiee.github.io/AetherFrame/pluginmaster.json", "not served from raw.githubusercontent.com")]
+    [InlineData("https://quietfoxlabs.github.io/AetherFrame/pluginmaster.json", "not served from raw.githubusercontent.com")]
     public void OtherAddresses_AreRefused(string url, string reason)
     {
         var config = TestPackages.Configuration(TestPackages.ConfigJson(pluginMasterUrl: url));

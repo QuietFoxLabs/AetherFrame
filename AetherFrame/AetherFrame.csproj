@@ -12,7 +12,7 @@
          Dalamud AI Usage Policy requires in the plugin description
          (https://dalamud.dev/plugin-publishing/ai-policy). -->
     <Description>Design character Plates: start from an Adventure Plate-style layout in the Basic Editor, or build freeform layouts with text, images and decorative Components in the Advanced Editor. The plugin icon is AI-generated, and the bundled Celestial Dream and Celestial Sakura Components use AI-assisted artwork.</Description>
-    <RepoUrl>https://github.com/richhiiee/AetherFrame</RepoUrl>
+    <RepoUrl>https://github.com/QuietFoxLabs/AetherFrame</RepoUrl>
     <Tags>aetherframe;plates;adventure-plate;profile;customization</Tags>
     <!-- Approved icon, served from the AetherFrameAssets repo
          (https://github.com/richhiiee/AetherFrameAssets), which DalamudPackager's manifest must be
