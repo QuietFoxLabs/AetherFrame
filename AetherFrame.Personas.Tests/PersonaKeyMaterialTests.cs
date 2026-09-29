@@ -37,27 +37,51 @@ public class PersonaKeyMaterialTests
     [InlineData(0xFF)]
     public void Constructor_NeverHoldsAScalarOutOfRange(byte fill)
     {
-        // All-zero is 0; all-0xFF is above the group order. The platform may refuse to import such
-        // a key itself; if it does not, the material must. Either way no material is ever made.
+        // All-zero is 0; all-0xFF is above the group order. Platforms differ on such a key: one
+        // refuses the import (Windows 11 CNG, OpenSSL), another imports it and hands back the scalar
+        // as given, and another imports it and hands back a reduced scalar (Windows Server 2022 CNG,
+        // for the value above the order). Whatever the platform does, material is either refused or
+        // holds a scalar in range; it never holds the value that was given.
         using var source = SyntheticKeys.Create();
         var parameters = source.ExportParameters(includePrivateParameters: false);
         parameters.D = new byte[32];
         Array.Fill(parameters.D, fill);
-        Exception? refusal = null;
+        ECDsa key;
         try
         {
-            var key = ECDsa.Create(parameters);
-            refusal = Assert.Throws<PersonaException>(() => new PersonaKeyMaterial(key));
+            key = ECDsa.Create(parameters);
         }
-        catch (CryptographicException e)
+        catch (CryptographicException)
         {
-            refusal = e;
+            return;
         }
 
-        Assert.NotNull(refusal);
-        if (refusal is PersonaException persona)
+        PersonaKeyMaterial material;
+        try
         {
-            Assert.Equal(PersonaError.InvalidKeyMaterial, persona.Error);
+            material = new PersonaKeyMaterial(key);
+        }
+        catch (PersonaException refusal)
+        {
+            Assert.Equal(PersonaError.InvalidKeyMaterial, refusal.Error);
+            return;
+        }
+
+        using (material)
+        {
+            var held = material.ExportPrivateParameters();
+            try
+            {
+                Assert.NotNull(held.D);
+                Assert.Equal(32, held.D!.Length);
+                Assert.True(held.D.AsSpan().IndexOfAnyExcept((byte)0) >= 0, "the material holds a zero scalar");
+                Assert.True(held.D.AsSpan().SequenceCompareTo(SyntheticKeys.GroupOrder) < 0, "the material holds a scalar at or above the group order");
+                Assert.NotEqual(Convert.ToHexString(parameters.D), Convert.ToHexString(held.D));
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(held.D);
+            }
         }
     }
 
