@@ -8,7 +8,7 @@ Claude runs AetherFrame end to end: it plans, decides OPEN items, builds, review
 | --- | --- |
 | Control checkout | `E:\AetherFrameWork`, always clean and on `master`. Task work never happens here. |
 | Task worktrees | `E:\AetherFrameWork\.claude\worktrees\<slug>`, one per task, branch `claude/<slug>` |
-| Off limits | `E:\Plugin development`: the old primary checkout, its stashes and 42 worktrees. Never read from it, write to it or run git in it. It is backed up under `E:\AetherFrame Archives\Primary checkout backups\`. |
+| Off limits | `E:\Plugin development`: the old primary checkout, its stashes and worktrees. The autopilot never reads from it, writes to it or runs git in it. It is backed up under `E:\AetherFrame Archives\Primary checkout backups\`. The exception in CLAUDE.md, for a session that already lives in one of Claude's clean worktrees there, never applies to an autopilot run, which always works from `E:\AetherFrameWork`. |
 | Status and queue | ROADMAP.md: section 2 for status, section 8 for the next five tasks |
 | Decisions | `docs/networking/DecisionRegister.md` for networking; ROADMAP.md section 5 for everything else |
 | Owner inbox | The open GitHub issue labelled `owner-inbox`: the only place the autopilot asks the owner for anything |
