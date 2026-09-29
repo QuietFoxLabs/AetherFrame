@@ -18,11 +18,15 @@ internal sealed class TutorialOverlay
     private readonly TutorialShadeWindow[] shades;
     private readonly TutorialCardWindow card;
     private readonly FirstRunPromptWindow offer;
+    private bool wasActive;
 
-    internal TutorialOverlay(OnboardingCoordinator coordinator, ITutorialHost host)
+    /// <param name="coordinator">The tutorial's state.</param>
+    /// <param name="host">What the tutorial may see and do.</param>
+    /// <param name="dimmedWindows">AetherFrame's own windows: what the dim covers.</param>
+    internal TutorialOverlay(OnboardingCoordinator coordinator, ITutorialHost host, IReadOnlyList<Window> dimmedWindows)
     {
         this.coordinator = coordinator;
-        driver = new TutorialOverlayWindow(coordinator, host, frame);
+        driver = new TutorialOverlayWindow(coordinator, host, frame, dimmedWindows);
         shades = new TutorialShadeWindow[TutorialShadeWindow.HoleCoverIndex + 1];
         for (var i = 0; i < shades.Length; i++)
         {
@@ -50,17 +54,24 @@ internal sealed class TutorialOverlay
     }
 
     /// <summary>
-    /// Once per frame, before the window system draws: the shades and the card are open exactly
-    /// while the tutorial runs. (The driver is always open; the offer opens itself.)
+    /// Once per frame, before the window system draws: the shades and the card open when the
+    /// tutorial starts and close when it ends. The card is opened only on that transition, so a
+    /// card Dalamud closed after a fault stays closed (its OnClose stops the tour) instead of being
+    /// reopened into the same fault every frame; a shade's Draw does nothing that can fault, so a
+    /// shade closed by anything else is simply reopened.
     /// </summary>
     internal void Update()
     {
         var active = coordinator.IsTutorialActive;
+        if (active != wasActive)
+        {
+            wasActive = active;
+            card.IsOpen = active;
+        }
+
         foreach (var shade in shades)
         {
             shade.IsOpen = active;
         }
-
-        card.IsOpen = active;
     }
 }

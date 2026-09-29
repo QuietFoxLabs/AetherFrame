@@ -69,7 +69,7 @@ internal static class TutorialScript
             new TutorialStep("first.template", "Choose a Template",
                 "Pick a Template. Adventure Plate Classic is the best start: it opens in the Basic Editor with every familiar section in place. The new Plate takes the Template's name; rename it any time from its card's right-click menu.\n\nThe tour continues as soon as the editor opens.",
                 TutorialTarget.LibraryTemplateChooser, TutorialStepMode.Interact, Requires: TutorialCondition.TemplateChooserOpen, AdvanceWhen: TutorialCondition.AnyEditorOpen,
-                SkipIfUnmet: true),
+                SkipIfUnmet: true, FallbackBody: "The chooser was closed. Click Create Plate to open it again, or use Next to move on.", FallbackTarget: TutorialTarget.LibraryCreatePlate),
             new TutorialStep("first.workspace", "The editor",
                 "A Plate is open. At the top of every editor: the way back to My Plates, the Basic | Advanced switch, the Plate's name, Undo and Redo, and on the right whether it is saved, plus Preview, Revert and Save.",
                 TutorialTarget.EditorModeSwitch, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),

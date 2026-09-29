@@ -94,6 +94,10 @@ Two halves, joined by one narrow seam.
 
 ImGui hit-tests windows front to back. The shades are created in front of AetherFrame's windows, and while the spotlight is up every AetherFrame window carries `NoBringToFrontOnFocus` (`AetherWindowChrome.ApplyPolicy`), so clicking the highlighted control gives it keyboard focus without letting the rest of its window out from under the dim. Steps that only explain a control cover the hole with a transparent window, so nothing is clickable; steps that ask the player to use the control leave the hole open. Modal popups (the Create Plate chooser) block input to everything else on their own, exactly as they do outside the tutorial; the tutorial waits for the condition it needs.
 
+The dim covers only the area AetherFrame's own open windows occupy (the driver looks their ImGui windows up by name), so the game's interface and other plugins' windows stay reachable and undimmed; a window that overlaps that area is dimmed with it. When a step has nothing to point at and needs the player to get somewhere (open a section, select an element, open My Plates), the shades take no input at all and lighten to a tint: the interface stays usable and the card waits. A click on the dim hands focus to the card, so Escape closes the tutorial (remembered where it stopped) and Left, Right and Enter page it only while the pointer is over the focused card.
+
+The driver computes in PreDraw, which Dalamud does not guard, so it guards itself: a fault logs, stands the overlay down and suspends the tour. Every push a window makes around its frame is recorded in a ledger (`AetherStyle.NotePushed`), and the plugin's draw pops whatever is still outstanding if an exception escapes a PreDraw, so AetherFrame's style can never be left on the windows drawn after it. The card is opened only when the tour starts, so a card Dalamud closed after a fault stays closed and its close stops the tour instead of reopening into the same fault.
+
 ### Authoring conventions
 
 - A step is one card: a title, at most ~420 characters of body, one control. Explain what the control does and when to use it, in the interface's own words.
@@ -123,7 +127,9 @@ Once the Library has loaded, `FirstRunDetector` decides once, without touching a
 
 ## Compromises forced by Dalamud or ImGui
 
-- ImGui windows are rectangles, so the dim is made of strips and the spotlight is a rectangle with rounded chrome, not an arbitrary shape.
+- ImGui windows are rectangles, so the dim is made of strips over the bounding rectangle of AetherFrame's open windows, and the spotlight is a rectangle with rounded chrome, not an arbitrary shape. Another plugin's window that overlaps that rectangle is dimmed and blocked with it.
+- The spotlight is cut where the control was drawn, not where it is visible after other windows are drawn on top of it; an AetherFrame window dragged over the highlighted control would receive clicks meant for it.
+- The card's height depends on the step's text and is known a frame late, so the frame after a step change can place it a few pixels off before it settles.
 - A modal popup blocks every other window, the tutorial card included, so a step whose control is inside a modal (the Create Plate chooser) explains and waits rather than being clicked through.
 - ImGui has no letter-spacing, so small-caps section labels use the Axis face rather than tracking.
 - Font handles are built asynchronously by Dalamud; until then headings draw in the default font.

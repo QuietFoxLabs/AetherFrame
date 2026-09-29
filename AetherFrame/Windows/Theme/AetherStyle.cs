@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using AetherFrame.UI.Theme;
 using Dalamud.Bindings.ImGui;
@@ -108,6 +109,11 @@ internal static class AetherStyle
         (ImGuiStyleVar.CellPadding, new Vector2(AetherMetrics.SpaceSm, AetherMetrics.SpaceXs)),
     ];
 
+    // Every push made around a window's frame, until its pop: if a window's own PreDraw throws,
+    // Dalamud never reaches PostDraw and never restores ImGui's stacks, so the plugin's draw
+    // (Plugin.DrawUi) pops whatever is still outstanding before the exception leaves it.
+    private static readonly List<IOutstandingStyle> Outstanding = new();
+
     /// <summary>How many colors <see cref="Push"/> pushes (what <see cref="Pop"/> pops).</summary>
     internal static int ColorCount => Colors.Length;
 
@@ -144,6 +150,33 @@ internal static class AetherStyle
     /// <summary>The style for the rest of a <c>using</c> block (an ImGui window drawn outside a Dalamud Window, say).</summary>
     internal static StyleScope Scope() => new(true);
 
+    /// <summary>Records that <paramref name="owner"/> has pushes on ImGui's stacks until it pops them.</summary>
+    internal static void NotePushed(IOutstandingStyle owner)
+    {
+        if (!Outstanding.Contains(owner))
+        {
+            Outstanding.Add(owner);
+        }
+    }
+
+    /// <summary>Records that <paramref name="owner"/> popped what it pushed.</summary>
+    internal static void NotePopped(IOutstandingStyle owner) => Outstanding.Remove(owner);
+
+    /// <summary>
+    /// Pops every push still outstanding: called when an exception leaves the plugin's draw, so a
+    /// PreDraw that threw between its push and Dalamud's PostDraw can't leave AetherFrame's style on
+    /// every window drawn after it. Nothing to do on a frame that ended normally.
+    /// </summary>
+    internal static void RecoverOutstanding()
+    {
+        for (var i = Outstanding.Count - 1; i >= 0; i--)
+        {
+            Outstanding[i].PopOutstanding();
+        }
+
+        Outstanding.Clear();
+    }
+
     /// <summary>Pushed on creation, popped on dispose; exception-safe inside <c>using</c>.</summary>
     internal struct StyleScope : IDisposable
     {
@@ -178,6 +211,54 @@ internal static class AetherStyle
     internal static uint U32(Vector4 color) => ImGui.GetColorU32(color);
 }
 
+/// <summary>Something that has pushed onto ImGui's style stacks and can pop it on demand.</summary>
+internal interface IOutstandingStyle
+{
+    /// <summary>Pops what is still pushed, if anything; safe to call when nothing is.</summary>
+    void PopOutstanding();
+}
+
+/// <summary>
+/// Extra pushes a window makes around its frame beyond the shared style (a card's own surface,
+/// say): counted, so they are popped in PostDraw or recovered after an exception.
+/// </summary>
+internal sealed class FramePushes : IOutstandingStyle
+{
+    private int colors;
+    private int vars;
+
+    /// <summary>Records <paramref name="colorCount"/> colors and <paramref name="varCount"/> variables just pushed.</summary>
+    internal void Pushed(int colorCount, int varCount)
+    {
+        colors += colorCount;
+        vars += varCount;
+        AetherStyle.NotePushed(this);
+    }
+
+    /// <summary>Pops everything recorded.</summary>
+    internal void Pop()
+    {
+        PopOutstanding();
+        AetherStyle.NotePopped(this);
+    }
+
+    public void PopOutstanding()
+    {
+        if (vars > 0)
+        {
+            ImGui.PopStyleVar(vars);
+        }
+
+        if (colors > 0)
+        {
+            ImGui.PopStyleColor(colors);
+        }
+
+        vars = 0;
+        colors = 0;
+    }
+}
+
 /// <summary>
 /// What every AetherFrame window does around its frame: the style, and the window policy the
 /// tutorial needs. One instance per window, called from its PreDraw and PostDraw:
@@ -191,7 +272,7 @@ internal static class AetherStyle
 /// say) win over it; ImGui pops by count, so the order of the pops in PostDraw doesn't matter.
 /// The policy goes on last so it wins over whatever flags the window's own PreDraw set.
 /// </summary>
-internal sealed class AetherWindowChrome
+internal sealed class AetherWindowChrome : IOutstandingStyle
 {
     private bool pushed;
 
@@ -205,10 +286,17 @@ internal sealed class AetherWindowChrome
 
         AetherStyle.Push();
         pushed = true;
+        AetherStyle.NotePushed(this);
     }
 
     /// <summary>Pops the style if it was pushed this frame.</summary>
     internal void PopStyle()
+    {
+        PopOutstanding();
+        AetherStyle.NotePopped(this);
+    }
+
+    public void PopOutstanding()
     {
         if (!pushed)
         {

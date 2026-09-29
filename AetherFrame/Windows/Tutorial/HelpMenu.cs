@@ -23,14 +23,27 @@ internal sealed class HelpMenu
 {
     private const string PopupSuffix = "##AetherFrameHelpMenu";
 
+    private static readonly string OpenCommandMeaning = "Open or close My Plates (also " + AetherFrameCommand.Name + ")";
+    private static readonly string ViewCommand = AetherFrameCommand.Alias + " " + AetherFrameCommand.ViewArgument;
+    private static readonly string VersionCommand = AetherFrameCommand.Alias + " " + AetherFrameCommand.VersionArgument;
+
     private readonly OnboardingCoordinator coordinator;
     private readonly ITutorialHost host;
     private readonly string buildDescription = AetherFrameBuildInfo.Current.Describe();
+    private readonly string[] chapterRows;
+    private string? resumeLabel;
+    private int resumeChapter = -1;
 
     internal HelpMenu(OnboardingCoordinator coordinator, ITutorialHost host)
     {
         this.coordinator = coordinator;
         this.host = host;
+        var chapters = coordinator.Session.Chapters;
+        chapterRows = new string[chapters.Count];
+        for (var i = 0; i < chapters.Count; i++)
+        {
+            chapterRows[i] = $"{i + 1}.  {chapters[i].Title}";
+        }
     }
 
     /// <summary>
@@ -125,8 +138,13 @@ internal sealed class HelpMenu
         {
             if (coordinator.CanResume)
             {
-                var chapter = coordinator.Session.Chapters[prefs.LastChapter];
-                if (ImGui.MenuItem($"Resume: {chapter.Title}"))
+                if (resumeChapter != prefs.LastChapter || resumeLabel is null)
+                {
+                    resumeChapter = prefs.LastChapter;
+                    resumeLabel = "Resume: " + coordinator.Session.Chapters[resumeChapter].Title;
+                }
+
+                if (ImGui.MenuItem(resumeLabel))
                 {
                     coordinator.ResumeTutorial(snapshot);
                 }
@@ -158,7 +176,7 @@ internal sealed class HelpMenu
                 var list = coordinator.Session.Chapters;
                 for (var i = 0; i < list.Count; i++)
                 {
-                    if (ImGui.MenuItem($"{i + 1}.  {list[i].Title}"))
+                    if (ImGui.MenuItem(chapterRows[i]))
                     {
                         coordinator.StartChapter(snapshot, i);
                     }
@@ -183,9 +201,9 @@ internal sealed class HelpMenu
 
         // ---- commands
         AetherControls.SectionHeader("Chat commands");
-        Shortcut(AetherFrameCommand.Alias, "Open or close My Plates (also " + AetherFrameCommand.Name + ")");
-        Shortcut(AetherFrameCommand.Alias + " " + AetherFrameCommand.ViewArgument, "Show your character's Active Plate");
-        Shortcut(AetherFrameCommand.Alias + " " + AetherFrameCommand.VersionArgument, "Print the running version in chat");
+        Shortcut(AetherFrameCommand.Alias, OpenCommandMeaning);
+        Shortcut(ViewCommand, "Show your character's Active Plate");
+        Shortcut(VersionCommand, "Print the running version in chat");
 
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceXs * scale));
         AetherControls.Muted("Everything stays on your PC. Bugs and ideas: the AetherFrame repository's issue tracker.");

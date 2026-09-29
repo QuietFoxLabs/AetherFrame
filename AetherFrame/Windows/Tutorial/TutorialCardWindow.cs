@@ -16,7 +16,8 @@ namespace AetherFrame.Windows.Tutorial;
 /// spotlight (see <see cref="TutorialCardPlacement"/>), with the chapter, the step's title and
 /// text, an action when a step needs the player elsewhere, progress, and Back / Next / Skip,
 /// plus a chapter picker. It never overlaps the hole when there is room, and always stays in the
-/// viewport. Left and Right arrows page while the card has focus.
+/// viewport. Escape closes it (the tour is remembered where it stopped); Left, Right and Enter
+/// page while the pointer is over the focused card.
 /// </summary>
 internal sealed class TutorialCardWindow : Window
 {
@@ -25,29 +26,47 @@ internal sealed class TutorialCardWindow : Window
         | ImGuiWindowFlags.AlwaysAutoResize;
 
     private const string ChaptersPopupId = "##AetherFrameTutorialChapters";
+    private const string CloseTooltip = "Close the tutorial for now. Help in My Plates resumes it where you left off.";
 
     private readonly OnboardingCoordinator coordinator;
     private readonly ITutorialHost host;
     private readonly TutorialOverlayFrame frame;
+    private readonly AetherWindowChrome chrome = new();
+    private readonly FramePushes pushes = new();
+
+    // Built once: the chapter line and the picker's rows, so the card allocates nothing per frame.
+    private readonly string[] chapterLines;
+    private readonly string[] chapterRows;
     private int framesOpen;
-    private bool pushed;
     private bool pendingChaptersPopup;
 
     internal TutorialCardWindow(OnboardingCoordinator coordinator, ITutorialHost host, TutorialOverlayFrame frame)
-        : base("AetherFrame Tutorial Card##AetherFrameTutorialCard", CardFlags)
+        : base("AetherFrame Tutorial Card##AetherFrameTutorialCard", CardFlags, forceMainWindow: true)
     {
         this.coordinator = coordinator;
         this.host = host;
         this.frame = frame;
-        RespectCloseHotkey = false;
+        RespectCloseHotkey = true;
         DisableWindowSounds = true;
         ShowCloseButton = false;
         AllowPinning = false;
         AllowClickthrough = false;
         AllowBackgroundBlur = true;
+
+        var chapters = coordinator.Session.Chapters;
+        chapterLines = new string[chapters.Count];
+        chapterRows = new string[chapters.Count];
+        for (var i = 0; i < chapters.Count; i++)
+        {
+            chapterLines[i] = $"CHAPTER {i + 1} OF {chapters.Count}  ·  {chapters[i].Title.ToUpperInvariant()}";
+            chapterRows[i] = $"{i + 1}.  {chapters[i].Title}";
+        }
     }
 
     public override void OnOpen() => framesOpen = 0;
+
+    /// <summary>Closed by Escape, or by Dalamud after a fault: the tour stops here and is remembered.</summary>
+    public override void OnClose() => coordinator.Suspend();
 
     public override void PreDraw()
     {
@@ -56,32 +75,29 @@ internal sealed class TutorialCardWindow : Window
         ImGui.SetNextWindowSize(new Vector2(AetherMetrics.TutorialCardWidth * scale, 0f), ImGuiCond.Always);
 
         // The card appears after the shades in the same frame, so for its first frames it asks
-        // to come forward; from then on nothing of AetherFrame's can get in front of it.
-        if (framesOpen < 3)
+        // to come forward; from then on nothing of AetherFrame's can get in front of it. A click
+        // on the dim hands focus over here too.
+        if (framesOpen < 3 || frame.CardFocusRequested)
         {
+            frame.CardFocusRequested = false;
             BringToFront();
         }
 
         framesOpen++;
 
-        AetherStyle.Push();
+        chrome.PushStyle();
         ImGui.PushStyleColor(ImGuiCol.WindowBg, AetherPalette.SurfaceRaised.WithOpacity(0.985f));
         ImGui.PushStyleColor(ImGuiCol.Border, AetherPalette.BorderStrong);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, AetherMetrics.RadiusLg * scale);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(AetherMetrics.SpaceLg, AetherMetrics.SpaceMd) * scale);
-        pushed = true;
+        pushes.Pushed(2, 3);
     }
 
     public override void PostDraw()
     {
-        if (pushed)
-        {
-            pushed = false;
-            ImGui.PopStyleVar(3);
-            ImGui.PopStyleColor(2);
-            AetherStyle.Pop();
-        }
+        pushes.Pop();
+        chrome.PopStyle();
     }
 
     public override void Draw()
@@ -106,11 +122,11 @@ internal sealed class TutorialCardWindow : Window
         using (AetherFonts.Label())
         using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.Aether))
         {
-            ImGui.TextUnformatted($"CHAPTER {view.ChapterIndex + 1} OF {view.ChapterCount}  ·  {view.Chapter.Title.ToUpperInvariant()}");
+            ImGui.TextUnformatted(chapterLines[view.ChapterIndex]);
         }
 
         ImGui.SameLine(contentWidth - ImGui.GetFrameHeight());
-        if (EditorWidgets.IconButton("CloseTutorial", FontAwesomeIcon.Times, "Close the tutorial for now. Help in My Plates resumes it where you left off."))
+        if (EditorWidgets.IconButton("CloseTutorial", FontAwesomeIcon.Times, CloseTooltip))
         {
             coordinator.Suspend();
             return;
@@ -141,6 +157,10 @@ internal sealed class TutorialCardWindow : Window
 
                 break;
 
+            case TutorialStepPresentation.Prerequisite:
+                Note(FontAwesomeIcon.LocationArrow, AetherPalette.Glow, "The interface stays usable: go ahead, the tour waits.");
+                break;
+
             case TutorialStepPresentation.Spotlight when view.AllowInteraction:
                 Note(FontAwesomeIcon.HandPointer, AetherPalette.Glow, view.Step.AdvanceWhen != TutorialCondition.None
                     ? "Use the highlighted control; the tour moves on by itself."
@@ -152,7 +172,7 @@ internal sealed class TutorialCardWindow : Window
                 break;
 
             case TutorialStepPresentation.MissingTarget:
-                Note(FontAwesomeIcon.EyeSlash, AetherPalette.Warning, "The control isn't in view; Next continues anyway.");
+                Note(FontAwesomeIcon.EyeSlash, AetherPalette.Warning, "The control isn't in view; the interface stays usable, and Next continues anyway.");
                 break;
         }
 
@@ -165,12 +185,11 @@ internal sealed class TutorialCardWindow : Window
         drawList.AddRectFilled(barMin, barMin + new Vector2(contentWidth * fraction, barHeight), ImGui.GetColorU32(AetherPalette.Aether), barHeight / 2f);
         ImGui.Dummy(new Vector2(contentWidth, barHeight + (AetherMetrics.SpaceXs * scale)));
 
-        // ---- footer: chapters, skip; back, next
-        using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextMuted))
-        {
-            ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted($"Step {view.StepNumber} of {view.TotalSteps}");
-        }
+        // ---- footer: progress, chapters, skip; back, next
+        ImGui.AlignTextToFramePadding();
+        ImGui.PushStyleColor(ImGuiCol.Text, AetherPalette.TextMuted);
+        ImGui.Text($"Step {view.StepNumber} of {view.TotalSteps}");
+        ImGui.PopStyleColor();
 
         ImGui.SameLine();
         if (AetherControls.GhostButton("Chapters", tooltip: "Jump to a chapter."))
@@ -203,8 +222,11 @@ internal sealed class TutorialCardWindow : Window
             Advance(view, snapshot);
         }
 
-        // Keyboard paging while the card has focus.
-        if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows))
+        // Keyboard paging: only while the pointer is over the focused card itself (not its
+        // popup), so Enter in the game's chat or arrows in the editor never page the tour.
+        if (ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows)
+            && ImGui.IsWindowFocused(ImGuiFocusedFlags.RootWindow | ImGuiFocusedFlags.NoPopupHierarchy)
+            && !ImGui.IsPopupOpen(ChaptersPopupId))
         {
             if (ImGui.IsKeyPressed(ImGuiKey.RightArrow, false) || ImGui.IsKeyPressed(ImGuiKey.Enter, false))
             {
@@ -247,14 +269,12 @@ internal sealed class TutorialCardWindow : Window
         var current = coordinator.Session.ChapterIndex;
         for (var i = 0; i < chapters.Count; i++)
         {
-            var chapter = chapters[i];
-            var label = $"{i + 1}.  {chapter.Title}";
-            if (ImGui.Selectable(label, i == current))
+            if (ImGui.Selectable(chapterRows[i], i == current))
             {
                 coordinator.StartChapter(snapshot, i);
             }
 
-            AetherControls.Tooltip(chapter.Summary);
+            AetherControls.Tooltip(chapters[i].Summary);
         }
     }
 
@@ -262,9 +282,14 @@ internal sealed class TutorialCardWindow : Window
     {
         EditorWidgets.IconText(icon, color);
         ImGui.SameLine(0f, AetherMetrics.ItemInnerSpacing * ImGuiHelpers.GlobalScale);
-        using (ImRaii.PushColor(ImGuiCol.Text, color))
+        ImGui.PushStyleColor(ImGuiCol.Text, color);
+        try
         {
             ImGui.TextWrapped(text);
+        }
+        finally
+        {
+            ImGui.PopStyleColor();
         }
     }
 

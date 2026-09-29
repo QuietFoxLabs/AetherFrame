@@ -58,6 +58,24 @@ public class OnboardingCoordinatorTests
     }
 
     [Fact]
+    public void Decide_APendingInstall_IsJudgedByTheLibraryAlone_EvenThoughAConfigurationNowExists()
+    {
+        // The first load found no configuration but saved one (for the guidance flag) before the
+        // Library was read; the next launch must not take that file for an established install.
+        var pending = new TutorialPreferences { Install = TutorialInstallKind.PendingDecision };
+
+        Assert.Equal(FirstRunDecision.OfferTutorial, FirstRunDetector.Decide(pending, configurationFound: true, false, true, 0, 0));
+        Assert.Equal(FirstRunDecision.ExistingInstall, FirstRunDetector.Decide(pending, configurationFound: true, false, true, 2, 0));
+        Assert.Equal(FirstRunDecision.Undetermined, FirstRunDetector.Decide(pending, configurationFound: true, false, libraryLoaded: false, 0, 0));
+
+        var store = new MemoryStore { Preferences = pending };
+        var coordinator = new OnboardingCoordinator(store, TutorialScript.Chapters, TutorialScript.Version);
+        coordinator.ResolveFirstRun(configurationFound: true, false, true, 0, 0);
+        Assert.True(coordinator.IsOfferOpen);
+        Assert.Equal(TutorialInstallKind.NewInstall, store.Preferences.Install);
+    }
+
+    [Fact]
     public void Decide_StopsOfferingAfterAFewUnansweredShowings()
     {
         var prefs = new TutorialPreferences { Install = TutorialInstallKind.NewInstall, OfferCount = FirstRunDetector.MaxOffers };

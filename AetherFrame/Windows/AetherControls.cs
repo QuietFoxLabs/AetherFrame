@@ -102,9 +102,14 @@ internal static class AetherControls
     internal static void MutedInline(string text)
     {
         ImGui.AlignTextToFramePadding();
-        using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextMuted))
+        ImGui.PushStyleColor(ImGuiCol.Text, AetherPalette.TextMuted);
+        try
         {
             ImGui.TextUnformatted(text);
+        }
+        finally
+        {
+            ImGui.PopStyleColor();
         }
     }
 
@@ -113,17 +118,26 @@ internal static class AetherControls
     /// <summary>The one primary action on a screen: filled with the accent.</summary>
     internal static bool PrimaryButton(string label, Vector2 size = default, string? tooltip = null)
     {
-        bool clicked;
-        using (ImRaii.PushColor(ImGuiCol.Button, AetherPalette.Aether))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, AetherPalette.AetherHover))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive, AetherPalette.AetherActive))
-        using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextOnAccent))
-        {
-            clicked = ImGui.Button(label, size);
-        }
-
+        var clicked = FilledButton(label, size, AetherPalette.Aether, AetherPalette.AetherHover, AetherPalette.AetherActive, AetherPalette.TextOnAccent);
         EditorWidgets.Tooltip(tooltip);
         return clicked;
+    }
+
+    /// <summary>A button with its own four colors, pushed and popped without allocating (a button is drawn every frame).</summary>
+    private static bool FilledButton(string label, Vector2 size, Vector4 fill, Vector4 hover, Vector4 active, Vector4 text)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Button, fill);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hover);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, active);
+        ImGui.PushStyleColor(ImGuiCol.Text, text);
+        try
+        {
+            return ImGui.Button(label, size);
+        }
+        finally
+        {
+            ImGui.PopStyleColor(4);
+        }
     }
 
     /// <summary>An ordinary action: the raised surface.</summary>
@@ -137,15 +151,7 @@ internal static class AetherControls
     /// <summary>A destructive action (Delete, Discard, Revert): filled red.</summary>
     internal static bool DangerButton(string label, Vector2 size = default, string? tooltip = null)
     {
-        bool clicked;
-        using (ImRaii.PushColor(ImGuiCol.Button, AetherPalette.DangerButton))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, AetherPalette.DangerButtonHover))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive, AetherPalette.DangerButtonActive))
-        using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextOnAccent))
-        {
-            clicked = ImGui.Button(label, size);
-        }
-
+        var clicked = FilledButton(label, size, AetherPalette.DangerButton, AetherPalette.DangerButtonHover, AetherPalette.DangerButtonActive, AetherPalette.TextOnAccent);
         EditorWidgets.Tooltip(tooltip);
         return clicked;
     }
@@ -153,20 +159,15 @@ internal static class AetherControls
     /// <summary>A quiet action: no surface until hovered (a Cancel, a Back).</summary>
     internal static bool GhostButton(string label, Vector2 size = default, string? tooltip = null)
     {
-        bool clicked;
-        using (ImRaii.PushColor(ImGuiCol.Button, Vector4.Zero))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, AetherPalette.SurfaceHover))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive, AetherPalette.SurfaceActive))
-        using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextSecondary))
-        {
-            clicked = ImGui.Button(label, size);
-        }
-
+        var clicked = FilledButton(label, size, Vector4.Zero, AetherPalette.SurfaceHover, AetherPalette.SurfaceActive, AetherPalette.TextSecondary);
         EditorWidgets.Tooltip(tooltip);
         return clicked;
     }
 
-    /// <summary>An icon beside a label in one button (FontAwesome glyph, then text).</summary>
+    /// <summary>
+    /// An icon beside a label in one button (FontAwesome glyph, then text). <paramref name="id"/> is
+    /// the button's ImGui id and must be unique in its scope; it never shows (pass "##Name").
+    /// </summary>
     internal static bool IconLabelButton(string id, FontAwesomeIcon icon, string label, Vector2 size = default, string? tooltip = null, bool primary = false)
     {
         var scale = ImGuiHelpers.GlobalScale;
@@ -186,13 +187,9 @@ internal static class AetherControls
             size.X > 0f ? size.X : content.X + (style.FramePadding.X * 2f),
             size.Y > 0f ? size.Y : ImGui.GetFrameHeight());
 
-        bool clicked;
-        using (ImRaii.PushColor(ImGuiCol.Button, AetherPalette.Aether, primary))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, AetherPalette.AetherHover, primary))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive, AetherPalette.AetherActive, primary))
-        {
-            clicked = ImGui.Button($"##{id}", buttonSize);
-        }
+        var clicked = primary
+            ? FilledButton(id, buttonSize, AetherPalette.Aether, AetherPalette.AetherHover, AetherPalette.AetherActive, AetherPalette.TextOnAccent)
+            : ImGui.Button(id, buttonSize);
 
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
@@ -327,9 +324,14 @@ internal static class AetherControls
         ImGui.AlignTextToFramePadding();
         EditorWidgets.IconText(icon, color);
         ImGui.SameLine(0f, AetherMetrics.ItemInnerSpacing * ImGuiHelpers.GlobalScale);
-        using (ImRaii.PushColor(ImGuiCol.Text, color))
+        ImGui.PushStyleColor(ImGuiCol.Text, color);
+        try
         {
             ImGui.TextUnformatted(text);
+        }
+        finally
+        {
+            ImGui.PopStyleColor();
         }
     }
 
@@ -489,10 +491,6 @@ internal static class AetherControls
             child = ImRaii.Child(id, size, false, flags | ImGuiWindowFlags.AlwaysUseWindowPadding);
             min = ImGui.GetWindowPos();
             max = min + ImGui.GetWindowSize();
-            if (child.Success)
-            {
-                ImGui.GetWindowDrawList().AddRect(min, max, ImGui.GetColorU32(AetherPalette.Border), AetherMetrics.RadiusMd * scale, ImDrawFlags.None, 1f);
-            }
         }
 
         internal bool Success => child.Success;
@@ -502,6 +500,10 @@ internal static class AetherControls
             child.Dispose();
             padding.Dispose();
             background.Dispose();
+
+            // On the parent, once the child has ended: the child's own clip rectangle is inset by
+            // its padding and would cut the border away.
+            ImGui.GetWindowDrawList().AddRect(min, max, ImGui.GetColorU32(AetherPalette.Border), AetherMetrics.RadiusMd * ImGuiHelpers.GlobalScale, ImDrawFlags.None, 1f);
         }
     }
 
@@ -557,15 +559,9 @@ internal static class AetherControls
             }
 
             var active = i == selected;
-            using (ImRaii.PushColor(ImGuiCol.Button, Vector4.Zero))
-            using (ImRaii.PushColor(ImGuiCol.ButtonHovered, AetherPalette.SurfaceHover))
-            using (ImRaii.PushColor(ImGuiCol.ButtonActive, AetherPalette.SurfaceActive))
-            using (ImRaii.PushColor(ImGuiCol.Text, active ? AetherPalette.TextPrimary : AetherPalette.TextMuted))
+            if (FilledButton(labels[i], default, Vector4.Zero, AetherPalette.SurfaceHover, AetherPalette.SurfaceActive, active ? AetherPalette.TextPrimary : AetherPalette.TextMuted) && !active)
             {
-                if (ImGui.Button(labels[i]) && !active)
-                {
-                    clicked = i;
-                }
+                clicked = i;
             }
 
             if (active)

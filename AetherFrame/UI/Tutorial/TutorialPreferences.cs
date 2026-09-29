@@ -31,6 +31,14 @@ public enum TutorialInstallKind
 
     /// <summary>A configuration or Plates from an earlier version: never treated as new.</summary>
     ExistingInstall,
+
+    /// <summary>
+    /// No configuration existed when this build first loaded, and the Library hadn't been read yet
+    /// when the configuration was first saved (the Basic-first guidance saves it at once). Decided
+    /// from the Library on a later launch, exactly as if no configuration had been found; never
+    /// mistaken for an established install.
+    /// </summary>
+    PendingDecision,
 }
 
 /// <summary>

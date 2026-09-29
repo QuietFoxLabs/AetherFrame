@@ -23,7 +23,9 @@ internal enum FirstRunDecision
 /// Templates in the Library, read only after the Library has loaded. Only an install with neither
 /// is new. The kind is decided once and stored, after which the stored kind is authoritative — so
 /// the configuration this very build writes on its first load can never turn a new player into an
-/// "existing" one on their second launch.
+/// "existing" one on their second launch: a first load that found no configuration marks the
+/// stored kind <see cref="TutorialInstallKind.PendingDecision"/> before anything is saved, and a
+/// later launch decides from the Library as if no configuration had been found.
 /// </summary>
 internal static class FirstRunDetector
 {
@@ -50,6 +52,12 @@ internal static class FirstRunDetector
                 return FirstRunDecision.AlreadyDecided;
             case TutorialInstallKind.NewInstall:
                 return preferences.OfferCount >= MaxOffers ? FirstRunDecision.AlreadyDecided : FirstRunDecision.OfferTutorial;
+            case TutorialInstallKind.PendingDecision:
+                // The configuration on disk is the one this build wrote before the Library was
+                // read: it says nothing about the player. Only the Library decides.
+                configurationFound = false;
+                configurationUnreadable = false;
+                break;
         }
 
         if (configurationFound || configurationUnreadable)

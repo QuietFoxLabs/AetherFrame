@@ -102,6 +102,14 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         configurationFound = savedConfiguration is not null;
         this.configurationUnreadable = configurationUnreadable;
 
+        // No configuration at all: the guidance below saves one right away, before the Library is
+        // read, so the tutorial's first-run decision (made after the load) is marked as pending in
+        // it. A later launch then judges this install by its Library, never by that file.
+        if (savedConfiguration is null)
+        {
+            Configuration.Tutorial = new TutorialPreferences { Install = TutorialInstallKind.PendingDecision };
+        }
+
         // The one-time Basic suggestion: decided now from the configuration alone (a current one's
         // stored flag always wins), so it's ready before any window can ask for Advanced.
         basicGuidance = new BasicGuidance(new ConfigurationGuidanceStore(Configuration, log));
@@ -214,7 +222,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // anchors. Whether to offer it is decided once the Library has loaded (see LoadAsync).
             onboarding = new OnboardingCoordinator(new ConfigurationTutorialStore(Configuration, log), TutorialScript.Chapters, TutorialScript.Version);
             var tutorialHost = new TutorialHost(this);
-            tutorialOverlay = new TutorialOverlay(onboarding, tutorialHost);
+            tutorialOverlay = new TutorialOverlay(
+                onboarding, tutorialHost, [plateLibraryWindow, basicProfileEditorWindow, profileEditorWindow, profileViewWindow, packageImportWindow]);
 
             // A player taking the tour is being shown both editors: the one-time Basic suggestion
             // would only get in the way of a step, so it counts as handled once the tour starts.
@@ -310,7 +319,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // in it, and can never fail the load.
         try
         {
-            await Framework.RunOnFrameworkThread(ResolveFirstRun).ConfigureAwait(false);
+            await Framework.RunOnTick(ResolveFirstRun, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -338,11 +347,23 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         Log.Information($"AetherFrame tutorial: {onboarding.LastDecision} (install {onboarding.Preferences.Install}, status {onboarding.Preferences.Status}).");
     }
 
-    /// <summary>Every frame: the tutorial's windows follow its state, then every window draws.</summary>
+    /// <summary>
+    /// Every frame: the tutorial's windows follow its state, then every window draws. Dalamud
+    /// guards each window's Draw but not its PreDraw, so if one throws there, whatever AetherFrame
+    /// style is still pushed is popped here before the exception reaches Dalamud, and no other
+    /// window is drawn in AetherFrame's colors.
+    /// </summary>
     private void DrawUi()
     {
-        tutorialOverlay.Update();
-        WindowSystem.Draw();
+        try
+        {
+            tutorialOverlay.Update();
+            WindowSystem.Draw();
+        }
+        finally
+        {
+            AetherStyle.RecoverOutstanding();
+        }
     }
 
     /// <summary>

@@ -27,7 +27,7 @@ internal sealed class FirstRunPromptWindow : Window
     private bool answered;
 
     internal FirstRunPromptWindow(OnboardingCoordinator coordinator, ITutorialHost host)
-        : base("Welcome to AetherFrame##AetherFrameFirstRun", PromptFlags)
+        : base("Welcome to AetherFrame##AetherFrameFirstRun", PromptFlags, forceMainWindow: true)
     {
         this.coordinator = coordinator;
         this.host = host;

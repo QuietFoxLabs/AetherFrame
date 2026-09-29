@@ -62,6 +62,7 @@ internal sealed class TutorialSession
 {
     private readonly IReadOnlyList<TutorialChapter> chapters;
     private readonly int[] firstStepNumber;
+    private readonly Dictionary<TutorialStep, string> missingTargetTexts = new();
     private int chapterIndex;
     private int stepIndex;
 
@@ -264,7 +265,13 @@ internal sealed class TutorialSession
         else if (!targetAvailable(step.Target))
         {
             presentation = TutorialStepPresentation.MissingTarget;
-            body = MissingTargetText(step);
+            if (!missingTargetTexts.TryGetValue(step, out var cached))
+            {
+                cached = MissingTargetText(step);
+                missingTargetTexts[step] = cached;
+            }
+
+            body = cached;
         }
         else
         {

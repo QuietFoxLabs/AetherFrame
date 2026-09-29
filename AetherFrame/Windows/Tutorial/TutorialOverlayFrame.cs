@@ -32,11 +32,23 @@ internal sealed class TutorialOverlayFrame
     /// <summary>The main viewport's work area.</summary>
     internal ScreenRect Viewport { get; private set; }
 
+    /// <summary>
+    /// What the dim covers: the area AetherFrame's own open windows occupy, so the game and other
+    /// plugins' windows stay untouched. Empty when none is open.
+    /// </summary>
+    internal ScreenRect DimBounds { get; private set; }
+
     /// <summary>The spotlight hole; empty for a step with no control on screen.</summary>
     internal ScreenRect Hole { get; private set; }
 
     /// <summary>Whether the control inside the hole may be used (Interact steps).</summary>
     internal bool AllowInteraction { get; private set; }
+
+    /// <summary>
+    /// The step needs the player to find or open something and has nothing to point at: the dim
+    /// stays as a tint but blocks nothing, so the player can get there.
+    /// </summary>
+    internal bool PassThrough { get; private set; }
 
     /// <summary>How many of <see cref="Strips"/> are in use.</summary>
     internal int StripCount { get; private set; }
@@ -51,6 +63,9 @@ internal sealed class TutorialOverlayFrame
     /// <summary>The card's size as last measured (its height depends on the step's text).</summary>
     internal Vector2 CardSize { get; set; }
 
+    /// <summary>A shade was clicked: the card asks for focus, so Escape and the arrow keys mean the tutorial.</summary>
+    internal bool CardFocusRequested { get; set; }
+
     internal bool IsActive => View is not null;
 
     /// <summary>Nothing to show this frame.</summary>
@@ -59,19 +74,31 @@ internal sealed class TutorialOverlayFrame
         Frame = frame;
         View = null;
         Hole = ScreenRect.Empty;
+        DimBounds = ScreenRect.Empty;
         StripCount = 0;
         AllowInteraction = false;
+        PassThrough = false;
     }
 
     /// <summary>Computes the hole, the strips and the card's place for <paramref name="view"/>.</summary>
-    internal void Set(int frame, TutorialStepView view, ScreenRect viewport, ScreenRect visibleTarget, float margin, float gap, float inset)
+    /// <param name="frame">The frame count.</param>
+    /// <param name="view">The step to show.</param>
+    /// <param name="viewport">The main viewport's work area (the card stays inside it).</param>
+    /// <param name="dim">The area to dim (AetherFrame's open windows), already within the viewport.</param>
+    /// <param name="visibleTarget">The target's visible rectangle, or empty.</param>
+    /// <param name="margin">The spotlight's margin around the target.</param>
+    /// <param name="gap">The gap between the hole and the card.</param>
+    /// <param name="inset">How far the card stays inside the viewport.</param>
+    internal void Set(int frame, TutorialStepView view, ScreenRect viewport, ScreenRect dim, ScreenRect visibleTarget, float margin, float gap, float inset)
     {
         Frame = frame;
         View = view;
         Viewport = viewport;
+        DimBounds = dim.Intersect(viewport);
         Hole = SpotlightGeometry.Hole(visibleTarget, margin, viewport);
         AllowInteraction = view.AllowInteraction && !Hole.IsEmpty;
-        StripCount = SpotlightGeometry.Strips(viewport, Hole, strips);
+        PassThrough = Hole.IsEmpty && view.Presentation != TutorialStepPresentation.Narrative;
+        StripCount = SpotlightGeometry.Strips(DimBounds, Hole, strips);
         var (position, side) = TutorialCardPlacement.Place(Hole, CardSize, viewport, gap, inset);
         CardPosition = position;
         CardSide = side;

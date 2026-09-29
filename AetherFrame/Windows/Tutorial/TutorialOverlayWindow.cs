@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
+using AetherFrame.Services;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.UI.Theme;
 using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Theme;
@@ -16,8 +19,9 @@ namespace AetherFrame.Windows.Tutorial;
 /// spotlight ring over everything. The shade and card windows, added after it, read that state in
 /// the same frame, so the spotlight follows a moved or resized window with no lag.
 ///
-/// <para>Being a Dalamud window means an exception here is caught and logged per window rather
-/// than ending the game's UI; everything it pushes lives in <c>using</c> scopes.</para>
+/// <para>Its work happens in PreDraw, which Dalamud does not guard, so it guards itself: a fault
+/// stands the tutorial down (the dim never stays up over an interface the player can't reach) and
+/// is logged, never thrown into the frame.</para>
 /// </summary>
 internal sealed class TutorialOverlayWindow : Window
 {
@@ -28,14 +32,23 @@ internal sealed class TutorialOverlayWindow : Window
     private readonly OnboardingCoordinator coordinator;
     private readonly ITutorialHost host;
     private readonly TutorialOverlayFrame frame;
+    private readonly IReadOnlyList<Window> dimmedWindows;
+    private readonly Func<TutorialTarget, bool> isAvailable;
+    private int currentFrame;
     private int missingSince = -1;
 
-    internal TutorialOverlayWindow(OnboardingCoordinator coordinator, ITutorialHost host, TutorialOverlayFrame frame)
-        : base("AetherFrame Tutorial##AetherFrameTutorialDriver", DriverFlags)
+    /// <param name="coordinator">The tutorial's state.</param>
+    /// <param name="host">What the tutorial may see and do.</param>
+    /// <param name="frame">The state shared with the shades and the card.</param>
+    /// <param name="dimmedWindows">AetherFrame's own windows: what the dim covers.</param>
+    internal TutorialOverlayWindow(OnboardingCoordinator coordinator, ITutorialHost host, TutorialOverlayFrame frame, IReadOnlyList<Window> dimmedWindows)
+        : base("AetherFrame Tutorial##AetherFrameTutorialDriver", DriverFlags, forceMainWindow: true)
     {
         this.coordinator = coordinator;
         this.host = host;
         this.frame = frame;
+        this.dimmedWindows = dimmedWindows;
+        isAvailable = target => TutorialOverlayState.Registry.IsAvailable(target, currentFrame);
         IsOpen = true;
         RespectCloseHotkey = false;
         DisableWindowSounds = true;
@@ -51,40 +64,43 @@ internal sealed class TutorialOverlayWindow : Window
 
     public override void PreDraw()
     {
-        var frameCount = ImGui.GetFrameCount();
+        currentFrame = ImGui.GetFrameCount();
         var viewport = ImGui.GetMainViewport();
         var work = new ScreenRect(viewport.WorkPos, viewport.WorkPos + viewport.WorkSize);
 
-        // Parked in the corner, a pixel large: never seen, never hit.
-        ImGui.SetNextWindowPos(work.Min, ImGuiCond.Always);
-        ImGui.SetNextWindowSize(Vector2.One, ImGuiCond.Always);
-
         try
         {
-            Compute(frameCount, work);
+            Compute(currentFrame, work);
         }
-        catch
+        catch (Exception ex)
         {
-            // A fault computing the overlay must never leave the dim up over an interface the
-            // player can't reach: stand down for this frame, then rethrow for Dalamud's log.
-            frame.Clear(frameCount);
-            TutorialOverlayState.IsSpotlightActive = false;
-            TutorialOverlayState.WantedTarget = TutorialTarget.None;
-            throw;
+            StandDown(currentFrame);
+            coordinator.Suspend();
+            DalamudServices.Log.Error(LogPrivacy.ForLog(ex), "AetherFrame's tutorial could not compute its overlay and has closed.");
         }
+
+        // Parked in the corner, a pixel large: never seen, never hit. Set only once the frame's
+        // state is settled, so nothing above can leave ImGui's next-window data armed for another window.
+        ImGui.SetNextWindowPos(work.Min, ImGuiCond.Always);
+        ImGui.SetNextWindowSize(Vector2.One, ImGuiCond.Always);
+    }
+
+    private void StandDown(int frameCount)
+    {
+        frame.Clear(frameCount);
+        TutorialOverlayState.IsSpotlightActive = false;
+        TutorialOverlayState.WantedTarget = TutorialTarget.None;
+        missingSince = -1;
     }
 
     private void Compute(int frameCount, ScreenRect work)
     {
         var registry = TutorialOverlayState.Registry;
         var snapshot = host.Snapshot();
-        var view = coordinator.Tick(snapshot, target => registry.IsAvailable(target, frameCount));
+        var view = coordinator.Tick(snapshot, isAvailable);
         if (view is not { } step)
         {
-            frame.Clear(frameCount);
-            TutorialOverlayState.IsSpotlightActive = false;
-            TutorialOverlayState.WantedTarget = TutorialTarget.None;
-            missingSince = -1;
+            StandDown(frameCount);
             return;
         }
 
@@ -100,7 +116,9 @@ internal sealed class TutorialOverlayWindow : Window
             frame.CardSize = new Vector2(AetherMetrics.TutorialCardWidth, 220f) * scale;
         }
 
-        frame.Set(frameCount, step, work, visible, AetherMetrics.SpotlightMargin * scale, AetherMetrics.TutorialCardGap * scale, AetherMetrics.TutorialCardViewportInset * scale);
+        frame.Set(
+            frameCount, step, work, DimmedArea(), visible,
+            AetherMetrics.SpotlightMargin * scale, AetherMetrics.TutorialCardGap * scale, AetherMetrics.TutorialCardViewportInset * scale);
         TutorialOverlayState.IsSpotlightActive = true;
 
         // What the windows may bring into view: the step's own control (also while it's missing,
@@ -126,14 +144,38 @@ internal sealed class TutorialOverlayWindow : Window
         }
     }
 
-    public override void Draw()
+    /// <summary>
+    /// The rectangle AetherFrame's open windows occupy this frame (their ImGui windows, looked up
+    /// by name, as ImGui placed them). Only that is dimmed and blocked; the game and every other
+    /// plugin stay reachable.
+    /// </summary>
+    private ScreenRect DimmedArea()
     {
-        if (frame.View is not { } view || frame.Frame != ImGui.GetFrameCount())
+        var area = ScreenRect.Empty;
+        foreach (var window in dimmedWindows)
         {
-            return;
+            if (!window.IsOpen)
+            {
+                continue;
+            }
+
+            var imgui = ImGuiP.FindWindowByName(window.WindowName);
+            if (imgui.IsNull || !imgui.WasActive || imgui.Hidden)
+            {
+                continue;
+            }
+
+            Vector2 pos = imgui.Pos;
+            Vector2 size = imgui.Size;
+            area = area.Union(new ScreenRect(pos, pos + size));
         }
 
-        if (frame.Hole.IsEmpty)
+        return area;
+    }
+
+    public override void Draw()
+    {
+        if (frame.View is not { } view || frame.Frame != ImGui.GetFrameCount() || frame.Hole.IsEmpty)
         {
             return;
         }
@@ -155,10 +197,9 @@ internal sealed class TutorialOverlayWindow : Window
         // A small hand marks a control that's meant to be used.
         if (frame.AllowInteraction && view.Presentation == TutorialStepPresentation.Spotlight)
         {
-            string glyph;
-            using (Services.DalamudServices.PluginInterface.UiBuilder.IconFontHandle.Push())
+            using (DalamudServices.PluginInterface.UiBuilder.IconFontHandle.Push())
             {
-                glyph = EditorWidgets.GetIconString(Dalamud.Interface.FontAwesomeIcon.HandPointer);
+                var glyph = EditorWidgets.GetIconString(Dalamud.Interface.FontAwesomeIcon.HandPointer);
                 var size = ImGui.CalcTextSize(glyph);
                 var pos = new Vector2(max.X + (6f * scale), max.Y - size.Y);
                 if (pos.X + size.X > frame.Viewport.Max.X)
