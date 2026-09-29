@@ -1,6 +1,6 @@
 # NETWORK2: from local preparation to a two-player test
 
-**Status (2026-09-29): a plan, nothing implemented.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
+**Status (2026-09-29): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). Nothing is implemented yet.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
 
 **Safeguards.** Safeguards 2 to 8 of [NETWORK1.md](NETWORK1.md), section 4, hold throughout NETWORK2:
 - no persistent key before G1 is complete;
@@ -66,11 +66,11 @@ Player A's plugin (preview)                          Owner's server             
   - the publish and unpublish flow with its consent screen;
   - the viewer.
 
-  The recommended boundary amendment allows the networking API inside `Services/Network`, and only in the preview flavour; the player flavour stays free of it. Its exact scope is decided in N2-1: `System.Net.Http`, and `System.Net.Sockets` only if a dual-stack connect callback needs it.
+  Network code lives only inside `Services/Network`, and only in the preview flavour, as R3's exact allowlist says; the player flavour stays free of it.
 - **The viewer.**
   - It turns a schema 2 snapshot into an in-memory Plate that is never saved, and draws it with the shared renderer. It touches no Library, Template or binding.
   - Components and fonts resolve only against the viewer's own bundled set. An identifier it doesn't know is drawn as a placeholder and named in a note, never fetched.
-  - Images are decoded under the same limits imports use (ROADMAP.md, section 4, rule 5).
+  - It accepts only the images I1 allows: it sniffs the bytes before decoding and refuses anything but a non-animated 8-bit PNG or an 8-bit JPEG with 1 or 3 components, within the limits imports use (ROADMAP.md, section 4, rule 5).
   - Whether the viewer checks the signature itself or receives server-checked content is D6.
 - **Server.** `server/AetherFrame.Server`, a small ASP.NET Core service in this repository, built and tested by CI like the rest:
   - It references `AetherFrame.Protocol` and verifies every document before storing anything.
@@ -86,7 +86,7 @@ Player A's plugin (preview)                          Owner's server             
 ## 4. What only the owner does, and when
 
 Nothing is needed from the owner until increment N2-8. Then, with exact steps posted in the Owner inbox:
-1. Buy a domain.
+1. Buy a domain, and keep it on automatic renewal: a lapsed domain could be registered by someone else, who could then serve players' plugins (R2).
 2. Rent a small Linux server (a few dollars a month) with IPv4, and IPv6 if offered, and point the domain's `A` (and `AAAA`) records at it.
 3. Create the deploy key and the server's secret values (the S2 pepper, if S2 keeps one), and add them as secrets of a protected GitHub environment. Claude never sees or handles a credential or a secret.
 4. Approve each deploy run in GitHub.
@@ -111,7 +111,7 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 | N2-7 | Server: verify, store and serve; share codes; retraction; quotas and rate limits; version checks; its own test suite in CI | Decision batch B: D1, D6, K5, N2, N6, S2, S3, S4, I2; the share-code format; server logging | N2-3 |
 | N2-8 | Deployment kit: container, Caddy, the deploy workflow with owner approval, the runbook | G3 complete (D1, D6, D7, K4, K5, N1, N7) before the deployed server accepts documents signed by real keys; the owner's hosting (section 4) | N2-7 |
 | N2-9 | Plugin: the transport, publish and unpublish, the consent screen, share codes | The boundary amendment and the transport (batch A) | N2-5, N2-6, N2-7 |
-| N2-10 | Plugin: the viewer (open by code, check per D6, render read-only, refresh) | N7, D6, I2 | N2-3, N2-7, N2-9 |
+| N2-10 | Plugin: the viewer (open by code, check per D6, render read-only, refresh) | N7, I1, K3 (viewing), D6, I2 | N2-3, N2-7, N2-9 |
 | N2-11 | The preview test kit and the two-player checklist | The tester kit (P2's unsettled item) and the matching AUTOPILOT.md procedure; G3 complete | everything above, and the owner's server |
 
 N2-7's server runs locally in its own tests and in the plugin's integration tests, so everything up to N2-10 can be built and tested before the owner's server exists. Only the real test needs it.

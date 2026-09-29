@@ -57,7 +57,7 @@ PR #21 was receiving commits during verification. Recheck its head before contin
 
 **The key store core (NETWORK1 increment 5; K1, K2, K6 and K7 decided under the delegation, with a security reviewer's concurrence; [#35](https://github.com/QuietFoxLabs/AetherFrame/pull/35), merged as `564e1b9`, in no test build yet, not released):** `AetherFrame.Personas` gains `ProtectedPersonaKeyStore`, the `AFPK` envelope and two seams (a protector, a blob storage); the plugin gains a preview-only directory storage under `Services/Network`, tested from the persona suite. No protector ships, nothing is wired, and no key is written outside tests ([docs/networking/NETWORK1_KeyStoreCore.md](docs/networking/NETWORK1_KeyStoreCore.md)). Both reviews found that a failed check after a durable write could leave an unrecorded key file; the contract now says so, and the wiring must detect and report such files (L12).
 
-**NETWORK2, the path to a two-player test ([docs/networking/NETWORK2.md](docs/networking/NETWORK2.md)):** planned on September 29, 2026 at the owner's instruction. It runs from the decisions and protocol changes the test needs, through the key protector, the persona window, the snapshot builder and a server in this repository, to the owner's hosting and a preview test build. Nothing in it is implemented yet.
+**NETWORK2, the path to a two-player test ([docs/networking/NETWORK2.md](docs/networking/NETWORK2.md)):** planned on September 29, 2026 at the owner's instruction. It runs from the decisions and protocol changes the test needs, through the key protector, the persona window, the snapshot builder and a server in this repository, to the owner's hosting and a preview test kit. The plan merged as `8c58e34` (#36). Decision batch A (N2-1) is recorded in the register. Nothing is implemented yet.
 
 **Verified CI evidence:** #23's Windows job passed 2739 plugin, 439 release tooling, 153 protocol, and 226 persona tests, with zero build warnings and Package OK ([run](https://github.com/QuietFoxLabs/AetherFrame/actions/runs/36559291387)). #21 at `bb37acc` passed 2917 plugin, 439 release tooling, and 153 protocol tests on both platforms, with zero build warnings and Package OK ([run](https://github.com/QuietFoxLabs/AetherFrame/actions/runs/36561609661)). These runs build GitHub's merge previews for the recorded PR heads: `12f03e9` for #23 and `0c54caa` for #21. They do not test #21 and #23 combined.
 
@@ -139,7 +139,7 @@ Current verified build context is .NET 10, Dalamud SDK/API 15, and an x64 plugin
 
 The delegation covers OPEN items only. Claude records each delegated decision in the networking register or in this section, marked "APPROVED (Claude, under the owner's delegation of September 29, 2026)", with the date, exact scope and rationale. CONFIRMED requirements and the owner's own approvals (D3, and D2 in principle) change only on the owner's word. The owner can overrule any delegated decision in the Owner inbox. Things only the owner can do are listed in [docs/process/AUTOPILOT.md](docs/process/AUTOPILOT.md#owner-only).
 
-D2 does not approve an encryption scheme, password policy, derivation parameters, recovery warnings, or implementation. D3 does not approve labels, storage, supported platforms, user interface, or the interim lease revocation policy. These remain OPEN.
+D2 does not approve an encryption scheme, password policy, derivation parameters, recovery warnings, or implementation. D3 does not approve labels, storage, supported platforms, user interface, or the interim lease revocation policy. Labels (D9a), storage on native Windows (K2) and where persona features turn on (K3) have since been decided under the delegation; the user interface and the lease policy (L10) remain OPEN.
 
 ## 6. Deferred features in planned order
 
@@ -171,12 +171,12 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 | Gate or area | OPEN questions |
 | --- | --- |
 | Beta scope | What exact publish, view, retract, sharing, and lookup experience constitutes working networking beyond NETWORK2's two-player test? What runtime and usability evidence is required before invitations? |
-| G1: persistent keys | N3 draft marker; K1 algorithm choice; K2 storage; K3 platform enablement; K6 rotation; K7 implementation sources; P1 publication index. K8 verification and K9 storage also apply if pursuing Wine support. N5 (document API), L6 (provider and policy API), D9b (packaging) and P2 (preview enablement) are APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026. |
+| G1: persistent keys | Complete for native Windows: N5, L6, D9b, P2, K1, K2, K6 and K7, then N3, K3 and P1 in decision batch A, are all APPROVED (Claude, under the owner's delegation of September 29, 2026). Still open: K8 verification and K9 storage, if persona features are ever offered under Wine, Proton or macOS. |
 | D2 technical approval | Backup encryption, container format, password rules, derivation parameters, recovery warnings, and implementation, including K5; K4 governs backup or acknowledgement before real publishing. |
-| G2: snapshots and images | D4 name rules; D5 image digest and metadata policy; D8 whether a metadata only schema reaches players; D9a persona labels; I1 supported image policy. |
-| G3: freeze or real server | D1 retraction semantics; D6 signed envelopes versus server checked content; D7 deployment binding; K4 and K5; N1 identifier scope; N7 consumer text handling. |
+| G2: snapshots and images | Complete: D4, D5, D8, D9a and I1 are APPROVED (Claude, under the owner's delegation of September 29, 2026), in decision batch A. |
+| G3: freeze or real server | D1 retraction semantics; D6 signed envelopes versus server-checked content; D7 deployment binding; K5 backup passphrase rules. K4, N1 and N7 are APPROVED (Claude, under the owner's delegation of September 29, 2026), in decision batch A. |
 | G4: backend | N2 replay retention; N6 clock behavior for retractions; S1 request proofs; S2 tombstones; S3 lost keys and expiry; S4 persona revocation; I2 server image processing. NETWORK2 plans the hosting shape (one small Linux server, Docker, Caddy, a deploy workflow the owner approves); the domain, the provider and their cost are the owner's to choose when increment N2-8 needs them. |
-| #23 follow ups | L10 signer lease behavior during a persona switch; D3's additional deliberate association clause (owner only); D9a provisional labels; L9 and L11 networking suites as release gates. The current revocation behavior is an interim implementation. All are recorded in the register. |
+| #23 follow ups | L10 signer lease behavior during a persona switch; D3's additional deliberate association clause (owner only); L9 and L11 networking suites as release gates. D9a is APPROVED (a private local label), and N2-5 drops the "provisional" wording. The current revocation behavior is an interim implementation. All are recorded in the register. |
 | Other protocol items | L2 conformance coverage for a second implementation; L4 public only signer acceptance; L8 signing context specification; local package photo metadata under I3. |
 | Local reliability | Resolution and current applicability of the residual findings in section 2; any future autosave, history, cleanup, or concurrent client storage design. |
 | Acceptance and integration | Fresh review and game evidence for the amended draft PRs; combined integration of #21 and #23 with current master. Separate green PR runs do not prove the combined result. |
@@ -191,39 +191,41 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - NETWORK1 increment 1, the protocol API tidy: [#32](https://github.com/QuietFoxLabs/AetherFrame/pull/32) (N5, L6), merged as `97674be`.
 - NETWORK1 increment 3, the plugin integration skeleton: [#34](https://github.com/QuietFoxLabs/AetherFrame/pull/34) (D9b, P2), merged as `b80127b`, ahead of increment 2 on the owner's instruction to continue the persona foundation.
 - NETWORK1 increment 5, the key store core: [#35](https://github.com/QuietFoxLabs/AetherFrame/pull/35) (K1, K2, K6, K7, each with a security reviewer's concurrence), merged as `564e1b9`. A session outside the autopilot started it; Claude finished it on the owner's instruction.
-- NETWORK2 increment N2-0, the plan: this change.
+- NETWORK2 increment N2-0, the plan: [#36](https://github.com/QuietFoxLabs/AetherFrame/pull/36), merged as `8c58e34`.
+- NETWORK2 increment N2-1, decision batch A: this change. N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3 and K4, and the new R1 (share codes), R2 (the transport) and R3 (where network code may live), are APPROVED (Claude, under the owner's delegation of September 29, 2026) in the register. A security-focused reviewer concurred with each security and privacy entry, I1 and R3 after amendment, as each entry records.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
 
-1. **N2-1: decision batch A.** Prerequisite: none. Decide N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3 and K4, and three new ones. For the new ones, each recommendation below is weighed, not presumed:
-   - the lookup model: recommended, share codes for the first test;
-   - the transport: recommended, HTTPS to a DNS hostname with the signed documents as request bodies, and dual-stack as Dalamud recommends;
-   - the boundary amendment: recommended, the networking API only inside `Services/Network` and only in the preview flavour (`System.Net.Http`, and `System.Net.Sockets` only if a dual-stack connect callback needs it).
-
-   Acceptance:
-   - each decision is recorded in the register as APPROVED (Claude, under the owner's delegation of September 29, 2026), with its date, option, scope, rationale and what it doesn't settle;
-   - primary sources are cited where they matter;
-   - a security reviewer concurs with every security, cryptography and privacy entry;
-   - no code changes.
-2. **N2-2: the draft marker and the name rule** (NETWORK1 increments 2a and 2b). Prerequisites: N3 and D4. It changes signed bytes, which NETWORK1.md's safeguard 3 reserves for the owner: the owner approved it in advance on September 29, 2026 (section 5), on condition that its decisions are recorded, an independent and a security review are clean, and CI is green. Acceptance:
-   - exactly the approved marker and rule are implemented;
+1. **N2-2: the draft marker and the name rule** (NETWORK1 increments 2a and 2b). Prerequisites: N3 and D4, approved in batch A. It changes signed bytes, which NETWORK1.md's safeguard 3 reserves for the owner: the owner approved it in advance on September 29, 2026 (section 5), on condition that its decisions are recorded, an independent and a security review are clean, and CI is green. Acceptance:
+   - exactly the approved marker (`protocolVersion` `0x8001`, the `…SignedDocument.v1-draft` tag) and name rule are implemented;
    - the vectors, the specification and the independent checker change together;
    - documents with incompatible markers are proved to be refused;
-   - boundary and adversarial name cases are added;
+   - boundary and adversarial name cases are added, in D4's error order;
+   - the specification's status paragraph and section 10 say drafts exist and a test server accepts them;
+   - where the general 32,000-scalar text limit stays tested is stated (L2);
    - the protocol stays DRAFT, and local Plate naming and files are unchanged.
-3. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: D8, D5, D9a and I1 (batch A); S1, D7 and L8 (decided in this change or in batch A); and, because it changes signed bytes, the owner's advance approval of September 29, 2026 under the same conditions (section 5). Acceptance:
+2. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: N2-2 merged first; D8, D5, D9a and I1 (approved in batch A); S1, D7 and L8, decided and recorded in this change with a security reviewer's concurrence; and, because it changes signed bytes, the owner's advance approval of September 29, 2026 under the same conditions (section 5). Acceptance:
    - a canonical layout schema in fixed-point integers: canvas, background, text, images and Components, with a limit on every count, length and value;
    - the request proof in its own signing context, with its own domain tag;
    - vectors, the specification, the reference implementation in the tests, and adversarial cases;
+   - `ImageReference.format` limited to PNG and JPEG in schema 2 (I1);
+   - N7 written into the specification as a consumer obligation, D5's wording applied to section 8.2, and N1's scoping to sections 8.4 and 13;
    - schema 1 stays readable;
    - no plugin or server code.
-4. **N2-4: the Windows DPAPI protector and the capability probe** (NETWORK1 increment 7). Prerequisites: K2 (approved) and K3, with N2-2 merged first (NETWORK1's gate for increment 7). Acceptance:
+3. **N2-4: the Windows DPAPI protector and the capability probe** (NETWORK1 increment 7). Prerequisites: K2 (approved) and K3, with N2-2 merged first (NETWORK1's gate for increment 7). Acceptance:
    - crypt32 is called directly, with UI forbidden and the entropy taken from the envelope header;
    - the output is zeroed before `LocalFree`, and the prompt structure is never used;
-   - the probe runs the full chain before persona features turn on, and decides by capability, never by operating system name;
+   - the probe runs the full chain before persona features turn on, and decides by capability, never by operating system name; the protector claims protection only on native Windows (K3);
    - it compiles into the preview flavour only, and a security reviewer concurs;
    - no key is written outside tests before N2-5.
+4. **N2-5: the persisted persona registry and the persona window.** Prerequisites: G1 (complete for native Windows), K4 (approved), L10 and L12, decided and recorded in this change with a security reviewer's concurrence; N2-2 and N2-4 merged first. Acceptance:
+   - D3 as approved: several personas, created, selected and switched only by the player, one active for identity operations, never bound to a character, Content ID or account; switching alters no Plate and publishes nothing;
+   - labels are private and local (D9a);
+   - key files that no record names are detected and reported (L12), and the key file's move is written through;
+   - K4's acknowledgement is recorded per persona before any first publish;
+   - persona features turn on only as K3 says; every local feature is untouched;
+   - preview flavour only; a security reviewer concurs; an **In game** section for the persona window.
 5. **Release 0.1.7 to the testing channel.** Prerequisite: the owner passes test build `01a14a5` in the Owner inbox, including #21's release-blocking checks. That build supersedes `1024490` and holds #21 as well as #33, but its inbox post lists only #33's 14 checks and leaves #21's (in the `1024490` post) for "if you get to them". A pass must therefore also cover checks 1, 2, 5 to 10 and 15 of the `1024490` post; if the owner passes only the `01a14a5` checks, ask in the inbox for those before starting this task. From then this task comes before the NETWORK2 tasks (AUTOPILOT.md, "One run", step 4, item 5). The release carries only player builds: no networking code (P2). Steps:
    - a release-prep PR: `Version.props` 0.1.7, the CHANGELOG section, and the dry-run fixture ([docs/Releasing.md](docs/Releasing.md), steps 1 to 3);
    - a release-candidate test build from its merge, with a short smoke check by the owner;
@@ -235,4 +237,4 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
    - the dry run passes, and the owner approves the publication run in GitHub;
    - `pluginmaster.json` on `plugin-repository` serves 0.1.7 in testing, with the pinned icon address.
 
-After these five come NETWORK2's N2-5 to N2-11: the persona window, the snapshot builder, the server, the owner's hosting, the transport and sharing flow, the viewer, and the preview test kit with the two-player checklist. Known bugs 7 and 8 are fixed by #29 and #30. Test build `01a14a5` (#33, superseding `1024490`) waits for the owner's formal in-game verdict in the Owner inbox. The owner wrote in chat on September 29 that "all seems to work well in game", relayed in the inbox as the result for `01a14a5`. It is not yet a pass for releasing: it isn't a pass of that build's checks, and it doesn't cover #21's release-blocking checks. So task 5 still waits. Persistent keys outside tests, real backups and beta invitations follow only when their decisions and acceptance evidence are complete.
+After these five come NETWORK2's N2-6 to N2-11: the snapshot builder, the server, the owner's hosting, the transport and sharing flow, the viewer, and the preview test kit with the two-player checklist. Known bugs 7 and 8 are fixed by #29 and #30. Test build `01a14a5` (#33, superseding `1024490`) waits for the owner's formal in-game verdict in the Owner inbox. The owner wrote in chat on September 29 that "all seems to work well in game", relayed in the inbox as the result for `01a14a5`. It is not yet a pass for releasing: it isn't a pass of that build's checks, and it doesn't cover #21's release-blocking checks. So task 5 still waits. Persistent keys outside tests, real backups and beta invitations follow only when their decisions and acceptance evidence are complete.
