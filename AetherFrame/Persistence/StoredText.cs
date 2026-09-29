@@ -101,8 +101,9 @@ internal static class StoredTextDecoder
 
     /// <summary>
     /// The copy a write of <paramref name="contents"/> would read back as: written as UTF-8 (what
-    /// both stores write), then decoded here. Equal to <paramref name="contents"/> for any text
-    /// without a lone surrogate, which UTF-8 can't encode and the encoder silently replaces.
+    /// both stores write), then decoded here. Equal to <paramref name="contents"/> except for text
+    /// holding a lone surrogate, which UTF-8 can't encode and the encoder silently replaces, or
+    /// starting with U+FEFF, which reads back as a byte order mark and is dropped.
     /// </summary>
     internal static StoredText ReadBack(string contents) => Decode(Encoding.UTF8.GetBytes(contents));
 }

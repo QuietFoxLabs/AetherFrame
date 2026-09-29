@@ -138,8 +138,9 @@ internal static class VersionedJson
     /// The text a write of <paramref name="json"/> reads back as at the next load (see
     /// <see cref="StoredTextDecoder.ReadBack"/>), refused as <see cref="InvalidDataException"/>
     /// when that isn't exactly <paramref name="json"/>: what the Library keeps in memory must be
-    /// what the file holds. The serializer escapes everything outside ASCII, so only a string
-    /// holding a lone surrogate could fail this, and it is refused before anything is written.
+    /// what the file holds. Only text holding a lone surrogate or starting with U+FEFF could fail
+    /// this, and the serializer's output is neither (it escapes everything outside ASCII and starts
+    /// with a brace); such text is refused before anything is written.
     /// </summary>
     internal static string RequireFaithfulReadBack(string json, string what)
     {
