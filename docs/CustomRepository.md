@@ -40,7 +40,8 @@ Every field below is written by `generate-repository` and `prepare-publication`.
 
 | Field | Value | Comes from |
 |---|---|---|
-| `Author`, `Name`, `Punchline`, `Description`, `Tags`, `CategoryTags`, `IconUrl`, `ImageUrls`, `RepoUrl`, `ApplicableVersion`, `MinimumDalamudVersion`, `LoadRequiredState`, `LoadSync`, `LoadPriority`, `CanUnloadAsync`, `AcceptsFeedback`, `FeedbackMessage` | as built | the `AetherFrame.json` inside the release ZIP, which DalamudPackager writes from `AetherFrame.csproj` |
+| `Author`, `Name`, `Punchline`, `Description`, `Tags`, `CategoryTags`, `IconUrl`, `ImageUrls`, `ApplicableVersion`, `MinimumDalamudVersion`, `LoadRequiredState`, `LoadSync`, `LoadPriority`, `CanUnloadAsync`, `AcceptsFeedback`, `FeedbackMessage` | as built | the `AetherFrame.json` inside the release ZIP, which DalamudPackager writes from `AetherFrame.csproj` |
+| `RepoUrl` | `https://github.com/QuietFoxLabs/AetherFrame` | `sourceRepositoryUrl` in `distribution/repository.json`, which the packaged manifest must also name (a package up to `previousAddressLastVersion` may name the previous address instead; see [Repository move](#repository-move)) |
 | `InternalName` | `AetherFrame` | the ZIP's manifest, which must equal `distribution/repository.json` |
 | `AssemblyVersion` | `MAJOR.MINOR.PATCH.0` | the DLL inside the ZIP (which must equal the manifest, the file name, `Version.props` and the tag) |
 | `DalamudApiLevel` | `15` | `distribution/repository.json`, which must equal the manifest, the DLL's Dalamud reference and `Dalamud.NET.Sdk` in the csproj |
@@ -151,7 +152,7 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 
 **The manifest (`AetherFrame.json`)**
 - Strict JSON: no comments, trailing commas, duplicate keys or unknown keys. Keys Dalamud writes into installed plugins (`WorkingPluginId`, `InstalledFromUrl`, `Disabled`, `Testing`, `ScheduledForDeletion`) fail with an explanation.
-- `InternalName`, `AssemblyVersion`, `DalamudApiLevel` and `RepoUrl` equal the configuration and the DLL.
+- `InternalName`, `AssemblyVersion`, `DalamudApiLevel` and `RepoUrl` equal the configuration and the DLL. The one exception: a package up to `previousAddressLastVersion` may name the previous source address as its `RepoUrl` ([Repository move](#repository-move)).
 - `Name`, `Author`, `Punchline`, `Description` are non-empty; `ApplicableVersion` is `any`; `IconUrl` and `ImageUrls` are plain https URLs (at most five images); tags are non-empty and distinct.
 - Contains nothing that looks like a local path (drive letters, UNC paths, Unix home directories).
 
@@ -168,6 +169,7 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 - A JSON array with exactly one object, with known keys only.
 - The entry's identity, API level, source URL and `ApplicableVersion` equal the configuration; versions are canonical `MAJOR.MINOR.PATCH.0` text; `LastUpdate` is Unix seconds between 2020 and 2100; `IsHide` is false; load and feedback flags are present.
 - Every download link is exactly what the configured template gives for that version (https on a dotted host name, default port, no query, no user information, written in canonical form, ending in the package file name).
+- The one exception to the source URL and link rules: the file already published, read before a publication, may use the previous source address for versions up to `previousAddressLastVersion` ([Repository move](#repository-move)). Nothing about to be published gets that allowance.
 - The testing slot is coherent: absent entirely, a newer version with `TestingDalamudApiLevel` and its own link, or a testing-exclusive entry with one version, one link and one changelog.
 - With the packages at hand: the entry describes exactly them, field by field (a testing-exclusive entry is compared with its package whether it is given as the stable or the testing package). With `--changelog`: its changelog fields are the current sections.
 
@@ -347,6 +349,26 @@ Why this address (checked 2026-09-27, against the live service):
 - **Availability.** The same GitHub service that hosts the release ZIPs, which Dalamud downloads anyway. If GitHub is down, installs fail either way.
 - **GitHub Pages** (`https://quietfoxlabs.github.io/AetherFrame/pluginmaster.json`) would serve `application/json` and needs Pages switched on and a deployment step: either Pages building from the branch, or a deployment job with `pages: write` and `id-token: write`. That is more moving parts, and it is no more reliable: it is the same GitHub, and it is tied to the same account and repository names. Only a custom domain, such as the branded address above, makes an address independent of GitHub.
 - **Permanence.** The address contains the owner name, the repository name and the branch name. Never rename any of them; don't rely on GitHub's redirects for this. The owner's move to QuietFoxLabs (above) is the one exception, and installations from the old address now depend on that redirect.
+
+## Repository move
+
+The source repository moved from `richhiiee/AetherFrame` to `QuietFoxLabs/AetherFrame` on 2026-09-29, after v0.1.6. GitHub now reports every release page and asset under the new address, and the configuration uses it. Two things still name the old one, and both are history:
+
+- **The file published before the move.** Its `RepoUrl` and download links use `https://github.com/richhiiee/AetherFrame`.
+- **Packages up to 0.1.6.** Their manifest's `RepoUrl` is the old address, and so is the tagged project's.
+
+`distribution/repository.json` records that history in three fields, set together or not at all: `previousSourceRepositoryUrl`, `previousDownloadUrlTemplate` (which must be a release download of that repository), and `previousAddressLastVersion`, the last version released there (`0.1.6`). The tooling accepts the old address in exactly two places:
+
+- **Reading the published file** (`plan-publication`, `prepare-publication`): its `RepoUrl` and download links may be the old address, for versions up to `previousAddressLastVersion`. The run reports it as `published address`.
+- **Checking a package** (`validate-package`, and each release a publication verifies): a package of `previousAddressLastVersion` or older may name the old address as its `RepoUrl`.
+
+Everything generated uses the current address. A new entry's `RepoUrl` is the configured `sourceRepositoryUrl`, never a package's, and its download links come from the current template, so the first publication after the move rewrites both. A file about to be published is checked without the allowance. A package of any later version must name the current address, and any third address is refused as before. Promoting or rolling back to v0.1.6 works, and the new file links its package at the new address, which GitHub serves.
+
+Limits and follow-ups:
+
+- **The package allowance is keyed on the version number**, not on a list of pre-move releases. A future reviewed release of an unused version at or below 0.1.6 could still carry the old `RepoUrl` in its package; the entry would still link the current address, and every other release check applies.
+- **The published-file allowance can go** once the first publication after the move has rewritten the file at the new address. Only the package allowance is then needed, for a rollback to 0.1.6.
+- **Installations from the old address depend on GitHub's redirect**, and so on the `richhiiee/AetherFrame` name staying unused. If `richhiiee` were renamed or deleted, someone else could claim the name, create `AetherFrame` there, and serve those installations a `pluginmaster.json` of their choosing, which Dalamud would update from. Never rename or delete the `richhiiee` account, keep two-factor authentication on it, never create or fork `AetherFrame` under it, and ask players who installed from the old address to add the new one.
 
 ## Protecting the repository
 

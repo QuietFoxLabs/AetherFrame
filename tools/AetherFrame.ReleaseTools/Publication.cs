@@ -77,7 +77,9 @@ public static class Publication
         IReadOnlyList<RepositoryEntry>? entries = null;
         try
         {
-            entries = RepositoryValidator.Validate(new RepositoryValidationRequest { Document = current, What = "published pluginmaster.json", Configuration = config }, own);
+            // The published file is history: written before the source repository moved, it links to the
+            // previous address. The new file is generated and checked without that allowance.
+            entries = RepositoryValidator.Validate(new RepositoryValidationRequest { Document = current, What = "published pluginmaster.json", Configuration = config, AcceptPreviousAddress = true }, own);
         }
         catch (ReleaseCheckException e)
         {
@@ -94,6 +96,11 @@ public static class Publication
         if (entries is null)
         {
             throw new ReleaseCheckException("the published pluginmaster.json does not pass validation; nothing is built on it.");
+        }
+
+        if (entries[0].RepoUrl != config.SourceRepositoryUrl)
+        {
+            checks.Pass("published address", $"{entries[0].RepoUrl}, from before the repository moved; the new file uses {config.SourceRepositoryUrl}");
         }
 
         var state = RepositoryState.FromEntry(entries[0]);
