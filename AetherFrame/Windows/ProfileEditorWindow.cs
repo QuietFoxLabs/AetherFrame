@@ -5,6 +5,7 @@ using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Theme;
 using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
@@ -296,6 +297,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     {
         actionBar.Draw(profile, editorSession.PreviewActive, () => EditorPreview.Enter(editorSession), EditorPreview.Tooltip, editorSession.ErrorMessage);
 
+        var toolbarMin = ImGui.GetCursorScreenPos();
         var atCapacity = profile.Elements.Count >= ProfileDocument.MaxElementCount;
         using (ImRaii.Disabled(atCapacity))
         {
@@ -304,6 +306,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
                 AddTextFromToolbar();
             }
 
+            TutorialAnchorMarks.Mark(TutorialTarget.AdvancedAddText);
             EditorWidgets.Tooltip(atCapacity ? $"At the maximum of {ProfileDocument.MaxElementCount} elements." : "Add a text element");
 
             ImGui.SameLine();
@@ -312,6 +315,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
                 OpenImageFileDialog("Add Image", path => editorSession.AddImageElement(path));
             }
 
+            TutorialAnchorMarks.Mark(TutorialTarget.AdvancedAddImage);
             EditorWidgets.Tooltip(atCapacity ? $"At the maximum of {ProfileDocument.MaxElementCount} elements." : "Import an image");
         }
 
@@ -322,11 +326,16 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
             editorSession.ShowGuides = !editorSession.ShowGuides;
         }
 
+        TutorialAnchorMarks.Mark(TutorialTarget.AdvancedGuides);
+
         ImGui.SameLine();
         if (EditorWidgets.TextToggle("Snap", editorSession.SnapEnabled, tooltip: "Snap to the canvas and other elements while moving or resizing.\nHold Alt to bypass temporarily."))
         {
             editorSession.SnapEnabled = !editorSession.SnapEnabled;
         }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.AdvancedSnap);
+        TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedToolbar, toolbarMin, ImGui.GetItemRectMax());
     }
 
     private static void ToolbarGap()
@@ -342,6 +351,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     /// </summary>
     private void DrawStatusBar(ProfileDocument profile)
     {
+        var zoomMin = ImGui.GetCursorScreenPos();
         if (EditorWidgets.IconButton("ZoomOut", FontAwesomeIcon.Minus, "Zoom out"))
         {
             editorSession.SetZoom(editorSession.Zoom / 1.25f);
@@ -367,6 +377,8 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
             FitCanvas();
         }
 
+        TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedZoom, zoomMin, ImGui.GetItemRectMax());
+
         var selected = GetSelectedElement(profile);
 
         ImGui.SameLine();
@@ -374,6 +386,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         using (ImRaii.PushColor(ImGuiCol.Text, EditorWidgets.DimTextColor))
         {
             ImGui.TextUnformatted($"   Canvas {profile.CanvasWidth:0} x {profile.CanvasHeight:0}   |   Elements {profile.Elements.Count}/{ProfileDocument.MaxElementCount}   |   {(selected is null ? "Nothing selected" : ProfileElementNames.GetDisplayName(selected))}");
+            TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedStatusBar, zoomMin, ImGui.GetItemRectMax());
 
             ImGui.SameLine();
             const string hints = "Wheel: zoom   Middle-drag: pan   F: fit   Alt: no snap";

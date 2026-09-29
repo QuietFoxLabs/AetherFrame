@@ -6,6 +6,8 @@ using AetherFrame.Services;
 using Dalamud.Bindings.ImGui;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Theme;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -83,13 +85,28 @@ internal static class EditorWidgets
     }
 
     /// <summary>A collapsible Inspector section; open by default unless told otherwise.</summary>
-    internal static bool Section(string label, bool defaultOpen = true)
+    internal static bool Section(string label, bool defaultOpen = true) => Section(label, [], defaultOpen);
+
+    /// <summary>
+    /// A collapsible Inspector section that opens itself while the tutorial points at one of the
+    /// controls inside it (<paramref name="reveals"/>), so a step never points into a closed section.
+    /// </summary>
+    internal static bool Section(string label, ReadOnlySpan<TutorialTarget> reveals, bool defaultOpen = true)
     {
         ImGui.Spacing();
 
         if (!SectionOpenStates.TryGetValue(label, out var open))
         {
             open = defaultOpen;
+        }
+
+        foreach (var target in reveals)
+        {
+            if (TutorialAnchorMarks.IsWanted(target))
+            {
+                open = true;
+                break;
+            }
         }
 
         ImGui.SetNextItemOpen(open, ImGuiCond.Always);

@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
+using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
@@ -90,8 +91,12 @@ internal sealed class EditorActionBar
             openMyPlates();
         }
 
+        TutorialAnchorMarks.Mark(TutorialTarget.EditorMyPlates);
+
         ImGui.SameLine();
+        var modeSwitchMin = ImGui.GetCursorScreenPos();
         DrawModeSwitch();
+        TutorialAnchorMarks.MarkRect(TutorialTarget.EditorModeSwitch, modeSwitchMin, ImGui.GetItemRectMax());
         var leftEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
 
         // ---- measure the other two groups
@@ -102,7 +107,8 @@ internal sealed class EditorActionBar
         var (stateText, stateColor) = SaveState();
         var rightWidth = ImGui.CalcTextSize(stateText).X
             + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
-            + (style.ItemSpacing.X * 3f);
+            + (style.ItemSpacing.X * 3f)
+            + (Help is null ? 0f : frame + style.ItemSpacing.X);
 
         var (centerX, rightX, nameWidth) = EditorActionBarLayout.Arrange(
             ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, leftEnd, centerWidth, rightWidth, gap);
@@ -113,6 +119,7 @@ internal sealed class EditorActionBar
             ImGui.SameLine(leftEnd + gap);
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted(FitText(profile.Name, nameWidth));
+            TutorialAnchorMarks.Mark(TutorialTarget.EditorPlateName);
             if (ImGui.IsItemHovered() && ImGui.CalcTextSize(profile.Name).X > nameWidth)
             {
                 ImGui.SetTooltip(profile.Name);
@@ -121,6 +128,7 @@ internal sealed class EditorActionBar
 
         // ---- center: history
         ImGui.SameLine(centerX);
+        var historyMin = ImGui.GetCursorScreenPos();
         using (ImRaii.Disabled(!commands.CanUndo))
         {
             if (EditorWidgets.IconButton("Undo", FontAwesomeIcon.Undo, "Undo (Ctrl+Z)"))
@@ -138,16 +146,21 @@ internal sealed class EditorActionBar
             }
         }
 
-        // ---- right: save state, Preview, Revert, Save
+        TutorialAnchorMarks.MarkRect(TutorialTarget.EditorHistory, historyMin, ImGui.GetItemRectMax());
+
+        // ---- right: save state, Preview, Revert, Save, Help
         ImGui.SameLine(rightX);
         ImGui.AlignTextToFramePadding();
         ImGui.TextColored(stateColor, stateText);
+        TutorialAnchorMarks.Mark(TutorialTarget.EditorSaveState);
 
         ImGui.SameLine();
         if (EditorWidgets.TextToggle(PreviewLabel, previewActive, tooltip: previewTooltip))
         {
             togglePreview();
         }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.EditorPreview);
 
         ImGui.SameLine();
         using (ImRaii.Disabled(!commands.CanRevert))
@@ -158,6 +171,7 @@ internal sealed class EditorActionBar
             }
         }
 
+        TutorialAnchorMarks.Mark(TutorialTarget.EditorRevert);
         EditorWidgets.Tooltip("Discard unsaved changes and go back to the last saved version. Asks first.");
 
         ImGui.SameLine();
@@ -171,7 +185,14 @@ internal sealed class EditorActionBar
             }
         }
 
+        TutorialAnchorMarks.Mark(TutorialTarget.EditorSave);
         EditorWidgets.Tooltip("Save (Ctrl+S)");
+
+        if (Help is { } help)
+        {
+            ImGui.SameLine();
+            help.DrawButton("EditorHelp");
+        }
 
         if (errorMessage is { } error)
         {
@@ -199,17 +220,14 @@ internal sealed class EditorActionBar
         ImGui.Spacing();
 
         var buttonSize = new Vector2(120f * ImGuiHelpers.GlobalScale, 0f);
-        using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.62f, 0.22f, 0.22f, 1f)))
+        if (AetherControls.DangerButton("Revert", buttonSize))
         {
-            if (ImGui.Button("Revert", buttonSize))
-            {
-                commands.Revert();
-                ImGui.CloseCurrentPopup();
-            }
+            commands.Revert();
+            ImGui.CloseCurrentPopup();
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", buttonSize))
+        if (AetherControls.GhostButton("Cancel", buttonSize))
         {
             ImGui.CloseCurrentPopup();
         }

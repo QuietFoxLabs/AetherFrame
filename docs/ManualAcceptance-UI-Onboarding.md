@@ -10,8 +10,8 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 
 1. **Upgrade from v0.1.6.** Load with the real folder. My Plates lists every Plate, the log shows `AetherFrame tutorial: ExistingInstall`, the offer is not shown, no file in the folder changed except `AetherFrame.json`, which gained a `Tutorial` block with `"Install": 2`.
 2. **Pre-0.1.6 shape.** Delete `AetherFrame.json` from a copy of the real folder (Plates remain). Load: `ExistingInstall`, not offered.
-3. **Damaged configuration.** Replace `AetherFrame.json` with `{` and load: the plugin loads, the log warns about the configuration, not offered.
-4. **Library failed to load.** Make the `Profiles` folder unreadable (deny permissions) and load: My Plates reports the failure, the log shows `Undetermined`, not offered, and `AetherFrame.json` gains no `Tutorial` block. Restore permissions.
+3. **Damaged configuration.** Replace `AetherFrame.json` with `{` and load: the plugin loads, the log warns about the configuration, the tutorial line reads `AlreadyDecided (install ExistingInstall …)`, not offered, and the rewritten `AetherFrame.json` holds `"Install": 2`.
+4. **Library failed to load.** In a copy with `AetherFrame.json` deleted (the pre-0.1.6 shape), make the `Profiles` folder unreadable (deny permissions) and load: My Plates reports the failure, the log shows `Undetermined`, not offered, and `AetherFrame.json` (written for the guidance flag) holds `"Install": 3`, the pending kind, which a later launch decides from the Library. Restore permissions and load again: `ExistingInstall`, because the copy has Plates.
 5. **Second launch of an existing install.** Load again: `AlreadyDecided`, nothing written.
 
 ## B. A new install is offered the tutorial, once, politely
@@ -44,11 +44,11 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 
 ## D. The redesign
 
-26. **Recognizable.** Open My Plates, both editors, the Plate Viewer and the Import Preview side by side with another plugin's window: every AetherFrame window shares the same midnight surfaces, the accent, the title row with the mark, and the same button styles; none of them changed the other plugin's look.
-27. **My Plates.** Create Plate is the one primary button; Import, search and Help sit with it; an empty library shows the empty state with Create Your First Plate; the selected card shows the accent ring with the frame corners; the Active badge is gold; right-click menus are unchanged in content.
-28. **Basic editor.** Every category's controls are grouped under section labels; each slider and choice has a tooltip with units where they apply; the navigator's selected row is the accent; the live Plate renders exactly as in v0.1.6 (compare a screenshot of the same Plate).
-29. **Advanced editor.** Layers, canvas and Inspector read as one workspace; the selected element is obvious in Layers and on the canvas; the Inspector's sections carry the section labels; every property has a tooltip; the canvas rendering of a saved Plate is identical to v0.1.6.
-30. **Prompts.** The unsaved-changes, revert, delete and rename prompts use the shared button row: red for the destructive choice, Cancel ghost; Escape and Enter behave as before.
+26. **Recognizable.** Open My Plates, both editors, the Plate Viewer and the Import Preview side by side with another plugin's window: every AetherFrame window shares the same midnight surfaces, rounding, spacing and accent; My Plates opens with the brand row (the mark and the title in the Axis face); none of them changed the other plugin's look.
+27. **My Plates.** Create Plate is the one primary (accent-filled) button; Import, search and the Help button sit with it; an empty library shows the empty state with Create Your First Plate; the selected card shows the accent ring with the frame corners; the Active badge is gold; right-click menus are unchanged in content.
+28. **Basic editor.** The selected category's title is a small accent label with a rule, its summary lines are in the secondary tone, and each group inside the category (Theme, Portrait, Name…) has the same small accent label; the navigator's selected row is the accent; sliders and choices keep the tooltips they had; the live Plate renders exactly as in v0.1.6 (compare a screenshot of the same Plate).
+29. **Advanced editor.** Layers, canvas and Inspector share the themed chrome and read as one workspace; the action bar ends with the Help button; the Inspector's collapsible sections and their tooltips are unchanged in content; the canvas rendering of a saved Plate is identical to v0.1.6.
+30. **Prompts.** The unsaved-changes, open-another-Plate, revert, rename and delete prompts use the shared button row: the destructive choice red, Save or Rename accent, Cancel a quiet ghost; Escape and Enter behave as before.
 31. **Clean Preview and the Plate Viewer** show only the Plate over the game, as before; the close control is unchanged.
 32. **Scale.** Everything above at 100 %, 150 % and 200 %.
 33. **Performance.** With the tour running and My Plates holding 100 Plates, the frame time does not visibly change when the tour is closed versus open (compare with a frame-time overlay); no per-frame GC spikes in the log's memory counters.

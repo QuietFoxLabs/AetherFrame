@@ -3,6 +3,8 @@ using System.Numerics;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 
@@ -56,6 +58,8 @@ internal sealed partial class ProfileEditorWindow
         {
             return;
         }
+
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.AdvancedCanvas);
 
         // The interior content region (post-border/padding), not the outer `size` passed in —
         // this is what the canvas actually has to fit inside.

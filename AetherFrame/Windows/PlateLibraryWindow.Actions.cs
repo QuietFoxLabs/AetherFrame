@@ -401,7 +401,7 @@ internal sealed partial class PlateLibraryWindow
         var buttonSize = EditorWidgets.Scaled(new Vector2(110f, 0f));
         using (ImRaii.Disabled(profileService.IsBusy || guardSaveTask is not null))
         {
-            if (ImGui.Button(guardSaveTask is null ? "Save" : "Saving...", buttonSize))
+            if (AetherControls.PrimaryButton(guardSaveTask is null ? "Save" : "Saving...", buttonSize))
             {
                 guardSaveTask = editorSession.SaveProfileAsync();
                 ImGui.CloseCurrentPopup();
@@ -413,7 +413,7 @@ internal sealed partial class PlateLibraryWindow
         ImGui.SameLine();
         using (ImRaii.Disabled(profileService.IsBusy || guardSaveTask is not null))
         {
-            if (ImGui.Button("Discard", buttonSize) && editorSession.DiscardChanges())
+            if (AetherControls.DangerButton("Discard", buttonSize) && editorSession.DiscardChanges())
             {
                 // Only once the edits are really gone: a refused revert (a save landed meanwhile)
                 // keeps the question open, with the editor's own message saying why.
@@ -424,7 +424,7 @@ internal sealed partial class PlateLibraryWindow
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", buttonSize))
+        if (AetherControls.GhostButton("Cancel", buttonSize))
         {
             guardedOpen = null;
             ImGui.CloseCurrentPopup();
@@ -462,7 +462,7 @@ internal sealed partial class PlateLibraryWindow
         ImGui.Spacing();
         using (ImRaii.Disabled(IsBusy))
         {
-            if (ImGui.Button("Rename", EditorWidgets.Scaled(new Vector2(110f, 0f))) || submitted)
+            if (AetherControls.PrimaryButton("Rename", EditorWidgets.Scaled(new Vector2(110f, 0f))) || submitted)
             {
                 if (!PlateNaming.TryNormalizeName(renameBuffer, out var name, out var validationError))
                 {
@@ -478,7 +478,7 @@ internal sealed partial class PlateLibraryWindow
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (AetherControls.GhostButton("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
         {
             ImGui.CloseCurrentPopup();
         }
@@ -539,30 +539,27 @@ internal sealed partial class PlateLibraryWindow
         ImGui.Spacing();
         using (ImRaii.Disabled(IsBusy))
         {
-            using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.6f, 0.18f, 0.18f, 1f)))
+            if (AetherControls.DangerButton("Delete", EditorWidgets.Scaled(new Vector2(110f, 0f))))
             {
-                if (ImGui.Button("Delete", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+                var plateId = plate.PlateId;
+                var name = plate.DisplayName;
+                RunOperation<PlateDeletionResult>("delete the Plate", () => library.DeletePlateAsync(plateId), result =>
                 {
-                    var plateId = plate.PlateId;
-                    var name = plate.DisplayName;
-                    RunOperation<PlateDeletionResult>("delete the Plate", () => library.DeletePlateAsync(plateId), result =>
+                    if (selectedPlateId == plateId)
                     {
-                        if (selectedPlateId == plateId)
-                        {
-                            selectedPlateId = null;
-                        }
+                        selectedPlateId = null;
+                    }
 
-                        statusMessage = result.ClearedActiveForContentIds.Count > 0
-                            ? $"Deleted \"{name}\". No Plate is Active for {(result.ClearedActiveForContentIds.Count == 1 ? "that character" : "those characters")} now."
-                            : $"Deleted \"{name}\".";
-                    });
-                    ImGui.CloseCurrentPopup();
-                }
+                    statusMessage = result.ClearedActiveForContentIds.Count > 0
+                        ? $"Deleted \"{name}\". No Plate is Active for {(result.ClearedActiveForContentIds.Count == 1 ? "that character" : "those characters")} now."
+                        : $"Deleted \"{name}\".";
+                });
+                ImGui.CloseCurrentPopup();
             }
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (AetherControls.GhostButton("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
         {
             ImGui.CloseCurrentPopup();
         }

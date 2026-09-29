@@ -327,8 +327,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         {
             await Framework.RunOnTick(ResolveFirstRun, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            // A stopped load tears the plugin down here, like the Library loads above; any other
+            // failure only means the offer isn't made this launch.
+            await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
             Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not decide whether to offer the tutorial.");
         }
     }
