@@ -1,35 +1,49 @@
-using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Signing;
 
 namespace AetherFrame.Personas;
 
 /// <summary>
-/// Custody of persona private keys: the one seam through which a key is made, opened for signing
-/// or handed to a backup codec. The <see cref="PersonaManager"/> holds public records and never a
-/// private key; an implementation holds keys and never a record. No implementation in this assembly
-/// stores anything. The protected store for real keys is a later increment, gated on the open
-/// key-storage decisions (docs/networking/DecisionRegister.md, K2 and K3), and until a reviewed one
-/// exists the only implementations are in-memory test doubles. Nothing about this interface makes a
-/// key safe: that is a property of an implementation, and only a reviewed one may claim it.
-/// Implementations may block (a store that reads files or unprotects keys does), so a caller on a
-/// frame thread hands the work to another thread.
+/// Custody of persona private keys: the one seam through which a key is made, kept, opened for
+/// signing or handed to a backup codec. The <see cref="PersonaManager"/> holds public records and
+/// never keeps a private key; an implementation keeps keys and never a record. No implementation in
+/// this assembly stores anything. The protected store for real keys is a later increment, gated on
+/// the open key-storage decisions (docs/networking/DecisionRegister.md, K2 and K3), and until a
+/// reviewed one exists the only implementations are in-memory test doubles. Nothing about this
+/// interface makes a key safe: that is a property of an implementation, and only a reviewed one may
+/// claim it. Implementations may block (a store that reads files or unprotects keys does), so a
+/// caller on a frame thread hands the work to another thread.
+/// <para>
+/// Custody is taken in two steps so that nothing is committed before it is checked: a key is made
+/// (<see cref="GenerateKey"/>) or restored by a codec without the store holding it, the manager
+/// checks its identity against the personas it holds, and only then does the store commit it
+/// (<see cref="AddKey"/>). A refusal therefore never leaves a key in a store without a record, and
+/// the manager never needs to delete one: nothing in this interface deletes a key.
+/// </para>
+/// <para>
+/// Ownership is the same everywhere: material or a signer a store returns is the caller's to
+/// dispose, and material a caller passes in stays the caller's; a store keeps its own copy of what
+/// it holds and never the caller's object.
+/// </para>
 /// </summary>
 public interface IPersonaKeyStore
 {
     /// <summary>
-    /// Makes a fresh P-256 key under <paramref name="slot"/>, keeps its private half and returns the
-    /// public half. Every call generates a new random key: a store that handed out an existing key
-    /// would give two records one identity, which the manager refuses.
+    /// A fresh random P-256 key that this store is able to hold, not held yet: nothing is committed
+    /// until <see cref="AddKey"/>. The caller owns and disposes it. Every call makes a new key; a
+    /// store that handed out a key it already holds would give two records one identity, which the
+    /// manager refuses before anything is committed.
     /// </summary>
-    PersonaPublicKey CreateKey(PersonaSlotId slot);
+    PersonaKeyMaterial GenerateKey();
 
     /// <summary>
-    /// Takes custody of <paramref name="material"/>, a key a backup codec restored, under
-    /// <paramref name="slot"/>, and returns its public half. Ownership passes on success: the store
-    /// disposes the material when it is done with it, and the caller does not use it again. On
-    /// failure the material stays the caller's.
+    /// Commits a copy of <paramref name="material"/>'s key to custody under <paramref name="slot"/>.
+    /// Three rules bind every implementation. It never replaces: a slot the store already holds is
+    /// refused with an exception and its key is left exactly as it was. It is atomic: it returns
+    /// only once the key is held, and when it throws, nothing is held under <paramref name="slot"/>.
+    /// It never retains <paramref name="material"/> itself, which stays the caller's to dispose
+    /// whether this returns or throws.
     /// </summary>
-    PersonaPublicKey AdoptKey(PersonaSlotId slot, PersonaKeyMaterial material);
+    void AddKey(PersonaSlotId slot, PersonaKeyMaterial material);
 
     /// <summary>
     /// A signer over the slot's key for one operation, disposed by the caller when it is disposable,

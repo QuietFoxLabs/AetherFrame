@@ -1,5 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Numerics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Signing;
@@ -7,17 +11,26 @@ using AetherFrame.Protocol.Signing;
 namespace AetherFrame.Personas.Tests;
 
 /// <summary>
-/// Synthetic keys: fresh random P-256 keys that exist only in this test process and are never
-/// written anywhere. None of them can be mistaken for a player's key, because no player key exists.
+/// Synthetic keys: fresh random P-256 keys, or fixed textbook scalars (1, n - 1) that no generator
+/// would produce, that exist only in this test process and are never written anywhere. None of them
+/// can be mistaken for a player's key, because no player key exists.
 /// </summary>
 internal static class SyntheticKeys
 {
-    /// <summary>The order of the P-256 base point, big-endian.</summary>
-    public static ReadOnlySpan<byte> GroupOrder =>
-    [
-        0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xBC, 0xE6, 0xFA, 0xAD, 0xA7, 0x17, 0x9E, 0x84, 0xF3, 0xB9, 0xCA, 0xC2, 0xFC, 0x63, 0x25, 0x51,
-    ];
+    /// <summary>The order of the P-256 base point.</summary>
+    public static readonly BigInteger Order = BigInteger.Parse("0FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
+
+    /// <summary>The prime of the P-256 field.</summary>
+    public static readonly BigInteger Prime = BigInteger.Parse("0FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF", NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
+
+    /// <summary>The P-256 base point G, as the specification gives it.</summary>
+    public static PersonaPublicKey BasePoint { get; } = PersonaPublicKey.FromBytes(Convert.FromHexString(
+        "04" +
+        "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296" +
+        "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"));
+
+    /// <summary>-G: the point whose private scalar is n - 1 (same x, y replaced by p - y).</summary>
+    public static PersonaPublicKey NegatedBasePoint { get; } = Negate(BasePoint);
 
     public static ECDsa Create() => ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -34,7 +47,7 @@ internal static class SyntheticKeys
         }
     }
 
-    public static PersonaKeyMaterial Material() => new(Create());
+    public static PersonaKeyMaterial Material() => PersonaKeyMaterial.Generate();
 
     /// <summary>The same point with no private scalar.</summary>
     public static ECDsa PublicOnly(ECDsa key) => ECDsa.Create(key.ExportParameters(includePrivateParameters: false));
@@ -54,15 +67,55 @@ internal static class SyntheticKeys
             CryptographicOperations.ZeroMemory(parameters.D);
         }
     }
+
+    /// <summary>A copy of the private scalar, which the test zeroes.</summary>
+    public static byte[] Scalar(ECDsa key)
+    {
+        var parameters = key.ExportParameters(includePrivateParameters: true);
+        return parameters.D!;
+    }
+
+    /// <summary><paramref name="value"/> as 32 big-endian bytes (it must be below 2^256).</summary>
+    public static byte[] Fixed32(BigInteger value)
+    {
+        var bytes = new byte[32];
+        var raw = value.ToByteArray(isUnsigned: true, isBigEndian: true);
+        raw.CopyTo(bytes, 32 - raw.Length);
+        return bytes;
+    }
+
+    /// <summary>scalar·G for a scalar from 1 to n - 1, derived by the platform from the scalar alone.</summary>
+    public static PersonaPublicKey PointFor(BigInteger scalar)
+    {
+        var d = Fixed32(scalar);
+        try
+        {
+            using var key = ECDsa.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = d });
+            return PersonaPublicKey.FromEcdsa(key);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(d);
+        }
+    }
+
+    public static PersonaPublicKey Negate(PersonaPublicKey point)
+    {
+        var bytes = point.ToArray();
+        var y = new BigInteger(bytes.AsSpan(33, 32), isUnsigned: true, isBigEndian: true);
+        Fixed32(Prime - y).CopyTo(bytes, 33);
+        return PersonaPublicKey.FromBytes(bytes);
+    }
 }
 
 /// <summary>
 /// In-memory custody for tests: keys live in a dictionary and vanish with the process. It stores
-/// nothing, protects nothing and is not a vault. It records every call so tests can assert that the
-/// manager never touches a key for an operation that does not need one, and it can be told to
-/// treat a slot as locked (as a protected store would for a key made under another account) or to
-/// hand out the wrong persona's key (a store fault the manager must catch). Not thread-safe: the
-/// manager serializes its store calls, which the concurrency test relies on.
+/// nothing, protects nothing and is not a vault. It follows the store contract (a copy is kept, a
+/// held slot is refused, a failure holds nothing) unless told to break it, records every call so
+/// tests can assert that the manager never touches a key for an operation that does not need one,
+/// and can be told to treat a slot as locked, to hand out the wrong persona's key, or to fail in
+/// each of the ways a real store might. Not thread-safe: the manager serializes its store calls,
+/// which the concurrency tests rely on.
 /// </summary>
 internal sealed class InMemoryPersonaKeyStore : IPersonaKeyStore
 {
@@ -71,50 +124,138 @@ internal sealed class InMemoryPersonaKeyStore : IPersonaKeyStore
 
     public List<string> Calls { get; } = new();
 
-    /// <summary>The platform key the next <see cref="CreateKey"/> wraps instead of a fresh one; used once.</summary>
+    /// <summary>The platform key the next <see cref="GenerateKey"/> copies instead of a fresh one; used once, then disposed here.</summary>
     public Func<ECDsa>? NextKey { get; set; }
+
+    /// <summary>Thrown by the next <see cref="GenerateKey"/>.</summary>
+    public Exception? FailNextGenerate { get; set; }
+
+    /// <summary>When set, <see cref="GenerateKey"/> returns null: a store breaking its contract.</summary>
+    public bool GenerateNothing { get; set; }
+
+    /// <summary>Thrown by the next <see cref="AddKey"/> before anything is held: an atomic failure.</summary>
+    public Exception? FailNextAdd { get; set; }
+
+    /// <summary>Thrown by the next <see cref="AddKey"/> after the key is held: a store breaking its atomicity rule.</summary>
+    public Exception? FailNextAddAfterCommit { get; set; }
+
+    /// <summary>When set, the next <see cref="AddKey"/> holds this key instead of the one it was given: a faulty store.</summary>
+    public Func<ECDsa>? SubstituteNextAdd { get; set; }
+
+    /// <summary>When set, <see cref="OpenSigner"/> answers with this instead of a signer over the held key.</summary>
+    public Func<PersonaSlotId, IPersonaSigner?>? SignerOverride { get; set; }
 
     /// <summary>Slots whose opens are answered with another slot's key.</summary>
     public Dictionary<PersonaSlotId, PersonaSlotId> Impersonate { get; } = new();
+
+    /// <summary>Every material this store handed out (generated or opened), to check the caller disposes it.</summary>
+    public List<PersonaKeyMaterial> HandedOut { get; } = new();
+
+    /// <summary>Every material passed to <see cref="AddKey"/>, to check the store never keeps the caller's object.</summary>
+    public List<PersonaKeyMaterial> Received { get; } = new();
 
     public int Count => keys.Count;
 
     public int CallsTo(string name) => Calls.FindAll(c => c == name).Count;
 
-    public PersonaPublicKey CreateKey(PersonaSlotId slot)
+    public PersonaKeyMaterial GenerateKey()
     {
-        Calls.Add(nameof(CreateKey));
-        var key = NextKey?.Invoke() ?? SyntheticKeys.Create();
-        NextKey = null;
-        var material = new PersonaKeyMaterial(key);
-        keys.Add(slot, material);
-        return material.PublicKey;
+        Calls.Add(nameof(GenerateKey));
+        if (FailNextGenerate is { } failure)
+        {
+            FailNextGenerate = null;
+            throw failure;
+        }
+
+        if (GenerateNothing)
+        {
+            return null!;
+        }
+
+        PersonaKeyMaterial material;
+        if (NextKey is { } next)
+        {
+            NextKey = null;
+            using var key = next();
+            material = PersonaKeyMaterial.FromEcdsa(key);
+        }
+        else
+        {
+            material = PersonaKeyMaterial.Generate();
+        }
+
+        HandedOut.Add(material);
+        return material;
     }
 
-    public PersonaPublicKey AdoptKey(PersonaSlotId slot, PersonaKeyMaterial material)
+    public void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
     {
-        Calls.Add(nameof(AdoptKey));
-        keys.Add(slot, material);
-        return material.PublicKey;
+        Calls.Add(nameof(AddKey));
+        Received.Add(material);
+        if (FailNextAdd is { } failure)
+        {
+            FailNextAdd = null;
+            throw failure;
+        }
+
+        if (keys.ContainsKey(slot))
+        {
+            throw new InvalidOperationException("This store already holds a key under that slot and never replaces one.");
+        }
+
+        PersonaKeyMaterial copy;
+        if (SubstituteNextAdd is { } substitute)
+        {
+            SubstituteNextAdd = null;
+            using var other = substitute();
+            copy = PersonaKeyMaterial.FromEcdsa(other);
+        }
+        else
+        {
+            copy = material.Copy();
+        }
+
+        keys.Add(slot, copy);
+        if (FailNextAddAfterCommit is { } late)
+        {
+            FailNextAddAfterCommit = null;
+            throw late;
+        }
     }
 
     public IPersonaSigner? OpenSigner(PersonaSlotId slot)
     {
         Calls.Add(nameof(OpenSigner));
+        if (SignerOverride is { } signer)
+        {
+            return signer(slot);
+        }
+
         return Resolve(slot)?.CreateSigner();
     }
 
     public PersonaKeyMaterial? OpenKey(PersonaSlotId slot)
     {
         Calls.Add(nameof(OpenKey));
-        return Resolve(slot)?.Copy();
+        var material = Resolve(slot)?.Copy();
+        if (material is not null)
+        {
+            HandedOut.Add(material);
+        }
+
+        return material;
     }
+
+    /// <summary>Puts a key under a slot directly, as a store that already held keys the manager does not know about would.</summary>
+    public void Seed(PersonaSlotId slot, PersonaKeyMaterial material) => keys.Add(slot, material.Copy());
 
     public void Lock(PersonaSlotId slot) => locked.Add(slot);
 
     public void Unlock(PersonaSlotId slot) => locked.Remove(slot);
 
     public bool Holds(PersonaSlotId slot) => keys.ContainsKey(slot);
+
+    public IReadOnlyCollection<PersonaSlotId> Slots => keys.Keys;
 
     /// <summary>The material held for a slot, to check it is the same object after an operation that must not touch it.</summary>
     public PersonaKeyMaterial Held(PersonaSlotId slot) => keys[slot];
@@ -126,33 +267,22 @@ internal sealed class InMemoryPersonaKeyStore : IPersonaKeyStore
     }
 }
 
-/// <summary>A store whose adoption fails, for the manager's rollback path.</summary>
-internal sealed class RefusingKeyStore : IPersonaKeyStore
-{
-    private readonly InMemoryPersonaKeyStore inner = new();
-
-    public PersonaPublicKey CreateKey(PersonaSlotId slot) => inner.CreateKey(slot);
-
-    public PersonaPublicKey AdoptKey(PersonaSlotId slot, PersonaKeyMaterial material) => throw new InvalidOperationException("This store refuses every adoption.");
-
-    public IPersonaSigner? OpenSigner(PersonaSlotId slot) => inner.OpenSigner(slot);
-
-    public PersonaKeyMaterial? OpenKey(PersonaSlotId slot) => inner.OpenKey(slot);
-}
-
 /// <summary>
 /// A test double for the backup seam, and deliberately not a file format. The bytes it produces are
 /// a magic, a version byte and a random 16-byte handle into this object's memory, where a copy of
 /// the material and of the secret's characters are kept for the duration of the test. No key
 /// material and no secret is in the bytes, nothing is encrypted, and nothing could be restored by
 /// any other process. It exists so the manager's inspection, duplicate and refusal paths can be
-/// exercised without a format that has not been approved.
+/// exercised without a format that has not been approved. It records what it was shown and can be
+/// told to misbehave the ways a faulty codec might. Thread-safe enough for the concurrency tests:
+/// its state is under a lock.
 /// </summary>
 internal sealed class HandleBackupCodec : IPersonaBackupCodec
 {
     public const byte SupportedVersion = 1;
     public const int Length = 6 + 1 + 16;
 
+    private readonly object sync = new();
     private readonly Dictionary<string, (PersonaKeyMaterial Material, char[] Secret)> handles = new();
 
     private static ReadOnlySpan<byte> Magic => "AFTEST"u8;
@@ -163,42 +293,96 @@ internal sealed class HandleBackupCodec : IPersonaBackupCodec
 
     public int OpenCalls { get; private set; }
 
+    /// <summary>Copies of the bytes each <see cref="Inspect"/> saw.</summary>
+    public List<byte[]> Inspected { get; } = new();
+
+    /// <summary>Copies of the bytes each <see cref="Open"/> saw.</summary>
+    public List<byte[]> Opened { get; } = new();
+
+    /// <summary>Every material <see cref="Open"/> handed out, to check the caller disposes it.</summary>
+    public List<PersonaKeyMaterial> HandedOut { get; } = new();
+
+    /// <summary>When set, <see cref="Inspect"/> answers with this (given a copy of the bytes) instead of classifying them.</summary>
+    public Func<byte[], PersonaBackupInspection?>? InspectOverride { get; set; }
+
+    /// <summary>Runs inside <see cref="Inspect"/> after the bytes were read: stands for another thread writing to the caller's buffer.</summary>
+    public Action? DuringInspect { get; set; }
+
+    /// <summary>When set, <see cref="Open"/> returns null: a codec breaking its contract.</summary>
+    public bool OpenNothing { get; set; }
+
+    /// <summary>Thrown by the next <see cref="Write"/>.</summary>
+    public Exception? FailNextWrite { get; set; }
+
     public PersonaBackupInspection Inspect(ReadOnlySpan<byte> backup)
     {
-        InspectCalls++;
-        return Classify(backup);
+        var seen = backup.ToArray();
+        Func<byte[], PersonaBackupInspection?>? inspect;
+        Action? during;
+        lock (sync)
+        {
+            InspectCalls++;
+            Inspected.Add(seen);
+            inspect = InspectOverride;
+            during = DuringInspect;
+        }
+
+        var inspection = inspect is not null ? inspect(seen) : Classify(seen);
+        during?.Invoke();
+        return inspection!;
     }
 
     public byte[] Write(PersonaKeyMaterial material, PersonaBackupSecret secret)
     {
-        WriteCalls++;
-        var handle = RandomNumberGenerator.GetBytes(16);
-        handles[Convert.ToHexString(handle)] = (material.Copy(), secret.Text.ToArray());
-        var bytes = new byte[Length];
-        Magic.CopyTo(bytes);
-        bytes[6] = SupportedVersion;
-        handle.CopyTo(bytes, 7);
-        return bytes;
+        lock (sync)
+        {
+            WriteCalls++;
+            if (FailNextWrite is { } failure)
+            {
+                FailNextWrite = null;
+                throw failure;
+            }
+
+            var handle = RandomNumberGenerator.GetBytes(16);
+            handles[Convert.ToHexString(handle)] = (material.Copy(), secret.Text.ToArray());
+            var bytes = new byte[Length];
+            Magic.CopyTo(bytes);
+            bytes[6] = SupportedVersion;
+            handle.CopyTo(bytes, 7);
+            return bytes;
+        }
     }
 
     public PersonaKeyMaterial Open(ReadOnlySpan<byte> backup, PersonaBackupSecret secret)
     {
-        OpenCalls++;
-        var inspection = Classify(backup);
-        switch (inspection.Status)
+        var seen = backup.ToArray();
+        lock (sync)
         {
-            case PersonaBackupStatus.Malformed:
-                throw new PersonaException(PersonaError.BackupMalformed, "Not a test backup.");
-            case PersonaBackupStatus.UnsupportedVersion:
-                throw new PersonaException(PersonaError.BackupUnsupported, "A test backup of another version.");
-        }
+            OpenCalls++;
+            Opened.Add(seen);
+            if (OpenNothing)
+            {
+                return null!;
+            }
 
-        if (!handles.TryGetValue(Convert.ToHexString(backup.Slice(7)), out var entry) || !entry.Secret.AsSpan().SequenceEqual(secret.Text))
-        {
-            throw new PersonaException(PersonaError.BackupCannotBeOpened, "The secret is wrong or the backup is damaged.");
-        }
+            var inspection = Classify(seen);
+            switch (inspection.Status)
+            {
+                case PersonaBackupStatus.Malformed:
+                    throw new PersonaException(PersonaError.BackupMalformed, "Not a test backup.");
+                case PersonaBackupStatus.UnsupportedVersion:
+                    throw new PersonaException(PersonaError.BackupUnsupported, "A test backup of another version.");
+            }
 
-        return entry.Material.Copy();
+            if (!handles.TryGetValue(Convert.ToHexString(seen, 7, 16), out var entry) || !entry.Secret.AsSpan().SequenceEqual(secret.Text))
+            {
+                throw new PersonaException(PersonaError.BackupCannotBeOpened, "The secret is wrong or the backup is damaged.");
+            }
+
+            var material = entry.Material.Copy();
+            HandedOut.Add(material);
+            return material;
+        }
     }
 
     public static byte[] WithVersion(byte[] backup, byte version)
@@ -215,6 +399,19 @@ internal sealed class HandleBackupCodec : IPersonaBackupCodec
         return copy;
     }
 
+    /// <summary>
+    /// An inspection built without its constructor, so it can carry what the constructor refuses
+    /// (an undefined status, an incoherent version): the only way a codec could hand the manager one.
+    /// </summary>
+    public static PersonaBackupInspection Forged(PersonaBackupStatus status, int formatVersion)
+    {
+        var inspection = (PersonaBackupInspection)RuntimeHelpers.GetUninitializedObject(typeof(PersonaBackupInspection));
+        const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
+        typeof(PersonaBackupInspection).GetField("<Status>k__BackingField", flags)!.SetValue(inspection, status);
+        typeof(PersonaBackupInspection).GetField("<FormatVersion>k__BackingField", flags)!.SetValue(inspection, formatVersion);
+        return inspection;
+    }
+
     private static PersonaBackupInspection Classify(ReadOnlySpan<byte> backup)
     {
         if (backup.Length != Length || !backup.Slice(0, Magic.Length).SequenceEqual(Magic))
@@ -223,9 +420,42 @@ internal sealed class HandleBackupCodec : IPersonaBackupCodec
         }
 
         var version = backup[6];
-        return version == SupportedVersion
-            ? new PersonaBackupInspection(PersonaBackupStatus.Supported, version)
-            : new PersonaBackupInspection(PersonaBackupStatus.UnsupportedVersion, version);
+        return version switch
+        {
+            0 => new PersonaBackupInspection(PersonaBackupStatus.Malformed, 0),
+            SupportedVersion => new PersonaBackupInspection(PersonaBackupStatus.Supported, version),
+            _ => new PersonaBackupInspection(PersonaBackupStatus.UnsupportedVersion, version),
+        };
+    }
+}
+
+/// <summary>A signer whose reported key can be changed after it was handed out: a faulty store's signer.</summary>
+internal sealed class ShiftingSigner : IPersonaSigner, IDisposable
+{
+    private readonly EcdsaPersonaSigner inner;
+
+    public ShiftingSigner(EcdsaPersonaSigner inner)
+    {
+        this.inner = inner;
+        PublicKey = inner.PublicKey;
+    }
+
+    public PersonaPublicKey PublicKey { get; set; }
+
+    public int SignCalls { get; private set; }
+
+    public bool Disposed { get; private set; }
+
+    public ProtocolSignature Sign(SigningInput input)
+    {
+        SignCalls++;
+        return inner.Sign(input);
+    }
+
+    public void Dispose()
+    {
+        Disposed = true;
+        inner.Dispose();
     }
 }
 
@@ -237,4 +467,21 @@ internal static class Documents
     public static AetherFrame.Protocol.Remote.ProfileRetraction Retraction() => new(Profile, 1_700_000_100);
 
     public static byte[] SignedRetraction(IPersonaSigner signer) => AetherFrame.Protocol.Documents.SignedDocumentCodec.Sign(Retraction(), signer);
+}
+
+/// <summary>Whether a material has been disposed, read the only way its public surface allows.</summary>
+internal static class Disposal
+{
+    public static bool IsDisposed(PersonaKeyMaterial material)
+    {
+        try
+        {
+            material.CreateSigner().Dispose();
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+    }
 }

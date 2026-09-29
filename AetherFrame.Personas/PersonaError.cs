@@ -12,7 +12,7 @@ public enum PersonaError
     /// <summary>A local identifier is not its prefix followed by 32 lowercase hex digits, or is all zero.</summary>
     InvalidIdentifier,
 
-    /// <summary>A key is not a named-curve P-256 key with a private half in range, or a key store handed out a key that belongs to another persona.</summary>
+    /// <summary>A key is not a consistent named-curve P-256 key pair with a private scalar in range, or a key store produced no key or handed out a key that belongs to another persona.</summary>
     InvalidKeyMaterial,
 
     /// <summary>The persona identity derived from a key is already held by this installation.</summary>
@@ -32,4 +32,15 @@ public enum PersonaError
 
     /// <summary>A backup that did not open under the given secret: the secret is wrong or the content is damaged, and the two are not distinguished.</summary>
     BackupCannotBeOpened,
+
+    /// <summary>A backup codec returned no inspection, or one that is not coherent, so the backup was not opened and no secret was used: a codec fault.</summary>
+    InvalidBackupInspection,
+
+    /// <summary>
+    /// A signer lease was used after the active selection changed (another persona selected, or the
+    /// persona deselected): the lease no longer signs, and a new one must be opened for the persona
+    /// that is active now. This is the interim, fail-closed policy; see
+    /// docs/networking/NETWORK1_PersonaFoundation.md, section 7, for the owner decision it awaits.
+    /// </summary>
+    LeaseRevoked,
 }

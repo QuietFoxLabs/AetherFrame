@@ -97,7 +97,7 @@ public class PersonaBackupContractTests
         Assert.Equal("Restored main", restored.Label);
         Assert.Null(away.Active);
         Assert.Single(away.Personas);
-        Assert.Equal(1, awayStore.CallsTo("AdoptKey"));
+        Assert.Equal(1, awayStore.CallsTo("AddKey"));
         Assert.True(awayStore.Holds(restored.Slot));
 
         // The restored persona signs as the original.
@@ -154,12 +154,14 @@ public class PersonaBackupContractTests
         var main = home.Create("Main");
         using var secret = Secret();
         var backup = home.ExportBackup(main.Slot, secret);
+        var addsBefore = homeStore.CallsTo("AddKey");
 
         var result = home.RestoreBackup(backup, secret, "Main again");
         Assert.Equal(PersonaRestoreStatus.AlreadyPresent, result.Status);
         Assert.Same(main, result.Persona);
         Assert.Single(home.Personas);
-        Assert.Equal(0, homeStore.CallsTo("AdoptKey"));
+        Assert.Equal(addsBefore, homeStore.CallsTo("AddKey"));
+        Assert.Equal(1, homeStore.Count);
     }
 
     [Fact]
@@ -226,7 +228,7 @@ public class PersonaBackupContractTests
 
         Assert.Empty(away.Personas);
         Assert.Equal(0, awayStore.Count);
-        Assert.Equal(0, awayStore.CallsTo("AdoptKey"));
+        Assert.Equal(0, awayStore.CallsTo("AddKey"));
         Assert.Null(away.Active);
     }
 
@@ -250,10 +252,13 @@ public class PersonaBackupContractTests
         using var secret = Secret();
         var backup = home.ExportBackup(main.Slot, secret);
 
-        var away = new PersonaManager(new RefusingKeyStore(), codec);
+        var away = Away();
+        awayStore.FailNextAdd = new InvalidOperationException("This store refuses the adoption.");
         Assert.Throws<InvalidOperationException>(() => away.RestoreBackup(backup, secret, "Main"));
         Assert.Empty(away.Personas);
         Assert.Null(away.Active);
+        Assert.Equal(0, awayStore.Count);
+        Assert.True(Disposal.IsDisposed(codec.HandedOut[^1]));
     }
 
     [Fact]
@@ -306,5 +311,20 @@ public class PersonaBackupContractTests
         Assert.False(new PersonaBackupInspection(PersonaBackupStatus.UnsupportedVersion, 7).IsSupported);
         Assert.False(new PersonaBackupInspection(PersonaBackupStatus.Malformed, 0).IsSupported);
         Assert.Equal(7, new PersonaBackupInspection(PersonaBackupStatus.UnsupportedVersion, 7).FormatVersion);
+    }
+
+    [Theory]
+    [InlineData(PersonaBackupStatus.Supported, 0)]
+    [InlineData(PersonaBackupStatus.Supported, -1)]
+    [InlineData(PersonaBackupStatus.UnsupportedVersion, 0)]
+    [InlineData(PersonaBackupStatus.UnsupportedVersion, int.MinValue)]
+    [InlineData(PersonaBackupStatus.Malformed, 1)]
+    [InlineData(PersonaBackupStatus.Malformed, -1)]
+    [InlineData((PersonaBackupStatus)3, 1)]
+    [InlineData((PersonaBackupStatus)(-1), 0)]
+    [InlineData((PersonaBackupStatus)int.MaxValue, 1)]
+    public void Inspection_RefusesAnUndefinedStatusOrAContradictoryVersion(PersonaBackupStatus status, int version)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PersonaBackupInspection(status, version));
     }
 }

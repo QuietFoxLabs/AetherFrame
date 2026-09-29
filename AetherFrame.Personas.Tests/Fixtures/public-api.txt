@@ -4,9 +4,9 @@ interface AetherFrame.Personas.IPersonaBackupCodec
     PersonaKeyMaterial Open(ReadOnlySpan<Byte> backup, PersonaBackupSecret secret)
 interface AetherFrame.Personas.IPersonaKeyStore
     IPersonaSigner OpenSigner(PersonaSlotId slot)
+    PersonaKeyMaterial GenerateKey()
     PersonaKeyMaterial OpenKey(PersonaSlotId slot)
-    PersonaPublicKey AdoptKey(PersonaSlotId slot, PersonaKeyMaterial material)
-    PersonaPublicKey CreateKey(PersonaSlotId slot)
+    Void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
 sealed class AetherFrame.Personas.PersonaBackupInspection
     Boolean IsSupported { get; }
     Int32 FormatVersion { get; }
@@ -27,10 +27,12 @@ enum AetherFrame.Personas.PersonaError
     const PersonaError BackupMalformed
     const PersonaError BackupUnsupported
     const PersonaError DuplicateIdentity
+    const PersonaError InvalidBackupInspection
     const PersonaError InvalidIdentifier
     const PersonaError InvalidKeyMaterial
     const PersonaError InvalidLabel
     const PersonaError KeyUnavailable
+    const PersonaError LeaseRevoked
     const PersonaError UnknownPersona
 sealed class AetherFrame.Personas.PersonaException
     PersonaError Error { get; }
@@ -40,7 +42,6 @@ sealed class AetherFrame.Personas.PersonaKeyMaterial
     PersonaPublicKey PublicKey { get; }
     String ToString()
     Void Dispose()
-    new(ECDsa key)
 static class AetherFrame.Personas.PersonaLabel
     Boolean TryNormalize(String text, ref String label)
     const Int32 MaxLength

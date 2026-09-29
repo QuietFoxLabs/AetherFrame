@@ -12,6 +12,13 @@ namespace AetherFrame.Personas;
 /// only as <see cref="PersonaKeyMaterial"/>; and a reader that gives material back the same way, so
 /// that no plaintext key crosses this boundary as bytes. The manager calls a codec outside its own
 /// lock, so an implementation is a function of its inputs, safe to call from several threads.
+/// <para>
+/// On restore the manager copies the caller's bytes once and gives that one private copy to both
+/// <see cref="Inspect"/> and <see cref="Open"/>, so the container a codec opens is the container it
+/// inspected. The secret reaches <see cref="Open"/> only after <see cref="Inspect"/> returned a
+/// coherent <see cref="PersonaBackupStatus.Supported"/> result; anything else (no result, an
+/// undefined status, an incoherent version) stops the restore without a secret being used.
+/// </para>
 /// </summary>
 public interface IPersonaBackupCodec
 {

@@ -8,6 +8,12 @@ namespace AetherFrame.Personas;
 /// it is never published, never part of a persona's identity, and never written to a log by this
 /// assembly. Surrounding whitespace is trimmed; what remains must be 1 to <see cref="MaxLength"/>
 /// UTF-16 code units with no control characters. Nothing else is rewritten.
+/// <para>
+/// PROVISIONAL under D9a (docs/networking/DecisionRegister.md, "Persona display name"), which is
+/// UNRESOLVED. This is the register's recommended option, a private local label only, implemented
+/// so the in-memory model can be exercised; it is not an approval of that option. The rule, the
+/// limit, and whether a label exists at all may change or go when the owner decides D9a.
+/// </para>
 /// </summary>
 public static class PersonaLabel
 {

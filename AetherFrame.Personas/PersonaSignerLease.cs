@@ -1,38 +1,86 @@
 using System;
+using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Signing;
 
 namespace AetherFrame.Personas;
 
 /// <summary>
-/// A persona's signer, borrowed for one operation: sign, then dispose. It is bound to the persona
-/// it was opened for; selecting another persona meanwhile does not change what it signs as. Not
-/// thread-safe, like the signer it wraps. Written to text it says the slot, never the identity.
+/// A persona's signer, borrowed for one operation: sign, then dispose. It signs only as the persona
+/// it was opened for, and only while that persona is still the active selection it was opened
+/// under. Once the player selects another persona or deselects this one, the lease is revoked: its
+/// signer refuses with <see cref="PersonaError.LeaseRevoked"/>, even if the persona is selected
+/// again later, and the operation must open a new lease. That is the interim, fail-closed policy
+/// that follows NETWORK1.md's rule that nothing signs for a persona that is not the active one; the
+/// owner decision it awaits is recorded in docs/networking/NETWORK1_PersonaFoundation.md, section 7.
+/// <para>
+/// The store's own signer is never handed out: <see cref="Signer"/> is a guard that checks, under
+/// the manager's lock and for every signature, that the lease is open and current, that the input
+/// names this persona, and that the store's signer still reports this persona's key. Written to
+/// text it says the slot, never the identity.
+/// </para>
 /// </summary>
 public sealed class PersonaSignerLease : IDisposable
 {
+    private readonly PersonaManager owner;
+    private readonly GuardedSigner guard;
     private IPersonaSigner? signer;
 
-    internal PersonaSignerLease(PersonaRecord persona, IPersonaSigner signer)
+    internal PersonaSignerLease(PersonaManager owner, PersonaRecord persona, IPersonaSigner signer, long selection)
     {
-        Persona = persona;
+        this.owner = owner;
         this.signer = signer;
+        Persona = persona;
+        Selection = selection;
+        guard = new GuardedSigner(this);
     }
 
-    /// <summary>The persona the signer belongs to, as its record was when the lease was opened.</summary>
+    /// <summary>The persona the lease signs as, as its record was when the lease was opened.</summary>
     public PersonaRecord Persona { get; }
 
-    /// <summary>The signer.</summary>
+    /// <summary>The signer: a guard over the store's signer, never the store's signer itself.</summary>
     /// <exception cref="ObjectDisposedException">After <see cref="Dispose"/>.</exception>
-    public IPersonaSigner Signer => signer ?? throw new ObjectDisposedException(nameof(PersonaSignerLease));
-
-    /// <summary>Releases the signer, disposing it when it is disposable.</summary>
-    public void Dispose()
+    public IPersonaSigner Signer
     {
-        var released = signer;
-        signer = null;
-        (released as IDisposable)?.Dispose();
+        get
+        {
+            ObjectDisposedException.ThrowIf(owner.IsReleased(this), this);
+            return guard;
+        }
     }
+
+    /// <summary>The selection this lease was opened under.</summary>
+    internal long Selection { get; }
+
+    /// <summary>Releases the signer, disposing it when it is disposable. Safe to call more than once, and from any thread.</summary>
+    public void Dispose() => (owner.Release(this) as IDisposable)?.Dispose();
 
     /// <summary>The slot, never the identity.</summary>
     public override string ToString() => Persona.ToString();
+
+    /// <summary>The store's signer, or null once released. Read and written only under the manager's lock.</summary>
+    internal IPersonaSigner? Inner
+    {
+        get => signer;
+        set => signer = value;
+    }
+
+    private sealed class GuardedSigner : IPersonaSigner
+    {
+        private readonly PersonaSignerLease lease;
+
+        public GuardedSigner(PersonaSignerLease lease)
+        {
+            this.lease = lease;
+        }
+
+        public PersonaPublicKey PublicKey => lease.Persona.PublicKey;
+
+        public ProtocolSignature Sign(SigningInput input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            return lease.owner.SignUnderLease(lease, input);
+        }
+
+        public override string ToString() => lease.ToString();
+    }
 }

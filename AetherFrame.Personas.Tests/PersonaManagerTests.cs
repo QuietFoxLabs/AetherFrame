@@ -43,7 +43,10 @@ public class PersonaManagerTests
         Assert.Equal(3, personas.Select(p => p.Id).Distinct().Count());
         Assert.Equal(3, personas.Select(p => p.PublicKey).Distinct().Count());
         Assert.Equal(3, store.Count);
-        Assert.Equal(3, store.CallsTo("CreateKey"));
+        Assert.Equal(3, store.CallsTo("GenerateKey"));
+        Assert.Equal(3, store.CallsTo("AddKey"));
+        Assert.All(personas, p => Assert.True(store.Holds(p.Slot)));
+        Assert.All(store.HandedOut, m => Assert.True(Disposal.IsDisposed(m)));
         Assert.All(personas, p => Assert.False(p.Slot.IsEmpty));
         Assert.All(personas, p => Assert.False(p.Id.IsEmpty));
         Assert.Same(main, personas[0]);
@@ -79,14 +82,23 @@ public class PersonaManagerTests
         store.NextKey = () => SyntheticKeys.Copy(shared);
         var first = manager.Create("Main");
 
+        manager.Select(first.Slot);
+        var heldBefore = store.Held(first.Slot);
+
         store.NextKey = () => SyntheticKeys.Copy(shared);
         var exception = Assert.Throws<PersonaException>(() => manager.Create("Impostor"));
         Assert.Equal(PersonaError.DuplicateIdentity, exception.Error);
         Assert.DoesNotContain(first.Id.ToString(), exception.Message, StringComparison.Ordinal);
 
+        // Refused before the store committed anything: no orphaned key, the first persona's key is
+        // the same object, and the duplicate the store generated was disposed.
         Assert.Single(manager.Personas);
         Assert.Same(first, manager.Personas[0]);
-        Assert.Null(manager.Active);
+        Assert.Same(first, manager.Active);
+        Assert.Equal(1, store.CallsTo("AddKey"));
+        Assert.Equal(1, store.Count);
+        Assert.Same(heldBefore, store.Held(first.Slot));
+        Assert.True(Disposal.IsDisposed(store.HandedOut[^1]));
     }
 
     [Fact]
@@ -187,8 +199,9 @@ public class PersonaManagerTests
         Assert.Same(main, manager.Personas[0]);
         Assert.Same(renamed, manager.Personas[1]);
         Assert.Same(renamed, manager.Active);
-        Assert.Equal(2, store.CallsTo("CreateKey"));
-        Assert.Equal(2, store.Calls.Count);
+        Assert.Equal(2, store.CallsTo("GenerateKey"));
+        Assert.Equal(2, store.CallsTo("AddKey"));
+        Assert.Equal(4, store.Calls.Count);
     }
 
     [Fact]
@@ -276,23 +289,32 @@ public class PersonaManagerTests
     }
 
     [Fact]
-    public void ALease_StaysBoundToItsPersonaAcrossASwitch()
+    public void ALease_IsRevokedWhenThePlayerSwitches()
     {
+        // NETWORK1.md, system 1: nothing signs for a persona that is not the active one. A lease
+        // opened for main stops signing the moment the player selects the alt, and stays revoked
+        // even if main is selected again; the alt's own lease signs as the alt.
         var manager = NewManager();
         var main = manager.Create("Main");
         var alt = manager.Create("RP alt");
         manager.Select(main.Slot);
         Assert.Equal(PersonaSignerAvailability.Available, manager.TryOpenActiveSigner(out var lease));
         using var mainLease = lease!;
+        Assert.Equal(main.Id, SignedDocumentCodec.Verify(Documents.SignedRetraction(mainLease.Signer)).Persona);
 
         manager.Select(alt.Slot);
+        var revoked = Assert.Throws<PersonaException>(() => Documents.SignedRetraction(mainLease.Signer));
+        Assert.Equal(PersonaError.LeaseRevoked, revoked.Error);
         Assert.Same(main, mainLease.Persona);
-        Assert.Equal(main.Id, SignedDocumentCodec.Verify(Documents.SignedRetraction(mainLease.Signer)).Persona);
 
         Assert.Equal(PersonaSignerAvailability.Available, manager.TryOpenActiveSigner(out lease));
         using var altLease = lease!;
         Assert.Same(alt, altLease.Persona);
         Assert.Equal(alt.Id, SignedDocumentCodec.Verify(Documents.SignedRetraction(altLease.Signer)).Persona);
+
+        manager.Select(main.Slot);
+        Assert.Equal(PersonaError.LeaseRevoked, Assert.Throws<PersonaException>(() => Documents.SignedRetraction(mainLease.Signer)).Error);
+        Assert.Equal(PersonaError.LeaseRevoked, Assert.Throws<PersonaException>(() => Documents.SignedRetraction(altLease.Signer)).Error);
     }
 
     [Fact]
