@@ -45,8 +45,9 @@ public enum TutorialInstallKind
 /// The tutorial's own persisted state, stored beside (never inside) any Plate: which kind of
 /// install this is, whether and how the player answered the first-run offer, where a started
 /// tutorial stopped, and which version of the script was completed. Plain properties so it
-/// serializes by convention; unknown future properties are preserved by the configuration that
-/// holds it.
+/// serializes by convention. The configuration that holds it keeps unknown top-level properties
+/// of a newer build, but a property a newer build adds inside this block is dropped by this
+/// build's next save, so a newer build must tolerate its absence.
 /// </summary>
 public sealed class TutorialPreferences
 {

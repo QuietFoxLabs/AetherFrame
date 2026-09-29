@@ -76,6 +76,26 @@ public class OnboardingCoordinatorTests
     }
 
     [Fact]
+    public void Decide_AnUnreadableConfiguration_IsAnExistingInstall_WhateverTheStoredKindAndTheLibrary()
+    {
+        // A file that exists but can't be read belongs to an established install (only v0.1.6 or
+        // later wrote one). The plugin records that before the file is rewritten, so the stored
+        // kind is never "pending" for such a file; the detector must not depend on that either.
+        Assert.Equal(FirstRunDecision.ExistingInstall, FirstRunDetector.Decide(new TutorialPreferences(), configurationFound: false, configurationUnreadable: true, libraryLoaded: false, 0, 0));
+        var pending = new TutorialPreferences { Install = TutorialInstallKind.PendingDecision };
+        Assert.Equal(FirstRunDecision.ExistingInstall, FirstRunDetector.Decide(pending, configurationFound: false, configurationUnreadable: true, libraryLoaded: true, 0, 0));
+        Assert.Equal(FirstRunDecision.AlreadyDecided, FirstRunDetector.Decide(new TutorialPreferences { Install = TutorialInstallKind.ExistingInstall }, false, true, true, 0, 0));
+
+        var store = new MemoryStore { Preferences = pending };
+        var coordinator = Create(store);
+        coordinator.ResolveFirstRun(configurationFound: false, configurationUnreadable: true, libraryLoaded: true, 0, 0);
+        Assert.False(coordinator.IsOfferOpen);
+        Assert.Equal(FirstRunDecision.ExistingInstall, coordinator.LastDecision);
+        Assert.Equal(TutorialInstallKind.ExistingInstall, store.Preferences.Install);
+        Assert.Equal(1, store.Saves);
+    }
+
+    [Fact]
     public void Decide_StopsOfferingAfterAFewUnansweredShowings()
     {
         var prefs = new TutorialPreferences { Install = TutorialInstallKind.NewInstall, OfferCount = FirstRunDetector.MaxOffers };

@@ -104,10 +104,16 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
         // No configuration at all: the guidance below saves one right away, before the Library is
         // read, so the tutorial's first-run decision (made after the load) is marked as pending in
-        // it. A later launch then judges this install by its Library, never by that file.
+        // it. A later launch then judges this install by its Library, never by that file. A file
+        // that exists but can't be read is an established install's (only v0.1.6 or later ever
+        // wrote one): that is recorded at once, before the rewrite replaces the damaged file, so
+        // the tutorial is never offered unasked, whatever the Library holds.
         if (savedConfiguration is null)
         {
-            Configuration.Tutorial = new TutorialPreferences { Install = TutorialInstallKind.PendingDecision };
+            Configuration.Tutorial = new TutorialPreferences
+            {
+                Install = configurationUnreadable ? TutorialInstallKind.ExistingInstall : TutorialInstallKind.PendingDecision,
+            };
         }
 
         // The one-time Basic suggestion: decided now from the configuration alone (a current one's
@@ -329,8 +335,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
     private void ResolveFirstRun()
     {
-        var libraryLoaded = plateLibrary.IsLoaded;
-        var plateCount = libraryLoaded ? plateLibrary.GetOrderedPlates().Count : 0;
+        // Both Libraries must have loaded for their counts to mean anything: an install whose only
+        // saved work is a Template must not look new because the Template Library failed to load.
+        var libraryLoaded = plateLibrary.IsLoaded && templateLibrary.IsLoaded;
+        var plateCount = plateLibrary.IsLoaded ? plateLibrary.GetOrderedPlates().Count : 0;
         var userTemplateCount = 0;
         if (templateLibrary.IsLoaded)
         {

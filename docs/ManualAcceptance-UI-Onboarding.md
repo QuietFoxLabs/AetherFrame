@@ -40,7 +40,7 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 22b. **Escape.** With the card focused, Escape closes the tour (Help then offers Resume); with the game's chat focused, Enter sends the chat line and does not page the tour.
 23. **Leaving.** The card's X closes the tour; Help shows Resume Tutorial and resumes at the same step. Skip tour closes it; Help shows Start Tutorial. Finish on the last step returns to My Plates and Help shows the tutorial as completed.
 24. **Reload mid-tour.** Disable and enable the plugin during chapter 5: after enabling, Help offers Resume Tutorial at chapter 5.
-25. **Nothing changed.** After the whole tour (without saving anything on purpose), compare the data folder's hash: only `AetherFrame.json` differs.
+25. **Nothing changed but what you did.** After the whole tour (without saving anything on purpose), compare the data folder's hash: only `AetherFrame.json` differs, plus the one Plate that chapter 3 had you create yourself through Create Plate (a new file under `Profiles` and, if it became the character's first Plate, that character's binding). Nothing else was written, and no existing file changed.
 
 ## D. The redesign
 

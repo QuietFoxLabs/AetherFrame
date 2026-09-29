@@ -34,8 +34,8 @@ internal static class FirstRunDetector
 
     /// <param name="preferences">The stored tutorial state.</param>
     /// <param name="configurationFound">Whether a configuration file was loaded at startup (captured before this build saves one).</param>
-    /// <param name="configurationUnreadable">Whether a configuration file existed but couldn't be read (only an established install has one).</param>
-    /// <param name="libraryLoaded">Whether the Plate Library loaded (its counts mean nothing otherwise).</param>
+    /// <param name="configurationUnreadable">Whether a configuration file existed but couldn't be read (only an established install has one; this outweighs every stored kind but a decided one).</param>
+    /// <param name="libraryLoaded">Whether both the Plate and the Template Library loaded (the counts mean nothing otherwise).</param>
     /// <param name="plateCount">Saved Plates in the Library, Trash excluded.</param>
     /// <param name="userTemplateCount">Saved (not built-in) Templates.</param>
     internal static FirstRunDecision Decide(
@@ -54,9 +54,10 @@ internal static class FirstRunDetector
                 return preferences.OfferCount >= MaxOffers ? FirstRunDecision.AlreadyDecided : FirstRunDecision.OfferTutorial;
             case TutorialInstallKind.PendingDecision:
                 // The configuration on disk is the one this build wrote before the Library was
-                // read: it says nothing about the player. Only the Library decides.
+                // read: its presence says nothing about the player, so only the Library decides.
+                // A file that couldn't be read is different: this build never stores "pending"
+                // for one, and if it somehow met one it would still be an established install's.
                 configurationFound = false;
-                configurationUnreadable = false;
                 break;
         }
 
