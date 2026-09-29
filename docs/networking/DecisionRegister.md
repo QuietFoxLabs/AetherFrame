@@ -325,7 +325,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 
 **What a viewer accepts, whoever published.** A hostile publisher can skip preparation, so the limit is enforced where images are received, not trusted from the sender:
 - schema 2's `ImageReference.format` allows only PNG (1) and JPEG (2) (N2-3);
-- the viewer (N2-10) sniffs every image's bytes and refuses anything but a non-animated 8-bit PNG, or an 8-bit JPEG with 1 or 3 components, within the specification's section 8.2 limits, whatever I2 and D6 decide.
+- the viewer (N2-10) sniffs every image's bytes before decoding anything, and refuses anything but a non-animated 8-bit PNG, or an 8-bit baseline, extended or progressive JPEG (frame types SOF0 to SOF2) with 1 or 3 components, within the specification's section 8.2 limits, whatever I2 and D6 decide.
 
 **Deviation from the recommendation, on sources only.** It proposed refusing animated WebP and CMYK JPEG. As *sources* they are accepted: preparation encodes the pixels again, so neither reaches a viewer in its original form. The risk the recommendation guarded against, which formats a viewer must decode, is covered by the rule above. Refusing them as sources would only turn away images the player already uses locally.
 
@@ -336,7 +336,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 
 **Not settled:** I2, and schema 2's count limit.
 
-**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which relied on the publisher preparing images honestly, and asked for the receive-side rule, now above. It concurred with the amended entry on its recheck.
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which relied on the publisher preparing images honestly, and asked for the receive-side rule, now above. It **concurred** with the amended entry on its recheck of `779e873`, adding that the sniff runs before any decoding and allows only frame types SOF0 to SOF2, also above.
 
 ### N1: identifier scope. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -421,7 +421,7 @@ N2-3 writes this into the specification as a consumer obligation.
 
 **Not settled:** K8, K9, macOS, and whether TLS certificate validation under Wine can be relied on for viewing (nobody has assessed it).
 
-**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**, with the conditions for N2-4 above. The exception only ever withholds a protection claim, so it fails toward "off", and no probe can measure confidentiality. It checked Wine's `protectdata.c` and wine-staging's patch that hides Wine's exports.
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**, with the conditions for N2-4 above. The exception only ever withholds a protection claim, so it fails toward "off", and no probe can measure confidentiality. It read Wine's `protectdata.c`, and confirmed that wine-staging's patch hiding Wine's exports exists.
 
 ### K4: what comes before a persona's first real publish. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -474,7 +474,7 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
   - automatic decompression is off;
   - HTTP/1.1 or HTTP/2 only, never HTTP/3;
   - explicit connect and request timeouts (the defaults are none and 100 seconds), and a response size bound far below the default 2 GiB buffer;
-  - certificate revocation is not checked, as by default. The server's Let's Encrypt certificates are short-lived.
+  - certificate revocation is not checked, as by default. The server's Let's Encrypt certificates last 90 days or less, and N2-8 may choose a shorter-lived profile.
 - **Traffic only on a player's action:** publish, unpublish, open a code, refresh. No polling, no background traffic, no telemetry.
 - **Request and response bodies.** Requests carry the signed documents' exact bytes and the prepared image bytes. Responses are small JSON objects with closed schemas, parsed strictly with bounded sizes.
 - **Version checks.** Every request names the plugin's version, and nothing else about the player or the machine, so the server can refuse an outdated client with a clear message.
@@ -506,7 +506,7 @@ The boundary tests change in N2-9, the first change that brings network code, to
 
 **Not settled:** nothing further.
 
-**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which refused `System.Net.Sockets` outright although R2's callback can't be constructed without `AddressFamily`, and a status code needs `HttpStatusCode`. It asked for this exact allowlist, and concurred with the amended entry on its recheck.
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which refused `System.Net.Sockets` outright although R2's callback can't be constructed without `AddressFamily`, and a status code needs `HttpStatusCode`. It asked for this exact allowlist, and **concurred** with the amended entry on its recheck of `779e873`. It confirmed that the list is exactly what its compiled probe referenced, and that both ways of overriding certificate validation reference `SslPolicyErrors`, outside the list, so the type check refuses them too.
 
 ## Gates
 
@@ -555,11 +555,11 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 
 | Id | Question | Baseline | Recommendation (not approved) | Bytes | Status |
 |---|---|---|---|---|---|
-| D4 | Rules for the schema-1 `name` | Any text without U+0000, up to 32,000 scalars | Approved: 1–64 scalars, at most 256 bytes, refusing C0/C1 controls and DEL, U+2028, U+2029, U+FEFF and UAX #9's twelve directional formatting characters; no normalisation (see "Decision batch A") | **yes** | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| D4 | Rules for the schema-1 `name` | Any text without U+0000, up to 32,000 scalars | Approved: 1–64 scalars, at most 256 bytes, refusing C0/C1 controls and DEL, U+2028, U+2029, U+FEFF, UAX #9's twelve directional formatting characters and the invisible format characters listed in the entry; no normalisation (see "Decision batch A") | **yes** | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | D5 | What an image digest covers; metadata | "The source image bytes" | Approved: the digest and declarations describe the prepared copy (decoded and encoded again, which drops all metadata), never the original (see "Decision batch A") | wording only, unless a salt is added | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | D8 | Whether metadata-only schema 1 is ever exposed to players | Test-only | Approved: no; schema 1 stays a test schema the plugin never publishes and the server refuses, and players publish schema 2 with the layout (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | D9a | Persona display name | None in the protocol. `AetherFrame.Personas` (#23) implements the recommendation provisionally as `PersonaLabel`, so the persona model can be exercised; the plugin does not reference that assembly. | Approved: a private local label only, never in any document, request, record or log; no public persona name in v1 (see "Decision batch A") | no (for now) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
-| I1 | Which images can be shared | Undefined | Approved: managed PNG, JPEG and WebP images, shared only as prepared 8-bit RGB(A) PNG or JPEG copies, first frame of an animation, within the specification's limits; over-limit images refused, never silently downscaled (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| I1 | Which images can be shared | Undefined | Approved: managed PNG, JPEG and WebP sources, shared only as prepared 8-bit RGB(A) PNG or JPEG copies, first frame of an animation, within the specification's limits, over-limit images refused; schema 2 allows only PNG and JPEG, and the viewer sniffs and refuses anything else whoever published (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 
 ## 3. Decisions needed before the freeze or the first real server (G3)
 
@@ -574,7 +574,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | N7 | Whether consumers must escape names before display or logging | Nothing obliges them | Approved: every consumer treats every text as plain text: no markup, format strings, game text payloads, paths, URLs or commands; never auto-linked; escaped in any HTML (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | R1 | How a viewer finds a Plate in the first test | None | Approved: share codes issued per published profile, the only way to reach one in stage 1; no directory, search or lookup; target lookup is stage 2 (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | R2 | The transport | None | Approved: HTTPS to one fixed DNS hostname, `HttpClient` with Dalamud's dual-stack callback, traffic only on a player's action, signed bytes as bodies, strict small JSON responses, version checks, no cookies or accounts (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
-| R3 | Where network code may live | Nowhere (NETWORK1.md, safeguard 1) | Approved: in the preview flavour, only under `Services/Network`, only `System.Net.Http` and Dalamud's dual-stack callback; nothing in the player flavour (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| R3 | Where network code may live | Nowhere (NETWORK1.md, safeguard 1) | Approved: an exact allowlist in the preview flavour under `Services/Network` only: `System.Net.Http` (with `.Headers`), `HttpStatusCode`, Dalamud's dual-stack callback and its `AddressFamily` parameter, `System.Net.Security` only for a TLS option; every other networking type refused; nothing in the player flavour (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 
 ## 4. Backend-time decisions (G4)
 
