@@ -227,7 +227,7 @@ A sequence that isn't valid in the file's encoding is detected on the bytes: an 
 
 ## 6. Tests
 
-| | Before (`6384db6`) | At the audit (`c724cd6`) | After the corrections |
+| | Before (`6384db6`) | At the audit (`c724cd6`) | After the corrections (`f07c10e`, and `6684a74` with `master` merged in) |
 |---|---|---|---|
 | AetherFrame.Tests | 2739 passed | 2798 passed | **3032 passed** |
 | AetherFrame.Protocol.Tests | 153 passed | 153 passed | 153 passed |
@@ -241,7 +241,7 @@ A sequence that isn't valid in the file's encoding is detected on the bytes: an 
 - **Against mutations.** `RecoveryCopyFaultTests` injects a disk that fills up partway through a copy. Replacing the copy with plain `File.Copy` fails 18 of its 21 cases. The previous stream copies (`dc92e41`'s, and `c724cd6`'s, which also kept the modified time) each fail 14, because a crash at the fault would have left their partial file under the copy's own name. A rename allowed to overwrite fails its mid-copy case. `StoredTextDecoderTests` compares the decoder with `File.ReadAllText` on 2000 seeded files and at every buffer boundary. Making one strict decoder lenient fails 21 of its 80 cases for UTF-8, 9 for UTF-16 little-endian, 5 for UTF-16 big-endian, 6 for UTF-32 little-endian and 4 for UTF-32 big-endian; keeping a byte order mark in the strict check fails 24.
 - **Negative checks, precisely.** For fixes 1 to 5, 9 and 12, and for every correction, the tests named were run with that fix removed. The ones that failed are named in section 3 or in the commit that adds them. Those that pass either way pin behaviour that was already correct: `DamagedFilePreservationTests.DamagedPlateWhoseCopySucceedsAtLoad_SavesAsBefore`, `WriteReadBackTests.EveryWrite_PutsOnDiskTheTextTheLibraryKeeps`, `UnopenableFileDiagnosticsTests.TemplateWhoseContentFailsToMaterialize_IsCalledDamaged_NotUnopenable`, `SystemFileStoreCopyTests`, `CompatibilityPreservationTests` and the byte order mark cases above.
 - **Isolation.** All of them use isolated temporary directories and never touch a real Dalamud configuration.
-- **Where they ran.** Locally on Linux for every commit, and in CI on `windows-2022` and `ubuntu-24.04` (`build.yml`) for each push to the pull request, on its merge with `master` (the tip of every push, not each commit).
+- **Where they ran.** Locally on Linux for every commit up to `f07c10e`; on Windows (Release, Dalamud API 15) at `6684a74`, the branch with `master` at `45f32e3` merged in, with the same counts, 0 warnings and `validate-package` OK; and in CI on `windows-2022` and `ubuntu-24.04` (`build.yml`) for each push to the pull request, on its merge with `master` (the tip of every push, not each commit).
 - **An independent reproduction** of the audit's six scenarios, written separately from these tests and not committed, fails all 7 of its cases on `c724cd6` and passes them all on the corrected branch.
 
 ## 7. Deferred findings
@@ -282,7 +282,11 @@ No specific change was stopped for being incompatible or destructive: none of th
 
 ## 8. Manual acceptance in FFXIV
 
-These need the game. Use Windows, Dalamud API 15, this branch's build installed as a dev plugin, and a copy of a real 0.1.6 data folder. Keep `/xllog` open. "Unloaded" means disabled in `/xlplugins`.
+These need the game. Use Windows, Dalamud API 15, and this branch's build installed as a dev plugin. Keep `/xllog` open. "Unloaded" means disabled in `/xlplugins`.
+
+**Data and backups.** Under the autopilot ([docs/process/AUTOPILOT.md](../process/AUTOPILOT.md#test-builds)), this branch reaches the game as a test build of `master`. Before installing it, the autopilot copies `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new folder under `E:\AetherFrame Archives\Acceptance backups\`, and the Owner inbox post names that folder. Steps 1 and 2 run on that real data. Steps 3 to 8 and 10 damage, lock or edit files on purpose: use Plates made for the test, never the only copy of real work. Dalamud's own backup rows (the copy a damaged file is read from in step 3) live in Dalamud's storage, not in that folder, so the Acceptance backup is what restores the data folder if a step goes wrong.
+
+**Results.** None of these steps has been run on this branch yet. Every result is OPEN until the owner reports it in the Owner inbox.
 
 1. **Load real data.** Hash the data folder, enable the plugin, and open My Plates: every Plate is listed, and no file's hash changed.
 2. **Everyday operations.** Create, rename, duplicate, delete, Set Active, reorder, save from both editors, Save as Template, and Use Template. Everything behaves as in 0.1.6, and everything reloads after a plugin reload.
