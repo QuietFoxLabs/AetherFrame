@@ -27,6 +27,13 @@ internal static class ProtocolName
             throw Empty(field);
         }
 
+        // UTF-8 never takes fewer bytes than UTF-16 code units, so a longer string is over the byte
+        // limit whatever it holds, and is refused before anything is encoded.
+        if (name.Length > ProtocolLimits.MaxNameBytes)
+        {
+            throw new ProtocolException(ProtocolError.LimitExceeded, $"The name field '{field}' is more than {ProtocolText.Number(ProtocolLimits.MaxNameBytes)} bytes; that is the limit.");
+        }
+
         byte[] bytes;
         try
         {

@@ -21,6 +21,31 @@ namespace AetherFrame.Protocol.Tests;
 public class TestVectorTests
 {
     [Fact]
+    public void FinalMarkerVectors_AreSignedOverTheFinalMarker_AndNeverVerifyAsDrafts()
+    {
+        // Decision N3: the two final-marker vectors carry a genuine signature over the final signing
+        // input (version 1, the tag without "-draft"), so what makes a draft reader refuse them is the
+        // marker alone, never a broken signature.
+        var fixture = VectorFixture.Load();
+        var final = Hex.Parse(fixture.Rejected.Single(r => r.Name == "final-version-1-document").Document);
+        var relabelled = Hex.Parse(fixture.Rejected.Single(r => r.Name == "final-signature-under-draft-version").Document);
+        Assert.Equal(new byte[] { 0x00, 0x01 }, final.AsSpan(4, 2).ToArray());
+        Assert.Equal(new byte[] { 0x80, 0x01 }, relabelled.AsSpan(4, 2).ToArray());
+
+        var key = final.AsSpan(7, 65).ToArray();
+        var payload = final.AsSpan(Layout.Payload, Layout.PayloadLengthOf(final)).ToArray();
+        var signature = final.AsSpan(final.Length - 64, 64).ToArray();
+        var finalDigest = System.Security.Cryptography.SHA256.HashData(ReferenceProtocol.SigningInput(ReferenceProtocol.Final, final[6], key, payload));
+        var draftDigest = System.Security.Cryptography.SHA256.HashData(ReferenceProtocol.SigningInput(ReferenceProtocol.Draft, final[6], key, payload));
+        Assert.True(ReferenceP256.Verify(key, finalDigest, signature));
+        Assert.False(ReferenceP256.Verify(key, draftDigest, signature));
+        Assert.Equal(signature, relabelled.AsSpan(relabelled.Length - 64, 64).ToArray());
+
+        ProtocolAssert.Throws(ProtocolError.UnsupportedVersion, () => SignedDocumentCodec.Verify(final));
+        ProtocolAssert.Throws(ProtocolError.SignatureMismatch, () => SignedDocumentCodec.Verify(relabelled));
+    }
+
+    [Fact]
     public void Fixture_DescribesThisProtocolVersion()
     {
         var fixture = VectorFixture.Load();

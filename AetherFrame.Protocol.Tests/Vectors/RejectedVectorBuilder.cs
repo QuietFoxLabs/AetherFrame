@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
@@ -21,10 +22,20 @@ namespace AetherFrame.Protocol.Tests;
 /// </summary>
 internal static class RejectedVectorBuilder
 {
-    /// <summary>Signs <paramref name="payload"/> as persona A with the final version 1 marker, around the library, which only writes drafts.</summary>
-    private static byte[] FinalSnapshot(PersonaPublicKey key, byte[] payload)
+    /// <summary>
+    /// Signs <paramref name="payload"/> with the final version 1 marker, around the library, which
+    /// only writes drafts. The key must be the one <paramref name="scalar"/> belongs to.
+    /// </summary>
+    public static byte[] FinalSnapshot(BigInteger scalar, PersonaPublicKey key, byte[] payload)
     {
-        using var platform = TestPersonas.CreateEcdsa(TestPersonas.ScalarA);
+        var (x, y) = ReferenceP256.PublicKey(scalar);
+        byte[] expected = [0x04, .. x, .. y];
+        if (!key.Bytes.SequenceEqual(expected))
+        {
+            throw new ArgumentException("The key is not the scalar's.", nameof(key));
+        }
+
+        using var platform = TestPersonas.CreateEcdsa(scalar);
         var input = ReferenceProtocol.SigningInput(ReferenceProtocol.Final, (byte)DocumentType.ProfileSnapshot, key.Bytes, payload);
         var rs = platform.SignData(input, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
         var signature = ProtocolSignature.Normalize(rs).ToArray();
@@ -107,6 +118,9 @@ internal static class RejectedVectorBuilder
             ("name with right-to-left isolate", ProtocolError.InvalidText), ("name with arabic letter mark", ProtocolError.InvalidText), ("name with zero width space", ProtocolError.InvalidText),
             ("name with soft hyphen", ProtocolError.InvalidText), ("name with interlinear annotation", ProtocolError.InvalidText), ("name with tag character", ProtocolError.InvalidText),
             ("name of the old unicode vector", ProtocolError.InvalidText), ("name of the old maximal vector", ProtocolError.LimitExceeded),
+            ("name length 300 with few bytes present", ProtocolError.LimitExceeded), ("name with left-to-right mark", ProtocolError.InvalidText), ("name with pop directional formatting", ProtocolError.InvalidText),
+            ("name with first strong isolate", ProtocolError.InvalidText), ("name with mongolian vowel separator", ProtocolError.InvalidText), ("name with word joiner", ProtocolError.InvalidText),
+            ("name with deprecated format character", ProtocolError.InvalidText), ("name with language tag", ProtocolError.InvalidText),
             ("images unsorted", ProtocolError.NotCanonical), ("images duplicate", ProtocolError.NotCanonical), ("image zero digest", ProtocolError.InvalidValue),
             ("image format 4", ProtocolError.InvalidValue), ("image zero bytes", ProtocolError.InvalidValue), ("image bytes u64 max", ProtocolError.LimitExceeded),
             ("image zero width", ProtocolError.InvalidValue), ("image pixels over max", ProtocolError.LimitExceeded), ("images total bytes over max", ProtocolError.LimitExceeded),
@@ -133,7 +147,7 @@ internal static class RejectedVectorBuilder
         // (version 1 and the tag without "-draft"). A draft reader refuses it by its version; with
         // its version changed to the draft's, its signature is over the other tag and never verifies.
         var payload = Samples.Snapshot().EncodePayload();
-        var final = FinalSnapshot(signer.PublicKey, payload);
+        var final = FinalSnapshot(TestPersonas.ScalarA, signer.PublicKey, payload);
         Add("final-version-1-document", final, ProtocolError.UnsupportedVersion, "a validly signed final version 1 document (version 1, tag without -draft): refused by a draft reader", deterministic: false);
         Add("final-signature-under-draft-version", Mutate(final, Layout.Version, 0x80), ProtocolError.SignatureMismatch, "the final document with its version changed to the draft's 0x8001: signed over the final tag, so it never verifies as a draft", deterministic: false);
         return list;

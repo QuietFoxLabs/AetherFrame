@@ -30,6 +30,14 @@ internal static class SnapshotPayloadCases
             "name one byte over max bytes" => PayloadBuilder.Snapshot(nameBytes: [.. MaxName(), 0x61]),
             "name length claims more than present" => Patch(PayloadBuilder.Snapshot(), NameLengthOffset, [0x00, 0x00, 0x00, 0xC8]),
             "name empty" => PayloadBuilder.Snapshot(nameBytes: []),
+            "name length 300 with few bytes present" => Patch(PayloadBuilder.Snapshot(images: []), NameLengthOffset, [0x00, 0x00, 0x01, 0x2C]),
+            "name with left-to-right mark" => PayloadBuilder.Snapshot(nameBytes: Around(0x200E)),
+            "name with pop directional formatting" => PayloadBuilder.Snapshot(nameBytes: Around(0x202C)),
+            "name with first strong isolate" => PayloadBuilder.Snapshot(nameBytes: Around(0x2068)),
+            "name with mongolian vowel separator" => PayloadBuilder.Snapshot(nameBytes: Around(0x180E)),
+            "name with word joiner" => PayloadBuilder.Snapshot(nameBytes: Around(0x2060)),
+            "name with deprecated format character" => PayloadBuilder.Snapshot(nameBytes: Around(0x206A)),
+            "name with language tag" => PayloadBuilder.Snapshot(nameBytes: Around(0xE0001)),
             "name with line break" => PayloadBuilder.Snapshot(nameBytes: Utf8("line\r\nbreak")),
             "name with tab" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\tb")),
             "name with DEL" => PayloadBuilder.Snapshot(nameBytes: Utf8("a\u007fb")),
@@ -77,6 +85,9 @@ internal static class SnapshotPayloadCases
     private static byte[] MaxName() => Utf8(string.Concat(Enumerable.Repeat("\U0001F600", ProtocolLimits.MaxNameScalars)));
 
     private static byte[] Utf8(string text) => ProtocolConstants.StrictUtf8.GetBytes(text);
+
+    /// <summary>"a", the scalar, "b": built from the code point so no escape or raw character is needed in source.</summary>
+    private static byte[] Around(int scalar) => Utf8("a" + char.ConvertFromUtf32(scalar) + "b");
 
     private static byte[] Patch(byte[] payload, int offset, byte[] bytes)
     {
