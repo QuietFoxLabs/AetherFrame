@@ -4,16 +4,15 @@ enum AetherFrame.Protocol.Documents.DocumentType
     const DocumentType ProfileSnapshot
 abstract class AetherFrame.Protocol.Documents.RemoteDocument
     DocumentType DocumentType { get; }
-    ProfileId ProfileId { get; }
 static class AetherFrame.Protocol.Documents.SignedDocumentCodec
     Byte[] Sign(RemoteDocument document, IPersonaSigner signer)
     VerifiedDocument Verify(ReadOnlySpan<Byte> document)
 sealed class AetherFrame.Protocol.Documents.VerifiedDocument
     DocumentType DocumentType { get; }
+    Nullable<RemoteProfileKey> Profile { get; }
     PersonaId Persona { get; }
     PersonaPublicKey PublicKey { get; }
     RemoteDocument Document { get; }
-    RemoteProfileKey Profile { get; }
 struct AetherFrame.Protocol.Identity.AssetId
     AssetId FromBytes(ReadOnlySpan<Byte> bytes)
     AssetId NewId()
@@ -78,8 +77,6 @@ struct AetherFrame.Protocol.Identity.RevisionId
     String ToString()
     Void WriteBytes(Span<Byte> destination)
     const String Prefix
-interface AetherFrame.Protocol.Integration.IPersonaKeyProvider
-    IPersonaSigner ActiveSigner { get; }
 static class AetherFrame.Protocol.ProtocolConstants
     ReadOnlySpan<Byte> DocumentMagic { get; }
     ReadOnlySpan<Byte> PersonaIdDomainTag { get; }
@@ -109,7 +106,6 @@ sealed class AetherFrame.Protocol.ProtocolException
     ProtocolError Error { get; }
     new(ProtocolError error, String message)
 static class AetherFrame.Protocol.ProtocolLimits
-    FuturePolicy
     const Int32 MaxDocumentBytes
     const Int32 MaxImageDimension
     const Int32 MaxImagesPerProfile
@@ -121,14 +117,6 @@ static class AetherFrame.Protocol.ProtocolLimits
     const Int64 MaxImagePixels
     const Int64 MaxProfileImageBytes
     const Int64 MaxUnixSeconds
-static class AetherFrame.Protocol.ProtocolLimits+FuturePolicy
-    const Int32 MaxActiveShares
-    const Int32 MaxComponentsPerProfile
-    const Int32 MaxElementsPerProfile
-    const Int32 MaxProcessedImageDimension
-    const Int32 MaxProfilesPerPersona
-    const Int64 PersonaFirstWeekStorageTargetBytes
-    const Int64 PersonaStorageTargetBytes
 enum AetherFrame.Protocol.Remote.ImageFormat
     Byte value__
     const ImageFormat Jpeg
@@ -161,6 +149,8 @@ sealed class AetherFrame.Protocol.Remote.ProfileSnapshot
     String Name { get; }
     const UInt16 SchemaVersion
     new(ProfileId profileId, RevisionId revisionId, Int64 createdAtUnixSeconds, String name, IEnumerable<ImageReference> images)
+abstract class AetherFrame.Protocol.Remote.RemoteProfileDocument
+    ProfileId ProfileId { get; }
 struct AetherFrame.Protocol.Remote.RemoteProfileKey
     Boolean Equals(Object obj)
     Boolean Equals(RemoteProfileKey other)

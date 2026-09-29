@@ -140,6 +140,16 @@ internal static class ProtocolAssert
         return exception;
     }
 
+    /// <summary>
+    /// The profile a verified document is about. Every version 1 document is about one, so a
+    /// missing profile fails the test instead of letting an inequality pass against null.
+    /// </summary>
+    public static RemoteProfileKey ProfileOf(VerifiedDocument document)
+    {
+        Assert.True(document.Profile.HasValue, $"A verified {document.DocumentType} names no profile.");
+        return document.Profile.GetValueOrDefault();
+    }
+
     /// <summary>A message never repeats key, signature or payload bytes: no run of 24 or more hex digits.</summary>
     private static void AssertSafeMessage(ProtocolException exception)
     {

@@ -1,14 +1,14 @@
 # NETWORK1: planned architecture boundaries
 
 **Status (2026-09-29): the boundaries are in force; the six systems are planned.**
-- Of this document, the integration skeleton (increment 3: the preview flavour, the boundary tests and the log redaction) and the key store core (increment 5: system 2's store, envelope and seams, with no protector outside tests; [NETWORK1_KeyStoreCore.md](NETWORK1_KeyStoreCore.md)) are implemented. No system is complete.
+- Of this document, the protocol API tidy (increment 1), the integration skeleton (increment 3: the preview flavour, the boundary tests and the log redaction) and the key store core (increment 5: system 2's store, envelope and seams, with no protector outside tests; [NETWORK1_KeyStoreCore.md](NETWORK1_KeyStoreCore.md)) are implemented. No system is complete.
 - No persona key exists.
 - Protocol Specification v1 is still a **DRAFT**.
 - The plugin still has no network code. A player build holds no `AetherFrame.Protocol` or `AetherFrame.Personas` type; only the networking preview flavour compiles them in (D9b, P2).
 - This document fixes *boundaries*, meaning what each part may and may not touch. It does not settle product decisions; those are recorded in [DecisionRegister.md](DecisionRegister.md). As of 2026-09-29:
   - **D3** (several independent personas, chosen manually) is **approved**, and this document follows it.
   - **D2** (encrypted, portable `.afpersona` backups; no plaintext key export) is **approved in principle**. Its technical details await security approval.
-  - **D9b** (the networking code ships as sources compiled into `AetherFrame.dll`) and **P2** (a compile-time preview flavour only) are **approved under the owner's delegation**; so are **K1** (P-256 kept), **K2** (DPAPI in CurrentUser scope in the plugin's own files, as the target for native Windows), **K6** (no rotation in v1) and **K7** (platform implementations only).
+  - **N5** (the profile id belongs to profile documents only), **L6** (no key storage seam or server policy in the protocol), **D9b** (the networking code ships as sources compiled into `AetherFrame.dll`) and **P2** (a compile-time preview flavour only) are **approved under the owner's delegation**; so are **K1** (P-256 kept), **K2** (DPAPI in CurrentUser scope in the plugin's own files, as the target for native Windows), **K6** (no rotation in v1) and **K7** (platform implementations only).
   - Every other decision is unresolved.
 - Platform findings are in [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md). NETWORK0's approved behaviour is in [NETWORK0.md](NETWORK0.md) and [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md).
 
@@ -113,3 +113,5 @@ Each increment needs its own approval, and none may cross a gate in DecisionRegi
 | 9 | Preview wiring in game | P2, K4 |
 | 10 | Wine, Proton and macOS measurements | K3, K8, K9 |
 | 11 | Acceptance and independent review | all of the above |
+
+`[updated 2026-09-29: increment 1 is implemented. N5 and L6 are APPROVED (Claude, under the owner's delegation of September 29, 2026) in DecisionRegister.md. The profile id moved to RemoteProfileDocument, and IPersonaKeyProvider and ProtocolLimits.FuturePolicy left the protocol. No signed byte and no committed vector changed, and nothing reaches the plugin.]`

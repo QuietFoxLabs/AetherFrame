@@ -26,9 +26,11 @@ public sealed class VerifiedDocument
     /// The profile the document is about: the signing persona's profile of the id the document
     /// carries (docs/networking/ProtocolSpecification-v1.md, "Profile identity and ownership"). A
     /// snapshot is a revision of this profile and a retraction withdraws this profile; neither can
-    /// touch a profile of any other persona, whatever id it carries.
+    /// touch a profile of any other persona, whatever id it carries. Null for a document that is not
+    /// about a profile, which no version 1 document type is (decision N5,
+    /// docs/networking/DecisionRegister.md).
     /// </summary>
-    public RemoteProfileKey Profile => new(Persona, Document.ProfileId);
+    public RemoteProfileKey? Profile => Document is RemoteProfileDocument profileDocument ? new RemoteProfileKey(Persona, profileDocument.ProfileId) : null;
 
     /// <summary>The wire type of <see cref="Document"/>.</summary>
     public DocumentType DocumentType => Document.DocumentType;

@@ -65,14 +65,36 @@ public class AssemblyBoundaryTests
     [Fact]
     public void RemoteDocumentHierarchy_IsClosed()
     {
-        var subtypes = Protocol.GetExportedTypes().Where(t => t.IsSubclassOf(typeof(RemoteDocument))).OrderBy(t => t.Name).ToArray();
-        Assert.Equal(["ProfileRetraction", "ProfileSnapshot"], subtypes.Select(t => t.Name));
-        Assert.All(subtypes, t => Assert.True(t.IsSealed));
-        Assert.Empty(typeof(RemoteDocument).GetConstructors(BindingFlags.Public | BindingFlags.Instance));
+        var subtypes = Protocol.GetExportedTypes().Where(t => t.IsSubclassOf(typeof(RemoteDocument))).ToArray();
+        Assert.Equal(["ProfileRetraction", "ProfileSnapshot"], subtypes.Where(t => !t.IsAbstract).Select(t => t.Name).Order(StringComparer.Ordinal));
+        Assert.All(subtypes.Where(t => !t.IsAbstract), t => Assert.True(t.IsSealed));
+        Assert.Equal(["RemoteProfileDocument"], subtypes.Where(t => t.IsAbstract).Select(t => t.Name));
+
+        // Nothing outside the assembly can derive a document type: every constructor of the abstract
+        // types is private protected (or narrower), never public, protected or protected internal.
+        foreach (var type in new[] { typeof(RemoteDocument) }.Concat(subtypes.Where(t => t.IsAbstract)))
+        {
+            var constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotEmpty(constructors);
+            Assert.All(constructors, c => Assert.True(c.IsFamilyAndAssembly || c.IsAssembly || c.IsPrivate, $"{type.Name} has a constructor other code could derive through"));
+        }
+
         foreach (var type in Protocol.GetExportedTypes().Where(t => t.IsClass && t != typeof(RemoteDocument)))
         {
             Assert.True(type.IsSealed || type.IsAbstract, $"{type.Name} is neither sealed nor static");
         }
+    }
+
+    [Fact]
+    public void PublicSurface_HoldsNoKeyStorageSeamAndNoServerPolicy()
+    {
+        // Decision L6 (docs/networking/DecisionRegister.md): key storage is plugin policy, behind the
+        // persona assembly's own seams, and the limits only a server can enforce are server policy,
+        // documented in NETWORK0.md; neither is part of the protocol's public surface.
+        var exported = Protocol.GetExportedTypes();
+        Assert.DoesNotContain(exported, t => t.Name.Contains("KeyProvider", StringComparison.Ordinal) || t.Name.Contains("KeyStore", StringComparison.Ordinal));
+        Assert.DoesNotContain(exported, t => t.Namespace == "AetherFrame.Protocol.Integration");
+        Assert.Empty(typeof(ProtocolLimits).GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic));
     }
 
     [Fact]

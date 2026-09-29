@@ -15,7 +15,7 @@ namespace AetherFrame.Protocol.Remote;
 /// version. Images are a set, held sorted by asset id so that the same set always encodes the same
 /// way. Validated on construction; immutable.
 /// </summary>
-public sealed class ProfileSnapshot : RemoteDocument
+public sealed class ProfileSnapshot : RemoteProfileDocument
 {
     /// <summary>The payload schema version this build reads and writes.</summary>
     public const ushort SchemaVersion = 1;
