@@ -284,7 +284,7 @@ No specific change was stopped for being incompatible or destructive: none of th
 
 These need the game. Use Windows, Dalamud API 15, and this branch's build installed as a dev plugin. Keep `/xllog` open. "Unloaded" means disabled in `/xlplugins`.
 
-**Data and backups.** Under the autopilot ([docs/process/AUTOPILOT.md](../process/AUTOPILOT.md#test-builds)), this branch reaches the game as a test build of `master`. Before installing it, the autopilot copies `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new folder under `E:\AetherFrame Archives\Acceptance backups\`, and the Owner inbox post names that folder. Steps 1 and 2 run on that real data. Steps 3 to 8 and 10 damage, lock or edit files on purpose: use Plates made for the test, never the only copy of real work. Dalamud's own backup rows (the copy a damaged file is read from in step 3) live in Dalamud's storage, not in that folder, so the Acceptance backup is what restores the data folder if a step goes wrong.
+**Data and backups.** Under the autopilot ([docs/process/AUTOPILOT.md](../process/AUTOPILOT.md#test-builds)), this branch reaches the game as a test build of `master`. Before installing it, the autopilot copies `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new folder under `E:\AetherFrame Archives\Acceptance backups\`, and the Owner inbox post names that folder. Step 1 runs on that real data. Step 2's rename, duplicate and delete, and steps 3 to 8, 10 and 11, change, damage, lock or edit files on purpose: use Plates made for the test, never the only copy of real work. Dalamud's own backup rows (the copy a damaged file is read from in step 3) live in Dalamud's storage, not in that folder, so the Acceptance backup is what restores the data folder if a step goes wrong.
 
 **Results.** None of these steps has been run on this branch yet. Every result is OPEN until the owner reports it in the Owner inbox.
 
@@ -317,7 +317,7 @@ Anything failing in steps 1 to 7 or 12 blocks a release.
 ## 9. What could not be checked in the cloud
 
 - **The game itself.** Everything in section 8 needs FFXIV: Dalamud's `IReliableFileStorage` in game, ImGui, and real Windows file locking and antivirus behavior.
-- **Windows builds and tests** run only in GitHub CI.
+- **Windows builds and tests** ran in GitHub CI and, at `6684a74`, locally on Windows; neither runs the game.
 - **Durability.** Flush-to-disk behavior under power loss can't be observed by a test.
 
 ## 10. Independent audit of `c724cd6`, and the corrections
