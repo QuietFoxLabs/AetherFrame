@@ -11,12 +11,13 @@ namespace AetherFrame.Persistence;
 internal sealed class VersionedReadResult<T>
     where T : class
 {
-    internal VersionedReadResult(SchemaMigrationResult migration, JsonObject? raw, T? value, bool recoveredFromBackup = false)
+    internal VersionedReadResult(SchemaMigrationResult migration, JsonObject? raw, T? value, bool recoveredFromBackup = false, bool hasInvalidBytes = false)
     {
         Migration = migration;
         Raw = raw;
         Value = value;
         RecoveredFromBackup = recoveredFromBackup;
+        HasInvalidBytes = hasInvalidBytes;
     }
 
     internal SchemaMigrationResult Migration { get; }
@@ -30,6 +31,11 @@ internal sealed class VersionedReadResult<T>
     /// <summary>True when the copy on disk was unusable and this came from the store's backup
     /// copy instead (see <see cref="VersionedJson.ReadAsync{T}"/>).</summary>
     internal bool RecoveredFromBackup { get; }
+
+    /// <summary>True when the copy this came from held bytes that aren't valid text (see
+    /// <see cref="StoredText.HasInvalidBytes"/>): it was read as it is, with U+FFFD in their place,
+    /// so its original bytes must be kept before anything writes over the file.</summary>
+    internal bool HasInvalidBytes { get; }
 
     internal bool IsUsable => Migration.IsUsable && Value is not null;
 
@@ -98,45 +104,52 @@ internal static class VersionedJson
     /// <see cref="InvalidDataException"/> (or the IO error) when no usable copy exists. A result
     /// the store had to retry for reports <see cref="VersionedReadResult{T}.RecoveredFromBackup"/>.
     /// </summary>
+    /// <remarks>
+    /// The encoding never decides which copy is used. Bytes that aren't valid text are read as
+    /// U+FFFD, as every earlier version read them, and the result says so
+    /// (<see cref="VersionedReadResult{T}.HasInvalidBytes"/>) instead of being refused: refusing
+    /// would read an older backup in place of a file that parses (losing whatever is newer in it,
+    /// or a newer version's protection), or, with no backup, make the file unreadable, and a
+    /// damaged binding or index is then replaced. Only content that isn't usable falls back.
+    /// </remarks>
     internal static async Task<VersionedReadResult<T>> ReadAsync<T>(IPlateFileStore store, string path, SchemaDefinition schema, Func<JsonObject, T?>? deserialize = null)
         where T : class
     {
         VersionedReadResult<T>? result = null;
         var attempts = 0;
 
-        await store.ReadTextAsync(path, text =>
+        await store.ReadTextAsync(path, stored =>
         {
             attempts++;
-            RejectUndecodableText(text, schema.Name);
-            var parsed = Parse(text, schema, deserialize);
+            var parsed = Parse(stored.Text, schema, deserialize);
             if (!parsed.IsUsable && !parsed.IsNewerVersion)
             {
                 throw new InvalidDataException(parsed.Migration.Error ?? $"{schema.Name} is unreadable.");
             }
 
             // A second invocation is the store retrying from its backup after the first copy failed.
-            result = attempts == 1 ? parsed : new VersionedReadResult<T>(parsed.Migration, parsed.Raw, parsed.Value, recoveredFromBackup: true);
+            result = new VersionedReadResult<T>(parsed.Migration, parsed.Raw, parsed.Value, recoveredFromBackup: attempts > 1, stored.HasInvalidBytes);
         }).ConfigureAwait(false);
 
         return result ?? throw new InvalidDataException($"{schema.Name} could not be read.");
     }
 
     /// <summary>
-    /// Refuses, as damage, text read from a file whose bytes weren't all valid text: the store
-    /// decodes leniently, so each invalid byte sequence arrives as U+FFFD. AetherFrame never writes
-    /// that character as it is (the serializer escapes everything outside ASCII), so a file holding
-    /// one is damaged even when it still parses — and accepting it would load the damaged copy as
-    /// if it were intact, skip the store's backup copy and its Recovery copy of the file, and let
-    /// the next save write the replacement characters over both. Only a hand-edited file could
-    /// hold the character legitimately; it is then left untouched like any other damaged file.
+    /// The text a write of <paramref name="json"/> reads back as at the next load (see
+    /// <see cref="StoredTextDecoder.ReadBack"/>), refused as <see cref="InvalidDataException"/>
+    /// when that isn't exactly <paramref name="json"/>: what the Library keeps in memory must be
+    /// what the file holds. The serializer escapes everything outside ASCII, so only a string
+    /// holding a lone surrogate could fail this, and it is refused before anything is written.
     /// </summary>
-    /// <exception cref="InvalidDataException">The text holds U+FFFD.</exception>
-    internal static void RejectUndecodableText(string text, string what)
+    internal static string RequireFaithfulReadBack(string json, string what)
     {
-        if (text.Contains('\uFFFD', StringComparison.Ordinal))
+        var readBack = StoredTextDecoder.ReadBack(json);
+        if (readBack.HasInvalidBytes || !string.Equals(readBack.Text, json, StringComparison.Ordinal))
         {
-            throw new InvalidDataException($"{what} holds bytes that aren't valid text.");
+            throw new InvalidDataException($"{what} would not read back as the text written.");
         }
+
+        return readBack.Text;
     }
 
     internal static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JsonOptions.Default);

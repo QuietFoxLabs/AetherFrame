@@ -35,7 +35,7 @@ internal sealed class ShutdownGuardedFileStore : IPlateFileStore
         return inner.ListFiles(directory, searchPattern);
     }
 
-    public Task ReadTextAsync(string path, Action<string> reader)
+    public Task ReadTextAsync(string path, Action<StoredText> reader)
     {
         operations.ThrowIfAbandoned();
         return inner.ReadTextAsync(path, reader);

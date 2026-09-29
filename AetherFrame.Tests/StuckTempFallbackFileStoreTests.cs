@@ -237,7 +237,7 @@ public class StuckTempFallbackFileStoreTests
         await store.WriteTextAsync(path, Contents);
         Assert.True(store.FileExists(path));
         var read = string.Empty;
-        await store.ReadTextAsync(path, text => read = text);
+        await store.ReadTextAsync(path, text => read = text.Text);
         Assert.Equal(Contents, read);
 
         store.CopyFile(path, copied);

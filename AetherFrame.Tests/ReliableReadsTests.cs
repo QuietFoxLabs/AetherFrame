@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
@@ -45,7 +46,7 @@ public class ReliableReadsTests : IDisposable
         File.WriteAllText(path, "on disk");
         var seen = new System.Collections.Generic.List<string>();
 
-        await ReliableReads.ReadTextAsync(path, seen.Add, Backup("stale backup"));
+        await ReliableReads.ReadTextAsync(path, text => seen.Add(text.Text), Backup("stale backup"));
 
         Assert.Equal(["on disk"], seen);
         Assert.Equal(0, backupReads);
@@ -59,8 +60,8 @@ public class ReliableReadsTests : IDisposable
 
         await ReliableReads.ReadTextAsync(path, text =>
         {
-            seen.Add(text);
-            if (text.StartsWith('{'))
+            seen.Add(text.Text);
+            if (text.Text.StartsWith('{'))
             {
                 throw new InvalidDataException("unusable");
             }
@@ -144,13 +145,13 @@ public class ReliableReadsTests : IDisposable
         await Assert.ThrowsAsync<FileNotFoundException>(() => VersionedJson.ReadAsync(store, path, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize));
     }
 
-    private Func<Task<string>> Backup(string contents) => () =>
+    private Func<Task<byte[]>> Backup(string contents) => () =>
     {
         backupReads++;
-        return Task.FromResult(contents);
+        return Task.FromResult(Encoding.UTF8.GetBytes(contents));
     };
 
-    private Func<Task<string>> NoBackup() => () =>
+    private Func<Task<byte[]>> NoBackup() => () =>
     {
         backupReads++;
         throw new FileNotFoundException("no backup row", path);

@@ -342,7 +342,7 @@ public class BackupRecoveryObservabilityTests
 
         public System.Collections.Generic.IReadOnlyList<string> ListFiles(string directory, string searchPattern) => inner.ListFiles(directory, searchPattern);
 
-        public Task ReadTextAsync(string path, Action<string> reader) => inner.ReadTextAsync(path, reader);
+        public Task ReadTextAsync(string path, Action<StoredText> reader) => inner.ReadTextAsync(path, reader);
 
         public Task WriteTextAsync(string path, string contents) => inner.WriteTextAsync(path, contents);
 

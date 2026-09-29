@@ -55,12 +55,18 @@ internal sealed class TemplateLibraryService
     internal const string UnavailableTemplateProblem =
         "This Template's file couldn't be opened; another program may be using it. It has been left untouched. Restart the game to try again.";
 
+    /// <summary>A Ready Template's note when its file held bytes that aren't valid text, as for Plates
+    /// (see <c>PlateLibraryService.InvalidTextPlateProblem</c>).</summary>
+    internal const string InvalidTextTemplateProblem =
+        "Part of this Template's file isn't valid text, so some of its characters may not show correctly. The file is unchanged; AetherFrame keeps a copy of it in its Recovery folder before saving over it.";
+
     private readonly Dictionary<Guid, TemplateRecord> templates = new();
 
-    // Template files read from the store's backup copy whose damaged on-disk bytes could not be
-    // copied to Recovery at load. Nothing is written over them until that copy succeeds (see
-    // PreserveBeforeOverwrite).
-    private readonly HashSet<string> unpreservedDamagedFiles = new(StringComparer.OrdinalIgnoreCase);
+    // Template files whose bytes on disk must be copied to Recovery before anything is written over
+    // them (see PreserveBeforeOverwrite): one read from the store's backup copy whose damaged
+    // on-disk bytes could not be copied at load, and one read with bytes that aren't valid text.
+    // Nothing is written over either until its copy succeeds.
+    private readonly HashSet<string> unpreservedFiles = new(StringComparer.OrdinalIgnoreCase);
 
     private bool isLoaded;
     private bool loadFailed;
@@ -169,7 +175,7 @@ internal sealed class TemplateLibraryService
     {
         lock (gate)
         {
-            unpreservedDamagedFiles.Clear();
+            unpreservedFiles.Clear();
         }
 
         List<TemplateRecord> loaded;
@@ -277,8 +283,22 @@ internal sealed class TemplateLibraryService
                 log.Warning($"AetherFrame repaired values in Template {templateId} that no build writes; its file is left untouched until it is next saved.");
             }
 
+            // Read as it is, never refused for its encoding, as for Plates: the file is only kept in
+            // Recovery before it is next written over (see PreserveBeforeOverwrite).
+            string? problem = null;
+            if (result.HasInvalidBytes && !result.RecoveredFromBackup)
+            {
+                log.Warning($"AetherFrame read Template file {Path.GetFileName(path)}, which holds bytes that aren't valid text; they read as U+FFFD, as before. The file is unchanged, and a copy of it is kept in Recovery before anything writes over it.");
+                lock (gate)
+                {
+                    unpreservedFiles.Add(path);
+                }
+
+                problem = InvalidTextTemplateProblem;
+            }
+
             var rawJson = VersionedJson.Serialize(result.Raw!);
-            return new TemplateRecord(templateId, TemplateStatus.Ready, rawJson, template, template.Name, template.CreatedAtUtc, template.UpdatedAtUtc, null);
+            return new TemplateRecord(templateId, TemplateStatus.Ready, rawJson, template, template.Name, template.CreatedAtUtc, template.UpdatedAtUtc, problem);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
         {
@@ -309,10 +329,10 @@ internal sealed class TemplateLibraryService
         TemplateFileReadResult? result = null;
         var attempts = 0;
 
-        await store.ReadTextAsync(path, text =>
+        await store.ReadTextAsync(path, stored =>
         {
             // A second invocation is the store retrying from its backup after the first copy failed.
-            result = ParseTemplateText(text, recoveredFromBackup: ++attempts > 1);
+            result = ParseTemplateText(stored.Text, recoveredFromBackup: ++attempts > 1) with { HasInvalidBytes = stored.HasInvalidBytes };
         }).ConfigureAwait(false);
 
         return result ?? throw new InvalidDataException("Template could not be read.");
@@ -322,10 +342,10 @@ internal sealed class TemplateLibraryService
     /// One Template file's text as the loader reads it: damage throws (so a store with backups
     /// retries from its backup copy), and a newer envelope or embedded document comes back as
     /// NewerVersion, untouched. Also how a write proves its text loads again before writing it.
+    /// The text's encoding is never damage (see <c>VersionedJson.ReadAsync</c>).
     /// </summary>
     private static TemplateFileReadResult ParseTemplateText(string text, bool recoveredFromBackup)
     {
-        VersionedJson.RejectUndecodableText(text, "Template");
         if (JsonNode.Parse(text) is not JsonObject raw)
         {
             throw new InvalidDataException("Template is not a JSON object.");
@@ -732,15 +752,16 @@ internal sealed class TemplateLibraryService
     }
 
     /// <summary>
-    /// Before any write to <paramref name="path"/>: if its damaged on-disk bytes still have no
-    /// Recovery copy (see <see cref="KeepRecoveryCopy"/>), keeps one now, and refuses the write
-    /// when that still fails, so what may be the newest content is never replaced uncopied.
+    /// Before any write to <paramref name="path"/>: if its on-disk bytes still have no Recovery
+    /// copy (a damaged file whose copy failed at load, see <see cref="KeepRecoveryCopy"/>, or a
+    /// file read with bytes that aren't valid text), keeps one now, and refuses the write when that
+    /// fails, so what may be the newest content, or the only faithful copy, is never replaced uncopied.
     /// </summary>
     private void PreserveBeforeOverwrite(string path)
     {
         lock (gate)
         {
-            if (!unpreservedDamagedFiles.Contains(path))
+            if (!unpreservedFiles.Contains(path))
             {
                 return;
             }
@@ -752,18 +773,18 @@ internal sealed class TemplateLibraryService
             {
                 var destination = paths.GetRecoveryPath(path, utcNow());
                 store.CopyFile(path, destination);
-                log.Warning($"AetherFrame kept a copy of the damaged Template file {Path.GetFileName(path)} in its Recovery folder as {Path.GetFileName(destination)}.");
+                log.Warning($"AetherFrame kept a copy of the Template file {Path.GetFileName(path)} in its Recovery folder as {Path.GetFileName(destination)} before writing over it.");
             }
         }
         catch (Exception ex) when (ex is not OperationAbandonedException)
         {
-            log.Error(ex, $"AetherFrame did not write the Template file {Path.GetFileName(path)}: its damaged copy still couldn't be kept in Recovery.");
+            log.Error(ex, $"AetherFrame did not write the Template file {Path.GetFileName(path)}: a copy of it couldn't be kept in Recovery first.");
             throw new TemplateLibraryException(PlateLibraryService.UnpreservedDamagedFileMessage);
         }
 
         lock (gate)
         {
-            unpreservedDamagedFiles.Remove(path);
+            unpreservedFiles.Remove(path);
         }
     }
 
@@ -793,7 +814,7 @@ internal sealed class TemplateLibraryService
             log.Error(ex, $"AetherFrame couldn't keep a Recovery copy of the damaged Template file {Path.GetFileName(path)}; the Template still loaded from its backup copy, and its file won't be written over until a copy can be kept.");
             lock (gate)
             {
-                unpreservedDamagedFiles.Add(path);
+                unpreservedFiles.Add(path);
             }
         }
     }
@@ -831,7 +852,7 @@ internal sealed class TemplateLibraryService
         var json = VersionedJson.Serialize(raw);
         try
         {
-            var parsed = ParseTemplateText(json, recoveredFromBackup: false);
+            var parsed = ParseTemplateText(VersionedJson.RequireFaithfulReadBack(json, "Template"), recoveredFromBackup: false);
             if (parsed.Status != TemplateStatus.Ready)
             {
                 throw new InvalidDataException("It would read as a newer version's Template.");
@@ -858,6 +879,8 @@ internal sealed class TemplateLibraryService
     /// One file as read. <see cref="RecoveredFromBackup"/>: the store served its backup copy
     /// because the on-disk one was unusable. <see cref="RepairedValues"/>: materializing repaired
     /// content no build writes (see <see cref="TemplateDocuments.Materialize(JsonObject, out bool)"/>).
+    /// <see cref="HasInvalidBytes"/>: the copy read held bytes that aren't valid text (see
+    /// <see cref="StoredText.HasInvalidBytes"/>).
     /// </summary>
     private readonly record struct TemplateFileReadResult(
         JsonObject? Raw,
@@ -865,7 +888,8 @@ internal sealed class TemplateLibraryService
         TemplateStatus Status,
         string? Problem,
         bool RecoveredFromBackup,
-        bool RepairedValues);
+        bool RepairedValues,
+        bool HasInvalidBytes = false);
 
     /// <summary>
     /// One Template as loaded. Immutable apart from replacement on rename: the saved JSON is kept

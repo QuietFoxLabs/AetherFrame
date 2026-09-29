@@ -19,9 +19,9 @@ internal sealed class SystemFileStore : IPlateFileStore
     public IReadOnlyList<string> ListFiles(string directory, string searchPattern) =>
         Directory.Exists(directory) ? Directory.GetFiles(directory, searchPattern, SearchOption.TopDirectoryOnly).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToList() : [];
 
-    public async Task ReadTextAsync(string path, Action<string> reader)
+    public async Task ReadTextAsync(string path, Action<StoredText> reader)
     {
-        var text = await File.ReadAllTextAsync(path, Encoding.UTF8).ConfigureAwait(false);
+        var text = await StoredTextDecoder.ReadFileAsync(path).ConfigureAwait(false);
         reader(text);
     }
 

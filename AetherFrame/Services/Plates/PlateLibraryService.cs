@@ -73,10 +73,12 @@ internal sealed class PlateLibraryService
     // Bindings saved by a newer AetherFrame: never interpreted and never written by this build.
     private readonly HashSet<ulong> newerVersionBindings = new();
 
-    // Files read from the store's backup copy whose damaged on-disk bytes could not be copied to
-    // Recovery at load (a full disk, say). Those bytes may be newer than the backup, so nothing is
-    // written over them until the copy succeeds (see PreserveBeforeOverwrite).
-    private readonly HashSet<string> unpreservedDamagedFiles = new(StringComparer.OrdinalIgnoreCase);
+    // Files whose bytes on disk must be copied to Recovery before anything is written over them
+    // (see PreserveBeforeOverwrite): a damaged file read from the store's backup copy whose own
+    // bytes could not be copied at load (a full disk, say), which may be newer than the backup; and
+    // a file read with bytes that aren't valid text, whose text in memory (U+FFFD in their place)
+    // is not a faithful copy of it. Nothing is written over either until its copy succeeds.
+    private readonly HashSet<string> unpreservedFiles = new(StringComparer.OrdinalIgnoreCase);
 
     private PlateLibraryState library = new();
 
@@ -259,7 +261,7 @@ internal sealed class PlateLibraryService
         ThrowIfLoadCanceled(cancellationToken);
         lock (gate)
         {
-            unpreservedDamagedFiles.Clear();
+            unpreservedFiles.Clear();
         }
 
         var loadedPlates = await Task.Run(LoadPlatesAsync).ConfigureAwait(false);
@@ -417,6 +419,10 @@ internal sealed class PlateLibraryService
                     "This Plate was saved by a newer version of AetherFrame. Update AetherFrame to open it.");
             }
 
+            // Read as it is, never refused for its encoding (see VersionedJson.ReadAsync); the file
+            // is only kept in Recovery before it is next written over.
+            var problem = KeepInvalidTextFile(path, result) ? InvalidTextPlateProblem : null;
+
             // The file name is the Plate's identity: a document whose own id disagrees (e.g. a
             // hand-copied file) is treated as the Plate its file says, so saving it can never
             // overwrite a different Plate.
@@ -440,7 +446,7 @@ internal sealed class PlateLibraryService
             }
 
             return new PlateRecord(plateId, PlateStatus.Ready, VersionedJson.Serialize(raw), document, document.Name, document.CreatedAtUtc, document.UpdatedAtUtc,
-                document.Revision, result.Migration.Version, null);
+                document.Revision, result.Migration.Version, problem);
         }
         catch (Exception ex) when (!IsInterruption(ex))
         {
@@ -491,6 +497,7 @@ internal sealed class PlateLibraryService
                     continue;
                 }
 
+                KeepInvalidTextFile(path, result);
                 var binding = result.Value!;
                 binding.ContentId = contentId;
                 binding.PlateIds = binding.PlateIds.Where(id => id != Guid.Empty).Distinct().ToList();
@@ -539,6 +546,7 @@ internal sealed class PlateLibraryService
                 return false;
             }
 
+            KeepInvalidTextFile(paths.LibraryFile, result);
             lock (gate)
             {
                 library = result.Value!;
@@ -1242,7 +1250,7 @@ internal sealed class PlateLibraryService
                 {
                     await store.ReadTextAsync(path, text =>
                     {
-                        using var json = JsonDocument.Parse(text);
+                        using var json = JsonDocument.Parse(text.Text);
                         AssetReferenceScanner.CollectAllGuidStrings(json.RootElement, referenced);
                     }).ConfigureAwait(false);
                 }
@@ -1368,7 +1376,15 @@ internal sealed class PlateLibraryService
 
     /// <summary>What the player is told when <see cref="PreserveBeforeOverwrite"/> refuses a write.</summary>
     internal const string UnpreservedDamagedFileMessage =
-        "A damaged file couldn't be copied to AetherFrame's Recovery folder, so it wasn't written over. Check that the drive isn't full and the AetherFrame folder isn't read-only, then try again.";
+        "AetherFrame couldn't keep a copy of the file this would replace in its Recovery folder, so nothing was written over it. Check that the drive isn't full and the AetherFrame folder isn't read-only, then try again.";
+
+    /// <summary>
+    /// A Ready Plate's note (shown when its card is hovered) when its file held bytes that aren't
+    /// valid text: they read as U+FFFD, exactly as before, and the file is kept in Recovery before
+    /// it is next saved (see <see cref="KeepInvalidTextFile"/>).
+    /// </summary>
+    internal const string InvalidTextPlateProblem =
+        "Part of this Plate's file isn't valid text, so some of its characters may not show correctly. The file is unchanged; AetherFrame keeps a copy of it in its Recovery folder before saving over it.";
 
     /// <summary>
     /// Between reading and writing during load: stops (with nothing written) when the load was
@@ -1534,7 +1550,34 @@ internal sealed class PlateLibraryService
 
         var destination = paths.GetRecoveryPath(path, utcNow());
         store.CopyFile(path, destination);
-        log.Warning($"AetherFrame kept a copy of damaged file {LogPrivacy.FileName(path)} in Recovery as {LogPrivacy.FileName(destination)}.");
+        log.Warning($"AetherFrame kept a copy of {LogPrivacy.FileName(path)} in Recovery as {LogPrivacy.FileName(destination)} before writing over it.");
+    }
+
+    /// <summary>
+    /// A usable copy read from disk with bytes that aren't valid text (see
+    /// <see cref="StoredText.HasInvalidBytes"/>): it is used as read, like any other, and the file
+    /// is left exactly as it is. Its text in memory isn't a faithful copy of it, though, so the
+    /// path is remembered and its original bytes are copied to Recovery before the first write
+    /// that would replace them (see <see cref="PreserveBeforeOverwrite"/>), which is refused while
+    /// that copy fails. A copy read from the store's backup is never marked: its on-disk file is
+    /// already kept by <see cref="KeepRecoveredFile"/>.
+    /// </summary>
+    /// <returns>True when the file was marked.</returns>
+    private bool KeepInvalidTextFile<T>(string path, VersionedReadResult<T> result)
+        where T : class
+    {
+        if (!result.HasInvalidBytes || result.RecoveredFromBackup || !result.IsUsable)
+        {
+            return false;
+        }
+
+        log.Warning($"AetherFrame read {LogPrivacy.FileName(path)}, which holds bytes that aren't valid text; they read as U+FFFD, as before. The file is unchanged, and a copy of it is kept in Recovery before anything writes over it.");
+        lock (gate)
+        {
+            unpreservedFiles.Add(path);
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -1563,21 +1606,22 @@ internal sealed class PlateLibraryService
             log.Error(ex, $"AetherFrame could not keep a copy of damaged file {fileName} in Recovery; it won't be written over until a copy can be kept.");
             lock (gate)
             {
-                unpreservedDamagedFiles.Add(path);
+                unpreservedFiles.Add(path);
             }
         }
     }
 
     /// <summary>
-    /// Before any write to <paramref name="path"/>: if its damaged on-disk bytes still have no
-    /// Recovery copy (see <see cref="KeepRecoveredFile"/>), keeps one now, and refuses the write
-    /// when that still fails, so the only copy of what may be the newest content is never replaced.
+    /// Before any write to <paramref name="path"/>: if its on-disk bytes still have no Recovery
+    /// copy (see <see cref="KeepRecoveredFile"/> and <see cref="KeepInvalidTextFile"/>), keeps one
+    /// now, and refuses the write when that fails, so the only copy of what may be the newest
+    /// content, or the only faithful one, is never replaced.
     /// </summary>
     private void PreserveBeforeOverwrite(string path)
     {
         lock (gate)
         {
-            if (!unpreservedDamagedFiles.Contains(path))
+            if (!unpreservedFiles.Contains(path))
             {
                 return;
             }
@@ -1589,13 +1633,13 @@ internal sealed class PlateLibraryService
         }
         catch (Exception ex) when (!IsInterruption(ex))
         {
-            log.Error(ex, $"AetherFrame did not write {LogPrivacy.FileName(path)}: its damaged copy still couldn't be kept in Recovery.");
+            log.Error(ex, $"AetherFrame did not write {LogPrivacy.FileName(path)}: a copy of it couldn't be kept in Recovery first.");
             throw new PlateLibraryException(UnpreservedDamagedFileMessage);
         }
 
         lock (gate)
         {
-            unpreservedDamagedFiles.Remove(path);
+            unpreservedFiles.Remove(path);
         }
     }
 
@@ -1689,15 +1733,17 @@ internal sealed class PlateLibraryService
     /// proven first to load again as a Ready Plate through the reader startup uses (the same text
     /// check, schema check, deserialization and in-memory repairs). Text that couldn't be read
     /// back would make the Plate unreadable at the next startup, and in game the write replaces
-    /// the storage's backup copy too, so it is refused here, before anything is written.
+    /// the storage's backup copy too, so it is refused here, before anything is written. The text
+    /// is first put through the byte-level round trip a file makes (see
+    /// <see cref="VersionedJson.RequireFaithfulReadBack"/>), so what is kept is what is read.
     /// </summary>
     private PlateRecord PreparePlateWrite(Guid plateId, JsonObject raw)
     {
         var json = VersionedJson.Serialize(raw);
         try
         {
-            VersionedJson.RejectUndecodableText(json, PersistenceSchemas.ProfileDocument.Name);
-            var parsed = VersionedJson.Parse(json, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
+            var readBack = VersionedJson.RequireFaithfulReadBack(json, PersistenceSchemas.ProfileDocument.Name);
+            var parsed = VersionedJson.Parse(readBack, PersistenceSchemas.ProfileDocument, PlateDocuments.Deserialize);
             if (!parsed.IsUsable)
             {
                 throw new InvalidDataException(parsed.IsNewerVersion ? "It would read as a newer version's Plate." : parsed.Migration.Error ?? "It is unreadable.");
