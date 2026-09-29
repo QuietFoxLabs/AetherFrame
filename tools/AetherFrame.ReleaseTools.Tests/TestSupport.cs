@@ -91,7 +91,7 @@ internal static class TestPackages
     internal const string InternalName = "AetherFrame";
     internal const string Commit = "ab26da043832712af955e92815f59fb517a7db46";
     internal const string RepoUrl = "https://github.com/QuietFoxLabs/AetherFrame";
-    internal const string IconUrl = "https://raw.githubusercontent.com/richhiiee/AetherFrameAssets/master/images/icon.png";
+    internal const string IconUrl = "https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/master/AetherFrame/images/icon.png";
     internal const string DownloadTemplate = "https://github.com/QuietFoxLabs/AetherFrame/releases/download/v{version}/{package}";
     internal const string DryRunTemplate = "https://dry-run.invalid/QuietFoxLabs/AetherFrame/releases/download/v{version}/{package}";
 

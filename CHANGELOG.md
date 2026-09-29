@@ -17,6 +17,8 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ### Fixed
 
+- The plugin installer shows AetherFrame's icon again. Its address now points at [`AetherFrame/images/icon.png`](AetherFrame/images/icon.png) in this repository; the separate repository it pointed at no longer exists.
+
 Plate Library reliability and data preservation ([docs/reliability/PlateLibraryReliability.md](docs/reliability/PlateLibraryReliability.md)). Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged.
 
 - A damaged Plate, Template, character or Plate order file that was read from Dalamud's backup copy is never written over until its damaged bytes are kept under `Recovery`: if that copy failed at load (a full disk), the next save or change now retries it, and is refused with a plain message while it still fails, instead of replacing bytes that may be newer than the backup. Set Active on a character whose file can't be kept gives the same message, Create, Use Template and Duplicate for that character add it to their "couldn't be linked" message, and the log no longer claims a copy it couldn't make.

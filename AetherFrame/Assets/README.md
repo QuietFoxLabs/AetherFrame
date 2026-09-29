@@ -7,8 +7,9 @@ copied to the output folder, and nothing here is ever persisted: Plates, Templat
 which the compile-time catalog maps to the logical asset id
 (`af.asset.celestial-dream.corner-ornament.astrolabe-pivot`) and from there to the resource.
 
-The full-size approved sources live in the separate AetherFrameAssets repository and are never
-needed at runtime or build time.
+The full-size approved sources were kept in a separate AetherFrameAssets repository, which no
+longer exists; they are never needed at runtime or build time. The `Source:` lines below record
+where each runtime copy was made from.
 
 ## Requirements for every runtime PNG
 

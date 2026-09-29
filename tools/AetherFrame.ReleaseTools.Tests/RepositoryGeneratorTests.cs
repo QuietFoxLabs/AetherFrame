@@ -45,7 +45,7 @@ public class RepositoryGeneratorTests
                 "LoadSync": false,
                 "LoadPriority": 0,
                 "CanUnloadAsync": false,
-                "IconUrl": "https://raw.githubusercontent.com/richhiiee/AetherFrameAssets/master/images/icon.png",
+                "IconUrl": "https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/master/AetherFrame/images/icon.png",
                 "AcceptsFeedback": true,
                 "IsTestingExclusive": false
               }
