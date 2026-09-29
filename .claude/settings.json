@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "E:\\AetherFrame Test Build",
+      "E:\\AetherFrame Test Builds",
+      "E:\\AetherFrame Archives\\Acceptance backups"
+    ],
+    "allow": [
+      "Bash(git status*)", "Bash(git log *)", "Bash(git diff *)", "Bash(git show *)", "Bash(git fetch *)",
+      "Bash(git pull --ff-only*)", "Bash(git switch *)", "Bash(git worktree *)", "Bash(git add *)",
+      "Bash(git commit *)", "Bash(git merge *)", "Bash(git rev-parse *)", "Bash(git branch *)",
+      "Bash(git push -u origin claude/*)", "Bash(git push origin claude/*)", "Bash(git push origin HEAD:refs/heads/claude/*)",
+      "Bash(git tag -a v*)", "Bash(git push origin v*)",
+      "Bash(gh pr create *)", "Bash(gh pr edit *)", "Bash(gh pr comment *)", "Bash(gh pr ready *)",
+      "Bash(gh pr view *)", "Bash(gh pr list*)", "Bash(gh pr checks *)", "Bash(gh pr diff *)",
+      "Bash(gh pr merge * --merge --match-head-commit *)",
+      "Bash(gh issue list*)", "Bash(gh issue view *)", "Bash(gh issue comment *)", "Bash(gh issue create *)", "Bash(gh issue edit *)",
+      "Bash(gh release list*)", "Bash(gh release view *)", "Bash(gh release download *)", "Bash(gh release edit *)",
+      "Bash(gh run list*)", "Bash(gh run view *)",
+      "Bash(gh workflow run release.yml*)", "Bash(gh workflow run publish-custom-repository.yml *)",
+      "Bash(dotnet build *)", "Bash(dotnet test *)", "Bash(dotnet restore *)"
+    ],
+    "ask": [
+      "Bash(gh workflow run *stable*)", "Bash(gh workflow run *rollback=true*)",
+      "PowerShell(gh workflow run *stable*)", "PowerShell(gh workflow run *rollback=true*)"
+    ],
+    "deny": [
+      "Bash(git push *--force*)", "Bash(git push *-f *)", "Bash(git push *-f)", "Bash(git push *+*)",
+      "Bash(git push *master*)", "Bash(git push *--delete*)", "Bash(git push * :*)",
+      "Bash(git push *--mirror*)", "Bash(git push *--prune*)",
+      "Bash(git tag -d *)", "Bash(git tag --delete *)", "Bash(git tag -f *)", "Bash(git tag *--force*)",
+      "Bash(git filter-branch *)", "Bash(git filter-repo *)",
+      "Bash(git branch *-D*)", "Bash(git branch *-d *)", "Bash(git branch *--delete*)",
+      "Bash(git branch *-f *)", "Bash(git branch *--force*)", "Bash(git branch *-M *)",
+      "Bash(git worktree remove -f*)", "Bash(git worktree remove * -f*)", "Bash(git worktree remove *--force*)",
+      "Bash(git switch *--discard-changes*)", "Bash(git switch *--force*)", "Bash(git switch -f*)", "Bash(git switch *-C *)",
+      "Bash(git reset --hard*)", "Bash(git clean *)", "Bash(git stash drop*)", "Bash(git stash clear*)",
+      "Bash(gh release delete *)", "Bash(gh release delete-asset *)", "Bash(gh repo delete *)", "Bash(gh repo edit *)",
+      "Bash(gh issue delete *)", "Bash(gh pr merge *--admin*)", "Bash(gh pr merge *--auto*)",
+      "Bash(gh api *DELETE*)", "Bash(gh api *protection*)",
+      "Bash(*Plugin development*)",
+      "PowerShell(git push *--force*)", "PowerShell(git push *-f *)", "PowerShell(git push *-f)", "PowerShell(git push *+*)",
+      "PowerShell(git push *master*)", "PowerShell(git push *--delete*)", "PowerShell(git push * :*)",
+      "PowerShell(gh release delete *)", "PowerShell(gh repo delete *)", "PowerShell(gh pr merge *--admin*)",
+      "PowerShell(*Plugin development*)",
+      "Read(//e/Plugin development/**)", "Edit(//e/Plugin development/**)", "Write(//e/Plugin development/**)",
+      "mcp__ccd_pr__set_auto_merge"
+    ]
+  }
+}
