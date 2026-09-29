@@ -128,7 +128,12 @@ The owner writes plain comments; read them generously.
 
 Only for a release candidate the owner passed in game:
 
-1. **Tag.** Annotate the tag on the exact passed commit, as Releasing.md step 5 shows, and push it: `git push origin vX.Y.Z`.
+1. **Tag the exact passed commit, never the current `HEAD`.** `master` may have moved since the test build. Name the commit explicitly:
+   - `git tag -a vX.Y.Z <passed sha> -m "AetherFrame X.Y.Z"`;
+   - check that `git rev-parse vX.Y.Z^{commit}` prints that same sha;
+   - only then run `git push origin vX.Y.Z`.
+
+   If the passed commit isn't the release-prep merge for `vX.Y.Z` (so its `Version.props` doesn't say `X.Y.Z`), don't tag it: make a new release candidate instead.
 2. **Check the draft.** On a later run, check the Release workflow's draft: its assets are built from that commit, and its SHA256SUMS match.
 3. **Publish the draft as a pre-release.** Every `gh release edit` call must include `--tag vX.Y.Z` (a draft edited without it is detached from its tag).
 4. **Dry run.** Run `publish-custom-repository.yml` with `channel=testing` and `publish=false`, and check the output.
