@@ -27,6 +27,8 @@ Approved by the owner, in these words:
 > Personas are never automatically bound to characters, Content IDs, accounts or other game identifiers.
 > Switching personas must not alter saved local Plates or trigger publishing.
 
+**Wording the approved text does not quote.** The owner's instruction to the persona foundation (#23) also said that distinct personas remain independent unless the user deliberately associates them. `AetherFrame.Personas` enforces it: no operation associates two personas. The approved text above is left exactly as approved. Adding the clause changes the owner's own approval, so only the owner can do it.
+
 **What the approval does not settle:**
 - how personas are stored (K2, K9);
 - which platforms can create them (K3);
@@ -96,7 +98,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | D4 | Rules for the schema-1 `name` | Any text without U+0000, up to 32,000 scalars | 1–64 scalars, a 256-byte limit, and a fixed list of refused code points (C0/C1 controls, line and paragraph separators, BOM, bidi controls), with no normalisation | **yes** | UNRESOLVED |
 | D5 | What an image digest covers; metadata | "The source image bytes" | The digest of the prepared upload copy, never the original. The client strips metadata by rebuilding the container; the server always re-processes. | wording only, unless a salt is added | UNRESOLVED |
 | D8 | Whether metadata-only schema 1 is ever exposed to players | Test-only | No; the first public schema includes the layout | no | UNRESOLVED |
-| D9a | Persona display name | None | A private local label only; any public name later, per snapshot | no (for now) | UNRESOLVED |
+| D9a | Persona display name | None in the protocol. `AetherFrame.Personas` (#23) implements the recommendation provisionally as `PersonaLabel`, so the persona model can be exercised; the plugin does not reference that assembly. | A private local label only; any public name later, per snapshot | no (for now) | UNRESOLVED |
 | I1 | Which images can be shared | Undefined | Still PNG, JPEG and WebP. The first frame of animated PNG. Refuse animated WebP, CMYK JPEG and oversize images; no silent downscaling. | no | UNRESOLVED |
 
 ## 3. Decisions needed before the freeze or the first real server (G3)
@@ -132,6 +134,8 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | L8 | Signing-context rules not yet in the specification | UNRESOLVED (before any second signing context) |
 | L9 | Whether protocol tests gate plugin releases (`release.yml`) as well as `build.yml` | UNRESOLVED. Its "Linux never ran" part is closed: the ubuntu leg has run green twice (NETWORK0.md, section 13). |
 | I3 | Photo metadata in local `.aetherframe` exports (existing local behaviour, not networking) | UNRESOLVED |
+| L10 | Signer lease on a persona switch: may an operation holding a lease for persona A still sign as A after the player switches to B? The interim in `AetherFrame.Personas` (#23) revokes the lease on any change of selection, never revives it, and fails closed, following NETWORK1.md system 1. The alternatives are letting the operation finish as A (which needs system 1 amended) or refusing a switch while a lease is open. | UNRESOLVED (before the preview wiring, NETWORK1.md increment 9, lets a player start an operation that signs) |
+| L11 | Whether the persona suite also gates plugin releases (`release.yml`). Today only `build.yml` runs it. A question of the same kind as L9; L9 itself stays scoped to the protocol suite. | UNRESOLVED (with L9) |
 
 ## 6. Closed items
 

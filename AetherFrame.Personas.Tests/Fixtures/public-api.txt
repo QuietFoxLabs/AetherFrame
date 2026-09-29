@@ -1,0 +1,100 @@
+interface AetherFrame.Personas.IPersonaBackupCodec
+    Byte[] Write(PersonaKeyMaterial material, PersonaBackupSecret secret)
+    PersonaBackupInspection Inspect(ReadOnlySpan<Byte> backup)
+    PersonaKeyMaterial Open(ReadOnlySpan<Byte> backup, PersonaBackupSecret secret)
+interface AetherFrame.Personas.IPersonaKeyStore
+    IPersonaSigner OpenSigner(PersonaSlotId slot)
+    PersonaKeyMaterial GenerateKey()
+    PersonaKeyMaterial OpenKey(PersonaSlotId slot)
+    Void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
+sealed class AetherFrame.Personas.PersonaBackupInspection
+    Boolean IsSupported { get; }
+    Int32 FormatVersion { get; }
+    PersonaBackupStatus Status { get; }
+    new(PersonaBackupStatus status, Int32 formatVersion)
+sealed class AetherFrame.Personas.PersonaBackupSecret
+    PersonaBackupSecret FromText(ReadOnlySpan<Char> text)
+    String ToString()
+    Void Dispose()
+enum AetherFrame.Personas.PersonaBackupStatus
+    Int32 value__
+    const PersonaBackupStatus Malformed
+    const PersonaBackupStatus Supported
+    const PersonaBackupStatus UnsupportedVersion
+enum AetherFrame.Personas.PersonaError
+    Int32 value__
+    const PersonaError BackupCannotBeOpened
+    const PersonaError BackupMalformed
+    const PersonaError BackupUnsupported
+    const PersonaError DuplicateIdentity
+    const PersonaError InvalidBackupInspection
+    const PersonaError InvalidIdentifier
+    const PersonaError InvalidKeyMaterial
+    const PersonaError InvalidLabel
+    const PersonaError KeyUnavailable
+    const PersonaError LeaseRevoked
+    const PersonaError UnknownPersona
+sealed class AetherFrame.Personas.PersonaException
+    PersonaError Error { get; }
+    new(PersonaError error, String message)
+sealed class AetherFrame.Personas.PersonaKeyMaterial
+    EcdsaPersonaSigner CreateSigner()
+    PersonaPublicKey PublicKey { get; }
+    String ToString()
+    Void Dispose()
+static class AetherFrame.Personas.PersonaLabel
+    Boolean TryNormalize(String text, ref String label)
+    const Int32 MaxLength
+sealed class AetherFrame.Personas.PersonaManager
+    Boolean TryGet(PersonaSlotId slot, ref PersonaRecord persona)
+    Byte[] ExportBackup(PersonaSlotId slot, PersonaBackupSecret secret)
+    IReadOnlyList<PersonaRecord> Personas { get; }
+    PersonaBackupInspection InspectBackup(ReadOnlySpan<Byte> backup)
+    PersonaRecord Active { get; }
+    PersonaRecord Create(String label)
+    PersonaRecord Rename(PersonaSlotId slot, String label)
+    PersonaRecord Select(PersonaSlotId slot)
+    PersonaRestoreResult RestoreBackup(ReadOnlySpan<Byte> backup, PersonaBackupSecret secret, String label)
+    PersonaSignerAvailability TryOpenActiveSigner(ref PersonaSignerLease lease)
+    Void Deselect()
+    new(IPersonaKeyStore keys, IPersonaBackupCodec backups)
+sealed class AetherFrame.Personas.PersonaRecord
+    PersonaId Id { get; }
+    PersonaPublicKey PublicKey { get; }
+    PersonaSlotId Slot { get; }
+    String Label { get; }
+    String ToString()
+sealed class AetherFrame.Personas.PersonaRestoreResult
+    Int32 FormatVersion { get; }
+    PersonaRecord Persona { get; }
+    PersonaRestoreStatus Status { get; }
+enum AetherFrame.Personas.PersonaRestoreStatus
+    Int32 value__
+    const PersonaRestoreStatus AlreadyPresent
+    const PersonaRestoreStatus CannotOpen
+    const PersonaRestoreStatus InvalidKey
+    const PersonaRestoreStatus Malformed
+    const PersonaRestoreStatus Restored
+    const PersonaRestoreStatus UnsupportedVersion
+enum AetherFrame.Personas.PersonaSignerAvailability
+    Int32 value__
+    const PersonaSignerAvailability Available
+    const PersonaSignerAvailability KeyUnavailable
+    const PersonaSignerAvailability NoActivePersona
+sealed class AetherFrame.Personas.PersonaSignerLease
+    IPersonaSigner Signer { get; }
+    PersonaRecord Persona { get; }
+    String ToString()
+    Void Dispose()
+struct AetherFrame.Personas.PersonaSlotId
+    Boolean Equals(Object obj)
+    Boolean Equals(PersonaSlotId other)
+    Boolean IsEmpty { get; }
+    Boolean TryParse(String text, ref PersonaSlotId id)
+    Int32 GetHashCode()
+    PersonaSlotId NewId()
+    PersonaSlotId Parse(String text)
+    String ToString()
+    const Int32 ByteLength
+    const Int32 TextLength
+    const String Prefix
