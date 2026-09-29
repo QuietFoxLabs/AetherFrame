@@ -103,7 +103,8 @@ internal static class TestPackages
         string? informationalVersion = "",
         Machine machine = Machine.Amd64,
         CorFlags flags = CorFlags.ILOnly,
-        int? dalamudMajor = 15)
+        int? dalamudMajor = 15,
+        string? typeNamespace = null)
     {
         assemblyVersion ??= version + ".0";
         if (fileVersion == string.Empty)
@@ -130,6 +131,11 @@ internal static class TestPackages
         var builder = new PersistedAssemblyBuilder(new AssemblyName(name) { Version = Version.Parse(assemblyVersion) }, typeof(object).Assembly, attributes);
         var module = builder.DefineDynamicModule(name);
         module.DefineType("Plugin", TypeAttributes.Public | TypeAttributes.Class).CreateType();
+        if (typeNamespace is not null)
+        {
+            // A type in a namespace the package check refuses (a networking preview build).
+            module.DefineType(typeNamespace + ".Marker", TypeAttributes.Public | TypeAttributes.Class).CreateType();
+        }
 
         var metadata = builder.GenerateMetadata(out var ilStream, out var fieldData);
         if (dalamudMajor is not null)

@@ -8,8 +8,9 @@
 
     Plain .NET with no NuGet packages, no Dalamud reference, no game state, no files and no network
     access. It generates no persistent key, persists nothing, and knows nothing about characters,
-    Content IDs or Plates. The plugin does not reference it: how the networking assemblies ship in
-    the release package is decision D9b (docs/networking/DecisionRegister.md), still open.
+    Content IDs or Plates. The plugin never references it as an assembly: decision D9b
+    (docs/networking/DecisionRegister.md) compiles these sources into AetherFrame.dll in the
+    networking preview flavour only; a player build holds none of this code.
   -->
 
   <Import Project="..\Version.props" />

@@ -58,6 +58,10 @@ public static class PackageValidator
     private static readonly Regex AbsolutePath = new(@"(?<![A-Za-z0-9])[A-Za-z]:[\\/]|\\\\[A-Za-z0-9]|(?<![A-Za-z0-9.])/(home|Users|root|mnt|tmp|var|opt)/", RegexOptions.CultureInvariant);
     private static readonly Regex Sha1 = new(@"^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant);
 
+    // The namespaces of the networking code, which only the plugin's networking preview flavour
+    // compiles in (docs/networking/DecisionRegister.md, D9b and P2). No package may hold them.
+    private static readonly string[] NetworkingNamespaces = { "AetherFrame.Protocol", "AetherFrame.Personas" };
+
     public static PackageReport Validate(PackageValidationRequest request, CheckList checks)
     {
         var config = request.Configuration;
@@ -139,6 +143,17 @@ public static class PackageValidator
                 $"Dalamud {dalamud.Version}",
                 $"compiled against Dalamud {dalamud.Version}, whose API level {dalamud.Version.Major} is not the configured {config.DalamudApiLevel}.");
         }
+
+        // The flavour: a player package holds none of the networking code. A networking preview
+        // build is never released and never handed over as a test build.
+        var networking = assembly.TypeNamespaces
+            .Where(ns => NetworkingNamespaces.Any(n => ns == n || ns.StartsWith(n + ".", StringComparison.Ordinal)))
+            .ToList();
+        checks.Require(
+            networking.Count == 0,
+            "plugin flavour",
+            "player build, no networking code",
+            $"the DLL holds types in {string.Join(", ", networking)}; it is a networking preview build, which is never packaged for players.");
 
         // The manifest.
         var manifest = checks.Attempt("manifest", () => PluginManifest.Parse(package.ManifestJson, PluginPackage.ManifestEntryName(internalName)), m => "parsed, all keys known");

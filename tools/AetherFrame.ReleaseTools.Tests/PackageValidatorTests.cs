@@ -38,6 +38,7 @@ public class PackageValidatorTests
         Assert.Equal(Checksums.Sha256Hex(package), report.Package.Sha256);
         Assert.Equal(new[] { "AetherFrame.deps.json", "AetherFrame.dll", "AetherFrame.json" }, report.Package.Entries.Select(e => e.Name).OrderBy(n => n, StringComparer.Ordinal));
         Assert.Contains(checks.Checks, c => c.Name == "Dalamud reference" && c.Passed && c.Detail == "Dalamud 15.0.0.0");
+        Assert.Contains(checks.Checks, c => c.Name == "plugin flavour" && c.Passed && c.Detail == "player build, no networking code");
     }
 
     [Fact]
@@ -485,6 +486,23 @@ public class PackageValidatorTests
         });
 
         Assert.Contains("does not reference Dalamud", TestPackages.Failure(checks, "Dalamud reference"));
+    }
+
+    [Theory]
+    [InlineData("AetherFrame.Protocol")]
+    [InlineData("AetherFrame.Personas.Storage")]
+    public void DllHoldingNetworkingCode_Fails(string ns)
+    {
+        // A networking preview build (docs/networking/DecisionRegister.md, D9b and P2) is never a
+        // release and never a test build, so the package check refuses its DLL.
+        using var directory = new TempDirectory();
+        var (checks, _) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(directory, assembly: TestPackages.Assembly(typeNamespace: ns)),
+            Configuration = TestPackages.Configuration(),
+        });
+
+        Assert.Contains($"holds types in {ns}", TestPackages.Failure(checks, "plugin flavour"));
     }
 
     [Fact]
