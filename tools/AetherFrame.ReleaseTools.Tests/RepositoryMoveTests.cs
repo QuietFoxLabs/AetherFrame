@@ -225,7 +225,8 @@ public class RepositoryMoveTests
         var entry = RepositoryGenerator.Build(config, null, package, true, DateTimeOffset.Parse("2026-09-27T23:58:31Z"));
         var text = Encoding.UTF8.GetString(RepositoryDocument.Serialize(new[] { entry }))
             .Replace(TestPackages.RepoUrl, Previous, StringComparison.Ordinal);
-        Assert.DoesNotContain("QuietFoxLabs", text);
+        // Every source and download address is the old one; the icon's address is not a repository address.
+        Assert.DoesNotContain(TestPackages.RepoUrl, text);
         return Encoding.UTF8.GetBytes(text);
     }
 
