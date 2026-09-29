@@ -7,11 +7,20 @@ namespace AetherFrame.Protocol;
 /// The fixed bytes of protocol version 1: the document magic, the version number and the domain
 /// separation tags. Every value here is part of the wire format (docs/networking/ProtocolSpecification-v1.md)
 /// and can never change within version 1; a new version gets new tags.
+/// <para>
+/// Until the owner freezes version 1, this build writes and reads only drafts of it (decision N3,
+/// docs/networking/DecisionRegister.md): the version is <see cref="DraftVersionFlag"/> | 1 and the
+/// signature tag ends in "-draft". A draft can never be read as final or verify as final, and the
+/// persona identity derivation is the same for both, so an identity survives the freeze.
+/// </para>
 /// </summary>
 public static class ProtocolConstants
 {
-    /// <summary>The only protocol version this build reads or writes.</summary>
-    public const ushort ProtocolVersion = 1;
+    /// <summary>The high bit of a protocol version, set on every draft: the low fifteen bits name the version it drafts.</summary>
+    public const ushort DraftVersionFlag = 0x8000;
+
+    /// <summary>The only protocol version this build reads or writes: 0x8001, a draft of version 1 (decision N3).</summary>
+    public const ushort ProtocolVersion = DraftVersionFlag | 1;
 
     /// <summary>The first four bytes of every signed document: ASCII "AFPD" (AetherFrame Protocol Document).</summary>
     public static ReadOnlySpan<byte> DocumentMagic => "AFPD"u8;
@@ -19,9 +28,10 @@ public static class ProtocolConstants
     /// <summary>
     /// The domain separation tag that starts every signing input, so a signature over a document can
     /// never be a valid signature over anything else AetherFrame signs (docs/networking/ProtocolSpecification-v1.md,
-    /// "Signing input"). Written as a one-byte length followed by these ASCII bytes.
+    /// "Signing input"). Written as a one-byte length followed by these ASCII bytes. The "-draft"
+    /// suffix (decision N3) keeps a draft signature from ever verifying under the final version's tag.
     /// </summary>
-    public static ReadOnlySpan<byte> SignatureDomainTag => "AetherFrame.Protocol.SignedDocument.v1"u8;
+    public static ReadOnlySpan<byte> SignatureDomainTag => "AetherFrame.Protocol.SignedDocument.v1-draft"u8;
 
     /// <summary>
     /// The domain separation tag of persona identity derivation (docs/networking/ProtocolSpecification-v1.md,

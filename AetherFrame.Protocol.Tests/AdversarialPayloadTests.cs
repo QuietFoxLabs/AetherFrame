@@ -94,7 +94,10 @@ public class AdversarialPayloadTests
     [InlineData("image digest zero, then cut inside width", ProtocolError.InvalidValue)]
     [InlineData("image format 9 and byte length 0", ProtocolError.InvalidValue)]
     [InlineData("image byte length over max and width 0", ProtocolError.LimitExceeded)]
-    [InlineData("name with NUL after 32001 scalars", ProtocolError.InvalidText)]
+    [InlineData("name over the byte limit and with a NUL", ProtocolError.LimitExceeded)]
+    [InlineData("name with a NUL after 65 scalars", ProtocolError.InvalidText)]
+    [InlineData("name invalid utf8 after 65 scalars", ProtocolError.InvalidText)]
+    [InlineData("name with a right-to-left override after 65 scalars", ProtocolError.InvalidText)]
     [InlineData("image count 9 and trailing byte", ProtocolError.LimitExceeded)]
     [InlineData("trailing byte and images totalling over max", ProtocolError.TrailingBytes)]
     public void PayloadsWithSeveralFaults_AreRefusedForTheFirstInSchemaOrder(string name, ProtocolError expected)
@@ -108,7 +111,10 @@ public class AdversarialPayloadTests
             "image digest zero, then cut inside width" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, digest: new byte[32])])[..^6],
             "image format 9 and byte length 0" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, format: 9, byteLength: 0)]),
             "image byte length over max and width 0" => PayloadBuilder.Snapshot(images: [PayloadBuilder.Image(Samples.Asset1, byteLength: (ulong)ProtocolLimits.MaxImageBytes + 1, width: 0)]),
-            "name with NUL after 32001 scalars" => PayloadBuilder.Snapshot(nameBytes: [.. ProtocolConstants.StrictUtf8.GetBytes(new string('a', ProtocolLimits.MaxTextScalars + 1)), 0x00]),
+            "name over the byte limit and with a NUL" => PayloadBuilder.Snapshot(nameBytes: [.. ProtocolConstants.StrictUtf8.GetBytes(new string('a', ProtocolLimits.MaxNameBytes)), 0x00]),
+            "name with a NUL after 65 scalars" => PayloadBuilder.Snapshot(nameBytes: [.. ProtocolConstants.StrictUtf8.GetBytes(new string('a', ProtocolLimits.MaxNameScalars + 1)), 0x00]),
+            "name invalid utf8 after 65 scalars" => PayloadBuilder.Snapshot(nameBytes: [.. ProtocolConstants.StrictUtf8.GetBytes(new string('a', ProtocolLimits.MaxNameScalars + 1)), 0xFF]),
+            "name with a right-to-left override after 65 scalars" => PayloadBuilder.Snapshot(nameBytes: [.. ProtocolConstants.StrictUtf8.GetBytes(new string('a', ProtocolLimits.MaxNameScalars + 1)), 0xE2, 0x80, 0xAE]),
             "image count 9 and trailing byte" => PayloadBuilder.Snapshot(imageCount: 9, trailing: [0]),
             "trailing byte and images totalling over max" => PayloadBuilder.Snapshot(images: overMax, trailing: [0]),
             _ => throw new ArgumentException(name),

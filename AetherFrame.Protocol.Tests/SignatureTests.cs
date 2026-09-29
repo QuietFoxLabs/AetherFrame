@@ -19,15 +19,17 @@ public class SignatureTests
         var payload = new byte[] { 1, 2, 3 };
         var input = SigningInput.Create(DocumentType.ProfileSnapshot, signer.PublicKey, payload);
 
-        var tag = "AetherFrame.Protocol.SignedDocument.v1"u8.ToArray();
+        // Decision N3: every document is a draft until the freeze, so the tag ends in "-draft" and
+        // the version is 0x8001.
+        var tag = "AetherFrame.Protocol.SignedDocument.v1-draft"u8.ToArray();
         var expected = new byte[] { (byte)tag.Length }.Concat(tag)
-            .Concat(new byte[] { 0x00, 0x01 })
+            .Concat(new byte[] { 0x80, 0x01 })
             .Concat(new byte[] { 0x01 })
             .Concat(signer.PublicKey.ToArray())
             .Concat(new byte[] { 0, 0, 0, 3, 1, 2, 3 })
             .ToArray();
 
-        Assert.Equal(38, tag.Length);
+        Assert.Equal(44, tag.Length);
         Assert.Equal(expected, input.Bytes.ToArray());
         Assert.Equal(SHA256.HashData(expected), input.ComputeDigest());
         Assert.Equal(DocumentType.ProfileSnapshot, input.DocumentType);
@@ -42,7 +44,7 @@ public class SignatureTests
         ProtocolAssert.Throws(ProtocolError.UnknownDocumentType, () => SigningInput.Create((DocumentType)0, signer.PublicKey, [1]));
         ProtocolAssert.Throws(ProtocolError.InvalidLength, () => SigningInput.Create(DocumentType.ProfileSnapshot, signer.PublicKey, []));
         ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => SigningInput.Create(DocumentType.ProfileSnapshot, signer.PublicKey, new byte[ProtocolLimits.MaxPayloadBytes + 1]));
-        Assert.Equal(ProtocolLimits.MaxPayloadBytes, SigningInput.Create(DocumentType.ProfileSnapshot, signer.PublicKey, new byte[ProtocolLimits.MaxPayloadBytes]).Bytes.Length - 1 - 38 - 2 - 1 - 65 - 4);
+        Assert.Equal(ProtocolLimits.MaxPayloadBytes, SigningInput.Create(DocumentType.ProfileSnapshot, signer.PublicKey, new byte[ProtocolLimits.MaxPayloadBytes]).Bytes.Length - 1 - 44 - 2 - 1 - 65 - 4);
     }
 
     [Fact]

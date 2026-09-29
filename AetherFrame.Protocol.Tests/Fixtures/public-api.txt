@@ -86,6 +86,7 @@ static class AetherFrame.Protocol.ProtocolConstants
     const Int32 OpaqueIdLength
     const Int32 PublicKeyLength
     const Int32 SignatureLength
+    const UInt16 DraftVersionFlag
     const UInt16 ProtocolVersion
 enum AetherFrame.Protocol.ProtocolError
     Int32 value__
@@ -109,6 +110,8 @@ static class AetherFrame.Protocol.ProtocolLimits
     const Int32 MaxDocumentBytes
     const Int32 MaxImageDimension
     const Int32 MaxImagesPerProfile
+    const Int32 MaxNameBytes
+    const Int32 MaxNameScalars
     const Int32 MaxPayloadBytes
     const Int32 MaxTextBytes
     const Int32 MaxTextScalars

@@ -55,7 +55,7 @@ The second independent review of `a96d7fd` verified the security fixes and found
 ## What was built
 
 - `AetherFrame.Protocol`, a standalone net10.0 assembly (no packages, no Dalamud, no plugin reference, no `System.Net`, no file or process APIs; a test enforces this). 36 KB compiled, 0 warnings with warnings as errors and XML docs on every public member.
-  - Canonical binary encoding: `CanonicalWriter`, `CanonicalReader`, `ProtocolText` (strict UTF-8, no U+0000, 32,000 scalar values, no normalization).
+  - Canonical binary encoding: `CanonicalWriter`, `CanonicalReader`, `ProtocolText` (strict UTF-8, no U+0000, 32,000 scalar values, no normalization). `[updated 2026-09-29: names have their own stricter rule, ProtocolName (decision D4).]`
   - Identity: `PersonaPublicKey` (65-byte uncompressed P-256 point with the protocol's own on-curve check), `PersonaId` (`psn_` + SHA-256 over a tagged key), `ProfileId`, `RevisionId`, `AssetId` (16 random bytes, one strict text form each).
   - Signing: `SigningInput` (tag ‖ version ‖ type ‖ key ‖ length ‖ payload), `ProtocolSignature` (64-byte P1363, low-S required), `IPersonaSigner`, `EcdsaPersonaSigner` (in-memory, owns its `ECDsa`, exports nothing), `SignatureVerifier`.
   - Documents: `SignedDocumentCodec.Sign` and `.Verify`, `VerifiedDocument` (persona derived from the verifying key), `DocumentType` (ProfileSnapshot = 1, ProfileRetraction = 2).
@@ -231,7 +231,7 @@ No quadratic behaviour was found; everything is linear in the input. Two things 
 1. Keep `ProfileRetraction` as a signed document, or unpublish through an authenticated request? (NETWORK0.md, section 10, decision 2; now D1.)
 2. Is a metadata-only snapshot the right first remote model, with the layout as schema 2, or should the layout come first? (D8.)
 3. Persona display name: none, or a field in a future persona document? (D9.)
-4. Whether the 32,000-character text limit should be tightened per field (the name) at the protocol level, or left to server policy. (D4.)
+4. Whether the 32,000-character text limit should be tightened per field (the name) at the protocol level, or left to server policy. (D4.) `[updated 2026-09-29: yes, decided as D4 and applied by N2-2.]`
 5. How the protocol assembly ships in the plugin package (fourth file versus linked sources). (D9.)
 
 ## Recommended NETWORK1 scope

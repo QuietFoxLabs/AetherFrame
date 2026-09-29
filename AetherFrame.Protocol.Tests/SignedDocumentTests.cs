@@ -16,7 +16,7 @@ public class SignedDocumentTests
         var document = Samples.SignedSnapshot(signer);
 
         Assert.Equal("AFPD"u8.ToArray(), document.Take(4));
-        Assert.Equal(new byte[] { 0, 1 }, document.Skip(4).Take(2));
+        Assert.Equal(new byte[] { 0x80, 0x01 }, document.Skip(4).Take(2));
         Assert.Equal(1, document[6]);
         Assert.Equal(signer.PublicKey.ToArray(), document.Skip(7).Take(65));
         var payloadLength = Layout.PayloadLengthOf(document);

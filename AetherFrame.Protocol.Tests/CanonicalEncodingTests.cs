@@ -90,6 +90,29 @@ public class CanonicalEncodingTests
     }
 
     [Fact]
+    public void Text_DecoderRefusesOverTheLimits_InReadingOrder()
+    {
+        // The general text rules (section 2.3), which no version 1 field uses since the name rule
+        // (decision D4) and which schema 2's texts will: the byte limit, UTF-8, U+0000, the scalar limit.
+        var overScalars = System.Text.Encoding.UTF8.GetBytes(new string('a', ProtocolLimits.MaxTextScalars + 1));
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => ProtocolText.Decode(overScalars, "text"));
+
+        var overBytes = new byte[ProtocolLimits.MaxTextBytes + 1];
+        overBytes.AsSpan().Fill((byte)'a');
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => ProtocolText.Decode(overBytes, "text"));
+
+        byte[] nulAfterTooMany = [.. overScalars, 0x00];
+        ProtocolAssert.Throws(ProtocolError.InvalidText, () => ProtocolText.Decode(nulAfterTooMany, "text"));
+
+        // A declared length over the limit is refused before the input's own length is consulted.
+        byte[] declared = [0x00, 0x01, 0xF4, 0x01, (byte)'a'];
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => new CanonicalReader(declared).ReadText("text"));
+
+        var atLimit = System.Text.Encoding.UTF8.GetBytes(new string('a', ProtocolLimits.MaxTextScalars));
+        Assert.Equal(ProtocolLimits.MaxTextScalars, ProtocolText.Decode(atLimit, "text").Length);
+    }
+
+    [Fact]
     public void Reader_RefusesDeclaredLengthOverLimitBeforeLookingAtRemainingInput()
     {
         byte[] huge = [0xFF, 0xFF, 0xFF, 0xFF, 0x00];

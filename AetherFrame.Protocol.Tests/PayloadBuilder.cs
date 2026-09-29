@@ -72,7 +72,7 @@ internal static class PayloadBuilder
         return writer.ToArray();
     }
 
-    /// <summary>The largest snapshot the limits allow: a 32,000 four-byte-scalar name and eight 5 MiB images.</summary>
+    /// <summary>The largest snapshot the limits allow: a 64 four-byte-scalar name (256 bytes) and eight 5 MiB images.</summary>
     public static ProfileSnapshot MaximalSnapshot()
     {
         var images = new List<ImageReference>();
@@ -82,7 +82,7 @@ internal static class PayloadBuilder
             images.Add(new ImageReference(id, Samples.Digest((byte)index), ImageFormat.Png, ProtocolLimits.MaxProfileImageBytes / ProtocolLimits.MaxImagesPerProfile, 5000, 4000));
         }
 
-        var name = string.Concat(System.Linq.Enumerable.Repeat("\U0001F600", ProtocolLimits.MaxTextScalars));
+        var name = string.Concat(System.Linq.Enumerable.Repeat("\U0001F600", ProtocolLimits.MaxNameScalars));
         return new ProfileSnapshot(Samples.Profile, Samples.RevisionMaximal, ProtocolLimits.MaxUnixSeconds, name, images);
     }
 }
