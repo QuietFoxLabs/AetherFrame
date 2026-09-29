@@ -33,7 +33,7 @@ public class EncodingRegressionTests
 {
     private const string OlderName = "Older Plate";
 
-    private const string ReplacementName = "Newer � Plate";
+    private const string ReplacementName = "Newer \uFFFD Plate";
 
     /// <summary>Where <see cref="Encode"/> writes its raw bytes.</summary>
     private const string Marker = "@@";
@@ -117,6 +117,15 @@ public class EncodingRegressionTests
     /// <summary>What every save writes: UTF-8 without a byte order mark, everything outside ASCII escaped.</summary>
     private static void AssertSavedAsAscii(string path) => Assert.True(Ascii.IsValid(File.ReadAllBytes(path)));
 
+    /// <summary>A Ready Plate read with invalid text carries a note, and not one of the notes of a
+    /// Plate that couldn't be read at all.</summary>
+    private static void AssertReadWithInvalidText(PlateSummary summary)
+    {
+        Assert.NotNull(summary.Problem);
+        Assert.NotEqual(PlateLibraryService.DamagedPlateProblem, summary.Problem);
+        Assert.NotEqual(PlateLibraryService.UnavailablePlateProblem, summary.Problem);
+    }
+
     private static void AssertNoTemporaryFiles(string root) => Assert.Empty(Directory.GetFiles(root, "*.tmp", SearchOption.AllDirectories));
 
     [Theory]
@@ -167,25 +176,33 @@ public class EncodingRegressionTests
         File.WriteAllBytes(path, original);
         var fileName = NameAsReadAllTextReadsIt(path);
         Assert.StartsWith("Newer ", fileName, StringComparison.Ordinal);
-        Assert.Contains('�', fileName);
+        Assert.Contains('\uFFFD', fileName);
 
         var library = await fixture.LoadAsync();
 
         var summary = library.FindPlate(plateId)!;
         Assert.Equal(PlateStatus.Ready, summary.Status);
         Assert.Equal(fileName, summary.DisplayName);
-        Assert.NotNull(summary.Problem);
+        AssertReadWithInvalidText(summary);
         Assert.Equal(original, File.ReadAllBytes(path));
         Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths), sequence);
 
         fixture.Clock.Tick();
+        var copiedAt = fixture.Clock.Now;
         await library.SavePlateDocumentAsync(library.OpenDocumentForEditing(plateId));
 
-        AssertKeptInRecovery(fixture.Paths, path, original, fixture.Clock.Now);
+        AssertKeptInRecovery(fixture.Paths, path, original, copiedAt);
         AssertSavedAsAscii(path);
+        Assert.Null(library.FindPlate(plateId)!.Problem);
+
+        // Only the first write over the original keeps a copy: the file is now the Library's own.
+        fixture.Clock.Tick();
+        await library.SavePlateDocumentAsync(library.OpenDocumentForEditing(plateId));
+        await library.RenamePlateAsync(plateId, "Renamed Plate");
+        AssertKeptInRecovery(fixture.Paths, path, original, copiedAt);
         var reloaded = await fixture.LoadAsync();
         Assert.Equal(PlateStatus.Ready, reloaded.FindPlate(plateId)!.Status);
-        Assert.Equal(fileName, reloaded.FindPlate(plateId)!.DisplayName);
+        Assert.Equal("Renamed Plate", reloaded.FindPlate(plateId)!.DisplayName);
         Assert.Null(reloaded.FindPlate(plateId)!.Problem);
     }
 
@@ -231,7 +248,7 @@ public class EncodingRegressionTests
             "UTF-32 little-endian" => new UTF32Encoding(bigEndian: false, byteOrderMark: true),
             _ => new UTF32Encoding(bigEndian: true, byteOrderMark: true),
         };
-        const string name = "Ælfwyn � ✦ 🌸 Plate";
+        const string name = "\u00C6lfwyn \uFFFD \u2726 \U0001F338 Plate";
         var store = new BackupSimulatingStore();
         using var fixture = new LibraryFixture(store);
         var (plateId, path) = await SeedAsync(fixture);
@@ -251,7 +268,10 @@ public class EncodingRegressionTests
 
         AssertSavedAsAscii(path);
         Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
-        Assert.Equal(name, (await fixture.LoadAsync()).FindPlate(plateId)!.DisplayName);
+        var reloaded = (await fixture.LoadAsync()).FindPlate(plateId)!;
+        Assert.Equal(PlateStatus.Ready, reloaded.Status);
+        Assert.Equal(name, reloaded.DisplayName);
+        Assert.Null(reloaded.Problem);
     }
 
     [Fact]
@@ -270,7 +290,7 @@ public class EncodingRegressionTests
         var summary = library.FindPlate(plateId)!;
         Assert.Equal(PlateStatus.Ready, summary.Status);
         Assert.Equal(fileName, summary.DisplayName);
-        Assert.NotNull(summary.Problem);
+        AssertReadWithInvalidText(summary);
         Assert.Equal(original, File.ReadAllBytes(path));
         Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));
 
@@ -282,6 +302,46 @@ public class EncodingRegressionTests
         var reloaded = await fixture.LoadAsync();
         Assert.Equal(PlateStatus.Ready, reloaded.FindPlate(plateId)!.Status);
         Assert.Equal(fileName, reloaded.FindPlate(plateId)!.DisplayName);
+    }
+
+    /// <summary>Invalid text in each of the other encodings the reader honours, behind its byte order mark.</summary>
+    [Theory]
+    [InlineData("UTF-8 with a byte order mark, invalid byte")]
+    [InlineData("UTF-16 big-endian, lone surrogate")]
+    [InlineData("UTF-32 little-endian, value above U+10FFFF")]
+    [InlineData("UTF-32 big-endian, surrogate value")]
+    public async Task InvalidTextBehindAByteOrderMark_IsReadFromTheFileItself_AndKeptExactlyBeforeTheFirstSave(string kind)
+    {
+        var (encoding, invalid) = kind switch
+        {
+            "UTF-16 big-endian, lone surrogate" => ((Encoding)new UnicodeEncoding(bigEndian: true, byteOrderMark: true), new byte[] { 0xD8, 0x00 }),
+            "UTF-32 little-endian, value above U+10FFFF" => (new UTF32Encoding(bigEndian: false, byteOrderMark: true), new byte[] { 0x00, 0x00, 0x11, 0x00 }),
+            "UTF-32 big-endian, surrogate value" => (new UTF32Encoding(bigEndian: true, byteOrderMark: true), new byte[] { 0x00, 0x00, 0xD8, 0x00 }),
+            _ => (new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), new byte[] { 0xFF }),
+        };
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var (plateId, path) = await SeedAsync(fixture);
+        var original = Encode(WithName(File.ReadAllText(path), $"Newer {Marker} Plate"), encoding, invalid);
+        File.WriteAllBytes(path, original);
+        var fileName = NameAsReadAllTextReadsIt(path);
+        Assert.Contains('\uFFFD', fileName);
+
+        var library = await fixture.LoadAsync();
+
+        var summary = library.FindPlate(plateId)!;
+        Assert.Equal(PlateStatus.Ready, summary.Status);
+        Assert.Equal(fileName, summary.DisplayName);
+        AssertReadWithInvalidText(summary);
+        Assert.Equal(original, File.ReadAllBytes(path));
+        Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths), kind);
+
+        fixture.Clock.Tick();
+        await library.SavePlateDocumentAsync(library.OpenDocumentForEditing(plateId));
+
+        AssertKeptInRecovery(fixture.Paths, path, original, fixture.Clock.Now);
+        AssertSavedAsAscii(path);
+        Assert.Equal(fileName, (await fixture.LoadAsync()).FindPlate(plateId)!.DisplayName);
     }
 
     [Theory]
@@ -388,7 +448,8 @@ public class EncodingRegressionTests
         Assert.Equal(ReplacementName, library.FindPlate(plateId)!.DisplayName);
         Assert.Equal(backup, store.Backups[path]);
 
-        // A copy is a new file: nothing it writes replaces the original's bytes.
+        // A copy is a new file: nothing it writes replaces the original's bytes. (That Duplicate
+        // goes ahead is what the Library does today, not a rule; the rule is the original's bytes.)
         var copyId = await library.DuplicatePlateAsync(plateId);
         Assert.Equal(PlateStatus.Ready, library.FindPlate(copyId)!.Status);
         Assert.Equal(original, File.ReadAllBytes(path));
@@ -398,9 +459,15 @@ public class EncodingRegressionTests
         fixture.Clock.Tick();
         await (retried == "save" ? Save() : Rename());
 
-        AssertKeptInRecovery(fixture.Paths, path, original, fixture.Clock.Now);
+        var copiedAt = fixture.Clock.Now;
+        AssertKeptInRecovery(fixture.Paths, path, original, copiedAt);
         AssertSavedAsAscii(path);
         AssertNoTemporaryFiles(fixture.Root);
+        Assert.Null(library.FindPlate(plateId)!.Problem);
+
+        fixture.Clock.Tick();
+        await (retried == "save" ? Save() : Rename());
+        AssertKeptInRecovery(fixture.Paths, path, original, copiedAt);
         var reloaded = await fixture.LoadAsync();
         Assert.Equal(PlateStatus.Ready, reloaded.FindPlate(plateId)!.Status);
         Assert.Equal(retried == "save" ? ReplacementName : "Renamed Plate", reloaded.FindPlate(plateId)!.DisplayName);

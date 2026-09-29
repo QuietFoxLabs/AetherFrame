@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -32,6 +33,30 @@ public class PlateStoragePathsTests
         { Guid.Empty.ToString("D"), false },
         { "notes", false },
     };
+
+    /// <summary>A Recovery or trash name's time stamp is in the Gregorian calendar whatever the
+    /// player's culture: a Thai calendar would otherwise put 2569 in a name stamped in 2026.</summary>
+    [Theory]
+    [InlineData("th-TH")]
+    [InlineData("ar-SA")]
+    public void RecoveryAndTrashNames_AreStampedInTheGregorianCalendar_WhateverTheCulture(string culture)
+    {
+        var paths = new PlateStoragePaths("root");
+        var at = new DateTime(2026, 9, 27, 1, 2, 3, 4, DateTimeKind.Utc);
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo(culture);
+
+            Assert.Equal("1001.damaged-20260927-010203-004.json", Path.GetFileName(paths.GetRecoveryPath(Path.Combine("Characters", "1001.json"), at)));
+            Assert.Equal($"{Id}.deleted-20260927-010203-004.json", Path.GetFileName(paths.GetTrashPlatePath(Id, at)));
+            Assert.Equal($"{Id}.deleted-20260927-010203-004.json", Path.GetFileName(paths.GetTrashTemplatePath(Id, at)));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
 
     [Theory]
     [MemberData(nameof(GuidSpellings))]
