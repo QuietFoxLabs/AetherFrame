@@ -27,6 +27,13 @@
     <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
   </ItemGroup>
 
+  <!-- The plugin's Dalamud-free key blob storage (a directory of files), which the plugin compiles
+       only in its networking preview flavour, is compiled into this test assembly from its source
+       so it is tested on every build. It uses nothing but System.IO and the persona seams. -->
+  <ItemGroup>
+    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaKeyFileStorage.cs" Link="Linked\PersonaKeyFileStorage.cs" />
+  </ItemGroup>
+
   <!-- The approved public surface, copied next to the test binaries byte for byte
        (Fixtures/.gitattributes keeps git from rewriting its line endings). -->
   <ItemGroup>

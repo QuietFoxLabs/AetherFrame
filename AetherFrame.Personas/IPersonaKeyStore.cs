@@ -5,26 +5,28 @@ namespace AetherFrame.Personas;
 /// <summary>
 /// Custody of persona private keys: the one seam through which a key is made, kept, opened for
 /// signing or handed to a backup codec. The <see cref="PersonaManager"/> holds public records and
-/// never keeps a private key; an implementation keeps keys and never a record. No implementation in
-/// this assembly stores anything. The protected store for real keys is a later increment, gated on
-/// the open key-storage decisions (docs/networking/DecisionRegister.md, K2 and K3), and until a
-/// reviewed one exists the only implementations are in-memory test doubles. Nothing about this
-/// interface makes a key safe: that is a property of an implementation, and only a reviewed one may
-/// claim it.
+/// never keeps a private key; an implementation keeps keys and never a record. The implementation
+/// for real keys is <see cref="Storage.ProtectedPersonaKeyStore"/> (the key store core, K1, K2, K6
+/// and K7 in docs/networking/DecisionRegister.md), which keeps protected envelopes in a storage and
+/// through a protector the plugin supplies; no protector exists outside tests yet (increment 7), and
+/// nothing wires a store to the plugin. Nothing about this interface makes a key safe: that is a
+/// property of an implementation and its protector, and only a reviewed one may claim it.
 /// <para>
 /// The manager makes every call to a store, and to the signers it returns (signing and disposal
 /// alike), under its one lock, so an implementation is never called concurrently. The price is that
 /// every manager member, listings included, waits while a store call runs: an implementation that
 /// blocks (reading files, unprotecting keys, prompting) stalls a frame thread that only wanted a
-/// listing. No implementation exists yet; the one that does must keep its calls short or the
-/// manager's locking must be split, and that is a decision for the key store increment.
+/// listing. The key store core keeps its calls short (a few small reads and writes and at most two
+/// protector calls); whether the wiring (increment 9) calls the manager off the frame thread or
+/// splits its lock is decided there.
 /// </para>
 /// <para>
 /// Custody is taken in two steps so that nothing is committed before it is checked: a key is made
 /// (<see cref="GenerateKey"/>) or restored by a codec without the store holding it, the manager
 /// checks its identity against the personas it holds, and only then does the store commit it
-/// (<see cref="AddKey"/>). A refusal therefore never leaves a key in a store without a record, and
-/// the manager never needs to delete one: nothing in this interface deletes a key.
+/// (<see cref="AddKey"/>). A refusal before the commit therefore never leaves a key in a store
+/// without a record. Nothing in this interface deletes a key, so a commit that fails after the
+/// store's storage accepted the key is the one case that can: see <see cref="AddKey"/>.
 /// </para>
 /// <para>
 /// Ownership is the same everywhere: material or a signer a store returns is the caller's to
@@ -49,9 +51,13 @@ public interface IPersonaKeyStore
     /// anything else (a scalar that lost a byte in serialization, say) leaves a persona that can
     /// never sign or be backed up; a store verifies what it wrote before it returns. It never
     /// replaces: a slot the store already holds is refused with an exception and its key is left
-    /// exactly as it was. It is atomic: it returns only once the key is held, and when it throws,
-    /// nothing is held under <paramref name="slot"/>. It never retains <paramref name="material"/>
-    /// itself, which stays the caller's to dispose whether this returns or throws.
+    /// exactly as it was. It returns only once the key is held and verified, and when it throws
+    /// before anything became durable, nothing is held under <paramref name="slot"/>; a store that
+    /// cannot delete may be left holding an unverified key under that slot when the verification
+    /// after a durable write fails, and must say so in its exception. The caller never records or
+    /// reuses a slot whose commit threw (L12 in docs/networking/DecisionRegister.md). It never
+    /// retains <paramref name="material"/> itself, which stays the caller's to dispose whether this
+    /// returns or throws.
     /// </summary>
     void AddKey(PersonaSlotId slot, PersonaKeyMaterial material);
 
@@ -61,8 +67,8 @@ public interface IPersonaKeyStore
     /// a platform that cannot sign. An unavailable key is reported as null, never thrown. The signer
     /// must hold the private half: the manager checks the public key it reports, not that it can sign,
     /// so a public-only signer passes the check and fails at its first signature (L4 in
-    /// docs/networking/DecisionRegister.md, still open for the key store's design). A signer made by
-    /// <see cref="PersonaKeyMaterial.CreateSigner"/> always holds it.
+    /// docs/networking/DecisionRegister.md, settled for the key store core, which makes every signer
+    /// through <see cref="PersonaKeyMaterial.CreateSigner"/>). A signer made that way always holds it.
     /// </summary>
     IPersonaSigner? OpenSigner(PersonaSlotId slot);
 

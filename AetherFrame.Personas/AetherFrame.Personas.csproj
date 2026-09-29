@@ -3,11 +3,13 @@
   <!--
     AetherFrame's local persona management foundation (docs/networking/NETWORK1_PersonaFoundation.md):
     the in-memory model of the personas an installation holds, the deliberate selection of one
-    active persona, and the narrow seams that a later increment fills with protected key storage
-    and an encrypted .afpersona backup format.
+    active persona, the key store core over a protector seam and a storage seam that the plugin
+    fills (docs/networking/NETWORK1_KeyStoreCore.md), and the seam an encrypted .afpersona backup
+    format will fill.
 
     Plain .NET with no NuGet packages, no Dalamud reference, no game state, no files and no network
-    access. It generates no persistent key, persists nothing, and knows nothing about characters,
+    access. It persists nothing itself and generates no persistent key: the key store core reaches
+    storage and protection only through seams the plugin fills. It knows nothing about characters,
     Content IDs or Plates. The plugin never references it as an assembly: decision D9b
     (docs/networking/DecisionRegister.md) compiles these sources into AetherFrame.dll in the
     networking preview flavour only; a player build holds none of this code.
