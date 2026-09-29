@@ -1,6 +1,10 @@
 # Networking decision register
 
-**Status (2026-09-28): every product and architecture decision below is UNRESOLVED.**
+**Status (2026-09-28): two decisions are approved.**
+- **D3** is **APPROVED**.
+- **D2** is **APPROVED IN PRINCIPLE**. Its technical details remain unresolved, pending later security approval.
+
+**Every other product and architecture decision below is UNRESOLVED.**
 
 This file is the one place a networking decision is recorded as approved. Nothing is approved by appearing in NETWORK0.md, NETWORK1.md, a handoff, a review report, a baseline in the code, or a recommendation. An entry changes to APPROVED only when the owner approves it, with the date and the approved option written here.
 
@@ -8,6 +12,37 @@ This file is the one place a networking decision is recorded as approved. Nothin
 - The NETWORK0 baselines (NETWORK0.md, section 11) describe what the merged code does today. They are not decisions.
 - Recommendations come from the NETWORK1 architecture review and the Windows cryptography investigation (2026-09-28). They are proposals only.
 - Ids D1–D9 and N1–N7 are NETWORK0.md's. Its D9 is split here into D9a (display name) and D9b (packaging). The K, P, I and S ids are NETWORK1 additions.
+
+## Approved decisions
+
+### D3: personas per installation. APPROVED (September 28, 2026)
+
+Approved by the owner, in these words:
+
+> AetherFrame supports multiple independent personas per installation.
+> Players manually select and switch personas.
+> One persona may be active at a time for identity-dependent operations.
+> Personas are never automatically bound to characters, Content IDs, accounts or other game identifiers.
+> Switching personas must not alter saved local Plates or trigger publishing.
+
+**What the approval does not settle:**
+- how personas are stored (K2, K9);
+- which platforms can create them (K3);
+- whether they carry a display name (D9a);
+- any user interface.
+
+### D2: recovery from key loss. APPROVED IN PRINCIPLE (September 28, 2026)
+
+Approved by the owner, in these words:
+
+> AetherFrame will support encrypted, portable `.afpersona` identity backups and restoration.
+> Users must be able to restore the same cryptographic identity on another computer without a hosted account.
+> Plaintext private key exports are not permitted.
+> The exact backup encryption scheme, password policy, derivation parameters, recovery warnings and implementation remain subject to later security approval.
+
+**What follows directly from the approval.** This is not a separate decision: a persona's private key must remain exportable *into an encrypted backup*. So a storage option that makes the key permanently unexportable cannot be the only copy of it.
+
+**Still UNRESOLVED:** the encryption scheme, password policy, key derivation parameters, recovery warnings and implementation. They are tracked as "D2 details" in section 1 and relate to K4, K5 and K7. No `.afpersona` file may be written or restored outside tests until they have security approval.
 
 ## Gates
 
@@ -23,10 +58,16 @@ This file is the one place a networking decision is recorded as approved. Nothin
 
 ## 1. Decisions that must be approved before any persistent private key is created (G1)
 
+- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE).
+- **Every other row in this table must still be approved** before a persistent private key is created outside tests.
+- **"D2 details"** has its own gate: before any `.afpersona` file is written or restored outside tests.
+- **Approved rows** state the approved option in the recommendation column.
+
 | Id | Question | Baseline or current state | Recommendation (not approved) | Bytes | Status |
 |---|---|---|---|---|---|
-| D2 | Recovery from key loss | None. Without the key nothing can be retracted, and there is no account. | Keys are exportable from creation; the player makes a passphrase-encrypted backup; no server recovery codes. The *exportability* part is G1; the backup format and gating are G3 (K4, K5). | no | UNRESOLVED |
-| D3 | How many personas an installation holds, and how one is chosen | Undefined | Several independent personas, one selected for new publications, switched only deliberately, never automatically per character | no | UNRESOLVED |
+| D2 | Recovery from key loss | None. Without the key nothing can be retracted, and there is no account. | Approved in principle: encrypted, portable `.afpersona` backups and restoration, including on another computer without a hosted account; no plaintext private key export (see "Approved decisions") | no | **APPROVED IN PRINCIPLE (2026-09-28)** |
+| D2 details | Backup encryption scheme, password policy, key derivation parameters, recovery warnings, implementation | Undefined | Subject to later security approval. Related proposals, not approved: K4, K5, K7. No `.afpersona` file may be written or restored outside tests before this is approved. | no | UNRESOLVED |
+| D3 | How many personas an installation holds, and how one is chosen | Undefined | Approved: several independent personas; manual selection and switching; one active at a time for identity-dependent operations; never bound automatically to game identifiers; switching never alters saved Plates or triggers publishing (see "Approved decisions") | no | **APPROVED (2026-09-28)** |
 | D9b | How the protocol code ships in the plugin (fourth DLL or sources compiled in) | The plugin does not reference it | Compile the sources into AetherFrame.dll, keeping the package at three files, with the protocol project staying canonical. If a fourth DLL is ever chosen, the release tooling must keep accepting historical three-file packages. | no | UNRESOLVED |
 | N3 | Whether draft documents are distinguishable from final v1 in the signed bytes | Drafts use version 1 and the `…SignedDocument.v1` tag | A distinct draft version and tag until the freeze | **yes** | UNRESOLVED |
 | N5 | Whether the profile id stays on every `RemoteDocument` | It does | Move it to profile document types only, before NETWORK1 code depends on the API | no (public API) | UNRESOLVED |
@@ -64,7 +105,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | D6 | Whether viewers receive signed envelopes or server-checked content | Undecided | Server-checked content (reversible later; signed proofs handed out cannot be recalled) | no | UNRESOLVED |
 | D7 | Whether documents are bound to a deployment | Not bound | Bind through a short-lived publish request proof. The alternative is a deployment id in the signing input, which is only possible before the freeze. | yes, only for the alternative | UNRESOLVED |
 | K4 | Whether a backup is required before the first real publish | Undefined | Required, or an explicit acknowledgement that losing the key means never being able to unpublish | no | UNRESOLVED |
-| K5 | Backup passphrase rules and key derivation route | Undefined | At least 15 characters, or a generated code; NFC; never truncated. The key derivation must use a route verified on every supported platform: `Rfc2898DeriveBytes.Pbkdf2` fails under Wine before 11.3, from source and a published report. | no | UNRESOLVED |
+| K5 | Backup passphrase rules and key derivation route | Undefined | At least 15 characters, or a generated code; NFC; never truncated. The key derivation must use a route verified on every supported platform: `Rfc2898DeriveBytes.Pbkdf2` fails under Wine before 11.3, from source and a published report. Because D2 is approved in principle, this is also needed before any `.afpersona` file is written outside tests (part of "D2 details"). | no | UNRESOLVED |
 | N1 | Scope of revision and asset ids | Profile scoping only | Revisions per (persona, profile); assets per persona; nothing global; no deduplication across personas | no | UNRESOLVED |
 | N7 | Whether consumers must escape names before display or logging | Nothing obliges them | Oblige every consumer to treat names as plain text | no | UNRESOLVED |
 

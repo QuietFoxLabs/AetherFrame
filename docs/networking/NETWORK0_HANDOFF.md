@@ -16,7 +16,7 @@ Written on the night of 2026-09-27, at the end of the overnight NETWORK0 run, fo
 
   Nothing else in the content changed.
 - **What comes next.**
-  - The open decisions, still unresolved, are tracked in [DecisionRegister.md](DecisionRegister.md).
+  - Decisions are tracked in [DecisionRegister.md](DecisionRegister.md). D3 was approved and D2 approved in principle on 2026-09-28; every other decision is unresolved.
   - The planned NETWORK1 boundaries are in [NETWORK1.md](NETWORK1.md).
   - The platform cryptography findings are in [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md).
 
@@ -226,7 +226,7 @@ No quadratic behaviour was found; everything is linear in the input. Two things 
 
 ## Product decisions still needed
 
-`[superseded 2026-09-28 by NETWORK0.md, section 11, "Open product decisions" (D1 to D9), which lists these five and the review's additions with the baseline each has today. Nothing there is decided.]` `[updated 2026-09-28, after the merge: the current status of every decision is kept in DecisionRegister.md; all are still unresolved.]`
+`[superseded 2026-09-28 by NETWORK0.md, section 11, "Open product decisions" (D1 to D9), which lists these five and the review's additions with the baseline each has today. Nothing there is decided.]` `[updated 2026-09-28, after the merge: the current status of every decision is kept in DecisionRegister.md. D3 is approved and D2 is approved in principle (2026-09-28); all others are still unresolved.]`
 
 1. Keep `ProfileRetraction` as a signed document, or unpublish through an authenticated request? (NETWORK0.md, section 10, decision 2; now D1.)
 2. Is a metadata-only snapshot the right first remote model, with the layout as schema 2, or should the layout come first? (D8.)
@@ -238,7 +238,7 @@ No quadratic behaviour was found; everything is linear in the input. Two things 
 
 Client side only, still no backend: `IPersonaKeyProvider` over a DPAPI-protected P-256 key in the plugin's configuration folder (generate once, never export); a snapshot builder from `ProfileDocument` (name and image references) `[corrected 2026-09-28: not "digests computed from the stored assets": what a digest covers, and whether original image bytes are ever uploaded or digested, is decision D5, and no milestone may upload originals or expose their digests before the image processing and privacy design is approved]`; a minimal publish and retract flow behind a feature flag with no UI beyond a command, that produces documents and, for now, writes them to a local outbox instead of a server; the request-proof signing tag and schema, defined and vectored the same way as the documents. Only then the backend, which reuses `AetherFrame.Protocol` unchanged.
 
-`[updated 2026-09-28, after the merge: this paragraph was the night's recommendation, not a decision. Three parts of it are open owner decisions. "Generate once, never export": whether keys are exportable for a backup is D2. "A DPAPI-protected P-256 key": the storage and platform choices are K1 to K3; both were measured working on native Windows, while under Wine DPAPI is obfuscation only, from source inspection. "The request-proof signing tag and schema" inside NETWORK1: the architecture review suggests reserving only the tag name until the transport is designed, which is also unresolved. See NETWORK1.md for the planned boundaries and DecisionRegister.md for the gates; none of this is approved.]`
+`[updated 2026-09-28, after the merge: this paragraph was the night's recommendation, not a decision. Three parts of it were open owner decisions. "Generate once, never export" is superseded by D2, approved in principle on 2026-09-28: a key may leave the machine only inside an encrypted, portable .afpersona backup, never in plaintext, and the backup's security details await approval. "A DPAPI-protected P-256 key": the storage and platform choices are K1 to K3; both were measured working on native Windows, while under Wine DPAPI is obfuscation only, from source inspection. "The request-proof signing tag and schema" inside NETWORK1: the architecture review suggests reserving only the tag name until the transport is designed, which is also unresolved. See NETWORK1.md for the planned boundaries and DecisionRegister.md for the gates; apart from D2 in principle, none of this is approved.]`
 
 ## How to review
 

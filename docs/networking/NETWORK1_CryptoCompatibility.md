@@ -133,7 +133,7 @@ Other projects' reports, each consistent with section 3. They are other people's
 - **Any Wine key store would need independent verification.** If persona features are ever offered there, they need a separately verified storage alternative, and it must be run under the target Wine builds before it is relied on. Options:
   - a passphrase-wrapped store, whose PBKDF2 must avoid the missing pseudo-handle (for example by calling `BCryptDeriveKeyPBKDF2` directly) and whose AES-GCM needs GnuTLS before Wine 11.11;
   - an explicit "not protected on this system" state, which would be a policy decision.
-- **The backup design needs the same care.** A backup format built on `Rfc2898DeriveBytes` plus `AesGcm` would fail at the PBKDF2 step under XIVLauncher.Core's Wine 10.8 (section 3). The direct `BCryptDeriveKeyPBKDF2` route gives byte-identical output (tested on Windows), so choosing it would not change a file format.
+- **The backup design needs the same care.** A backup format built on `Rfc2898DeriveBytes` plus `AesGcm` would fail at the PBKDF2 step under XIVLauncher.Core's Wine 10.8 (section 3). The direct `BCryptDeriveKeyPBKDF2` route gives byte-identical output (tested on Windows), so choosing it would not change a file format. D2 (approved in principle, 2026-09-28) requires encrypted, portable `.afpersona` backups that restore the same identity on another computer. DPAPI blobs cannot move between machines or between Windows and Wine, so the backup, not the key store, is the portable path. Its primitives must work on every platform where restoring is offered; the scheme itself awaits security approval.
 
 ## 6. Selecting implementations
 
