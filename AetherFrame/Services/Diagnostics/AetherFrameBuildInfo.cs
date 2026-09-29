@@ -50,11 +50,28 @@ internal sealed record AetherFrameBuildInfo(string Version, string? Revision)
         return new AetherFrameBuildInfo(version, IsCommitId(metadata) ? metadata[..ShortRevisionLength] : metadata);
     }
 
+    /// <summary>
+    /// Whether this is the networking preview flavour (docs/networking/DecisionRegister.md, P2): the
+    /// build that compiles the protocol and persona sources in, and later the preview commands. A
+    /// player build, and every official build, is never the preview flavour, and nothing in one can
+    /// create a persona key or a signed document.
+    /// </summary>
+    internal static bool NetworkPreview =>
+#if AETHERFRAME_NETWORK_PREVIEW
+        true;
+#else
+        false;
+#endif
+
     /// <summary>"AetherFrame 0.1.0".</summary>
     internal string DisplayName => $"AetherFrame {Version}";
 
-    /// <summary>"AetherFrame 0.1.0 (build 1bf26e1)", or just the display name without a revision.</summary>
-    internal string Describe() => Revision is null ? DisplayName : $"{DisplayName} (build {Revision})";
+    /// <summary>"AetherFrame 0.1.0 (build 1bf26e1)", or just the display name without a revision; the preview flavour adds "[network preview]".</summary>
+    internal string Describe()
+    {
+        var text = Revision is null ? DisplayName : $"{DisplayName} (build {Revision})";
+        return NetworkPreview ? text + " [network preview]" : text;
+    }
 
     private static bool IsCommitId(string text)
     {

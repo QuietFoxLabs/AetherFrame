@@ -62,7 +62,7 @@ Future backend: consumes signed documents only; the plugin depends on it for not
 ```
 
 - **Arrows point from the user to the used.** Nothing points into local persistence except a read-only view of saved Plates and managed images.
-- **Nothing in local persistence refers to the other five systems.** Planned boundary tests enforce this:
+- **Nothing in local persistence refers to the other five systems.** The boundary tests (`AetherFrame.Tests/PluginAssemblyBoundaryTests.cs`, since the integration skeleton; they also hold the player build to no protocol or persona type at all, and both flavours to no networking API) enforce this:
   - the plugin assembly has no `System.Net` reference;
   - only the networking folders may name `AetherFrame.Protocol`;
   - local folders never reference the networking folders;
@@ -80,7 +80,7 @@ Future backend: consumes signed documents only; the plugin depends on it for not
    - no telemetry;
    - no game identifiers in documents;
    - no persona ids in file names;
-   - persona, profile, revision and asset ids redacted from logs (planned).
+   - persona, profile, revision and asset ids redacted from logs (done by the integration skeleton: `LogPrivacy` replaces each with a placeholder naming its kind, in every logged message and exception).
 8. **Ownership belongs to the backend.** The plugin cannot enforce it and must not claim to.
 
 ## 5. What NETWORK1 does not include
