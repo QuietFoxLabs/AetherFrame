@@ -426,6 +426,22 @@ internal static class PackageReader
                 return;
             }
 
+            // Step 4's check, again on what is actually imported: every new local image must be
+            // used where the reference scan looks. An id the scan finds in one place, but that is
+            // re-pointed only in another (a text field), would otherwise leave the new image
+            // referenced by nothing the scan counts.
+            var usedLocally = new HashSet<Guid>();
+            AssetReferenceScanner.Collect(previewDocument, usedLocally);
+            foreach (var asset in staged.Where(a => !usedLocally.Contains(a.LocalAssetId)))
+            {
+                diagnostics.Error(PackageErrorCode.AssetUndeclared, "The file contains an image the Plate doesn't use.", $"unused {asset.Declaration.Path}");
+            }
+
+            if (diagnostics.HasErrors)
+            {
+                return;
+            }
+
             result.PreparedProfile = prepared;
             result.PreviewDocument = previewDocument;
             result.Assets = staged;

@@ -59,13 +59,45 @@ public class PackageReliabilityTests
     [Fact]
     public void SelfCheckRefusal_NeverQuotesADetailThatNamesAPath_AndKeepsTheCheckersOwnAdviceOtherwise()
     {
-        var withPath = PackageExporter.DescribeSelfCheckRefusal([new PackageError(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", @"unreadable C:\Users\Someone\x")]);
+        var withPath = PackageExporter.DescribeSelfCheckRefusal(
+            [new PackageError(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", @"unreadable C:\Users\Someone\x") { IsFieldValue = true }]);
         Assert.Equal("This Plate holds a value a Plate file can't carry. Change it in the editor and save, then export again.", Assert.Single(withPath).Message);
+
+        // Not a value the editor shows: no advice to change it there, and the detail stays in the log.
+        var structural = Assert.Single(PackageExporter.DescribeSelfCheckRefusal(
+            [new PackageError(PackageErrorCode.ProfileInvalid, "The Plate in this file is damaged.", "malformed JSON at line 1, byte 2345")]));
+        Assert.Equal("This Plate holds data a Plate file can't carry, so it can't be exported.", structural.Message);
+        Assert.Equal("malformed JSON at line 1, byte 2345", structural.Detail);
 
         // "Too many elements" already says what to change; it is passed on as it is.
         PackageError[] tooLarge = [new PackageError(PackageErrorCode.PackageTooLarge, "The Plate has too many elements (the limit is 256).")];
         Assert.Equal(tooLarge, PackageExporter.DescribeSelfCheckRefusal(tooLarge));
         Assert.Equal("The Plate couldn't be exported.", Assert.Single(PackageExporter.DescribeSelfCheckRefusal([])).Message);
+    }
+
+    /// <summary>
+    /// Data the editor keeps without showing it: a hand-edited element that isn't an object is
+    /// kept as an unrecognized element and written back on every save, so no edit can clear it.
+    /// </summary>
+    [Fact]
+    public async Task ExportRefusedForDataTheEditorDoesntShow_GivesNoEditorAdvice()
+    {
+        using var fixture = new PackageFixture();
+        var plateId = Guid.NewGuid();
+        var document = PlateFactory.Create(PlateStartingLayout.Blank, plateId, "Hand edited", fixture.Clock.Now);
+        document.Elements.Add(new TextProfileElement { Text = "kept", Position = new Vector2(10, 10), Size = new Vector2(200, 60) });
+        var raw = PlateDocuments.ToJson(document);
+        raw["Elements"]!.AsArray().Add(0);
+        fixture.Library.WritePlateJson(plateId, raw.ToJsonString(JsonOptions.Default));
+        var (library, packages) = await fixture.LoadAsync();
+        Assert.Equal(PlateStatus.Ready, library.FindPlate(plateId)!.Status);
+        var destination = Path.Combine(fixture.ExportDirectory, "hand-edited.aetherframe");
+
+        var result = packages.Export(plateId, destination, overwrite: false);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("This Plate holds data a Plate file can't carry, so it can't be exported.", result.FailureMessage);
+        Assert.False(File.Exists(destination));
     }
 
     [Fact]
@@ -100,6 +132,45 @@ public class PackageReliabilityTests
         // The genuine package, whose image is used by an image element, still imports.
         using var genuine = packages.Inspect(valid);
         Assert.True(genuine.CanImport, genuine.DescribeForLog());
+    }
+
+    /// <summary>
+    /// The check that a package's images are used runs again on the document that is actually
+    /// imported. An image the reference scan finds only in a form the import doesn't re-point (a
+    /// newer build's data holding it in braces-and-hex form), while an exact spelling of it sits in
+    /// a text field, would otherwise pass: the import re-points only the text, and the new image is
+    /// then referenced by nothing the scan counts.
+    /// </summary>
+    [Fact]
+    public async Task ImageUsedOnlyInAFormTheImportDoesntRepoint_IsRefused()
+    {
+        using var fixture = new PackageFixture();
+        var (library, packages) = await fixture.LoadAsync();
+        var assetId = fixture.AddImage(TestImages.Png(64, 48));
+        var plateId = (await library.CreatePlateAsync(PlateStartingLayout.Blank, null, "Small")).PlateId;
+        var document = library.OpenDocumentForEditing(plateId);
+        document.Elements.Add(new ImageProfileElement { AssetId = assetId, Position = new Vector2(10, 10), Size = new Vector2(64, 48) });
+        document.Elements.Add(new TextProfileElement { Text = "hello", Position = new Vector2(100, 10), Size = new Vector2(200, 40), ZIndex = 1 });
+        await library.SavePlateDocumentAsync(document);
+        var valid = fixture.Export(packages, plateId, "valid.aetherframe");
+        var manifest = PackageFiles.Json(PackageFiles.Entry(PackageFiles.Read(valid), PackagePaths.ManifestPath));
+        var packageAssetId = Guid.Parse(manifest["assets"]![0]!["id"]!.GetValue<string>());
+
+        var crafted = PackageFiles.Rewrite(valid, entries => PackageFiles.EditProfile(entries, profile =>
+        {
+            var elements = profile["Elements"]!.AsArray();
+            var image = elements.First(e => e!["elementType"]!.GetValue<string>() == "image")!.AsObject();
+            image["elementType"] = "futureImage";
+            image["AssetId"] = packageAssetId.ToString("X");
+            elements.First(e => e!["elementType"]!.GetValue<string>() == "text")!["Name"] = packageAssetId.ToString("D");
+        }));
+        var assetsBefore = fixture.Assets.ListAssets().Count;
+
+        using var staged = packages.Inspect(crafted);
+
+        Assert.False(staged.CanImport, staged.DescribeForLog());
+        Assert.Contains(staged.Diagnostics.Errors, e => e.Code == PackageErrorCode.AssetUndeclared);
+        Assert.Equal(assetsBefore, fixture.Assets.ListAssets().Count);
     }
 
     [Fact]
