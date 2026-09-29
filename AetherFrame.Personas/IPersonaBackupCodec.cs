@@ -28,7 +28,12 @@ public interface IPersonaBackupCodec
     /// <summary>The portable form of <paramref name="material"/>, protected under <paramref name="secret"/>. The material stays the caller's.</summary>
     byte[] Write(PersonaKeyMaterial material, PersonaBackupSecret secret);
 
-    /// <summary>Opens <paramref name="backup"/> under <paramref name="secret"/>. The caller owns the material.</summary>
+    /// <summary>
+    /// Opens <paramref name="backup"/> under <paramref name="secret"/>. The caller owns the material.
+    /// Because the secret has been used by then, the manager reports every refusal from here as
+    /// <see cref="PersonaRestoreStatus.CannotOpen"/>, except a key pair that
+    /// <see cref="PersonaKeyMaterial"/> refuses, which is <see cref="PersonaRestoreStatus.InvalidKey"/>.
+    /// </summary>
     /// <exception cref="PersonaException">
     /// <see cref="PersonaError.BackupUnsupported"/>, <see cref="PersonaError.BackupMalformed"/>,
     /// <see cref="PersonaError.BackupCannotBeOpened"/> or <see cref="PersonaError.InvalidKeyMaterial"/>.

@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using AetherFrame.Protocol.Documents;
 using Xunit;
 
@@ -127,10 +129,11 @@ public class PersonaCustodyTests
     }
 
     [Fact]
-    public void Create_NeverReplacesAKeyTheStoreAlreadyHolds()
+    public void Create_WhenTheStoreRefusesTheSlot_RecordsNothingAndMovesNoKey()
     {
         // A store refusing the slot it was given (as it must when it already holds one there) leaves
-        // the manager with nothing recorded and every existing key where it was.
+        // the manager with nothing recorded and every existing key where it was. The second half
+        // checks the test double keeps that rule itself.
         var manager = NewManager();
         var main = manager.Create("Main");
         store.FailNextAdd = new InvalidOperationException("This store already holds a key under that slot and never replaces one.");
@@ -163,6 +166,45 @@ public class PersonaCustodyTests
         Assert.Equal(addsBefore, store.CallsTo("AddKey"));
         Assert.Equal(1, store.Count);
         Assert.All(codec.HandedOut, m => Assert.True(Disposal.IsDisposed(m)));
+    }
+
+    [Fact]
+    public async Task ConcurrentRestoresOfOneBackup_CommitItOnce()
+    {
+        // The duplicate check and the commit are one step under the manager's lock. The first
+        // restore's commit is held open until a second commit starts or a second passes; with the
+        // two steps split, the second restore would find nothing, commit too, and release the first,
+        // leaving two records of one identity. As it is, the second waits and finds the first.
+        var home = new PersonaManager(new InMemoryPersonaKeyStore(), codec);
+        var original = home.Create("Main");
+        using var secret = Secret();
+        var backup = home.ExportBackup(original.Slot, secret);
+
+        var manager = NewManager();
+        var commits = 0;
+        using var secondCommit = new ManualResetEventSlim();
+        store.BeforeCommit = _ =>
+        {
+            if (Interlocked.Increment(ref commits) == 1)
+            {
+                secondCommit.Wait(TimeSpan.FromSeconds(1));
+            }
+            else
+            {
+                secondCommit.Set();
+            }
+        };
+
+        var first = Task.Run(() => manager.RestoreBackup(backup, secret, "First"));
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref commits) == 1, TimeSpan.FromSeconds(10)));
+        var second = Task.Run(() => manager.RestoreBackup(backup, secret, "Second"));
+        var results = await Task.WhenAll(first, second);
+
+        Assert.Equal(1, Volatile.Read(ref commits));
+        Assert.Equal([PersonaRestoreStatus.Restored, PersonaRestoreStatus.AlreadyPresent], results.Select(r => r.Status));
+        Assert.Same(results[0].Persona, results[1].Persona);
+        Assert.Single(manager.Personas);
+        Assert.Equal(1, store.Count);
     }
 
     [Fact]

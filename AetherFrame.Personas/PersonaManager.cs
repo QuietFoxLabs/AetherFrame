@@ -27,9 +27,10 @@ namespace AetherFrame.Personas;
 /// Nothing here is persisted or loaded: how personas would be written to disk, in what schema and
 /// under what protection, is not decided (K2, K3), and this type takes no position on it. Every
 /// member is safe to call from any thread: the records, the selection, every store call and every
-/// signature made through a lease are under one lock, so a store and its signers are never called
-/// concurrently. Codec calls run outside that lock, so a slow key derivation never stalls a listing;
-/// a codec is a function of its inputs and must tolerate that.
+/// call to a store's signer (signing and disposal) are under one lock, so a store and its signers
+/// are never called concurrently. The price is that every member, listings included, waits while a
+/// store call runs (see <see cref="IPersonaKeyStore"/>). Codec calls run outside that lock, so a slow
+/// key derivation never stalls a listing; a codec is a function of its inputs and must tolerate that.
 /// </para>
 /// </summary>
 public sealed class PersonaManager
@@ -106,7 +107,8 @@ public sealed class PersonaManager
     /// <summary>
     /// Makes the persona with <paramref name="slot"/> the active one. Nothing else changes: no
     /// record and no key. Selecting a different persona revokes every lease opened before, so an
-    /// operation never signs for a persona that is no longer active (see <see cref="PersonaSignerLease"/>).
+    /// operation never signs for a persona that is no longer active (see <see cref="PersonaSignerLease"/>;
+    /// an interim, fail-closed policy awaiting an owner decision).
     /// </summary>
     /// <exception cref="PersonaException"><see cref="PersonaError.UnknownPersona"/>; the selection is unchanged then.</exception>
     public PersonaRecord Select(PersonaSlotId slot)
@@ -124,7 +126,7 @@ public sealed class PersonaManager
         }
     }
 
-    /// <summary>Leaves no persona active, and revokes every lease opened before.</summary>
+    /// <summary>Leaves no persona active, and revokes every lease opened before (the same interim policy as <see cref="Select"/>).</summary>
     public void Deselect()
     {
         lock (gate)
@@ -190,13 +192,23 @@ public sealed class PersonaManager
                 return PersonaSignerAvailability.KeyUnavailable;
             }
 
-            if (signer.PublicKey is not { } reported || !reported.Equals(active.PublicKey))
+            // The signer is the manager's until the lease holds it: disposed on every way out,
+            // including a store signer whose key cannot even be read.
+            try
+            {
+                if (signer.PublicKey is not { } reported || !reported.Equals(active.PublicKey))
+                {
+                    throw new PersonaException(PersonaError.InvalidKeyMaterial, "The key store opened a key that does not belong to the active persona.");
+                }
+
+                lease = new PersonaSignerLease(this, active, signer, selection);
+            }
+            catch
             {
                 (signer as IDisposable)?.Dispose();
-                throw new PersonaException(PersonaError.InvalidKeyMaterial, "The key store opened a key that does not belong to the active persona.");
+                throw;
             }
 
-            lease = new PersonaSignerLease(this, active, signer, selection);
             return PersonaSignerAvailability.Available;
         }
     }
@@ -245,7 +257,10 @@ public sealed class PersonaManager
     /// here. A persona this installation already holds is reported as present and left exactly as it
     /// is: no record, label, key or selection changes, and nothing reaches the store. A restored
     /// persona gets a fresh slot and is not selected. The material the codec produced is disposed in
-    /// every case.
+    /// every case. <see cref="PersonaRestoreStatus.UnsupportedVersion"/> and
+    /// <see cref="PersonaRestoreStatus.Malformed"/> come only from inspection, before the secret is
+    /// used; a refusal from the codec once it has the secret is <see cref="PersonaRestoreStatus.CannotOpen"/>
+    /// or <see cref="PersonaRestoreStatus.InvalidKey"/>.
     /// </summary>
     /// <exception cref="PersonaException">
     /// <see cref="PersonaError.InvalidLabel"/>, checked before anything else; or
@@ -306,14 +321,18 @@ public sealed class PersonaManager
         }
     }
 
-    /// <summary>Takes the store's signer out of <paramref name="lease"/>, once, for the lease to dispose outside the lock.</summary>
-    internal IPersonaSigner? Release(PersonaSignerLease lease)
+    /// <summary>
+    /// Takes the store's signer out of <paramref name="lease"/>, once, and disposes it, under the lock:
+    /// a store's signer is never disposed while the store or another of its signers is being called,
+    /// and never while a signature through this lease is in flight.
+    /// </summary>
+    internal void Release(PersonaSignerLease lease)
     {
         lock (gate)
         {
             var released = lease.Inner;
             lease.Inner = null;
-            return released;
+            (released as IDisposable)?.Dispose();
         }
     }
 
@@ -347,11 +366,13 @@ public sealed class PersonaManager
         }
     }
 
+    /// <summary>
+    /// A refusal from <see cref="IPersonaBackupCodec.Open"/>, which has used the secret by then. So none
+    /// of them is reported as the inspection-time outcomes that promise no secret was used.
+    /// </summary>
     private static PersonaRestoreStatus? Outcome(PersonaError error) => error switch
     {
-        PersonaError.BackupUnsupported => PersonaRestoreStatus.UnsupportedVersion,
-        PersonaError.BackupMalformed => PersonaRestoreStatus.Malformed,
-        PersonaError.BackupCannotBeOpened => PersonaRestoreStatus.CannotOpen,
+        PersonaError.BackupUnsupported or PersonaError.BackupMalformed or PersonaError.BackupCannotBeOpened => PersonaRestoreStatus.CannotOpen,
         PersonaError.InvalidKeyMaterial => PersonaRestoreStatus.InvalidKey,
         _ => null,
     };

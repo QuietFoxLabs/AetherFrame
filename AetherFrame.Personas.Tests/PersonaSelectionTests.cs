@@ -26,27 +26,27 @@ public class PersonaSelectionTests
     /// <summary>Every public member of the manager that is not <see cref="PersonaManager.Select"/> or <see cref="PersonaManager.Deselect"/>, each with the ways it can succeed and fail.</summary>
     private static readonly (string Member, string Case, Action<World> Run)[] OtherOperations =
     [
-        ("get_Personas", "list", w => _ = w.Manager.Personas),
-        ("get_Active", "read", w => _ = w.Manager.Active),
-        ("Create", "succeeds", w => w.Manager.Create("New")),
-        ("Create", "invalid label", w => Refused(() => w.Manager.Create(" "))),
-        ("Create", "duplicate identity", w =>
+        ("get_Personas()", "list", w => _ = w.Manager.Personas),
+        ("get_Active()", "read", w => _ = w.Manager.Active),
+        ("Create(String)", "succeeds", w => w.Manager.Create("New")),
+        ("Create(String)", "invalid label", w => Refused(() => w.Manager.Create(" "))),
+        ("Create(String)", "duplicate identity", w =>
         {
             w.Store.NextKey = () => SyntheticKeys.Copy(w.MainKey);
             Refused(() => w.Manager.Create("Duplicate"));
         }),
-        ("Create", "store cannot commit", w =>
+        ("Create(String)", "store cannot commit", w =>
         {
             w.Store.FailNextAdd = new InvalidOperationException("The store fails.");
             Refused(() => w.Manager.Create("Failing"));
         }),
-        ("Rename", "the active persona", w => w.Manager.Rename(w.Main.Slot, "Main renamed")),
-        ("Rename", "another persona", w => w.Manager.Rename(w.Alt.Slot, "Alt renamed")),
-        ("Rename", "invalid label", w => Refused(() => w.Manager.Rename(w.Main.Slot, ""))),
-        ("Rename", "unknown slot", w => Refused(() => w.Manager.Rename(PersonaSlotId.NewId(), "Nobody"))),
-        ("TryGet", "held", w => w.Manager.TryGet(w.Alt.Slot, out _)),
-        ("TryGet", "unknown", w => w.Manager.TryGet(PersonaSlotId.NewId(), out _)),
-        ("TryOpenActiveSigner", "open and sign", w =>
+        ("Rename(PersonaSlotId, String)", "the active persona", w => w.Manager.Rename(w.Main.Slot, "Main renamed")),
+        ("Rename(PersonaSlotId, String)", "another persona", w => w.Manager.Rename(w.Alt.Slot, "Alt renamed")),
+        ("Rename(PersonaSlotId, String)", "invalid label", w => Refused(() => w.Manager.Rename(w.Main.Slot, ""))),
+        ("Rename(PersonaSlotId, String)", "unknown slot", w => Refused(() => w.Manager.Rename(PersonaSlotId.NewId(), "Nobody"))),
+        ("TryGet(PersonaSlotId, PersonaRecord&)", "held", w => w.Manager.TryGet(w.Alt.Slot, out _)),
+        ("TryGet(PersonaSlotId, PersonaRecord&)", "unknown", w => w.Manager.TryGet(PersonaSlotId.NewId(), out _)),
+        ("TryOpenActiveSigner(PersonaSignerLease&)", "open and sign", w =>
         {
             if (w.Manager.TryOpenActiveSigner(out var lease) == PersonaSignerAvailability.Available)
             {
@@ -56,52 +56,52 @@ public class PersonaSelectionTests
                 }
             }
         }),
-        ("TryOpenActiveSigner", "key locked", w =>
+        ("TryOpenActiveSigner(PersonaSignerLease&)", "key locked", w =>
         {
             w.Store.Lock(w.Main.Slot);
             w.Manager.TryOpenActiveSigner(out _);
             w.Store.Unlock(w.Main.Slot);
         }),
-        ("ExportBackup", "succeeds", w => w.Manager.ExportBackup(w.Alt.Slot, w.Secret)),
-        ("ExportBackup", "unknown slot", w => Refused(() => w.Manager.ExportBackup(PersonaSlotId.NewId(), w.Secret))),
-        ("ExportBackup", "key locked", w =>
+        ("ExportBackup(PersonaSlotId, PersonaBackupSecret)", "succeeds", w => w.Manager.ExportBackup(w.Alt.Slot, w.Secret)),
+        ("ExportBackup(PersonaSlotId, PersonaBackupSecret)", "unknown slot", w => Refused(() => w.Manager.ExportBackup(PersonaSlotId.NewId(), w.Secret))),
+        ("ExportBackup(PersonaSlotId, PersonaBackupSecret)", "key locked", w =>
         {
             w.Store.Lock(w.Alt.Slot);
             Refused(() => w.Manager.ExportBackup(w.Alt.Slot, w.Secret));
             w.Store.Unlock(w.Alt.Slot);
         }),
-        ("InspectBackup", "supported", w => w.Manager.InspectBackup(w.FarBackup)),
-        ("InspectBackup", "malformed", w => w.Manager.InspectBackup(new byte[3])),
-        ("InspectBackup", "incoherent inspection", w =>
+        ("InspectBackup(ReadOnlySpan`1)", "supported", w => w.Manager.InspectBackup(w.FarBackup)),
+        ("InspectBackup(ReadOnlySpan`1)", "malformed", w => w.Manager.InspectBackup(new byte[3])),
+        ("InspectBackup(ReadOnlySpan`1)", "incoherent inspection", w =>
         {
             w.Codec.InspectOverride = _ => null;
             Refused(() => w.Manager.InspectBackup(w.FarBackup));
             w.Codec.InspectOverride = null;
         }),
-        ("RestoreBackup", "a new persona", w => Assert.Equal(PersonaRestoreStatus.Restored, w.Manager.RestoreBackup(w.FarBackup, w.Secret, "Far").Status)),
-        ("RestoreBackup", "the active persona again", w => Assert.Equal(PersonaRestoreStatus.AlreadyPresent, w.Manager.RestoreBackup(w.MainBackup, w.Secret, "Main again").Status)),
-        ("RestoreBackup", "another held persona again", w => Assert.Equal(PersonaRestoreStatus.AlreadyPresent, w.Manager.RestoreBackup(w.AltBackup, w.Secret, "Alt again").Status)),
-        ("RestoreBackup", "unsupported version", w => Assert.Equal(PersonaRestoreStatus.UnsupportedVersion, w.Manager.RestoreBackup(HandleBackupCodec.WithVersion(w.FarBackup, 7), w.Secret, "Far").Status)),
-        ("RestoreBackup", "malformed", w => Assert.Equal(PersonaRestoreStatus.Malformed, w.Manager.RestoreBackup(new byte[5], w.Secret, "Far").Status)),
-        ("RestoreBackup", "wrong secret", w =>
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "a new persona", w => Assert.Equal(PersonaRestoreStatus.Restored, w.Manager.RestoreBackup(w.FarBackup, w.Secret, "Far").Status)),
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "the active persona again", w => Assert.Equal(PersonaRestoreStatus.AlreadyPresent, w.Manager.RestoreBackup(w.MainBackup, w.Secret, "Main again").Status)),
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "another held persona again", w => Assert.Equal(PersonaRestoreStatus.AlreadyPresent, w.Manager.RestoreBackup(w.AltBackup, w.Secret, "Alt again").Status)),
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "unsupported version", w => Assert.Equal(PersonaRestoreStatus.UnsupportedVersion, w.Manager.RestoreBackup(HandleBackupCodec.WithVersion(w.FarBackup, 7), w.Secret, "Far").Status)),
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "malformed", w => Assert.Equal(PersonaRestoreStatus.Malformed, w.Manager.RestoreBackup(new byte[5], w.Secret, "Far").Status)),
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "wrong secret", w =>
         {
             using var wrong = PersonaBackupSecret.FromText("wrong");
             Assert.Equal(PersonaRestoreStatus.CannotOpen, w.Manager.RestoreBackup(w.FarBackup, wrong, "Far").Status);
         }),
-        ("RestoreBackup", "store cannot commit", w =>
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "store cannot commit", w =>
         {
             w.Store.FailNextAdd = new InvalidOperationException("The store fails.");
             Refused(() => w.Manager.RestoreBackup(w.FarBackup, w.Secret, "Far"));
         }),
-        ("RestoreBackup", "invalid label", w => Refused(() => w.Manager.RestoreBackup(w.FarBackup, w.Secret, "\n"))),
-        ("RestoreBackup", "incoherent inspection", w =>
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "invalid label", w => Refused(() => w.Manager.RestoreBackup(w.FarBackup, w.Secret, "\n"))),
+        ("RestoreBackup(ReadOnlySpan`1, PersonaBackupSecret, String)", "incoherent inspection", w =>
         {
             w.Codec.InspectOverride = _ => HandleBackupCodec.Forged((PersonaBackupStatus)42, 1);
             Refused(() => w.Manager.RestoreBackup(w.FarBackup, w.Secret, "Far"));
             w.Codec.InspectOverride = null;
         }),
-        ("Select", "unknown slot fails", w => Refused(() => w.Manager.Select(PersonaSlotId.NewId()))),
-        ("Select", "empty slot fails", w => Refused(() => w.Manager.Select(default))),
+        ("Select(PersonaSlotId)", "unknown slot fails", w => Refused(() => w.Manager.Select(PersonaSlotId.NewId()))),
+        ("Select(PersonaSlotId)", "empty slot fails", w => Refused(() => w.Manager.Select(default))),
     ];
 
     public static TheoryData<int, bool> EveryOtherOperation()
@@ -119,12 +119,33 @@ public class PersonaSelectionTests
     [Fact]
     public void TheOperationTable_CoversEveryPublicMemberOfTheManager()
     {
+        // By full signature, so a new overload of a classified name fails here too.
         var members = typeof(PersonaManager)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
-            .Select(m => m.Name)
+            .Select(Signature)
             .ToHashSet();
-        var classified = OtherOperations.Select(o => o.Member).Append("Select").Append("Deselect").ToHashSet();
+        var classified = OtherOperations.Select(o => o.Member).Append("Select(PersonaSlotId)").Append("Deselect()").ToHashSet();
         Assert.Equal(members.Order(StringComparer.Ordinal), classified.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void TheManagerAndItsLeases_HaveNoOtherWayIn()
+    {
+        // No interface (an explicit implementation is private, so the table above would not see it),
+        // no base class but object, and no public constructor but the one taking the two seams.
+        var manager = typeof(PersonaManager);
+        Assert.Empty(manager.GetInterfaces());
+        Assert.Equal(typeof(object), manager.BaseType);
+        Assert.DoesNotContain(manager.GetMethods(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly), m => m.Name.Contains('.', StringComparison.Ordinal));
+        Assert.Equal(["Void .ctor(AetherFrame.Personas.IPersonaKeyStore, AetherFrame.Personas.IPersonaBackupCodec)"], manager.GetConstructors().Select(c => c.ToString()!));
+
+        // A lease holds its manager, so its surface is pinned as well: it can sign and be disposed,
+        // and nothing on it selects.
+        var lease = typeof(PersonaSignerLease);
+        Assert.Equal([typeof(IDisposable)], lease.GetInterfaces());
+        Assert.Equal(
+            ["Dispose()", "ToString()", "get_Persona()", "get_Signer()"],
+            lease.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly).Select(Signature).Order(StringComparer.Ordinal));
     }
 
     [Theory]
@@ -256,6 +277,83 @@ public class PersonaSelectionTests
         var altInput = SigningInput.Create(DocumentType.ProfileRetraction, world.Alt.PublicKey, [0x01]);
         Assert.Equal(ProtocolError.InvalidKey, Assert.Throws<ProtocolException>(() => lease.Signer.Sign(altInput)).Error);
         Assert.Equal(0, shifting!.SignCalls);
+    }
+
+    [Fact]
+    public async Task ASwitch_WaitsForASignatureInFlight_AndTheLeaseIsRevokedAfterIt()
+    {
+        // The check and the signature are one step under the manager's lock: a switch the player
+        // makes while a signature is running completes only once it is done, so no signature is ever
+        // produced for a persona after the switch away from it has returned.
+        using var world = new World();
+        var blocking = BlockingStoreSigners(world);
+        world.Manager.Select(world.Main.Slot);
+        world.Manager.TryOpenActiveSigner(out var opened);
+        using var lease = opened!;
+        var signer = blocking[^1];
+
+        var signing = Task.Run(() => Documents.SignedRetraction(lease.Signer));
+        Assert.True(signer.Entered.Wait(TimeSpan.FromSeconds(10)));
+        var switching = Task.Run(() => world.Manager.Select(world.Alt.Slot));
+        Assert.NotSame(switching, await Task.WhenAny(switching, Task.Delay(300)));
+        Assert.False(switching.IsCompleted);
+
+        signer.Release.Set();
+        var document = await signing;
+        await switching;
+        Assert.Equal(world.Main.Id, SignedDocumentCodec.Verify(document).Persona);
+        Assert.Equal(world.Alt.Slot, world.Manager.Active!.Slot);
+        Assert.Equal(PersonaError.LeaseRevoked, Assert.Throws<PersonaException>(() => Documents.SignedRetraction(lease.Signer)).Error);
+    }
+
+    [Fact]
+    public async Task DisposingALease_WaitsForItsSignatureInFlight_ThenDisposesTheStoresSigner()
+    {
+        using var world = new World();
+        var blocking = BlockingStoreSigners(world);
+        world.Manager.Select(world.Main.Slot);
+        world.Manager.TryOpenActiveSigner(out var opened);
+        var lease = opened!;
+        var signer = blocking[^1];
+
+        var signing = Task.Run(() => Documents.SignedRetraction(lease.Signer));
+        Assert.True(signer.Entered.Wait(TimeSpan.FromSeconds(10)));
+        var disposing = Task.Run(lease.Dispose);
+        Assert.NotSame(disposing, await Task.WhenAny(disposing, Task.Delay(300)));
+
+        signer.Release.Set();
+        await signing;
+        await disposing;
+        Assert.Equal(["sign-start", "sign-end", "dispose"], signer.Events.ToArray());
+        Assert.False(signer.DisposedWhileSigning);
+    }
+
+    [Fact]
+    public void TryOpenActiveSigner_DisposesAStoreSignerItRefuses()
+    {
+        using var world = new World();
+        var signers = new List<ShiftingSigner>();
+        world.Store.SignerOverride = slot =>
+        {
+            // The store answers for the main persona with the alt's key.
+            var signer = new ShiftingSigner(world.Store.Held(world.Alt.Slot).CreateSigner());
+            signers.Add(signer);
+            return signer;
+        };
+        world.Manager.Select(world.Main.Slot);
+        Assert.Equal(PersonaError.InvalidKeyMaterial, Assert.Throws<PersonaException>(() => world.Manager.TryOpenActiveSigner(out _)).Error);
+        Assert.True(Assert.Single(signers).Disposed);
+    }
+
+    [Fact]
+    public void TryOpenActiveSigner_DisposesAStoreSignerWhoseKeyCannotBeRead()
+    {
+        using var world = new World();
+        ShiftingSigner? signer = null;
+        world.Store.SignerOverride = slot => signer = new ShiftingSigner(world.Store.Held(slot).CreateSigner()) { ThrowOnPublicKey = true };
+        world.Manager.Select(world.Main.Slot);
+        Assert.Throws<System.Security.Cryptography.CryptographicException>(() => world.Manager.TryOpenActiveSigner(out _));
+        Assert.True(signer!.Disposed);
     }
 
     [Fact]
@@ -409,6 +507,22 @@ public class PersonaSelectionTests
         }
 
         Assert.Equal(PersonaError.LeaseRevoked, Assert.Throws<PersonaException>(() => Documents.SignedRetraction(lease.Signer)).Error);
+    }
+
+    private static string Signature(MethodInfo method) =>
+        $"{method.Name}({string.Join(", ", method.GetParameters().Select(p => p.ParameterType.Name))})";
+
+    /// <summary>Makes the store answer every signer request with a <see cref="BlockingSigner"/>, collected in the returned list.</summary>
+    private static List<BlockingSigner> BlockingStoreSigners(World world)
+    {
+        var signers = new List<BlockingSigner>();
+        world.Store.SignerOverride = slot =>
+        {
+            var signer = new BlockingSigner(world.Store.Held(slot).CreateSigner());
+            signers.Add(signer);
+            return signer;
+        };
+        return signers;
     }
 
     private static void Refused(Action action)

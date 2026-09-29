@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using Xunit;
 
@@ -34,6 +36,34 @@ public class AssemblyBoundaryTests
             Assert.NotEqual("System.IO.FileSystem", name);
             Assert.NotEqual("System.Diagnostics.Process", name);
             Assert.NotEqual("System.Text.Json", name);
+        }
+    }
+
+    [Fact]
+    public void Personas_UsesNoFileNetworkProcessOrEnvironmentType()
+    {
+        // The assembly-name check above cannot see file access: on .NET 10, File, FileStream and
+        // Directory live in System.Runtime, which every assembly references. So this reads every type
+        // the compiled assembly refers to (its TypeRef table: a call to File.WriteAllText needs a
+        // reference to System.IO.File) and allows only the namespaces the model needs, and within
+        // System none of the types that reach the file system, the environment or the console.
+        var allowed = new[]
+        {
+            "AetherFrame.Protocol", "AetherFrame.Protocol.Identity", "AetherFrame.Protocol.Signing",
+            "System", "System.Buffers.Binary", "System.Collections.Generic", "System.Security.Cryptography",
+            "System.Threading", "System.Runtime.CompilerServices", "System.Runtime.InteropServices", "System.Runtime.Versioning",
+        };
+        var allowedTypes = new[] { "System.Diagnostics.DebuggableAttribute", "System.Diagnostics.DebuggableAttribute.DebuggingModes" };
+        var refusedInSystem = new[] { "Console", "Environment", "AppContext", "AppDomain", "Activator", "GC", "Uri", "UriBuilder" };
+
+        var referenced = ReferencedTypes(Personas.Location);
+        Assert.Contains(("System.Security.Cryptography", "ECDsa"), referenced);
+        foreach (var (ns, name) in referenced)
+        {
+            var full = ns + "." + name;
+            var isAssemblyAttribute = ns == "System.Reflection" && name.StartsWith("Assembly", StringComparison.Ordinal) && name.EndsWith("Attribute", StringComparison.Ordinal);
+            Assert.True(allowed.Contains(ns) || allowedTypes.Contains(full) || isAssemblyAttribute, $"The persona assembly refers to {full}.");
+            Assert.False(ns == "System" && refusedInSystem.Contains(name), $"The persona assembly refers to {full}.");
         }
     }
 
@@ -202,6 +232,34 @@ public class AssemblyBoundaryTests
         }
 
         Assert.Equal(File.ReadAllText(path), actual);
+    }
+
+    /// <summary>Every type the assembly's metadata refers to: its namespace (a nested type's is its outermost type's) and its name as Outer.Inner.</summary>
+    private static List<(string Namespace, string Name)> ReferencedTypes(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var pe = new PEReader(stream);
+        var metadata = pe.GetMetadataReader();
+        var types = new List<(string, string)>();
+        foreach (var handle in metadata.TypeReferences)
+        {
+            types.Add(Describe(metadata, handle));
+        }
+
+        return types;
+    }
+
+    private static (string Namespace, string Name) Describe(MetadataReader metadata, TypeReferenceHandle handle)
+    {
+        var type = metadata.GetTypeReference(handle);
+        var name = metadata.GetString(type.Name);
+        if (type.ResolutionScope.Kind == HandleKind.TypeReference)
+        {
+            var outer = Describe(metadata, (TypeReferenceHandle)type.ResolutionScope);
+            return (outer.Namespace, outer.Name + "." + name);
+        }
+
+        return (metadata.GetString(type.Namespace), name);
     }
 
     private static string SourceFixtures()

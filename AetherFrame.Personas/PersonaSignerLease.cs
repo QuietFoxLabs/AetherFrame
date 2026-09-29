@@ -51,8 +51,12 @@ public sealed class PersonaSignerLease : IDisposable
     /// <summary>The selection this lease was opened under.</summary>
     internal long Selection { get; }
 
-    /// <summary>Releases the signer, disposing it when it is disposable. Safe to call more than once, and from any thread.</summary>
-    public void Dispose() => (owner.Release(this) as IDisposable)?.Dispose();
+    /// <summary>
+    /// Releases the signer, disposing it when it is disposable, under the manager's lock. Safe to call
+    /// more than once, and from any thread. A revoked lease still holds the store's signer (and the
+    /// key copy inside it) until this is called: revocation refuses signatures, it does not release.
+    /// </summary>
+    public void Dispose() => owner.Release(this);
 
     /// <summary>The slot, never the identity.</summary>
     public override string ToString() => Persona.ToString();

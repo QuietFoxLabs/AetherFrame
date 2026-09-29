@@ -214,17 +214,19 @@ public sealed class PersonaKeyMaterial : IDisposable
 
     private static ECDsa CreateCheckedKey(ReadOnlySpan<byte> privateScalar, PersonaPublicKey publicKey)
     {
-        // 1. The scalar's range, before the platform sees it. Platforms differ here: some refuse an
-        //    out-of-range or short scalar, some pad a short one, one reduces a large one modulo n.
-        if (!IsCanonicalScalar(privateScalar))
-        {
-            throw Invalid("The private scalar is not 32 big-endian bytes from 1 to n - 1.");
-        }
-
+        // The scalar is copied once, and only the copy is checked and imported, so a caller's buffer
+        // that changes meanwhile cannot make the bytes imported differ from the bytes checked.
         var scalar = privateScalar.ToArray();
         ECDsa? key = null;
         try
         {
+            // 1. The scalar's range, before the platform sees it. Platforms differ here: some refuse
+            //    an out-of-range or short scalar, some pad a short one, one reduced a large one.
+            if (!IsCanonicalScalar(scalar))
+            {
+                throw Invalid("The private scalar is not 32 big-endian bytes from 1 to n - 1.");
+            }
+
             // 2. The platform derives the public point from the scalar alone: no point is given, so
             //    no platform can accept a pair by trusting a point it was handed.
             try

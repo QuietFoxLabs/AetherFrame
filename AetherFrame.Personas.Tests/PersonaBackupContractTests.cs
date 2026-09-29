@@ -320,7 +320,9 @@ public class PersonaBackupContractTests
     [InlineData(PersonaBackupStatus.UnsupportedVersion, int.MinValue)]
     [InlineData(PersonaBackupStatus.Malformed, 1)]
     [InlineData(PersonaBackupStatus.Malformed, -1)]
-    [InlineData((PersonaBackupStatus)3, 1)]
+    [InlineData((PersonaBackupStatus)0, 3)]
+    [InlineData((PersonaBackupStatus)0, 0)]
+    [InlineData((PersonaBackupStatus)4, 1)]
     [InlineData((PersonaBackupStatus)(-1), 0)]
     [InlineData((PersonaBackupStatus)int.MaxValue, 1)]
     public void Inspection_RefusesAnUndefinedStatusOrAContradictoryVersion(PersonaBackupStatus status, int version)

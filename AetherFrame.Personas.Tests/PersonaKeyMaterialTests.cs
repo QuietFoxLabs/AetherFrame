@@ -28,8 +28,11 @@ public class PersonaKeyMaterialTests
             { "2^256 - 1", SyntheticKeys.Fixed32((BigInteger.One << 256) - 1) },
             { "empty", [] },
             { "31 bytes", SyntheticKeys.Fixed32(1)[1..] },
-            { "33 bytes", [0x00, .. SyntheticKeys.Fixed32(1)] },
-            { "64 bytes", new byte[64] },
+            { "33 bytes, a leading zero before 1", [0x00, .. SyntheticKeys.Fixed32(1)] },
+            { "33 bytes, 1 followed by a zero", [.. SyntheticKeys.Fixed32(1), 0x00] },
+            { "33 bytes, 1 followed by a one", [.. SyntheticKeys.Fixed32(1), 0x01] },
+            { "64 bytes, the scalar 1 twice", [.. SyntheticKeys.Fixed32(1), .. SyntheticKeys.Fixed32(1)] },
+            { "64 bytes, a canonical scalar then zeros", [.. SyntheticKeys.Fixed32(SyntheticKeys.Order - 1), .. new byte[32]] },
         };
     }
 
@@ -210,6 +213,35 @@ public class PersonaKeyMaterialTests
         using var publicOnly = SyntheticKeys.PublicOnly(source);
         var exception = Assert.Throws<PersonaException>(() => PersonaKeyMaterial.FromEcdsa(publicOnly));
         Assert.Equal(PersonaError.InvalidKeyMaterial, exception.Error);
+    }
+
+    [Fact]
+    public void FromEcdsa_ZeroesEveryPrivateScalarItReadsFromTheCallersKey()
+    {
+        using var callers = new ScalarWatchingEcdsa();
+        using var material = PersonaKeyMaterial.FromEcdsa(callers);
+        Assert.Equal(callers.PublicKey, material.PublicKey);
+        Assert.NotEmpty(callers.ScalarsHandedOut);
+        Assert.All(callers.ScalarsHandedOut, scalar => Assert.All(scalar, b => Assert.Equal(0, b)));
+    }
+
+    [Fact]
+    public void CopyAndCreateSigner_CheckTheKeyAgain()
+    {
+        // The platform key inside material is never exposed, so it cannot drift in practice; this
+        // swaps it by reflection to show that every copy is checked again rather than trusted.
+        var material = SyntheticKeys.Material();
+        using var other = SyntheticKeys.Create();
+        var field = typeof(PersonaKeyMaterial).GetField("key", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var original = (ECDsa)field.GetValue(material)!;
+        field.SetValue(material, SyntheticKeys.Copy(other));
+        original.Dispose();
+
+        using (material)
+        {
+            Assert.Equal(PersonaError.InvalidKeyMaterial, Assert.Throws<PersonaException>(() => material.Copy()).Error);
+            Assert.Equal(PersonaError.InvalidKeyMaterial, Assert.Throws<PersonaException>(() => material.CreateSigner()).Error);
+        }
     }
 
     [Fact]

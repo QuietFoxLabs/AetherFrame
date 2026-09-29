@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
+using System.Threading;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Signing;
 
@@ -142,6 +143,9 @@ internal sealed class InMemoryPersonaKeyStore : IPersonaKeyStore
     /// <summary>When set, the next <see cref="AddKey"/> holds this key instead of the one it was given: a faulty store.</summary>
     public Func<ECDsa>? SubstituteNextAdd { get; set; }
 
+    /// <summary>Runs in every <see cref="AddKey"/> just before the key is committed: stands for a store that takes its time.</summary>
+    public Action<PersonaSlotId>? BeforeCommit { get; set; }
+
     /// <summary>When set, <see cref="OpenSigner"/> answers with this instead of a signer over the held key.</summary>
     public Func<PersonaSlotId, IPersonaSigner?>? SignerOverride { get; set; }
 
@@ -203,6 +207,7 @@ internal sealed class InMemoryPersonaKeyStore : IPersonaKeyStore
             throw new InvalidOperationException("This store already holds a key under that slot and never replaces one.");
         }
 
+        BeforeCommit?.Invoke(slot);
         PersonaKeyMaterial copy;
         if (SubstituteNextAdd is { } substitute)
         {
@@ -245,9 +250,6 @@ internal sealed class InMemoryPersonaKeyStore : IPersonaKeyStore
 
         return material;
     }
-
-    /// <summary>Puts a key under a slot directly, as a store that already held keys the manager does not know about would.</summary>
-    public void Seed(PersonaSlotId slot, PersonaKeyMaterial material) => keys.Add(slot, material.Copy());
 
     public void Lock(PersonaSlotId slot) => locked.Add(slot);
 
@@ -308,14 +310,24 @@ internal sealed class HandleBackupCodec : IPersonaBackupCodec
     /// <summary>Runs inside <see cref="Inspect"/> after the bytes were read: stands for another thread writing to the caller's buffer.</summary>
     public Action? DuringInspect { get; set; }
 
+    /// <summary>Runs inside <see cref="Inspect"/> before the bytes are read: stands for another thread writing to the caller's buffer first.</summary>
+    public Action? BeforeInspectRead { get; set; }
+
     /// <summary>When set, <see cref="Open"/> returns null: a codec breaking its contract.</summary>
     public bool OpenNothing { get; set; }
+
+    /// <summary>When set, <see cref="Open"/> refuses with this error once it has the secret.</summary>
+    public PersonaError? FailOpenWith { get; set; }
+
+    /// <summary>When set, <see cref="Open"/> decodes a scalar and a point that do not belong together, as a damaged or forged backup would give.</summary>
+    public bool OpenAMismatchedPair { get; set; }
 
     /// <summary>Thrown by the next <see cref="Write"/>.</summary>
     public Exception? FailNextWrite { get; set; }
 
     public PersonaBackupInspection Inspect(ReadOnlySpan<byte> backup)
     {
+        BeforeInspectRead?.Invoke();
         var seen = backup.ToArray();
         Func<byte[], PersonaBackupInspection?>? inspect;
         Action? during;
@@ -363,6 +375,26 @@ internal sealed class HandleBackupCodec : IPersonaBackupCodec
             if (OpenNothing)
             {
                 return null!;
+            }
+
+            if (FailOpenWith is { } error)
+            {
+                throw new PersonaException(error, "The test codec refuses after using the secret.");
+            }
+
+            if (OpenAMismatchedPair)
+            {
+                using var mine = SyntheticKeys.Create();
+                using var theirs = SyntheticKeys.Create();
+                var scalar = SyntheticKeys.Scalar(mine);
+                try
+                {
+                    return PersonaKeyMaterial.Import(scalar, PersonaPublicKey.FromEcdsa(theirs));
+                }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(scalar);
+                }
             }
 
             var inspection = Classify(seen);
@@ -433,14 +465,22 @@ internal sealed class HandleBackupCodec : IPersonaBackupCodec
 internal sealed class ShiftingSigner : IPersonaSigner, IDisposable
 {
     private readonly EcdsaPersonaSigner inner;
+    private PersonaPublicKey publicKey;
 
     public ShiftingSigner(EcdsaPersonaSigner inner)
     {
         this.inner = inner;
-        PublicKey = inner.PublicKey;
+        publicKey = inner.PublicKey;
     }
 
-    public PersonaPublicKey PublicKey { get; set; }
+    public PersonaPublicKey PublicKey
+    {
+        get => ThrowOnPublicKey ? throw new CryptographicException("The key cannot be read.") : publicKey;
+        set => publicKey = value;
+    }
+
+    /// <summary>When set, reading <see cref="PublicKey"/> throws, as a store signer over a damaged key might.</summary>
+    public bool ThrowOnPublicKey { get; set; }
 
     public int SignCalls { get; private set; }
 
@@ -456,6 +496,98 @@ internal sealed class ShiftingSigner : IPersonaSigner, IDisposable
     {
         Disposed = true;
         inner.Dispose();
+    }
+}
+
+/// <summary>
+/// A store signer whose <see cref="Sign"/> announces that it started and then waits to be released,
+/// so a test can hold a signature in flight and see what else can happen meanwhile. It records the
+/// order of events and whether it was disposed while a signature was running.
+/// </summary>
+internal sealed class BlockingSigner : IPersonaSigner, IDisposable
+{
+    private readonly EcdsaPersonaSigner inner;
+    private int signing;
+
+    public BlockingSigner(EcdsaPersonaSigner inner)
+    {
+        this.inner = inner;
+    }
+
+    public ManualResetEventSlim Entered { get; } = new();
+
+    public ManualResetEventSlim Release { get; } = new();
+
+    public System.Collections.Concurrent.ConcurrentQueue<string> Events { get; } = new();
+
+    public bool DisposedWhileSigning { get; private set; }
+
+    public PersonaPublicKey PublicKey => inner.PublicKey;
+
+    public ProtocolSignature Sign(SigningInput input)
+    {
+        Interlocked.Increment(ref signing);
+        Events.Enqueue("sign-start");
+        Entered.Set();
+        if (!Release.Wait(TimeSpan.FromSeconds(20)))
+        {
+            throw new TimeoutException("The test never released the signature.");
+        }
+
+        var signature = inner.Sign(input);
+        Events.Enqueue("sign-end");
+        Interlocked.Decrement(ref signing);
+        return signature;
+    }
+
+    public void Dispose()
+    {
+        DisposedWhileSigning |= Volatile.Read(ref signing) != 0;
+        Events.Enqueue("dispose");
+        inner.Dispose();
+    }
+}
+
+/// <summary>
+/// A caller's platform key that remembers every private scalar array it hands out, so a test can
+/// check that whoever read it zeroed it. The key itself is an ordinary synthetic P-256 key.
+/// </summary>
+internal sealed class ScalarWatchingEcdsa : ECDsa
+{
+    private readonly ECDsa inner = SyntheticKeys.Create();
+
+    public ScalarWatchingEcdsa()
+    {
+        KeySizeValue = 256;
+    }
+
+    public List<byte[]> ScalarsHandedOut { get; } = new();
+
+    public PersonaPublicKey PublicKey => PersonaPublicKey.FromEcdsa(inner);
+
+    public override ECParameters ExportParameters(bool includePrivateParameters)
+    {
+        var parameters = inner.ExportParameters(includePrivateParameters);
+        if (parameters.D is not null)
+        {
+            ScalarsHandedOut.Add(parameters.D);
+        }
+
+        return parameters;
+    }
+
+    public override byte[] SignHash(byte[] hash) => inner.SignHash(hash);
+
+    public override bool VerifyHash(byte[] hash, byte[] signature) => inner.VerifyHash(hash, signature);
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            inner.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }
 

@@ -9,15 +9,19 @@ public enum PersonaRestoreStatus
     /// <summary>This installation already holds the persona; nothing was changed or overwritten.</summary>
     AlreadyPresent,
 
-    /// <summary>The container is of a version this build does not read. No secret was used.</summary>
+    /// <summary>Inspection found a container of a version this build does not read. No secret was used.</summary>
     UnsupportedVersion,
 
-    /// <summary>The bytes are not a backup container. No secret was used.</summary>
+    /// <summary>Inspection found that the bytes are not a backup container. No secret was used.</summary>
     Malformed,
 
-    /// <summary>The backup did not open under the secret: a wrong secret or damaged content, not distinguished.</summary>
+    /// <summary>
+    /// The backup was inspected as supported and presented to the codec with the secret, and did not
+    /// open: a wrong secret, damaged content, or content the codec found unsupported or malformed only
+    /// once it opened it. These are not distinguished.
+    /// </summary>
     CannotOpen,
 
-    /// <summary>The backup opened but held no usable P-256 key.</summary>
+    /// <summary>The backup opened under the secret but held no usable P-256 key pair.</summary>
     InvalidKey,
 }
