@@ -217,17 +217,22 @@ public class ProtectedPersonaKeyStoreTests
     }
 
     [Fact]
-    public void AddKey_WhenTheStorageHoldsSomethingElse_ReportsIt()
+    public void AddKey_WhenTheStorageHoldsSomethingElse_ReportsIt_AndWhatItHoldsStays()
     {
         // A storage that breaks its contract (holds different bytes) is not hidden: the read-back
-        // fails and the caller learns the key is not in custody, even though the storage holds bytes.
+        // fails at once, with no retry, and the caller learns the key is not in custody. The store
+        // cannot delete (K6), so what the storage holds stays under the slot, which nobody records (L12).
         var store = NewStore();
+        var slot = NewSlot();
         using var material = store.GenerateKey();
         storage.SubstituteNextWrite = bytes => { bytes[^1] ^= 0x01; return bytes; };
 
-        var failure = Assert.Throws<PersonaException>(() => store.AddKey(NewSlot(), material));
+        var failure = Assert.Throws<PersonaException>(() => store.AddKey(slot, material));
         Assert.Equal(PersonaError.CustodyFailed, failure.Error);
         Assert.Null(failure.InnerException);
+        Assert.Contains("may stay", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(new[] { "Read", "WriteNew", "Read" }, storage.Calls);
+        Assert.Equal(slot, Assert.Single(storage.Slots));
     }
 
     [Fact]
@@ -240,6 +245,79 @@ public class ProtectedPersonaKeyStoreTests
         var failure = Assert.Throws<PersonaException>(() => store.AddKey(NewSlot(), material));
         Assert.Equal(PersonaError.CustodyFailed, failure.Error);
         Assert.Equal(0, storage.Count);
+        Assert.DoesNotContain("WriteNew", storage.Calls);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void AddKey_RetriesAReadBackThatFailsAfterTheWrite_AndHoldsTheKey(int failures)
+    {
+        // A file a scanner opened just after it was written refuses a read for a moment: the key is
+        // held, so the store tries the read-back again rather than report a key it cannot undo.
+        var store = NewStore();
+        var slot = NewSlot();
+        using var material = store.GenerateKey();
+        storage.FailReadsAfterNextWrite = failures;
+
+        store.AddKey(slot, material);
+        Assert.Equal(1 + 1 + failures + 1, storage.Calls.Count);
+        using var opened = store.OpenKey(slot);
+        Assert.Equal(material.PublicKey, opened!.PublicKey);
+        Assert.Empty(reports);
+    }
+
+    [Fact]
+    public void AddKey_WhenTheReadBackKeepsFailingAfterTheWrite_ReportsIt_AndTheEnvelopeStays()
+    {
+        // The one case the store cannot undo (L12): the storage accepted the envelope, then every
+        // read-back failed. The caller gets CustodyFailed and never records the slot; the envelope
+        // stays under it, a key file no record names, which the wiring must detect and report.
+        var store = NewStore();
+        var slot = NewSlot();
+        using var material = store.GenerateKey();
+        storage.FailReadsAfterNextWrite = 3;
+
+        var failure = Assert.Throws<PersonaException>(() => store.AddKey(slot, material));
+        Assert.Equal(PersonaError.CustodyFailed, failure.Error);
+        Assert.IsType<System.IO.IOException>(failure.InnerException);
+        Assert.Contains("may stay", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(new[] { "Read", "WriteNew", "Read", "Read", "Read" }, storage.Calls);
+        Assert.Equal(slot, Assert.Single(storage.Slots));
+        Assert.All(protector.HandedOut, array => Assert.All(array, b => Assert.Equal(0, b)));
+    }
+
+    [Fact]
+    public void AddKey_WhenTheStorageThrowsAfterHolding_ReportsIt_AndTheEnvelopeStays()
+    {
+        // A storage that breaks its own atomicity: the store reports the failure as it must, and
+        // cannot take back what the storage kept (L12).
+        var store = NewStore();
+        var slot = NewSlot();
+        using var material = store.GenerateKey();
+        storage.FailNextWriteAfterHolding = new System.IO.IOException("late");
+
+        var failure = Assert.Throws<PersonaException>(() => store.AddKey(slot, material));
+        Assert.Equal(PersonaError.CustodyFailed, failure.Error);
+        Assert.Equal(slot, Assert.Single(storage.Slots));
+    }
+
+    [Fact]
+    public void TheManager_AddsNoRecord_WhenTheCommitFailsAfterTheWrite()
+    {
+        var store = NewStore();
+        var manager = new PersonaManager(store, new HandleBackupCodec());
+        storage.FailReadsAfterNextWrite = 3;
+
+        var failure = Assert.Throws<PersonaException>(() => manager.Create("Main"));
+        Assert.Equal(PersonaError.CustodyFailed, failure.Error);
+        Assert.Empty(manager.Personas);
+        Assert.Equal(1, storage.Count);
+
+        // The next persona gets a fresh slot, never the unrecorded one.
+        var next = manager.Create("Main");
+        Assert.Equal(2, storage.Count);
+        Assert.Equal(next.Slot, Assert.Single(manager.Personas).Slot);
     }
 
     [Fact]
@@ -337,21 +415,42 @@ public class ProtectedPersonaKeyStoreTests
         store.AddKey(first, firstKey);
         store.AddKey(second, secondKey);
 
+        // Both envelopes are decoded before anything is planted, so each case below starts from
+        // what the store itself wrote.
+        var secondEnvelope = storage.Held(second);
+        Assert.True(ProtectedKeyEnvelope.TryDecode(storage.Held(first), out var firstDecoded));
+        Assert.True(ProtectedKeyEnvelope.TryDecode(secondEnvelope, out var secondDecoded));
+        Assert.Equal(second, secondDecoded.Slot);
+        Assert.Equal(secondKey.PublicKey, secondDecoded.PublicKey);
+
         // The whole envelope of the first under the second's slot: names another slot.
         storage.Plant(second, storage.Held(first));
         Assert.Null(store.OpenKey(second));
         Assert.Contains("another slot", reports.Last(), StringComparison.Ordinal);
 
         // The first's blob inside the second's header: the context differs, so it does not open.
-        Assert.True(ProtectedKeyEnvelope.TryDecode(storage.Held(first), out var firstDecoded));
-        Assert.True(ProtectedKeyEnvelope.TryDecode(storage.Held(second), out var secondDecoded));
         storage.Plant(second, ProtectedKeyEnvelope.Encode(secondDecoded.Context, firstDecoded.Blob));
         Assert.Null(store.OpenKey(second));
+        Assert.Contains("could not open", reports.Last(), StringComparison.Ordinal);
 
         // The second's own blob under the first's public key: the protector's context differs too.
         var header = ProtectedKeyEnvelope.EncodeHeader(second, FakeProtector.DefaultId, firstKey.PublicKey);
         storage.Plant(second, ProtectedKeyEnvelope.Encode(header, secondDecoded.Blob));
         Assert.Null(store.OpenKey(second));
+        Assert.Contains("could not open", reports.Last(), StringComparison.Ordinal);
+
+        // The second's own envelope still opens, so each refusal above came from the move.
+        storage.Plant(second, secondEnvelope);
+        using var opened = store.OpenKey(second);
+        Assert.Equal(secondKey.PublicKey, opened!.PublicKey);
+    }
+
+    [Fact]
+    public void Open_ReturnsNull_EvenWhenTheReportSinkThrows()
+    {
+        var store = new ProtectedPersonaKeyStore(storage, protector, _ => throw new InvalidOperationException("log"));
+        Assert.Null(store.OpenKey(NewSlot()));
+        Assert.Null(store.OpenSigner(NewSlot()));
     }
 
     [Fact]

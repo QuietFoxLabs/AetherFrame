@@ -29,6 +29,16 @@ internal sealed class InMemoryKeyBlobStorage : IPersonaKeyBlobStorage
     /// <summary>Thrown by every <see cref="Read"/> while set.</summary>
     public Exception? ReadFailure { get; set; }
 
+    /// <summary>
+    /// How many <see cref="Read"/> calls fail once the next <see cref="WriteNew"/> has held its blob,
+    /// each with <see cref="ReadAfterWriteFailure"/>: a file a scanner opened just after it was written.
+    /// </summary>
+    public int FailReadsAfterNextWrite { get; set; }
+
+    public Exception ReadAfterWriteFailure { get; set; } = new IOException("The file is being used by another process.");
+
+    private int pendingReadFailures;
+
     public int Count => blobs.Count;
 
     public IEnumerable<PersonaSlotId> Slots => blobs.Keys;
@@ -44,6 +54,12 @@ internal sealed class InMemoryKeyBlobStorage : IPersonaKeyBlobStorage
         if (ReadFailure is { } failure)
         {
             throw failure;
+        }
+
+        if (pendingReadFailures > 0)
+        {
+            pendingReadFailures--;
+            throw ReadAfterWriteFailure;
         }
 
         return blobs.TryGetValue(slot, out var blob) ? (byte[])blob.Clone() : null;
@@ -71,6 +87,8 @@ internal sealed class InMemoryKeyBlobStorage : IPersonaKeyBlobStorage
         }
 
         blobs[slot] = bytes;
+        pendingReadFailures = FailReadsAfterNextWrite;
+        FailReadsAfterNextWrite = 0;
         if (FailNextWriteAfterHolding is { } late)
         {
             FailNextWriteAfterHolding = null;

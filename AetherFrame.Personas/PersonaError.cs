@@ -26,7 +26,9 @@ public enum PersonaError
 
     /// <summary>
     /// A key store could not take a key into custody: its protector or its storage refused, or what
-    /// it wrote did not read back as the key it was given. Nothing is held under the slot.
+    /// it wrote did not read back as the key it was given. Nothing is held under the slot when the
+    /// failure came before the storage accepted the key; after that, the envelope may stay under the
+    /// slot, which is never recorded or reused (L12 in docs/networking/DecisionRegister.md).
     /// </summary>
     CustodyFailed,
 

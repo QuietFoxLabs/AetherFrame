@@ -1,5 +1,7 @@
 using System;
 using System.Security.Cryptography;
+using System.Threading;
+using AetherFrame.Protocol;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Signing;
 
@@ -12,17 +14,30 @@ namespace AetherFrame.Personas.Storage;
 /// envelope, asks the protector for the scalar, rebuilds the key through
 /// <see cref="PersonaKeyMaterial"/>'s checks, and zeroes the scalar. What it guarantees is the
 /// store contract (<see cref="IPersonaKeyStore"/>): it commits exactly the key it was given and
-/// verifies that before anything is durable, it never replaces, it is atomic, and it never retains
-/// the caller's material. What it does not guarantee is protection: that is the protector's claim,
-/// and only a reviewed protector may make one.
+/// verifies that before anything is durable, it never replaces, it holds nothing when it fails
+/// before the storage accepted the key, and it never retains the caller's material. What it does
+/// not guarantee is protection: that is the protector's claim, and only a reviewed protector may
+/// make one.
 /// <para>
-/// Not thread-safe; the <see cref="PersonaManager"/> serializes its calls. Each call does one
-/// storage read or write and one protector call on a few hundred bytes, so the manager's lock is
-/// held briefly; a protector that prompts or blocks would change that and is not allowed.
+/// Not thread-safe; the <see cref="PersonaManager"/> serializes its calls. Opening a key reads the
+/// storage once and calls the protector once. Adding one reads the storage before the write and
+/// after it (up to <see cref="ReadBackAttempts"/> times after it, pausing between tries), writes
+/// once and calls the protector twice; the plugin's file storage also flushes once to disk. All of
+/// it is on a few hundred bytes, so the manager's lock is held briefly; a protector that prompts or
+/// blocks would change that and is not allowed.
 /// </para>
 /// </summary>
 public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
 {
+    /// <summary>
+    /// How many times the storage is read to verify a key after the write returned. A file that an
+    /// antivirus scanner or an indexer has just opened can refuse a read for a moment; a read that
+    /// returns different bytes is never tried again.
+    /// </summary>
+    private const int ReadBackAttempts = 3;
+
+    private static readonly TimeSpan ReadBackPause = TimeSpan.FromMilliseconds(50);
+
     private readonly IPersonaKeyBlobStorage storage;
     private readonly IPersonaKeyProtector protector;
     private readonly Action<string>? report;
@@ -57,7 +72,13 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
     /// The caller's material is never retained and stays the caller's to dispose.
     /// </summary>
     /// <exception cref="InvalidOperationException">The slot already holds a key, which is left as it was.</exception>
-    /// <exception cref="PersonaException"><see cref="PersonaError.CustodyFailed"/>: the protector or the storage refused, or the envelope did not prove to hold this key. Nothing is held.</exception>
+    /// <exception cref="PersonaException">
+    /// <see cref="PersonaError.CustodyFailed"/>. When the protector refused, the envelope did not
+    /// prove to hold this key, or the storage refused the write, nothing is held. When the write
+    /// returned but what the storage holds could not be read back or differs, the store cannot take
+    /// the write back (it has no delete, K6): the envelope may stay under this fresh slot, which the
+    /// caller never records or reuses (L12 in docs/networking/DecisionRegister.md).
+    /// </exception>
     public void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
     {
         ArgumentNullException.ThrowIfNull(material);
@@ -108,11 +129,7 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
                 throw Failed("The storage could not hold the key.", e);
             }
 
-            var held = ReadOrFail(slot);
-            if (held is null || !held.AsSpan().SequenceEqual(envelope))
-            {
-                throw Failed("The storage does not hold what was written under the slot.");
-            }
+            VerifyHeld(slot, envelope);
         }
         finally
         {
@@ -133,9 +150,9 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
         {
             return material.CreateSigner();
         }
-        catch (PersonaException e)
+        catch (Exception e) when (IsKeyFailure(e))
         {
-            Unavailable(slot, "the key could not be copied into a signer (" + e.Error + ")");
+            Unavailable(slot, "the key could not be copied into a signer (" + Describe(e) + ")");
             return null;
         }
     }
@@ -206,9 +223,9 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
         {
             return PersonaKeyMaterial.Import(scalar, decoded.PublicKey);
         }
-        catch (PersonaException e)
+        catch (Exception e) when (IsKeyFailure(e))
         {
-            return Unavailable(slot, "the key does not belong to its recorded public key (" + e.Error + ")");
+            return Unavailable(slot, "the key does not belong to its recorded public key (" + Describe(e) + ")");
         }
         finally
         {
@@ -262,6 +279,41 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
         }
     }
 
+    /// <summary>
+    /// After a write that returned: reads back what the storage holds and compares it with what was
+    /// written. A read that throws is tried again, up to <see cref="ReadBackAttempts"/> reads in
+    /// all; bytes that differ fail at once. When this throws, the envelope (or whatever the storage
+    /// holds instead) may stay under the slot, because nothing here deletes (K6, L12).
+    /// </summary>
+    private void VerifyHeld(PersonaSlotId slot, byte[] envelope)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            byte[]? held;
+            try
+            {
+                held = storage.Read(slot);
+            }
+            catch (Exception e)
+            {
+                if (attempt < ReadBackAttempts)
+                {
+                    Thread.Sleep(ReadBackPause * attempt);
+                    continue;
+                }
+
+                throw Failed("The storage accepted the key but could not be read back to verify it; the envelope may stay under the slot, unrecorded.", e);
+            }
+
+            if (held is null || !held.AsSpan().SequenceEqual(envelope))
+            {
+                throw Failed("The storage does not hold what was written under the slot; what it holds may stay there, unrecorded.");
+            }
+
+            return;
+        }
+    }
+
     private byte[]? ReadOrFail(PersonaSlotId slot)
     {
         try
@@ -276,9 +328,28 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
 
     private PersonaKeyMaterial? Unavailable(PersonaSlotId slot, string reason)
     {
-        report?.Invoke("The key under " + slot + " is unavailable: " + reason + ".");
+        try
+        {
+            report?.Invoke("The key under " + slot + " is unavailable: " + reason + ".");
+        }
+        catch (Exception)
+        {
+            // An unavailable key is reported as null, never thrown (IPersonaKeyStore); a report sink
+            // that fails must not turn one into an exception.
+        }
+
         return null;
     }
+
+    /// <summary>The failures that mean a key cannot be used: the managed checks, the protocol's, or the platform's.</summary>
+    private static bool IsKeyFailure(Exception e) => e is PersonaException or ProtocolException or CryptographicException;
+
+    private static string Describe(Exception e) => e switch
+    {
+        PersonaException persona => persona.Error.ToString(),
+        ProtocolException => "a protocol check refused it",
+        _ => "the platform refused it",
+    };
 
     private static PersonaException Failed(string message) => new(PersonaError.CustodyFailed, message);
 

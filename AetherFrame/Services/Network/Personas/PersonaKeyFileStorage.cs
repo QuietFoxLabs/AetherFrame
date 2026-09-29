@@ -18,6 +18,14 @@ namespace AetherFrame.Services.Network.Personas;
 /// an interrupted write is deleted before the next write of that slot and is never trusted. Nothing
 /// here deletes a key.
 /// </para>
+/// <para>
+/// Durability falls short of the storage contract in one place: the file's bytes reach the disk
+/// before the move, but the move itself is not written through, so a power loss just after this
+/// returns can leave the key only in the temporary file, which is never trusted. Before anything
+/// persists a record of a key written here (increment 9), the move must be written through
+/// (<c>MoveFileEx</c> with <c>MOVEFILE_WRITE_THROUGH</c> on Windows), as the register's K2 entry
+/// requires.
+/// </para>
 /// </summary>
 public sealed class PersonaKeyFileStorage : IPersonaKeyBlobStorage
 {

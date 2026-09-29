@@ -72,6 +72,18 @@ public class PersonaKeyFileStorageTests : IDisposable
     }
 
     [Fact]
+    public void Read_NeverTrustsATemporaryFile_EvenWhenItIsTheOnlyOne()
+    {
+        // What an interrupted write leaves behind: complete-looking bytes under the temporary name
+        // and nothing under the final one. Nothing is held.
+        var storage = NewStorage();
+        var slot = PersonaSlotId.NewId();
+        File.WriteAllBytes(Path.Combine(directory.Path, slot + PersonaKeyFileStorage.Extension + ".tmp"), Bytes(20, 4));
+
+        Assert.Null(storage.Read(slot));
+    }
+
+    [Fact]
     public void WriteNew_RefusesAFileThatIsAlreadyThere_WhateverItHolds()
     {
         // A file under the final name that this storage did not write (a foreign or damaged file)

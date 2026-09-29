@@ -86,8 +86,10 @@ public sealed class PersonaManager
     /// </summary>
     /// <exception cref="PersonaException">
     /// <see cref="PersonaError.InvalidLabel"/>; <see cref="PersonaError.DuplicateIdentity"/> when the
-    /// store produced a key whose identity is already held, which no correct store does; or
-    /// <see cref="PersonaError.InvalidKeyMaterial"/> when the store produced no key.
+    /// store produced a key whose identity is already held, which no correct store does;
+    /// <see cref="PersonaError.InvalidKeyMaterial"/> when the store produced no key; or whatever the
+    /// store's <see cref="IPersonaKeyStore.AddKey"/> throws (for the key store core,
+    /// <see cref="PersonaError.CustodyFailed"/>), in which case no record is added.
     /// </exception>
     public PersonaRecord Create(string label)
     {
@@ -263,8 +265,11 @@ public sealed class PersonaManager
     /// or <see cref="PersonaRestoreStatus.InvalidKey"/>.
     /// </summary>
     /// <exception cref="PersonaException">
-    /// <see cref="PersonaError.InvalidLabel"/>, checked before anything else; or
-    /// <see cref="PersonaError.InvalidBackupInspection"/> when the codec gave no coherent inspection.
+    /// <see cref="PersonaError.InvalidLabel"/>, checked before anything else;
+    /// <see cref="PersonaError.InvalidBackupInspection"/> when the codec gave no coherent inspection;
+    /// or whatever the store's <see cref="IPersonaKeyStore.AddKey"/> throws when it commits the
+    /// restored key (for the key store core, <see cref="PersonaError.CustodyFailed"/>), in which case
+    /// no record is added.
     /// </exception>
     public PersonaRestoreResult RestoreBackup(ReadOnlySpan<byte> backup, PersonaBackupSecret secret, string label)
     {
@@ -393,9 +398,11 @@ public sealed class PersonaManager
 
     /// <summary>
     /// Under the lock, after every check: the store commits a copy of the key under a fresh slot and
-    /// the record is added. Nothing after <see cref="IPersonaKeyStore.AddKey"/> can refuse, so the
-    /// store never holds a key the manager has no record for. When the store throws, it holds nothing
-    /// under the slot (its contract), no record is added, and the exception is the caller's.
+    /// the record is added. Nothing after <see cref="IPersonaKeyStore.AddKey"/> can refuse, so a
+    /// store that returned holds exactly the keys the manager records. When the store throws, no
+    /// record is added, the slot is never used again, and the exception is the caller's; the store
+    /// holds nothing under the slot unless its storage accepted the key before its verification
+    /// failed (L12 in docs/networking/DecisionRegister.md).
     /// </summary>
     private PersonaRecord Commit(PersonaKeyMaterial material, string label)
     {
