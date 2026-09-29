@@ -211,7 +211,7 @@ The entries below were decided together for [NETWORK2.md](NETWORK2.md)'s increme
 - A draft-period reader accepts only `0x8001`, and refuses `1` as `UnsupportedVersion`. At the freeze the library accepts only `1` with the `v1` tag and refuses `0x8001`. No reader ever accepts both.
 - **The persona identity derivation (`PersonaId.v1`) does not change.** An identity is a hash of a public key, not a signature, so a persona made during the draft period keeps its identity after the freeze; only its documents must be signed again.
 - Every later signing context, starting with N2-3's request proof, carries a draft marker in its own tag in the same way.
-- N2-2 regenerates the vectors and updates the specification, the reference implementation in the tests, and the independent checker, all together.
+- N2-2 regenerates the vectors and updates the specification, the reference implementation in the tests, and the independent checker, all together. In the specification it rewrites sections 5, 7.2 and 10, and the status paragraph, which today says no server accepts a draft and that the tag isn't expected to change: the two-player test's server accepts drafts.
 
 **Rationale.** The two marks do different jobs:
 - **The version number makes a mismatch fail early and plainly.** A reader stops at step 3 of the specification's section 7.2 with `UnsupportedVersion`, before any cryptography, instead of reporting `SignatureMismatch`.
@@ -223,6 +223,8 @@ The two-player test's server accepts drafts. After the freeze, no document signe
 - the freeze itself, which is the owner's alone;
 - whether a later draft revision needs a number of its own. Schema versions already separate payload layouts inside one envelope version.
 
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. The new tag is length-prefixed, so the digests differ; `0x8001` stops a mismatch at step 3 of section 7.2, before any cryptography; each reader matches exactly one marker; and `PersonaId.v1` is a hash of a key, never a signature, so keeping it creates no cross-domain risk.
+
 ### D4: the rule for a remote Plate's `name`. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Applied by N2-2 to schema 1's `name`, and by N2-3 to schema 2's. A `name` is valid when all of these hold:
@@ -231,28 +233,36 @@ The two-player test's server accepts drafts. After the freeze, no document signe
   - the C0 controls U+0000 to U+001F, U+007F, and the C1 controls U+0080 to U+009F (General_Category Cc in the Unicode Character Database);
   - U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR;
   - U+FEFF;
-  - the twelve directional formatting characters of [UAX #9](https://www.unicode.org/reports/tr9/) (revision 52, Unicode 18.0): U+061C, U+200E, U+200F, U+202A to U+202E, and U+2066 to U+2069.
+  - the twelve directional formatting characters of [UAX #9](https://www.unicode.org/reports/tr9/) (revision 52, Unicode 18.0): U+061C, U+200E, U+200F, U+202A to U+202E, and U+2066 to U+2069;
+  - the invisible format characters U+00AD, U+180E, U+200B to U+200D, U+2060 to U+2064, U+206A to U+206F, U+FFF9 to U+FFFB, U+E0001, and U+E0020 to U+E007F.
 
 **Nothing is normalized**, as for every protocol text (specification, section 2.3).
 
-**Errors, in the specification's reading order (section 9.1):**
-- an empty name is `InvalidLength` as soon as its length is read;
-- a byte length over 256, or more than 64 scalars, is `LimitExceeded`;
-- a refused code point is `InvalidText`.
+**Errors, in the specification's reading order (section 9.1), each checked in this order:**
+1. an empty name is `InvalidLength` as soon as its length is read;
+2. a byte length over 256 is `LimitExceeded`;
+3. invalid UTF-8 is `InvalidText`;
+4. a refused code point, which includes U+0000, is `InvalidText`;
+5. more than 64 scalars is `LimitExceeded`.
+
+The list is fixed code points, not Unicode properties, so what is valid never changes with the Unicode version.
 
 The rule governs `name` only. Other texts are schema 2's (N2-3), and N7 governs how every text is displayed.
 
-**The local Plate name is never altered to fit.** `PlateNaming` already turns control and format characters into spaces and caps a name at 64 UTF-16 units. So only U+2028, U+2029 or an unpaired surrogate can make a local name fail this rule. The publish flow then refuses, asking the player to rename. Local naming, files and packages are unchanged.
+**The local Plate name is never altered to fit.** `PlateNaming` already turns control and format characters into spaces and caps a name at 64 UTF-16 units, so a name it produced can fail this rule only through U+2028, U+2029 or an unpaired surrogate. A name loaded from an older or hand-edited Plate file isn't normalized again, and can fail in other ways. In every case the publish flow refuses and asks the player to rename. Local naming, files and packages are unchanged.
 
 **Rationale.**
 - A Plate's name is what a viewer reads first, in lists and in logs. Control and directional characters let a name hide text or display it reversed: the "Trojan Source" technique, CVE-2021-42574.
 - The limits keep a name to a line.
 - Refusing is better than normalizing, which would change signed bytes after the fact.
-- The recommended list is kept exactly, and verified against UAX #9's table of directional formatting characters.
+- The recommended list is kept, verified against UAX #9's table of directional formatting characters. It gains the invisible format characters the security review asked for, which `PlateNaming` already folds away locally, so an honest publisher loses nothing, while a hostile one can't hide text in a name.
 
 **Not settled:**
 - confusable names ([UTS #39](https://www.unicode.org/reports/tr39/)), which a first test does not need;
-- persona names, which do not exist (D9a).
+- persona names, which do not exist (D9a);
+- Hangul fillers, noncharacters and names made only of spaces, which are cosmetic and left to the UTS #39 work.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. It checked the list against the Unicode Character Database (the 65 Cc code points) and UAX #9 (revision 52, Unicode 18.0.0), confirmed that `PlateNaming` folds Cc and Cf while U+2028, U+2029 and unpaired surrogates pass, and confirmed the CVE-2021-42574 citation. It asked for the exact error order and the invisible format characters, both added above.
 
 ### D5: an image digest covers the prepared copy. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -266,21 +276,22 @@ The server verifies received bytes against the declaration before serving them (
 N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the source image bytes" to the prepared copy. That is wording only: there is no salt, and the layout doesn't change.
 
 **Rationale.**
-- A digest of the original would let anyone holding the original file confirm which persona published it.
-- The original's metadata can carry a location, a device and an editing history.
-- Rebuilding the container is the only reliable way to drop every kind of metadata.
+- The original's metadata can carry a location, a device and an editing history, and rebuilding the container is the only reliable way to drop every kind of it.
+- Neither the original's bytes nor its digest is ever published. Anyone holding the original can still recognise the published pixels; that is inherent in sharing an image.
 - The consent screen shows the prepared copy, so the player sees what is sent.
 
 **Not settled:**
 - I2;
-- the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result).
+- the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result). N2-6 also clears the colour under fully transparent pixels, which a straight-alpha round trip would otherwise keep, and the consent screen shows each whole prepared image, not only the part a Plate element crops.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. `GetRawImageAsync` and `SaveToStreamAsync` exist on `ITextureReadbackProvider` in the installed Dalamud; a round trip through a texture cannot carry container metadata; and decoding the player's own managed copies adds no surface beyond import. It asked for the narrower rationale and the two N2-6 points above.
 
 ### D8: no metadata-only snapshot reaches players. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Schema 1 of `ProfileSnapshot` (a name and image references) stays a test schema:
 - the plugin never builds one to publish;
 - the server (N2-7) refuses to publish one;
-- the library keeps reading it, and its vectors stay, apart from N3's marker.
+- the library keeps reading it, and its vectors stay, changed only as N3's marker and D4's name rule require (N2-2). Three of them hold names D4 refuses: an empty name, one with CR LF, TAB and U+FEFF, and a 32,000-scalar name; N2-2 turns them into rejected vectors and says where the general 32,000-scalar text limit stays tested (L2).
 
 The first schema players publish is schema 2, with the layout (N2-3).
 
@@ -298,7 +309,9 @@ The protocol has no persona display name; what others see is the Plate's own con
 
 **Rationale.** D3 keeps personas independent. A label such as "Main, Aria on Twintania" would tie a persona to a character the moment it was published.
 
-**Not settled:** a public name (stage 2 at the earliest).
+**Not settled:** a public name (stage 2 at the earliest). N2-5 removes the "provisional" wording from `PersonaLabel` and `PersonaManager`.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: a local-only label is the only option consistent with D3 and ROADMAP.md, section 4, rule 8.
 
 ### I1: which images can be shared. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -310,7 +323,11 @@ The protocol has no persona display name; what others see is the Plate's own con
 
 The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is refused with a message; nothing is downscaled silently.** The consent screen shows the prepared copies, so a first frame instead of an animation, or colours after conversion, are visible before anything leaves.
 
-**Deviation from the recommendation.** It proposed refusing animated WebP and CMYK JPEG. Preparation encodes the pixels again, so neither reaches a viewer in its original form, and the viewer only ever decodes 8-bit PNG or JPEG. Refusing them would only turn away images the player already uses locally, while the risk the recommendation guarded against (what a viewer must decode) is covered.
+**What a viewer accepts, whoever published.** A hostile publisher can skip preparation, so the limit is enforced where images are received, not trusted from the sender:
+- schema 2's `ImageReference.format` allows only PNG (1) and JPEG (2) (N2-3);
+- the viewer (N2-10) sniffs every image's bytes and refuses anything but a non-animated 8-bit PNG, or an 8-bit JPEG with 1 or 3 components, within the specification's section 8.2 limits, whatever I2 and D6 decide.
+
+**Deviation from the recommendation, on sources only.** It proposed refusing animated WebP and CMYK JPEG. As *sources* they are accepted: preparation encodes the pixels again, so neither reaches a viewer in its original form. The risk the recommendation guarded against, which formats a viewer must decode, is covered by the rule above. Refusing them as sources would only turn away images the player already uses locally.
 
 **Rationale.**
 - The specification's limits (section 8.2) already bound the decoded size.
@@ -318,6 +335,8 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - One rule for all animations is simpler than one per format.
 
 **Not settled:** I2, and schema 2's count limit.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which relied on the publisher preparing images honestly, and asked for the receive-side rule, now above. It concurred with the amended entry on its recheck.
 
 ### N1: identifier scope. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -330,9 +349,11 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - **Profile ids** are already scoped (specification, section 8.4).
 - **The client** picks every identifier from a cryptographically secure generator (specification, section 2.6) and never reuses one across personas.
 
-**Rationale.** Deduplicating across personas would let one persona probe whether another holds an image (upload a digest and see whether it is already stored), or reference or overwrite another's asset. Scoping costs only storage. N2-7 applies it, and the specification's section 13 loses its "open" paragraph in N2-3.
+**Rationale.** Deduplicating across personas would let one persona probe whether another holds an image (upload a digest and see whether it is already stored), or reference or overwrite another's asset. Scoping costs only storage. N2-7 applies it. In N2-3, the specification's section 8.4 loses the N1 half of its "Open" paragraph; the N2 half (replay) stays until batch B.
 
 **Not settled:** nothing further.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: storage scoped to the persona, with no cross-persona deduplication or existence answers and fresh random ids never reused across personas, closes the probe-and-overwrite problem.
 
 ### N7: names and texts are plain text. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -342,9 +363,9 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - a path, a URL or a command.
 
 How texts are handled:
-- **Display.** Texts are drawn through calls that don't format their argument, and are never auto-linked.
-- **Logs.** Texts are logged only through the plugin's redacting log, with a length bound.
-- **The server.** It never puts a text into HTML without escaping it, and in stage 1 it serves no HTML page of a Plate at all.
+- **Display.** Texts are drawn through calls that don't format their argument, and are never auto-linked. A remote text is never an ImGui label or ID, because `##` and `###` in a label change what is shown and which widget it is.
+- **Logs.** Texts are logged only through the plugin's redacting log, with a length bound and control characters escaped, since schema 2 texts may hold line breaks.
+- **The server.** It never puts a text into HTML without escaping it, serves no HTML page of a Plate at all in stage 1, and passes texts to its database only as query parameters.
 
 N2-3 writes this into the specification as a consumer obligation.
 
@@ -352,22 +373,26 @@ N2-3 writes this into the specification as a consumer obligation.
 
 **Not settled:** nothing further.
 
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. It asked for the ImGui label rule, escaped control characters in logs and parameterised queries, all added above.
+
 ### P1: where "this Plate was published" is remembered. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
-**Option and scope.** A **publication index**, one per persona, in the plugin's own files under its networking directory. For each published profile it records:
+**Option and scope.** A **publication index**, one per persona, in the plugin's own files under its networking directory, each file named by the persona's local slot, never by its identity (NETWORK1.md, safeguard 7). For each published profile it records:
 - the local Plate's id;
 - the profile id;
 - the latest revision id;
 - the share code;
 - the time of the last publish.
 
-**Where it never appears.** Never in Plate JSON, character bindings, `.aetherframe` packages, Templates or the plugin configuration. Profile ids and share codes are never logged in the clear (the log redaction of NETWORK1's safeguard 7).
+**Where it never appears.** Never in Plate JSON, character bindings, `.aetherframe` packages, Templates or the plugin configuration. Profile ids are never logged in the clear (`LogPrivacy`, NETWORK1's safeguard 7). Share codes must not be either: batch B gives them a fixed prefixed form, and `LogPrivacy` gains it in the same change that first handles a code.
 
 **Deleting or renaming a Plate never publishes or unpublishes anything by itself.** The sharing view lists published profiles whose Plate is gone and offers to unpublish them. Losing the index loses no Plate. It does lose the local list of what was published: a signed request that lets the server list a persona's profiles is batch B's to decide.
 
 **Rationale.** Plate JSON travels: export, Duplicate and Save as Template copy it, including unknown fields. Publication state stored there would leak into copies and packages (NETWORK1.md, system 4).
 
 **Not settled:** recovering the list from the server (batch B).
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: Plate JSON travels through export, Duplicate and Save as Template, unknown fields included, so publication state belongs outside it. It noted that share codes aren't redacted yet and that index files must be named by slot, both now stated above.
 
 ### K3: where persona features turn on. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -381,6 +406,11 @@ N2-3 writes this into the specification as a consumer obligation.
 
 **Deciding by capability, not by name.** Which operations work is decided by the probe, never by the operating system's name. The one platform fact used is the protector's own statement about protection, which no probe can measure.
 
+**Conditions for N2-4.** The claim of protection rests on positive evidence and fails closed:
+- It is made only when a blob the protector just produced carries the Windows DPAPI provider identifier (`df9d8cd0-1501-11d1-8c7a-00c04fc297eb`). Wine's implementation writes its own marker instead.
+- It never rests on `wine_get_version`, which wine-staging can hide, or on environment variables.
+- Before viewing turns on, the probe verifies a committed known-answer document and refuses a tampered copy of it as `SignatureMismatch`. A round trip alone doesn't show that verification works.
+
 **When either condition fails:**
 - persona features are off for the session, with one message naming the missing capability, distinct from a protocol refusal;
 - **viewing** a shared Plate needs no persona, and turns on whenever the probe's verification step passes (K8 decides a verification path where it doesn't);
@@ -389,14 +419,16 @@ N2-3 writes this into the specification as a consumer obligation.
 
 **Rationale.** This is the recommendation (NETWORK1_CryptoCompatibility.md, section 6), plus the one gap it left: a probe tests function, not protection. A store that only obfuscates must not be offered as protection (section 5).
 
-**Not settled:** K8, K9, macOS.
+**Not settled:** K8, K9, macOS, and whether TLS certificate validation under Wine can be relied on for viewing (nobody has assessed it).
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**, with the conditions for N2-4 above. The exception only ever withholds a protection claim, so it fails toward "off", and no probe can measure confidentiality. It checked Wine's `protectdata.c` and wine-staging's patch that hides Wine's exports.
 
 ### K4: what comes before a persona's first real publish. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Before a persona's first publish to a real server, the player either has an encrypted backup of it, or explicitly acknowledges, for that persona, the following. Losing its key means never being able to update or unpublish what it published, and no account exists to recover it.
 
 **In NETWORK2's first stage there is no backup,** so the acknowledgement is required:
-- it is a separate confirmation with that text;
+- it is a separate confirmation with that text, naming the ordinary ways a key is lost: reinstalling Windows, moving to a new PC, deleting the plugin's data, or an administrator resetting the Windows password, which loses the key DPAPI protected it with;
 - it is recorded per persona in the persona registry, and asked once per persona;
 - it is repeated in the persona window whenever a persona is created.
 
@@ -406,6 +438,8 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 
 **Not settled:** the backup (the D2 details, K5).
 
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: for stage 1 on the owner's server, an informed acknowledgement per persona is proportionate, because key loss never touches local Plates, only retraction, and the owner can remove content on the server. It asked for the concrete ways a key is lost in the text, now above.
+
 ### R1: how a viewer finds a Plate in the first test. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** **Share codes.**
@@ -414,13 +448,17 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 - In stage 1 the code is the only way to reach a profile. There is no directory, search, listing or enumeration, and no lookup by persona, character, World or anything else.
 - A code binds nothing to a character.
 
-**Left to batch B:** the code's format and length, with at least 64 bits from a cryptographically secure generator, and rate limits on lookups.
+**How codes travel.** A code is sent in a request's body or a header, never in a URL, so no access log records it. The server returns a code only in reply to a publish carrying a fresh request proof (S1), never for a replayed document.
+
+**Left to batch B:** the code's format and length, with at least 64 bits from a cryptographically secure generator; a fixed prefixed text form that `LogPrivacy` redacts; and rate limits on lookups.
 
 **Target lookup** (by targeting a character in game) is stage 2, with its own privacy decision and an opt-in binding.
 
-**Rationale.** Sharing that the publisher starts deliberately and the viewer opens explicitly, with no character binding (ROADMAP.md, section 4, rule 8). A code is a capability in the sense of the W3C TAG's [Good Practices for Capability URLs](https://www.w3.org/TR/capability-urls/). Anyone who has it can use it, so it leaks the way a link does, and unpublishing revokes it.
+**Rationale.** Sharing that the publisher starts deliberately and the viewer opens explicitly, with no character binding (ROADMAP.md, section 4, rule 8). A code is a capability in the sense of the W3C TAG's [Good Practices for Capability URLs](https://www.w3.org/TR/capability-urls/). Anyone who has it can use it, so it leaks the way a link does, and unpublishing revokes it. Stage 1 departs from two of that document's recommendations on purpose: codes don't expire, and a code can't be replaced without unpublishing. Both would complicate a first test, and both can be added later without changing the protocol.
 
-**Not settled:** the format, the length and the rate limits (batch B); target lookup (stage 2).
+**Not settled:** the format, the length and the rate limits (batch B); expiring or replacing codes; target lookup (stage 2).
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: a bearer code with no enumeration and no character binding fits rule 8, and at least 64 random bits with rate limits is an adequate floor. It asked for codes to stay out of URLs, for the fresh-proof rule and the prefixed form, and for the TAG departures to be recorded, all now above.
 
 ### R2: the transport. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -428,28 +466,47 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 - **HTTPS only**, to one DNS hostname fixed in the preview build (set in N2-8):
   - the certificate is validated normally, never disabled or pinned to a self-signed one;
   - there is no plain HTTP, no user-entered server address, and redirects are not followed.
-- **The client stack.** .NET's `HttpClient` over `SocketsHttpHandler`, with Dalamud's `Dalamud.Networking.Http.HappyEyeballsCallback` as its connect callback for dual-stack connections (Dalamud v9 and later). Timeouts are explicit, response sizes are bounded, and every call runs off the framework thread.
+- **The client stack.** .NET's `HttpClient` over `SocketsHttpHandler`, with Dalamud's `Dalamud.Networking.Http.HappyEyeballsCallback` as its connect callback for dual-stack connections (Dalamud v9 and later). Every call runs off the framework thread. The handler's defaults are overridden where they matter:
+  - redirects are off (the default follows up to 50);
+  - cookies are off;
+  - no credentials are ever sent: `Credentials` and `DefaultProxyCredentials` stay empty, so no NTLM or Kerberos exchange happens;
+  - the system proxy may be used, since TLS stays end to end through it, but never with credentials;
+  - automatic decompression is off;
+  - HTTP/1.1 or HTTP/2 only, never HTTP/3;
+  - explicit connect and request timeouts (the defaults are none and 100 seconds), and a response size bound far below the default 2 GiB buffer;
+  - certificate revocation is not checked, as by default. The server's Let's Encrypt certificates are short-lived.
 - **Traffic only on a player's action:** publish, unpublish, open a code, refresh. No polling, no background traffic, no telemetry.
 - **Request and response bodies.** Requests carry the signed documents' exact bytes and the prepared image bytes. Responses are small JSON objects with closed schemas, parsed strictly with bounded sizes.
-- **Version checks.** Every request names the plugin's version, so the server can refuse an outdated client with a clear message.
+- **Version checks.** Every request names the plugin's version, and nothing else about the player or the machine, so the server can refuse an outdated client with a clear message.
 - **No cookies and no accounts.** Identity comes only from signatures (specification, section 13, rule 2).
 
-**Rationale.** Dalamud requires HTTPS with a certificate from a trusted authority, and a DNS hostname rather than an IP address. It recommends dual-stack support and version checks ([Plugin Technical Considerations](https://dalamud.dev/plugin-development/technical-considerations/), [What's New in Dalamud v9](https://dalamud.dev/versions/v9/)). A fixed hostname means no one can point a player's plugin at a hostile server.
+**Rationale.** Dalamud requires HTTPS with a certificate from a trusted authority, and a DNS hostname rather than an IP address. It recommends dual-stack support and version checks ([Plugin Technical Considerations](https://dalamud.dev/plugin-development/technical-considerations/), [What's New in Dalamud v9](https://dalamud.dev/versions/v9/)). A fixed hostname means no one can point a player's plugin at a hostile server, as long as the owner keeps the domain. A lapsed domain could be registered by someone else and given a valid certificate, so the owner keeps it on automatic renewal (NETWORK2.md, section 4).
 
 **Not settled:** the hostname (N2-8), and the server's endpoints (N2-7).
 
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. It verified Dalamud's requirements ("must" for HTTPS, a trusted certificate and a hostname; "should" for dual-stack and version checks) and measured .NET 10's handler defaults, which led to the overrides listed above.
+
 ### R3: where network code may live. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
-**Option and scope.** Only one place may use a networking API:
-- **The preview flavour, only under `Services/Network`,** may use `System.Net.Http` and Dalamud's `HappyEyeballsCallback`. Nothing else in the plugin may.
-- **Refused everywhere:** `System.Net.Sockets`, `System.Net.WebSockets`, and every other networking API.
-- **The player flavour** contains no networking API at all, as today.
+**Option and scope.** An exact allowlist, and only in one place: the preview flavour, under `Services/Network`. Nothing else in the plugin may use a networking type, and the player flavour contains none at all, as today.
 
-The boundary tests change in N2-9, the first change that brings network code, to enforce exactly this. Until then they keep refusing every networking API everywhere, which is NETWORK1.md's safeguard 1.
+**Allowed there:**
+- the assemblies `System.Net.Http` and `System.Net.Primitives`, and `System.Net.Security` only if R2 ever sets a TLS option;
+- every type in `System.Net.Http` and `System.Net.Http.Headers`;
+- `System.Net.HttpStatusCode`;
+- `System.Net.Security.SslClientAuthenticationOptions`, only under the same condition;
+- Dalamud's `HappyEyeballsCallback`;
+- `System.Net.Sockets.AddressFamily`, only as the type of that callback's constructor parameter. Dalamud's shared instance is internal, so the plugin must construct the callback itself.
 
-**Rationale.** It is the smallest surface R2 needs. Dalamud's callback provides dual-stack connections without opening sockets in the plugin.
+**Refused everywhere:** every other type in `System.Net.Sockets` (`Socket`, `TcpClient`, `NetworkStream` and the rest); `SslStream`; WebSockets; QUIC; `Dns`; `WebRequest`, `WebClient` and `HttpListener`; mail; and Dalamud's `Util.OpenLink`.
+
+The boundary tests change in N2-9, the first change that brings network code, to enforce exactly this list, both by referenced types in the compiled flavour and by a source scan. Until then they keep refusing every networking API everywhere, which is NETWORK1.md's safeguard 1. The source scan's `Sockets` substring would match `SocketsHttpHandler`, so N2-9 makes it match whole names.
+
+**Rationale.** It is the smallest surface R2 needs, found by compiling a minimal R2 transport against the installed Dalamud and reading the type references it produces. Dalamud's callback provides dual-stack connections without the plugin opening sockets itself.
 
 **Not settled:** nothing further.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which refused `System.Net.Sockets` outright although R2's callback can't be constructed without `AddressFamily`, and a status code needs `HttpStatusCode`. It asked for this exact allowlist, and concurred with the amended entry on its recheck.
 
 ## Gates
 
@@ -466,14 +523,14 @@ The boundary tests change in N2-9, the first change that brings network code, to
 ## 1. Decisions that must be approved before any persistent private key is created (G1)
 
 - **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b, P2, K1, K2, K6, K7, N3, K3 and P1 (APPROVED, Claude, under the owner's delegation of September 29, 2026). **Every row of this table except "D2 details", which has its own gate, is now approved,** so G1 is complete for native Windows. K8 and K9 below still gate any other platform, and the "D2 details" still gate any `.afpersona` file.
-- **Every other row in this table must still be approved** before a persistent private key is created outside tests.
+- **No row of this table other than "D2 details" remains to be approved** before a persistent private key is created outside tests on native Windows.
 - **"D2 details"** has its own gate: before any `.afpersona` file is written or restored outside tests.
 - **Approved rows** state the approved option in the recommendation column.
 
 | Id | Question | Baseline or current state | Recommendation (not approved) | Bytes | Status |
 |---|---|---|---|---|---|
 | D2 | Recovery from key loss | None. Without the key nothing can be retracted, and there is no account. | Approved in principle: encrypted, portable `.afpersona` backups and restoration, including on another computer without a hosted account; no plaintext private key export (see "Approved decisions") | no | **APPROVED IN PRINCIPLE (2026-09-28)** |
-| D2 details | Backup encryption scheme, password policy, key derivation parameters, recovery warnings, implementation | Undefined | Subject to later security approval. Related proposals, not approved: K4, K5, K7. No `.afpersona` file may be written or restored outside tests before this is approved. | no | UNRESOLVED |
+| D2 details | Backup encryption scheme, password policy, key derivation parameters, recovery warnings, implementation | Undefined | Subject to later security approval. Related: K4 and K7 (approved), K5 (UNRESOLVED). No `.afpersona` file may be written or restored outside tests before this is approved. | no | UNRESOLVED |
 | D3 | How many personas an installation holds, and how one is chosen | Undefined | Approved: several independent personas; manual selection and switching; one active at a time for identity-dependent operations; never bound automatically to game identifiers; switching never alters saved Plates or triggers publishing (see "Approved decisions") | no | **APPROVED (2026-09-28)** |
 | D9b | How the protocol code ships in the plugin (fourth DLL or sources compiled in) | The preview flavour compiles the sources in; player builds compile none | Approved: the sources compiled into AetherFrame.dll, the package at three files, the standalone projects canonical, and only in the preview flavour (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | N3 | Whether draft documents are distinguishable from final v1 in the signed bytes | Drafts use version 1 and the `…SignedDocument.v1` tag | Approved: drafts carry `protocolVersion` `0x8001` and the tag `…SignedDocument.v1-draft` until the owner's freeze; readers accept exactly one of draft and final; identities unchanged (see "Decision batch A") | **yes** | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |

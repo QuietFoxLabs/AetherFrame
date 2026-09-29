@@ -139,7 +139,7 @@ Current verified build context is .NET 10, Dalamud SDK/API 15, and an x64 plugin
 
 The delegation covers OPEN items only. Claude records each delegated decision in the networking register or in this section, marked "APPROVED (Claude, under the owner's delegation of September 29, 2026)", with the date, exact scope and rationale. CONFIRMED requirements and the owner's own approvals (D3, and D2 in principle) change only on the owner's word. The owner can overrule any delegated decision in the Owner inbox. Things only the owner can do are listed in [docs/process/AUTOPILOT.md](docs/process/AUTOPILOT.md#owner-only).
 
-D2 does not approve an encryption scheme, password policy, derivation parameters, recovery warnings, or implementation. D3 does not approve labels, storage, supported platforms, user interface, or the interim lease revocation policy. These remain OPEN.
+D2 does not approve an encryption scheme, password policy, derivation parameters, recovery warnings, or implementation. D3 does not approve labels, storage, supported platforms, user interface, or the interim lease revocation policy. Labels (D9a), storage on native Windows (K2) and where persona features turn on (K3) have since been decided under the delegation; the user interface and the lease policy (L10) remain OPEN.
 
 ## 6. Deferred features in planned order
 
@@ -176,7 +176,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 | G2: snapshots and images | Complete: D4, D5, D8, D9a and I1 are APPROVED (Claude, under the owner's delegation of September 29, 2026), in decision batch A. |
 | G3: freeze or real server | D1 retraction semantics; D6 signed envelopes versus server-checked content; D7 deployment binding; K5 backup passphrase rules. K4, N1 and N7 are APPROVED (Claude, under the owner's delegation of September 29, 2026), in decision batch A. |
 | G4: backend | N2 replay retention; N6 clock behavior for retractions; S1 request proofs; S2 tombstones; S3 lost keys and expiry; S4 persona revocation; I2 server image processing. NETWORK2 plans the hosting shape (one small Linux server, Docker, Caddy, a deploy workflow the owner approves); the domain, the provider and their cost are the owner's to choose when increment N2-8 needs them. |
-| #23 follow ups | L10 signer lease behavior during a persona switch; D3's additional deliberate association clause (owner only); D9a provisional labels; L9 and L11 networking suites as release gates. The current revocation behavior is an interim implementation. All are recorded in the register. |
+| #23 follow ups | L10 signer lease behavior during a persona switch; D3's additional deliberate association clause (owner only); L9 and L11 networking suites as release gates. D9a is APPROVED (a private local label), and N2-5 drops the "provisional" wording. The current revocation behavior is an interim implementation. All are recorded in the register. |
 | Other protocol items | L2 conformance coverage for a second implementation; L4 public only signer acceptance; L8 signing context specification; local package photo metadata under I3. |
 | Local reliability | Resolution and current applicability of the residual findings in section 2; any future autosave, history, cleanup, or concurrent client storage design. |
 | Acceptance and integration | Fresh review and game evidence for the amended draft PRs; combined integration of #21 and #23 with current master. Separate green PR runs do not prove the combined result. |
@@ -192,7 +192,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - NETWORK1 increment 3, the plugin integration skeleton: [#34](https://github.com/QuietFoxLabs/AetherFrame/pull/34) (D9b, P2), merged as `b80127b`, ahead of increment 2 on the owner's instruction to continue the persona foundation.
 - NETWORK1 increment 5, the key store core: [#35](https://github.com/QuietFoxLabs/AetherFrame/pull/35) (K1, K2, K6, K7, each with a security reviewer's concurrence), merged as `564e1b9`. A session outside the autopilot started it; Claude finished it on the owner's instruction.
 - NETWORK2 increment N2-0, the plan: [#36](https://github.com/QuietFoxLabs/AetherFrame/pull/36), merged as `8c58e34`.
-- NETWORK2 increment N2-1, decision batch A: this change. N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3 and K4, and the new R1 (share codes), R2 (the transport) and R3 (where network code may live), are APPROVED (Claude, under the owner's delegation of September 29, 2026) in the register, with a security reviewer's concurrence.
+- NETWORK2 increment N2-1, decision batch A: this change. N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3 and K4, and the new R1 (share codes), R2 (the transport) and R3 (where network code may live), are APPROVED (Claude, under the owner's delegation of September 29, 2026) in the register. A security-focused reviewer concurred with each security and privacy entry, I1 and R3 after amendment, as each entry records.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
@@ -201,13 +201,16 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
    - exactly the approved marker (`protocolVersion` `0x8001`, the `…SignedDocument.v1-draft` tag) and name rule are implemented;
    - the vectors, the specification and the independent checker change together;
    - documents with incompatible markers are proved to be refused;
-   - boundary and adversarial name cases are added;
+   - boundary and adversarial name cases are added, in D4's error order;
+   - the specification's status paragraph and section 10 say drafts exist and a test server accepts them;
+   - where the general 32,000-scalar text limit stays tested is stated (L2);
    - the protocol stays DRAFT, and local Plate naming and files are unchanged.
-2. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: D8, D5, D9a and I1 (approved in batch A); S1, D7 and L8, decided and recorded in this change with a security reviewer's concurrence; and, because it changes signed bytes, the owner's advance approval of September 29, 2026 under the same conditions (section 5). Acceptance:
+2. **N2-3: ProfileSnapshot schema 2 and the request proof.** Prerequisites: N2-2 merged first; D8, D5, D9a and I1 (approved in batch A); S1, D7 and L8, decided and recorded in this change with a security reviewer's concurrence; and, because it changes signed bytes, the owner's advance approval of September 29, 2026 under the same conditions (section 5). Acceptance:
    - a canonical layout schema in fixed-point integers: canvas, background, text, images and Components, with a limit on every count, length and value;
    - the request proof in its own signing context, with its own domain tag;
    - vectors, the specification, the reference implementation in the tests, and adversarial cases;
-   - N7 written into the specification as a consumer obligation, D5's wording applied to section 8.2, and N1's scoping to section 13;
+   - `ImageReference.format` limited to PNG and JPEG in schema 2 (I1);
+   - N7 written into the specification as a consumer obligation, D5's wording applied to section 8.2, and N1's scoping to sections 8.4 and 13;
    - schema 1 stays readable;
    - no plugin or server code.
 3. **N2-4: the Windows DPAPI protector and the capability probe** (NETWORK1 increment 7). Prerequisites: K2 (approved) and K3, with N2-2 merged first (NETWORK1's gate for increment 7). Acceptance:

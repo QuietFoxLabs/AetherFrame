@@ -86,7 +86,7 @@ Player A's plugin (preview)                          Owner's server             
 ## 4. What only the owner does, and when
 
 Nothing is needed from the owner until increment N2-8. Then, with exact steps posted in the Owner inbox:
-1. Buy a domain.
+1. Buy a domain, and keep it on automatic renewal: a lapsed domain could be registered by someone else, who could then serve players' plugins (R2).
 2. Rent a small Linux server (a few dollars a month) with IPv4, and IPv6 if offered, and point the domain's `A` (and `AAAA`) records at it.
 3. Create the deploy key and the server's secret values (the S2 pepper, if S2 keeps one), and add them as secrets of a protected GitHub environment. Claude never sees or handles a credential or a secret.
 4. Approve each deploy run in GitHub.
