@@ -86,11 +86,11 @@ internal sealed class PlateStoragePaths
     internal string GetBindingPath(ulong contentId) => Path.Combine(CharactersDirectory, $"{contentId.ToString(CultureInfo.InvariantCulture)}.json");
 
     internal string GetTrashPlatePath(Guid plateId, DateTime deletedUtc) =>
-        Path.Combine(PlateTrashDirectory, $"{plateId}.deleted-{deletedUtc:yyyyMMdd-HHmmss-fff}.json");
+        Path.Combine(PlateTrashDirectory, $"{plateId}.deleted-{Stamp(deletedUtc)}.json");
 
     /// <summary>A recovery copy of <paramref name="originalPath"/>: same name, stamped.</summary>
     internal string GetRecoveryPath(string originalPath, DateTime nowUtc) =>
-        Path.Combine(RecoveryDirectory, $"{Path.GetFileNameWithoutExtension(originalPath)}.damaged-{nowUtc:yyyyMMdd-HHmmss-fff}{Path.GetExtension(originalPath)}");
+        Path.Combine(RecoveryDirectory, $"{Path.GetFileNameWithoutExtension(originalPath)}.damaged-{Stamp(nowUtc)}{Path.GetExtension(originalPath)}");
 
     /// <summary>
     /// The Plate a file in the Plates folder is named for — only when the name is the exact
@@ -114,11 +114,15 @@ internal sealed class PlateStoragePaths
     internal string GetTemplatePath(Guid templateId) => Path.Combine(TemplatesDirectory, $"{templateId}.json");
 
     internal string GetTrashTemplatePath(Guid templateId, DateTime deletedUtc) =>
-        Path.Combine(TemplateTrashDirectory, $"{templateId}.deleted-{deletedUtc:yyyyMMdd-HHmmss-fff}.json");
+        Path.Combine(TemplateTrashDirectory, $"{templateId}.deleted-{Stamp(deletedUtc)}.json");
 
     /// <summary>The Template a file in the Templates folder is named for; see <see cref="TryParsePlateFileName"/>.</summary>
     internal static bool TryParseTemplateFileName(string path, out Guid templateId) =>
         TryParseCanonicalGuid(Path.GetFileNameWithoutExtension(path), out templateId);
+
+    /// <summary>A file name's time stamp, in the Gregorian calendar whatever the player's culture
+    /// (a Thai or Japanese calendar would otherwise put another year in the name).</summary>
+    private static string Stamp(DateTime utc) => utc.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
 
     // "D" is the dashed spelling; the comparison rejects what Guid parsing still tolerates around it (whitespace).
     private static bool TryParseCanonicalGuid(string name, out Guid id) =>

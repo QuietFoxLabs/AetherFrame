@@ -272,7 +272,7 @@ public class LibraryDispatcherContractTests
 
         public IReadOnlyList<string> ListFiles(string directory, string searchPattern) => files.ListFiles(directory, searchPattern);
 
-        public async Task ReadTextAsync(string path, Action<string> reader)
+        public async Task ReadTextAsync(string path, Action<StoredText> reader)
         {
             if (Interlocked.Exchange(ref nextRead, null) is { } hold)
             {

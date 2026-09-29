@@ -129,6 +129,15 @@ public static class AssetReferenceScanner
         }
     }
 
+    /// <summary>
+    /// Every GUID string in a preserved extension bag outside a document (a Template envelope's,
+    /// say). Conservatively each counts as a reference, as inside a document.
+    /// </summary>
+    public static void CollectUnknown(Dictionary<string, JsonElement>? data, ISet<Guid> into) => CollectGuids(data, into);
+
+    /// <summary>Every GUID string anywhere in raw JSON: for a file that isn't a loaded document.</summary>
+    public static void CollectAllGuidStrings(JsonElement root, ISet<Guid> into) => CollectGuids(root, into);
+
     private static void CollectGuids(Dictionary<string, JsonElement>? data, ISet<Guid> into)
     {
         if (data is null)
