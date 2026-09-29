@@ -384,6 +384,76 @@ public class PublicationTests
         Assert.Contains("[FAIL] plan: 0.1.5 is older than the 0.1.6 the testing channel serves now", output);
     }
 
+    [Fact]
+    public void AfterTheRepositoryMoved_TheNextTestingRelease_PublishesOverTheFileFromBeforeTheMove()
+    {
+        using var directory = new TempDirectory();
+        TestPackages.Config(directory, TestPackages.ConfigJsonWithPrevious());
+        var releases = directory.File("releases");
+        TestReleases.Create(releases, "0.1.6", new ReleaseOptions { RepoUrl = TestPackages.PreviousRepoUrl, PublishedAt = "2026-09-27T23:58:31Z" });
+        TestReleases.Create(releases, "0.1.7");
+        var beforeTheMove = PublishedBeforeTheMove(directory);
+
+        var (code, output, _) = Prepare(directory, "0.1.7", "testing", current: beforeTheMove, publication: "after");
+
+        Assert.True(code == 0, output);
+        Assert.Contains("[ OK ] published address: https://github.com/richhiiee/AetherFrame, from before the repository moved; the new file uses https://github.com/QuietFoxLabs/AetherFrame", output);
+        var text = File.ReadAllText(directory.File("after/branch/pluginmaster.json"));
+        Assert.DoesNotContain("richhiiee/AetherFrame/", text);
+        Assert.DoesNotContain("\"https://github.com/richhiiee/AetherFrame\"", text);
+        var entry = RepositoryDocument.Parse(Encoding.UTF8.GetBytes(text), "published").Single();
+        Assert.Equal(TestPackages.RepoUrl, entry.RepoUrl);
+        Assert.Equal("0.1.7.0", entry.TestingAssemblyVersion);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.7/AetherFrame-0.1.7.zip", entry.DownloadLinkTesting);
+    }
+
+    [Fact]
+    public void AfterTheRepositoryMoved_TheReleaseFromBeforeTheMove_CanStillBePromoted()
+    {
+        using var directory = new TempDirectory();
+        TestPackages.Config(directory, TestPackages.ConfigJsonWithPrevious());
+        TestReleases.Create(directory.File("releases"), "0.1.6", new ReleaseOptions { RepoUrl = TestPackages.PreviousRepoUrl, Prerelease = false });
+        var beforeTheMove = PublishedBeforeTheMove(directory);
+
+        var (code, output, _) = Prepare(directory, "0.1.6", "stable", current: beforeTheMove, publication: "promote");
+
+        Assert.True(code == 0, output);
+        Assert.Contains("[ OK ] v0.1.6: manifest RepoUrl: https://github.com/richhiiee/AetherFrame (the address before the move", output);
+        var entry = RepositoryDocument.Parse(File.ReadAllBytes(directory.File("promote/branch/pluginmaster.json")), "published").Single();
+        Assert.Equal("0.1.6.0", entry.AssemblyVersion);
+        Assert.Equal(TestPackages.RepoUrl, entry.RepoUrl);
+        Assert.Equal("https://github.com/QuietFoxLabs/AetherFrame/releases/download/v0.1.6/AetherFrame-0.1.6.zip", entry.DownloadLinkInstall);
+    }
+
+    [Fact]
+    public void AfterTheRepositoryMoved_AReleaseThatStillNamesTheOldAddress_IsRefused()
+    {
+        using var directory = new TempDirectory();
+        TestPackages.Config(directory, TestPackages.ConfigJsonWithPrevious());
+        var releases = directory.File("releases");
+        TestReleases.Create(releases, "0.1.6", new ReleaseOptions { RepoUrl = TestPackages.PreviousRepoUrl });
+        TestReleases.Create(releases, "0.1.7", new ReleaseOptions { RepoUrl = TestPackages.PreviousRepoUrl });
+        var beforeTheMove = PublishedBeforeTheMove(directory);
+
+        var (code, output, _) = Prepare(directory, "0.1.7", "testing", current: beforeTheMove, publication: "after");
+
+        Assert.Equal(1, code);
+        Assert.Contains("[FAIL] v0.1.7: manifest RepoUrl", output);
+        Assert.False(Directory.Exists(directory.File("after")));
+    }
+
+    /// <summary>
+    /// The pluginmaster.json serving 0.1.6 testing-exclusive as the tooling wrote it before the repository
+    /// moved, like the live file: every address the old one.
+    /// </summary>
+    private static string PublishedBeforeTheMove(TempDirectory directory)
+    {
+        var generated = Publish(directory, "0.1.6", "testing", current: null, publication: "before-the-move");
+        var path = directory.File("before-the-move.json");
+        File.WriteAllText(path, File.ReadAllText(generated).Replace(TestPackages.RepoUrl, TestPackages.PreviousRepoUrl, StringComparison.Ordinal), new UTF8Encoding(false));
+        return path;
+    }
+
     /// <summary>Runs prepare-publication; returns its exit code, its output and what it appended to the GitHub output file.</summary>
     private static (int Code, string Output, string Outputs) Prepare(
         TempDirectory directory, string version, string channel, string? current, string publication = "publication", bool rollback = false, string branch = "plugin-repository")

@@ -65,7 +65,9 @@ public static class RepositoryGenerator
             IsHide = false,
             InternalName = manifest.InternalName,
             AssemblyVersion = primary.Version.AssemblyVersion.ToString(),
-            RepoUrl = manifest.RepoUrl,
+            // The current address, also for a package released before the repository moved, whose
+            // manifest names the old one: a new entry never links to the old address.
+            RepoUrl = config.SourceRepositoryUrl,
             ApplicableVersion = manifest.ApplicableVersion ?? "any",
             MinimumDalamudVersion = manifest.MinimumDalamudVersion,
             DalamudApiLevel = config.DalamudApiLevel,
