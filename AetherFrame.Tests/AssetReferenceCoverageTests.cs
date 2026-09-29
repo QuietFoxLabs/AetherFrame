@@ -15,8 +15,9 @@ namespace AetherFrame.Tests;
 /// <summary>
 /// The reference scan any future asset cleanup must start from (nothing runs cleanup yet) never
 /// misses an image something on disk may still need: data a newer build keeps in a Template's
-/// envelope, a Plate put back from the trash by hand while AetherFrame runs, or any other file in
-/// the Plates folder. Missing one would let cleanup move a wanted image to the asset trash.
+/// envelope, a Plate or Template put back from the trash by hand while AetherFrame runs, any other
+/// file in the Plates or Templates folder, or a loaded file whose bytes on disk aren't what memory
+/// holds. Missing one would let cleanup move a wanted image to the asset trash.
 /// </summary>
 public class AssetReferenceCoverageTests
 {
@@ -92,6 +93,88 @@ public class AssetReferenceCoverageTests
 
         Assert.False(scan.IsComplete);
         Assert.Contains(scan.Problems, p => p.Contains("notes.json", StringComparison.Ordinal) && !p.Contains(fixture.Root, StringComparison.Ordinal));
+    }
+
+    private static string RichTemplate(Guid templateId, DateTime now) =>
+        TemplateSamples.Envelope(templateId, "Rich", JsonSerializer.Serialize(SampleDocuments.Rich(Guid.NewGuid(), "Rich", now), JsonOptions.Default));
+
+    [Fact]
+    public async Task TemplatePutBackFromTheTrashByHand_WhileLoaded_KeepsItsImagesLive()
+    {
+        using var fixture = new TemplateLibraryFixture();
+        var templateId = Guid.NewGuid();
+        fixture.WriteTemplateJson(templateId, RichTemplate(templateId, fixture.Clock.Now));
+        var templates = await fixture.LoadAsync();
+        await templates.DeleteTemplateAsync(templateId);
+        File.Move(Directory.GetFiles(fixture.Paths.TemplateTrashDirectory).Single(), fixture.Paths.GetTemplatePath(templateId));
+
+        var scan = await templates.ScanAssetReferencesAsync();
+
+        Assert.True(scan.IsComplete);
+        Assert.Contains(SampleDocuments.ImageAsset, scan.ReferencedAssetIds);
+        Assert.Contains(SampleDocuments.BackgroundAsset, scan.ReferencedAssetIds);
+    }
+
+    [Theory]
+    [InlineData("copy")]
+    [InlineData("built-in-id")]
+    public async Task FileInTheTemplatesFolderThatIsntLoaded_StillKeepsItsImagesLive(string kind)
+    {
+        using var fixture = new TemplateLibraryFixture();
+        var templateId = kind == "copy" ? Guid.NewGuid() : BuiltInTemplateCatalog.BlankCanvasId;
+        var name = kind == "copy" ? $"{templateId} - Copy.json" : $"{templateId}.json";
+        Directory.CreateDirectory(fixture.Paths.TemplatesDirectory);
+        File.WriteAllText(Path.Combine(fixture.Paths.TemplatesDirectory, name), RichTemplate(templateId, fixture.Clock.Now), Encoding.UTF8);
+        var templates = await fixture.LoadAsync();
+        Assert.DoesNotContain(templates.GetOrderedTemplates(), t => !t.IsBuiltIn);
+
+        var scan = await templates.ScanAssetReferencesAsync();
+
+        Assert.True(scan.IsComplete);
+        Assert.Contains(SampleDocuments.ImageAsset, scan.ReferencedAssetIds);
+    }
+
+    [Fact]
+    public async Task UnreadableFileInTheTemplatesFolderThatIsntLoaded_MakesTheScanIncomplete()
+    {
+        using var fixture = new TemplateLibraryFixture();
+        Directory.CreateDirectory(fixture.Paths.TemplatesDirectory);
+        File.WriteAllText(Path.Combine(fixture.Paths.TemplatesDirectory, "notes.json"), "{ truncated");
+        var templates = await fixture.LoadAsync();
+
+        var scan = await templates.ScanAssetReferencesAsync();
+
+        Assert.False(scan.IsComplete);
+        Assert.Contains(scan.Problems, p => p.Contains("notes.json", StringComparison.Ordinal) && !p.Contains(fixture.Root, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A Plate read from its backup keeps the backup's references in memory, but its damaged file
+    /// on disk may be newer and need other images. Until that file has a Recovery copy, it is the
+    /// only copy of that content: the scan reads it too, and can't call itself complete when the
+    /// file doesn't parse.
+    /// </summary>
+    [Fact]
+    public async Task PlateReadFromItsBackup_WhoseDamagedFileHasNoRecoveryCopy_LeavesTheScanIncomplete()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = Guid.NewGuid();
+        await store.WriteTextAsync(fixture.Paths.GetPlatePath(plateId), JsonSerializer.Serialize(SampleDocuments.Rich(plateId, "Rich", fixture.Clock.Now), JsonOptions.Default));
+        File.WriteAllText(fixture.Paths.GetPlatePath(plateId), "{ truncated");
+        Directory.CreateDirectory(Path.GetDirectoryName(fixture.Paths.RecoveryDirectory)!);
+        File.WriteAllText(fixture.Paths.RecoveryDirectory, "in the way");
+        var library = await fixture.LoadAsync();
+
+        var scan = await library.ScanAssetReferencesAsync();
+
+        Assert.False(scan.IsComplete);
+        Assert.Contains(SampleDocuments.ImageAsset, scan.ReferencedAssetIds);
+
+        // Once the damaged file is kept and replaced, the Plate on disk is the one in memory.
+        File.Delete(fixture.Paths.RecoveryDirectory);
+        await library.SavePlateDocumentAsync(library.OpenDocumentForEditing(plateId));
+        Assert.True((await library.ScanAssetReferencesAsync()).IsComplete);
     }
 
     [Fact]

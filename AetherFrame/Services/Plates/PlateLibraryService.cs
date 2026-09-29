@@ -1238,9 +1238,11 @@ internal sealed class PlateLibraryService
             var problems = new List<string>();
 
             List<PlateRecord> snapshot;
+            HashSet<string> unpreserved;
             lock (gate)
             {
                 snapshot = plates.Values.ToList();
+                unpreserved = new HashSet<string>(unpreservedFiles, StringComparer.OrdinalIgnoreCase);
             }
 
             foreach (var record in snapshot)
@@ -1258,19 +1260,30 @@ internal sealed class PlateLibraryService
             // What is in the Plates folder now, not only what was loaded: a Plate put back from the
             // trash by hand (the only restore there is yet) or a file whose name isn't a Plate's
             // (a "- Copy" made in Explorer) may reference images too. Conservatively every GUID
-            // string in such a file counts; one that can't be read leaves the scan incomplete.
+            // string in such a file counts; one that can't be read leaves the scan incomplete. So
+            // does a loaded Plate whose file on disk isn't what memory holds (read from its backup,
+            // or with bytes that aren't valid text) and still has no Recovery copy: that file may
+            // be the only copy of newer content.
             var loaded = snapshot.Select(r => r.Id).ToHashSet();
             foreach (var path in store.ListFiles(paths.PlatesDirectory, "*.json"))
             {
-                if (PlateStoragePaths.TryParsePlateFileName(path, out var fileId) && loaded.Contains(fileId))
+                if (PlateStoragePaths.TryParsePlateFileName(path, out var fileId) && loaded.Contains(fileId) && !unpreserved.Contains(path))
                 {
                     continue;
                 }
 
                 try
                 {
+                    // The file on disk is what counts: a second run is the store's backup copy,
+                    // which may be older, so a file only its backup can answer for is a problem.
+                    var runs = 0;
                     await store.ReadTextAsync(path, text =>
                     {
+                        if (++runs > 1)
+                        {
+                            throw new InvalidDataException("Only its backup copy could be read.");
+                        }
+
                         using var json = JsonDocument.Parse(text.Text);
                         AssetReferenceScanner.CollectAllGuidStrings(json.RootElement, referenced);
                     }).ConfigureAwait(false);
@@ -1531,8 +1544,18 @@ internal sealed class PlateLibraryService
         var path = paths.GetBindingPath(binding.ContentId);
         if (replacesDamaged)
         {
-            // Throws (aborting the write) if the damaged file can't be preserved first.
-            PreserveDamagedFile(path);
+            // Refuses the write if the damaged file can't be preserved first, with the same
+            // message as a file read from its backup (see PreserveBeforeOverwrite).
+            try
+            {
+                PreserveDamagedFile(path);
+            }
+            catch (Exception ex) when (!IsInterruption(ex))
+            {
+                log.Error(ex, $"AetherFrame did not write {LogPrivacy.FileName(path)}: a copy of its damaged content couldn't be kept in Recovery first.");
+                throw new PlateLibraryException(UnpreservedDamagedFileMessage);
+            }
+
             lock (gate)
             {
                 unreadableBindings.Remove(binding.ContentId);
@@ -1612,7 +1635,7 @@ internal sealed class PlateLibraryService
     private void KeepRecoveredFile(string path)
     {
         var fileName = LogPrivacy.FileName(path);
-        log.Warning($"AetherFrame found {fileName} damaged and read it from the backup copy instead; the damaged file is kept in Recovery.");
+        log.Warning($"AetherFrame found {fileName} damaged and read it from the backup copy instead.");
 
         try
         {
@@ -1620,6 +1643,7 @@ internal sealed class PlateLibraryService
             if (store.FileExists(path) && !store.FileExists(destination))
             {
                 store.CopyFile(path, destination);
+                log.Warning($"AetherFrame kept a copy of damaged file {fileName} in Recovery as {LogPrivacy.FileName(destination)}.");
             }
         }
         catch (Exception ex) when (!IsInterruption(ex))

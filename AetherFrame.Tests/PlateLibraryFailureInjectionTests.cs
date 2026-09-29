@@ -704,7 +704,8 @@ public class CreateHalfFailureTests
         var library = await fixture.LoadAsync();
 
         await Assert.ThrowsAsync<PlateLibraryException>(() => library.CreatePlateAsync(PlateStartingLayout.Blank, Characters.Alice));
-        await Assert.ThrowsAsync<IOException>(() => library.SetActivePlateAsync(Characters.Alice, library.GetOrderedPlates()[0].PlateId));
+        var refused = await Assert.ThrowsAsync<PlateLibraryException>(() => library.SetActivePlateAsync(Characters.Alice, library.GetOrderedPlates()[0].PlateId));
+        Assert.Equal(PlateLibraryService.UnpreservedDamagedFileMessage, refused.Message);
 
         Assert.Equal("not json at all", fixture.ReadBindingJson(Characters.Alice.ContentId));
         Assert.True(LibraryFiles.RecoveryIsEmpty(fixture.Paths));

@@ -57,6 +57,10 @@ public class DamagedFilePreservationTests
         var library = await fixture.LoadAsync();
         Assert.Equal(PlateStatus.Ready, library.FindPlate(plateId)!.Status);
 
+        // The log never claims a copy that doesn't exist.
+        Assert.DoesNotContain(fixture.Log.Messages, m => m.StartsWith("W ", StringComparison.Ordinal) && m.Contains("kept", StringComparison.Ordinal));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("could not keep a copy", StringComparison.Ordinal));
+
         Task Write() => operation == "save"
             ? library.SavePlateDocumentAsync(library.OpenDocumentForEditing(plateId))
             : library.RenamePlateAsync(plateId, "Renamed");

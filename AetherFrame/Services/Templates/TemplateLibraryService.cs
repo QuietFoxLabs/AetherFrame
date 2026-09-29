@@ -611,9 +611,11 @@ internal sealed class TemplateLibraryService
             }
 
             List<TemplateRecord> snapshot;
+            HashSet<string> unpreserved;
             lock (gate)
             {
                 snapshot = templates.Values.ToList();
+                unpreserved = new HashSet<string>(unpreservedFiles, StringComparer.OrdinalIgnoreCase);
             }
 
             foreach (var record in snapshot)
@@ -625,6 +627,41 @@ internal sealed class TemplateLibraryService
                 else
                 {
                     problems.Add($"Template {record.Id} is {record.Status}.");
+                }
+            }
+
+            // What is in the Templates folder now, as for Plates (see PlateLibraryService's scan): a
+            // Template put back from the trash by hand, a file whose name isn't a Template's, one
+            // using a built-in Template's id (never loaded), or a loaded one whose file isn't what
+            // memory holds and has no Recovery copy yet. Every GUID string in such a file counts;
+            // one that can't be read leaves the scan incomplete.
+            var loaded = snapshot.Select(r => r.Id).ToHashSet();
+            foreach (var path in store.ListFiles(paths.TemplatesDirectory, "*.json"))
+            {
+                if (PlateStoragePaths.TryParseTemplateFileName(path, out var fileId) && loaded.Contains(fileId) && !unpreserved.Contains(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    // As for Plates: a second run is the store's backup copy, which may be older.
+                    var runs = 0;
+                    await store.ReadTextAsync(path, text =>
+                    {
+                        if (++runs > 1)
+                        {
+                            throw new InvalidDataException("Only its backup copy could be read.");
+                        }
+
+                        using var json = JsonDocument.Parse(text.Text);
+                        AssetReferenceScanner.CollectAllGuidStrings(json.RootElement, referenced);
+                    }).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException and not OperationAbandonedException)
+                {
+                    log.Error(ex, $"AetherFrame could not read {Path.GetFileName(path)} in the Templates folder while scanning for image references.");
+                    problems.Add($"Template file {Path.GetFileName(path)} is unreadable ({ex.GetType().Name}).");
                 }
             }
 
