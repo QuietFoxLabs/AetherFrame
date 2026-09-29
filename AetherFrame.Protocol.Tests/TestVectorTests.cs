@@ -47,7 +47,7 @@ public class TestVectorTests
         var personas = fixture.Personas.ToDictionary(p => p.Name, p => PersonaId.Parse(p.PersonaId), StringComparer.Ordinal);
         foreach (var vector in fixture.Documents)
         {
-            var model = VectorBuilder.Models().Single(m => m.Name == vector.Name).Model;
+            var model = Assert.IsAssignableFrom<RemoteProfileDocument>(VectorBuilder.Models().Single(m => m.Name == vector.Name).Model);
             var profileId = model.ProfileId.ToString();
             Assert.Equal(profileId, vector.Snapshot?.ProfileId ?? vector.Retraction?.ProfileId ?? profileId);
             Assert.True(owners.TryGetValue(profileId, out var owner), $"{vector.Name}: {profileId} has no recorded owner");
@@ -55,7 +55,7 @@ public class TestVectorTests
 
             var document = vector.Document is null ? SignedDocumentCodec.Sign(model, TestPersonas.Create(TestPersonas.Scalar(fixture.Personas.Single(p => p.Name == vector.Persona).Label))) : Hex.Parse(vector.Document);
             var verified = SignedDocumentCodec.Verify(document);
-            Assert.Equal(new RemoteProfileKey(personas[owner], model.ProfileId), verified.Profile);
+            Assert.Equal(new RemoteProfileKey(personas[owner], model.ProfileId), ProtocolAssert.ProfileOf(verified));
         }
     }
 
@@ -75,8 +75,8 @@ public class TestVectorTests
             Assert.Equal(owners[vector.ProfileId], vector.Owner);
             Assert.NotEqual(vector.Owner, vector.Persona);
             Assert.Equal(personas[vector.Persona], verified.Persona);
-            Assert.Equal(new RemoteProfileKey(personas[vector.Persona], ProfileId.Parse(vector.ProfileId)), verified.Profile);
-            Assert.NotEqual(new RemoteProfileKey(personas[vector.Owner], ProfileId.Parse(vector.ProfileId)), verified.Profile);
+            Assert.Equal(new RemoteProfileKey(personas[vector.Persona], ProfileId.Parse(vector.ProfileId)), ProtocolAssert.ProfileOf(verified));
+            Assert.NotEqual(new RemoteProfileKey(personas[vector.Owner], ProfileId.Parse(vector.ProfileId)), ProtocolAssert.ProfileOf(verified));
             Assert.DoesNotContain(fixture.Documents, d => d.Document == vector.Document);
         }
     }
@@ -113,8 +113,8 @@ public class TestVectorTests
             var signer = PersonaId.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PersonaId);
             var profileId = ProfileId.Parse(vector.ProfileId);
             Assert.Equal(signer, verified.Persona);
-            Assert.Equal(new RemoteProfileKey(signer, profileId), verified.Profile);
-            Assert.NotEqual(new RemoteProfileKey(ownerA, profileId), verified.Profile);
+            Assert.Equal(new RemoteProfileKey(signer, profileId), ProtocolAssert.ProfileOf(verified));
+            Assert.NotEqual(new RemoteProfileKey(ownerA, profileId), ProtocolAssert.ProfileOf(verified));
             Assert.NotEqual(ownerA, verified.Persona);
         }
     }

@@ -112,3 +112,5 @@ Each increment needs its own approval, and none may cross a gate in DecisionRegi
 | 9 | Preview wiring in game | P2, K4 |
 | 10 | Wine, Proton and macOS measurements | K3, K8, K9 |
 | 11 | Acceptance and independent review | all of the above |
+
+`[updated 2026-09-29: increment 1 is implemented. N5 and L6 are APPROVED (Claude, under the owner's delegation of September 29, 2026) in DecisionRegister.md. The profile id moved to RemoteProfileDocument, and IPersonaKeyProvider and ProtocolLimits.FuturePolicy left the protocol. No signed byte and no committed vector changed, and nothing reaches the plugin.]`

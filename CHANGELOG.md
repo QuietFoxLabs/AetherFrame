@@ -15,6 +15,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 - The project moved to [QuietFoxLabs/AetherFrame](https://github.com/QuietFoxLabs/AetherFrame). The plugin's repository link and release downloads use that address, and so does the custom repository address for new installs ([docs/CustomRepository.md](docs/CustomRepository.md)). The old `richhiiee/AetherFrame` addresses still redirect, so a custom repository URL added earlier keeps working.
 - The release tooling accepts the address from before the move only as history: in the custom repository file published before it, and in packages up to 0.1.6. Everything it publishes uses the new address ([docs/CustomRepository.md](docs/CustomRepository.md#repository-move)).
+- The remote protocol's public API, which the plugin doesn't use yet (NETWORK1 increment 1; decisions N5 and L6 in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md)). Only documents about a profile carry a profile id now (`RemoteProfileDocument`), and a verified document's `Profile` is empty for any later document type that isn't about one. The provisional key provider and the server-only limits left the protocol: key storage is the plugin's concern, and those limits are documented in [docs/networking/NETWORK0.md](docs/networking/NETWORK0.md). No signed bytes changed.
 
 ### Fixed
 

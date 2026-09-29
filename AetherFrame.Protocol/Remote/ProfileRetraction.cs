@@ -14,7 +14,7 @@ namespace AetherFrame.Protocol.Remote;
 /// account. What a server does after a retraction is stated in the specification's server
 /// obligations. Validated on construction; immutable.
 /// </summary>
-public sealed class ProfileRetraction : RemoteDocument
+public sealed class ProfileRetraction : RemoteProfileDocument
 {
     /// <summary>The payload schema version this build reads and writes.</summary>
     public const ushort SchemaVersion = 1;
