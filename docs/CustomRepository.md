@@ -348,6 +348,20 @@ Why this address (checked 2026-09-27, against the live service):
 - **GitHub Pages** (`https://quietfoxlabs.github.io/AetherFrame/pluginmaster.json`) would serve `application/json` and needs Pages switched on and a deployment step: either Pages building from the branch, or a deployment job with `pages: write` and `id-token: write`. That is more moving parts, and it is no more reliable: it is the same GitHub, and it is tied to the same account and repository names. Only a custom domain, such as the branded address above, makes an address independent of GitHub.
 - **Permanence.** The address contains the owner name, the repository name and the branch name. Never rename any of them; don't rely on GitHub's redirects for this. The owner's move to QuietFoxLabs (above) is the one exception, and installations from the old address now depend on that redirect.
 
+## Repository move
+
+The source repository moved from `richhiiee/AetherFrame` to `QuietFoxLabs/AetherFrame` on 2026-09-29, after v0.1.6. GitHub now reports every release page and asset under the new address, and the configuration uses it. Two things still name the old one, and both are history:
+
+- **The file published before the move.** Its `RepoUrl` and download links use `https://github.com/richhiiee/AetherFrame`.
+- **Packages up to 0.1.6.** Their manifest's `RepoUrl` is the old address, and so is the tagged project's.
+
+`distribution/repository.json` records that history in three fields, set together or not at all: `previousSourceRepositoryUrl`, `previousDownloadUrlTemplate` (which must be a release download of that repository), and `previousAddressLastVersion`, the last version released there (`0.1.6`). The tooling accepts the old address in exactly two places:
+
+- **Reading the published file** (`plan-publication`, `prepare-publication`): its `RepoUrl` and download links may be the old address, for versions up to `previousAddressLastVersion`. The run reports it as `published address`.
+- **Checking a package** (`validate-package`, and each release a publication verifies): a package of `previousAddressLastVersion` or older may name the old address as its `RepoUrl`.
+
+Everything generated uses the current address. A new entry's `RepoUrl` is the configured `sourceRepositoryUrl`, never a package's, and its download links come from the current template, so the first publication after the move rewrites both. A file about to be published is checked without the allowance. A package of any later version must name the current address, and any third address is refused as before. Promoting or rolling back to v0.1.6 works, and the new file links its package at the new address, which GitHub serves.
+
 ## Protecting the repository
 
 None of this is set up yet: the repository has no rulesets and no branch protection, and the `custom-repository` environment doesn't exist. These are owner actions in the GitHub settings. The repository is public, so all of them are available on GitHub Free.

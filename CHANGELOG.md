@@ -14,6 +14,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 ### Changed
 
 - The project moved to [QuietFoxLabs/AetherFrame](https://github.com/QuietFoxLabs/AetherFrame). The plugin's repository link and release downloads use that address, and so does the custom repository address for new installs ([docs/CustomRepository.md](docs/CustomRepository.md)). The old `richhiiee/AetherFrame` addresses still redirect, so a custom repository URL added earlier keeps working.
+- The release tooling accepts the address from before the move only as history: in the custom repository file published before it, and in packages up to 0.1.6. Everything it publishes uses the new address ([docs/CustomRepository.md](docs/CustomRepository.md#repository-move)).
 
 ### Fixed
 
