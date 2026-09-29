@@ -132,11 +132,44 @@ public class DamagedFilePreservationTests
         Assert.Equal(PlateLibraryService.UnpreservedDamagedFileMessage, refused.Message);
         Assert.Equal(Damaged, File.ReadAllText(fixture.Paths.LibraryFile));
 
+        // The refused move isn't kept in memory, so the same move is made again.
         UnblockRecovery(fixture.Paths);
-        await library.MovePlateAsync(second, first, placeAfter: false);
+        await library.MovePlateAsync(first, second, placeAfter: false);
 
         Assert.Contains(Damaged, RecoveryContents(fixture.Paths));
-        Assert.Equal([second, first], fixture.ReadLibraryOrder());
+        Assert.Equal([first, second], fixture.ReadLibraryOrder());
+    }
+
+    /// <summary>
+    /// A refused order write leaves the order as it was, in memory too: otherwise the player sees
+    /// the move, and repeating it once space is freed is a no-op that never saves it.
+    /// </summary>
+    [Fact]
+    public async Task RefusedMove_LeavesTheOrderAsItWas_AndTheSameMoveLaterSavesIt()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var first = await SeedAsync(fixture);
+        var second = (await (await fixture.LoadAsync()).CreatePlateAsync(PlateStartingLayout.Blank, null, "Second")).PlateId;
+        File.WriteAllText(fixture.Paths.LibraryFile, Damaged);
+        BlockRecovery(fixture.Paths);
+        var library = await fixture.LoadAsync();
+        var shown = library.GetOrderedPlates().Select(p => p.PlateId).ToList();
+        var generation = library.Generation;
+
+        await Assert.ThrowsAsync<PlateLibraryException>(() => library.MovePlateAsync(shown[1], shown[0], placeAfter: false));
+
+        Assert.Equal(shown, library.GetOrderedPlates().Select(p => p.PlateId));
+        Assert.NotEqual(generation, library.Generation);
+        Assert.Equal(Damaged, File.ReadAllText(fixture.Paths.LibraryFile));
+
+        UnblockRecovery(fixture.Paths);
+        await library.MovePlateAsync(shown[1], shown[0], placeAfter: false);
+
+        Assert.Equal([shown[1], shown[0]], fixture.ReadLibraryOrder());
+        Assert.Contains(Damaged, RecoveryContents(fixture.Paths));
+        Assert.Equal([shown[1], shown[0]], (await fixture.LoadAsync()).GetOrderedPlates().Select(p => p.PlateId));
+        Assert.Equal(new[] { first, second }.Order(), shown.Order());
     }
 
     [Fact]

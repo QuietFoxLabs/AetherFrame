@@ -1040,15 +1040,21 @@ internal sealed class PlateLibraryService
             log.Information($"AetherFrame set Plate {plateId} Active for a character.");
         });
 
-    /// <summary>Moves a Plate next to another in the manual order and saves the order.</summary>
+    /// <summary>
+    /// Moves a Plate next to another in the manual order and saves the order. A failed or refused
+    /// write puts the previous order back, as every other operation only makes a change live once
+    /// its write succeeded: a move left in memory would make repeating it a no-op that saves nothing.
+    /// </summary>
     internal Task MovePlateAsync(Guid plateId, Guid targetPlateId, bool placeAfter) =>
         RunExclusiveAsync(async () =>
         {
             RequireLoaded();
 
             bool moved;
+            List<Guid> previous;
             lock (gate)
             {
+                previous = library.OrderedPlateIds.ToList();
                 moved = PlateOrdering.Move(library.OrderedPlateIds, plateId, targetPlateId, placeAfter);
                 if (moved)
                 {
@@ -1056,9 +1062,24 @@ internal sealed class PlateLibraryService
                 }
             }
 
-            if (moved)
+            if (!moved)
+            {
+                return;
+            }
+
+            try
             {
                 await WriteLibraryAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!IsInterruption(ex))
+            {
+                lock (gate)
+                {
+                    library.OrderedPlateIds = previous;
+                    Changed();
+                }
+
+                throw;
             }
         });
 
