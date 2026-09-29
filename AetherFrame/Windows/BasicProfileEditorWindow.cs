@@ -7,6 +7,10 @@ using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Theme;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -56,7 +60,6 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     private const string ResetLayoutPopupId = "Reset Basic Layout##AetherFrameResetBasicLayout";
 
     private static readonly Vector4 CustomizedColor = new(0.6f, 0.8f, 1f, 0.9f);
-    private static readonly Vector4 SubheadingColor = new(0.75f, 0.82f, 1f, 0.95f);
 
     private static readonly string[] PreviewZoomLabels = ["Fit", "150%", "200%"];
     private static readonly string[] PreviewZoomTooltips =
@@ -85,6 +88,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     // Preview: the same Clean Preview the Advanced editor's Preview shows.
     private readonly CleanPreviewPresenter cleanPreview;
+
+    // AetherFrame's style around this window's frame, and the tutorial's window policy.
+    private readonly AetherWindowChrome chrome = new();
 
     // Which category is shown, and the live view's zoom: view state only, never part of the Plate.
     private readonly BasicEditorNavigation navigation = new();
@@ -132,11 +138,14 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         this.openLibrary = openLibrary;
         this.surfaces = surfaces;
         backgroundPanel = new BackgroundStylePanel(editorSession, renderResources, OpenImageFileDialog);
-        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Basic, openLibrary, openAdvancedEditor);
+        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Basic, openLibrary, openAdvancedEditor, () => Help);
         this.keyboardShortcuts = keyboardShortcuts;
         closeGuard = new EditorCloseGuard(editorSession, commands);
         cleanPreview = new CleanPreviewPresenter(this, editorSession, profileService, renderResources, ImGuiWindowFlags.None);
     }
+
+    /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
+    internal HelpMenu? Help { get; set; }
 
     public void Dispose()
     {
@@ -150,9 +159,18 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     }
 
     /// <summary>Clean Preview's presentation (see <see cref="CleanPreviewPresenter"/>), or the editor's own.</summary>
-    public override void PreDraw() => cleanPreview.PreDraw();
+    public override void PreDraw()
+    {
+        chrome.PushStyle();
+        cleanPreview.PreDraw();
+        AetherWindowChrome.ApplyPolicy(this);
+    }
 
-    public override void PostDraw() => cleanPreview.PostDraw();
+    public override void PostDraw()
+    {
+        cleanPreview.PostDraw();
+        chrome.PopStyle();
+    }
 
     /// <inheritdoc/>
     public void Show()
@@ -356,6 +374,17 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// mouse, keyboard and gamepad navigation work as before; a status marker still sits at the
     /// right of any row that needs one.
     /// </summary>
+    /// <summary>The tutorial target of a category's row in the navigator or the strip.</summary>
+    private static TutorialTarget NavigatorTarget(BasicEditorCategory category) => category switch
+    {
+        BasicEditorCategory.Style => TutorialTarget.BasicNavigatorStyle,
+        BasicEditorCategory.Portrait => TutorialTarget.BasicNavigatorPortrait,
+        BasicEditorCategory.Identity => TutorialTarget.BasicNavigatorIdentity,
+        BasicEditorCategory.Details => TutorialTarget.BasicNavigatorDetails,
+        BasicEditorCategory.Message => TutorialTarget.BasicNavigatorMessage,
+        _ => TutorialTarget.None,
+    };
+
     private void DrawNavigator(ProfileDocument profile, Vector2 size)
     {
         var scale = ImGuiHelpers.GlobalScale;
@@ -367,6 +396,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             return;
         }
 
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.BasicNavigator);
         var padding = RailPadding * scale;
         var rowHeight = MathF.Round(ImGui.GetFrameHeight() * 1.45f);
         var rowWidth = Math.Max(1f, ImGui.GetContentRegionAvail().X - (padding * 2f));
@@ -387,6 +417,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 navigation.Select(category);
             }
 
+            TutorialAnchorMarks.Mark(NavigatorTarget(category));
             var min = ImGui.GetItemRectMin();
             var max = ImGui.GetItemRectMax();
             var hovered = ImGui.IsItemHovered();
@@ -419,6 +450,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         var style = ImGui.GetStyle();
         var available = ImGui.GetContentRegionAvail().X;
         var rowUsed = 0f;
+        var stripMin = ImGui.GetCursorScreenPos();
+        var stripMax = stripMin;
 
         foreach (var category in BasicEditorView.Categories)
         {
@@ -443,11 +476,14 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 navigation.Select(category);
             }
 
+            TutorialAnchorMarks.Mark(NavigatorTarget(category));
+            stripMax = Vector2.Max(stripMax, ImGui.GetItemRectMax());
             StatusTooltip(status);
             DrawStatusDot(status);
             rowUsed += width;
         }
 
+        TutorialAnchorMarks.MarkRect(TutorialTarget.BasicNavigator, stripMin, stripMax);
         ImGui.Spacing();
     }
 
@@ -521,16 +557,18 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             return;
         }
 
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.BasicInspector);
+
         if (withCategoryStrip)
         {
             DrawCategoryStrip(profile);
         }
 
         var category = navigation.Selected;
-        ImGui.TextColored(EditorWidgets.AccentColor, BasicEditorView.Title(category).ToUpperInvariant());
+        AetherControls.SectionHeader(BasicEditorView.Title(category), topSpacing: 0f);
         foreach (var line in BasicEditorView.SummaryOf(profile, category))
         {
-            ImGui.TextDisabled(line);
+            AetherControls.Secondary(line);
         }
 
         ImGui.Separator();
@@ -565,10 +603,15 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     }
 
     /// <summary>A small heading inside a category (not collapsible).</summary>
+    /// <summary>A group's label inside a category: the small label face in the accent, on one row so a Show toggle can follow it.</summary>
     private static void Subheading(string text)
     {
         ImGui.Spacing();
-        ImGui.TextColored(SubheadingColor, text);
+        using (AetherFonts.Label())
+        {
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(AetherPalette.Aether, text);
+        }
     }
 
     /// <summary>A field's name with its Show toggle at the right edge of the same row.</summary>
@@ -720,6 +763,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             return;
         }
 
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.BasicPreview);
+
         // Fit is measured against the visible area without scrollbars, so zoom levels are exact
         // multiples of the fitted size.
         var available = ImGui.GetContentRegionAvail();
@@ -785,6 +830,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         ImGui.TextDisabled("Live view");
         ImGui.SameLine();
 
+        var zoomMin = ImGui.GetCursorScreenPos();
         for (var i = 0; i < PreviewZoomLabels.Length; i++)
         {
             if (i > 0)
@@ -798,6 +844,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 navigation.Zoom = zoom;
             }
         }
+
+        TutorialAnchorMarks.MarkRect(TutorialTarget.BasicPreviewZoom, zoomMin, ImGui.GetItemRectMax());
     }
 
     private void DrawResetLayoutPopup()

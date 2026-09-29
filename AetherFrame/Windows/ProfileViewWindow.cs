@@ -5,6 +5,7 @@ using AetherFrame.Services;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
+using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -120,10 +121,14 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     {
     }
 
+    // AetherFrame's style around this window's frame, and the tutorial's window policy.
+    private readonly AetherWindowChrome chrome = new();
+
     public override void OnClose() => placement.EndDrag();
 
     public override void PreDraw()
     {
+        chrome.PushStyle();
         presenting = false;
         layout = null;
         content = target.Resolve(activePlates, library.GetSavedDocument, profileService.CurrentProfile);
@@ -150,6 +155,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
                 ImGui.PushStyleColor(ImGuiCol.WindowBg, CleanPreviewPresentation.BackgroundColor);
                 ImGui.PushStyleColor(ImGuiCol.ChildBg, CleanPreviewPresentation.BackgroundColor);
                 presenting = true;
+                AetherWindowChrome.ApplyPolicy(this);
                 return;
             }
         }
@@ -159,6 +165,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         ImGui.SetNextWindowPos(viewport.WorkPos + (viewport.WorkSize / 2f), ImGuiCond.Always, new Vector2(0.5f));
         Flags = MessageFlags;
         AllowBackgroundBlur = true;
+        AetherWindowChrome.ApplyPolicy(this);
     }
 
     public override void PostDraw()
@@ -169,6 +176,8 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             ImGui.PopStyleVar(2);
             presenting = false;
         }
+
+        chrome.PopStyle();
     }
 
     public override void Draw()

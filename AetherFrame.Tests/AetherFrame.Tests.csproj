@@ -49,6 +49,10 @@
          through the narrow interfaces in UI/Editor/EditorServices.cs, so they build here too. -->
     <Compile Include="..\AetherFrame\UI\Editor\*.cs" Link="Linked\UI\Editor\%(Filename)%(Extension)" />
     <Compile Include="..\AetherFrame\UI\Library\*.cs" Link="Linked\UI\Library\%(Filename)%(Extension)" />
+    <!-- The design tokens (colors, measurements) and the tutorial's progression, geometry and
+         preferences are plain logic: the ImGui side of both lives under Windows/ and stays out. -->
+    <Compile Include="..\AetherFrame\UI\Theme\*.cs" Link="Linked\UI\Theme\%(Filename)%(Extension)" />
+    <Compile Include="..\AetherFrame\UI\Tutorial\*.cs" Link="Linked\UI\Tutorial\%(Filename)%(Extension)" />
     <Compile Include="..\AetherFrame\UI\Rendering\ProfileRenderOptions.cs" Link="Linked\UI\Rendering\ProfileRenderOptions.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\ProfilePaintOrder.cs" Link="Linked\UI\Rendering\ProfilePaintOrder.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\ProfileVisualBounds.cs" Link="Linked\UI\Rendering\ProfileVisualBounds.cs" />

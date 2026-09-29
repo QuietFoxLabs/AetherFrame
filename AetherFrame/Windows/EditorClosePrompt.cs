@@ -43,7 +43,7 @@ internal static class EditorClosePrompt
         var buttonSize = new Vector2(110f * ImGuiHelpers.GlobalScale, 0f);
         using (ImRaii.Disabled(!guard.CanSave))
         {
-            if (ImGui.Button(guard.IsSaving ? "Saving..." : "Save", buttonSize))
+            if (AetherControls.PrimaryButton(guard.IsSaving ? "Saving..." : "Save", buttonSize))
             {
                 guard.Save();
                 ImGui.CloseCurrentPopup();
@@ -60,7 +60,7 @@ internal static class EditorClosePrompt
         ImGui.SameLine();
         using (ImRaii.Disabled(!guard.CanSave))
         {
-            if (ImGui.Button("Discard", buttonSize) && guard.Discard())
+            if (AetherControls.DangerButton("Discard", buttonSize) && guard.Discard())
             {
                 ImGui.CloseCurrentPopup();
                 close();
@@ -70,7 +70,7 @@ internal static class EditorClosePrompt
         EditorWidgets.Tooltip("Go back to the last saved version, then close.");
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", buttonSize))
+        if (AetherControls.GhostButton("Cancel", buttonSize))
         {
             guard.Cancel();
             ImGui.CloseCurrentPopup();

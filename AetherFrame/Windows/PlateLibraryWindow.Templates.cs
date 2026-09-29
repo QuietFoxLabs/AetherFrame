@@ -12,6 +12,8 @@ using AetherFrame.Services.Thumbnails;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Library;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Tutorial;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
@@ -445,8 +447,15 @@ internal sealed partial class PlateLibraryWindow
     /// preview surface in AetherFrame uses — on the right. Nothing is created until "Use Template"
     /// (or a double-click on a row) is confirmed.
     /// </summary>
+    /// <summary>Whether the Create Plate chooser was on screen this frame (the tutorial waits on it).</summary>
+    internal bool TemplateChooserShowing { get; private set; }
+
+    /// <summary>Whether Manage Templates is the view showing (the tutorial reads it, never sets it).</summary>
+    internal bool TemplatesViewShowing => activeView == LibraryView.Templates;
+
     private void DrawTemplateChooserPopup()
     {
+        TemplateChooserShowing = false;
         if (pendingTemplateChooserPopup)
         {
             ImGui.OpenPopup(TemplateChooserPopupId);
@@ -462,6 +471,9 @@ internal sealed partial class PlateLibraryWindow
         {
             return;
         }
+
+        TemplateChooserShowing = true;
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.LibraryTemplateChooser);
 
         // The selection can go stale without the chooser closing — e.g. Delete Template from a
         // row's own context menu. Fall back to the default rather than showing an empty selection.
