@@ -15,7 +15,8 @@ public sealed record AssemblyFacts(
     Machine Machine,
     PEMagic Magic,
     CorFlags CorFlags,
-    IReadOnlyList<AssemblyReferenceFact> References)
+    IReadOnlyList<AssemblyReferenceFact> References,
+    IReadOnlyList<string> TypeNamespaces)
 {
     public bool IsPe32Plus => Magic == PEMagic.PE32Plus;
 
@@ -66,6 +67,13 @@ public static class PluginAssemblyInspector
                 references.Add(new AssemblyReferenceFact(metadata.GetString(reference.Name), reference.Version));
             }
 
+            // Every namespace the DLL defines a type in, once each, in order.
+            var namespaces = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var handle in metadata.TypeDefinitions)
+            {
+                namespaces.Add(metadata.GetString(metadata.GetTypeDefinition(handle).Namespace));
+            }
+
             return new AssemblyFacts(
                 metadata.GetString(assembly.Name),
                 assembly.Version,
@@ -74,7 +82,8 @@ public static class PluginAssemblyInspector
                 headers.CoffHeader.Machine,
                 headers.PEHeader?.Magic ?? default,
                 corHeader.Flags,
-                references);
+                references,
+                new List<string>(namespaces));
         }
         catch (BadImageFormatException e)
         {

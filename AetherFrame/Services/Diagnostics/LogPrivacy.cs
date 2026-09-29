@@ -20,26 +20,69 @@ namespace AetherFrame.Services.Diagnostics;
 /// </list>
 /// Only files named by a number are affected: Plates, Templates and images are named by Guids, so
 /// every other file keeps its name.
+/// <para>
+/// The same pass hides the remote protocol's identifiers (docs/networking/NETWORK1.md, safeguard 7):
+/// a persona identity (<c>psn_</c> and 64 hex digits) and the profile, revision and asset ids
+/// (<c>prf_</c>, <c>rev_</c>, <c>ast_</c> and 32 hex digits). They are public values, but a log is
+/// pasted into public bug reports, and two mentions of one identity would let a reader link them,
+/// so a log shows their kind and never their value. Nothing in a player build produces one yet.
+/// </para>
 /// </summary>
 internal static partial class LogPrivacy
 {
     /// <summary>What a log shows instead of a character binding file's name.</summary>
     internal const string CharacterBindingFile = "[character binding file]";
 
+    /// <summary>What a log shows instead of a persona identity.</summary>
+    internal const string PersonaIdentity = "[persona id]";
+
+    /// <summary>What a log shows instead of a remote profile id.</summary>
+    internal const string ProfileIdentifier = "[profile id]";
+
+    /// <summary>What a log shows instead of a revision id.</summary>
+    internal const string RevisionIdentifier = "[revision id]";
+
+    /// <summary>What a log shows instead of an asset id.</summary>
+    internal const string AssetIdentifier = "[asset id]";
+
     /// <summary>The file name of <paramref name="path"/> as a log may show it.</summary>
     internal static string FileName(string path) => Redact(Path.GetFileName(path));
 
-    /// <summary><paramref name="text"/> with every file name made of a number replaced by <see cref="CharacterBindingFile"/>.</summary>
-    internal static string Redact(string text) => NumberNamedFile().Replace(text, CharacterBindingFile);
+    /// <summary>
+    /// <paramref name="text"/> with every file name made of a number replaced by
+    /// <see cref="CharacterBindingFile"/>, and every protocol identifier by the placeholder of its kind.
+    /// </summary>
+    internal static string Redact(string text) =>
+        NetworkIdentifier().Replace(NumberNamedFile().Replace(text, CharacterBindingFile), static match => match.Value[..3] switch
+        {
+            "psn" => PersonaIdentity,
+            "prf" => ProfileIdentifier,
+            "rev" => RevisionIdentifier,
+            _ => AssetIdentifier,
+        });
 
     /// <summary>
     /// The exception to log for <paramref name="exception"/>: itself when its text names no file
-    /// made of a number, otherwise a stand-in with its type name, message, inner exceptions and
-    /// stack trace, each redacted (see <see cref="Redact"/>).
+    /// made of a number and no protocol identifier, otherwise a stand-in with its type name,
+    /// message, inner exceptions and stack trace, each redacted (see <see cref="Redact"/>).
     /// </summary>
     [return: NotNullIfNotNull(nameof(exception))]
-    internal static Exception? ForLog(Exception? exception) =>
-        exception is null || !NumberNamedFile().IsMatch(exception.ToString()) ? exception : new RedactedException(exception);
+    internal static Exception? ForLog(Exception? exception)
+    {
+        if (exception is null)
+        {
+            return null;
+        }
+
+        var text = exception.ToString();
+        return NumberNamedFile().IsMatch(text) || NetworkIdentifier().IsMatch(text) ? new RedactedException(exception) : exception;
+    }
+
+    // The protocol's text forms exactly (docs/networking/ProtocolSpecification-v1.md): the prefix
+    // and the lowercase hex digits, as a whole word. Nothing shorter, longer or uppercase is one,
+    // and a prefix inside another word is left alone; one beside a hyphen, slash or bracket is hidden.
+    [GeneratedRegex(@"(?<!\w)(?:psn_[0-9a-f]{64}|(?:prf|rev|ast)_[0-9a-f]{32})(?!\w)", RegexOptions.CultureInvariant)]
+    private static partial Regex NetworkIdentifier();
 
     // A whole file name (nothing but a separator, quote, bracket, space or the start of the text
     // before it) whose stem is only digits, ending .json or .tmp after any further extensions: a
