@@ -1044,8 +1044,10 @@ internal sealed class PlateLibraryService
 
     /// <summary>
     /// Moves a Plate next to another in the manual order and saves the order. A failed or refused
-    /// write puts the previous order back, as every other operation only makes a change live once
-    /// its write succeeded: a move left in memory would make repeating it a no-op that saves nothing.
+    /// write puts the previous order back: a move left in memory would make repeating it a no-op
+    /// that saves nothing. (Create, Duplicate, Import and Delete keep their order change in memory
+    /// when only the order file fails: it follows a Plate that did change, and startup derives it
+    /// again.)
     /// </summary>
     internal Task MovePlateAsync(Guid plateId, Guid targetPlateId, bool placeAfter) =>
         RunExclusiveAsync(async () =>

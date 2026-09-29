@@ -22,7 +22,7 @@ namespace AetherFrame.Tests;
 /// Existing documents load exactly as they always have, whatever encoding their text is in. Every
 /// historical fixture (the pre-release shapes under <c>Fixtures/legacy</c> and every tagged
 /// release's installation), re-encoded with a byte order mark as UTF-8, UTF-16 (either byte order)
-/// or UTF-32, loads with the same status, names, migrated schema versions, character associations,
+/// or UTF-32 (either byte order), loads with the same status, names, migrated schema versions, character associations,
 /// Plate order and Templates as its ASCII original, and saves to the same bytes. A U+FFFD that a
 /// file encodes validly is ordinary text: it is read from the file itself, never from an older
 /// backup copy, and nothing is kept in Recovery, at load or at the next write. A version-1
@@ -44,7 +44,7 @@ public class VersionedDocumentEncodingTests
     /// <summary>The pre-release single-profile documents; each is loaded with the legacy binding and Template beside it.</summary>
     private static readonly string[] LegacyPlates = ["plate-unversioned-single-profile.json", "plate-v0-single-profile.json", "plate-v1-single-profile.json"];
 
-    private static readonly string[] ByteOrderMarkEncodings = ["utf8-bom", "utf16-bom", "utf16be-bom", "utf32-bom"];
+    private static readonly string[] ByteOrderMarkEncodings = ["utf8-bom", "utf16-bom", "utf16be-bom", "utf32-bom", "utf32be-bom"];
 
     public static TheoryData<string> Scenes => new(SceneNames());
 
@@ -133,6 +133,7 @@ public class VersionedDocumentEncodingTests
     [InlineData("utf16-bom", "replacement")]
     [InlineData("utf16be-bom", "replacement")]
     [InlineData("utf32-bom", "replacement")]
+    [InlineData("utf32be-bom", "replacement")]
     public async Task LegacyBinding_WithNonAsciiTextOrAByteOrderMark_IsBackedUpByteForByte_AndKeepsItsPlate(string encoding, string noteKind)
     {
         var note = noteKind switch
@@ -524,6 +525,7 @@ public class VersionedDocumentEncodingTests
             "utf16-bom" => new UnicodeEncoding(bigEndian: false, byteOrderMark: true),
             "utf16be-bom" => new UnicodeEncoding(bigEndian: true, byteOrderMark: true),
             "utf32-bom" => new UTF32Encoding(bigEndian: false, byteOrderMark: true),
+            "utf32be-bom" => new UTF32Encoding(bigEndian: true, byteOrderMark: true),
             _ => throw new ArgumentOutOfRangeException(nameof(encoding), encoding, "Unknown encoding."),
         };
         return [.. chosen.GetPreamble(), .. chosen.GetBytes(text)];
