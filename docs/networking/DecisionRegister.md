@@ -1,9 +1,9 @@
 # Networking decision register
 
-**Status (2026-09-29): two decisions are the owner's approvals, and two more are approved under the owner's delegation.**
+**Status (2026-09-29): two decisions are the owner's approvals, and six more are approved under the owner's delegation.**
 - **D3** is **APPROVED** by the owner.
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
-- **D9b** and **P2** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
+- **D9b**, **P2**, **K1**, **K2**, **K6** and **K7** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 
 **Every other product and architecture decision below is UNRESOLVED.**
 
@@ -82,6 +82,46 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 
 **Independent concurrence.** The same two reviews. The security reviewer **concurred** with this entry as recorded: no plugin source names the networking code or a key, signing or random-number API (ECDsa, RandomNumberGenerator, CngKey, NCrypt), so no path in a player build can create a key or a signed document; the boundary tests fail loudly when either CI variable is misnamed (a misnamed assembly variable falls back to the player DLL and fails the preview assertion, and a misnamed flavour variable runs the player assertions against the preview DLL); the README's statements that no account and no online service are needed stay literally true. Its notes were applied in the same change: the source scan resumes after `#else` inside a preview block, the plugin's own networking folders compile only in the preview flavour, and the package check refuses a DLL holding a protocol or persona type.
 
+### K1: the persona key algorithm. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Applied by the key store core (NETWORK1 increment 5, [NETWORK1_KeyStoreCore.md](NETWORK1_KeyStoreCore.md)). Keep P-256 ECDSA with P1363 signatures and low-S, as NETWORK0's approved signed bytes fix it: the key store holds P-256 private scalars and nothing else, and `PersonaKeyMaterial`'s managed checks stay the only way a scalar becomes a key.
+
+**Rationale.** The signed bytes are approved and every identity is derived from a P-256 public key, so another algorithm would change every identity and every document. Every platform measured creates, imports, signs and verifies P-256 (native Windows CNG, the windows-2022 runner, Linux OpenSSL: [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md), sections 1 and 2).
+
+**Not settled:** Wine, Proton and macOS, where NCrypt import fails from source and nothing has been run (K8).
+
+**Independent concurrence.** Recorded below once the security-focused review of the change has run.
+
+### K2: key storage on native Windows. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** The target for native Windows: DPAPI in CurrentUser scope with UI forbidden, its optional entropy derived from the envelope's header (so a blob is bound to its slot, its protector and its public key), in the plugin's own files under its configuration directory, one `.afkey` file per slot named by the slot alone; never `PluginConfiguration`, never Dalamud's reliable storage (which keeps copies the plugin cannot delete), never a persona identity in a name. What the key store core builds: the store (`ProtectedPersonaKeyStore`), the envelope (`AFPK` version 1), the two seams (`IPersonaKeyProtector`, `IPersonaKeyBlobStorage`) and the plugin's directory storage (`PersonaKeyFileStorage`, compiled only in the preview flavour, tested from the persona suite). What it does not build: the DPAPI protector itself, which is increment 7 and gets its own review under this entry. Until then no protector exists outside tests, and no key is written outside tests.
+
+**Rationale.** The recommendation and the Windows measurements ([NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md), sections 1 and 5): DPAPI in CurrentUser scope protects a copied key file against other accounts and other machines, and against nothing that runs as the same user, including other plugins in the game process; the register says so plainly and the plugin will too. The plugin's own files let it delete a key it no longer holds; reliable storage keeps copies it cannot. Binding the blob to the header costs nothing and stops a blob from being moved under another slot or key.
+
+**Not settled:** K3 (enabling by capability test), K9 (Wine and other platforms), the exact directory (increment 9's wiring), how the protector derives DPAPI's entropy from the header and what it reports as "locked on this account" (increment 7).
+
+**Independent concurrence.** Recorded below once the security-focused review of the change has run.
+
+### K6: key rotation. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** None in v1: a persona's key is its identity for its whole life. Migrating means creating a new persona, republishing under it, and retracting the old profiles with the old key (D1). The store therefore has no replace and no delete.
+
+**Rationale.** Rotation with continuity of identity needs a signed link between keys, a server that honours it and a protocol change; nothing in NETWORK1 needs any of that, and a new persona is cheap. Without rotation the store's contract stays small enough to verify: one key per slot, written once.
+
+**Not settled:** whether a later protocol version adds a signed successor link.
+
+**Independent concurrence.** Recorded below once the security-focused review of the change has run.
+
+### K7: where cryptographic implementations come from. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Platform implementations only: .NET's `ECDsa` and `RandomNumberGenerator` over the platform (CNG on Windows, OpenSSL on Linux), and the same platform's APIs called directly where .NET does not expose them (crypt32's DPAPI, increment 7). No third-party cryptography package, and no algorithm written in this repository: not signing, not key derivation, not encryption, not verification in production. The test fake protector implements nothing cryptographic and never ships. Neither our own code nor a dependency is chosen to keep the package at three files; either is a separate owner decision with its own review.
+
+**Rationale.** [NETWORK1.md](NETWORK1.md), safeguard 5, made binding.
+
+**Not settled:** K8 (a verification path that does not import through NCrypt, for Wine), which this entry does not allow by itself.
+
+**Independent concurrence.** Recorded below once the security-focused review of the change has run.
+
 ## Gates
 
 | Gate | Must be decided before |
@@ -110,11 +150,11 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 | N3 | Whether draft documents are distinguishable from final v1 in the signed bytes | Drafts use version 1 and the `…SignedDocument.v1` tag | A distinct draft version and tag until the freeze | **yes** | UNRESOLVED |
 | N5 | Whether the profile id stays on every `RemoteDocument` | It does | Move it to profile document types only, before NETWORK1 code depends on the API | no (public API) | UNRESOLVED |
 | L6 | Where the provisional `IPersonaKeyProvider` and `FuturePolicy` live | Both public, marked provisional | Remove the provider from the protocol (key storage is plugin policy); make the policy numbers internal or documentation only | no (public API) | UNRESOLVED |
-| K1 | Persona key algorithm | P-256 ECDSA, P1363, low-S (NETWORK0) | Keep it. Tested working on native Windows and native Linux. | no | UNRESOLVED |
-| K2 | Key storage on native Windows | Undefined | DPAPI, CurrentUser scope, UI forbidden, fixed purpose entropy, in the plugin's own files. Never through plugin configuration or Dalamud reliable storage. It works on Windows under both runtimes tested. | no | UNRESOLVED |
+| K1 | Persona key algorithm | P-256 ECDSA, P1363, low-S (NETWORK0); the key store core holds P-256 scalars only | Approved: keep it (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
+| K2 | Key storage on native Windows | The store core, the envelope and the directory storage exist behind a protector seam; no protector ships | Approved as the target: DPAPI, CurrentUser scope, UI forbidden, entropy from the envelope header, in the plugin's own files named by slot; never plugin configuration or Dalamud reliable storage. The DPAPI protector itself is increment 7 with its own review (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | K3 | Platform enablement policy | The architecture review first proposed disabling personas under Wine | Enable persona features only where a startup capability test of the full chain passes; never decide by operating system label; local features always unaffected; no product statement excluding non-Windows players (NETWORK1_CryptoCompatibility.md, section 6) | no | UNRESOLVED |
-| K6 | Key rotation | None | None in v1. Migrating means a new persona, republishing, and retracting the old profiles with the old key. | no | UNRESOLVED |
-| K7 | Where cryptographic implementations come from | Platform only (.NET over CNG/NCrypt) | Platform implementations only: .NET, or the same platform's APIs called directly. A third-party library or an algorithm in our own code is a separate owner decision with its own review, and is never chosen to keep the package at three files. | no | UNRESOLVED |
+| K6 | Key rotation | None; the store has no replace and no delete | Approved: none in v1. Migrating means a new persona, republishing, and retracting the old profiles with the old key (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
+| K7 | Where cryptographic implementations come from | Platform only (.NET over CNG/NCrypt) | Approved: platform implementations only, .NET or the same platform's APIs called directly. A third-party library or an algorithm in our own code is a separate owner decision with its own review, and is never chosen to keep the package at three files (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | P1 | Where "this Plate was published" is remembered | Undefined | A separate private index per persona, never in Plate JSON, character bindings, packages or logs | no | UNRESOLVED |
 | P2 | Who can create keys during NETWORK1 | Nobody yet: the preview flavour holds the code, no key store exists | Approved: preview builds only, by the compile-time switch `AetherFrameNetworkPreview`; player and official builds contain none of the networking code (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 
@@ -164,7 +204,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | Id | Item | Status |
 |---|---|---|
 | L2 | Conformance vectors thinner than the rule set (the large text limits live in unit tests only) | UNRESOLVED (NETWORK1, when a second implementation exists) |
-| L4 | A public-only key accepted by `EcdsaPersonaSigner` until first `Sign` | UNRESOLVED (key store design) |
+| L4 | A public-only key accepted by `EcdsaPersonaSigner` until first `Sign` | SETTLED for the key store core (September 29, 2026): `ProtectedPersonaKeyStore` makes every signer from checked material, which always holds the private half. The manager's public-key check stays, because the interface allows another store to differ |
 | L8 | Signing-context rules not yet in the specification | UNRESOLVED (before any second signing context) |
 | L9 | Whether protocol tests gate plugin releases (`release.yml`) as well as `build.yml` | UNRESOLVED. Its "Linux never ran" part is closed: the ubuntu leg has run green twice (NETWORK0.md, section 13). |
 | I3 | Photo metadata in local `.aetherframe` exports (existing local behaviour, not networking) | UNRESOLVED |

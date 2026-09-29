@@ -90,9 +90,28 @@ public readonly struct PersonaSlotId : IEquatable<PersonaSlotId>
     public override string ToString()
     {
         Span<byte> bytes = stackalloc byte[ByteLength];
-        BinaryPrimitives.WriteUInt64BigEndian(bytes, high);
-        BinaryPrimitives.WriteUInt64BigEndian(bytes.Slice(8), low);
+        WriteBytes(bytes);
         return Prefix + Convert.ToHexStringLower(bytes);
+    }
+
+    /// <summary>The 16 raw bytes, big-endian, for custody code that encodes the slot into its own format.</summary>
+    internal void WriteBytes(Span<byte> destination)
+    {
+        BinaryPrimitives.WriteUInt64BigEndian(destination, high);
+        BinaryPrimitives.WriteUInt64BigEndian(destination.Slice(8), low);
+    }
+
+    /// <summary>The slot for 16 raw bytes, or false when there are not exactly 16 or they are all zero.</summary>
+    internal static bool TryFromBytes(ReadOnlySpan<byte> bytes, out PersonaSlotId id)
+    {
+        id = default;
+        if (bytes.Length != ByteLength || bytes.IndexOfAnyExcept((byte)0) < 0)
+        {
+            return false;
+        }
+
+        id = new PersonaSlotId(BinaryPrimitives.ReadUInt64BigEndian(bytes), BinaryPrimitives.ReadUInt64BigEndian(bytes.Slice(8)));
+        return true;
     }
 
     /// <inheritdoc />

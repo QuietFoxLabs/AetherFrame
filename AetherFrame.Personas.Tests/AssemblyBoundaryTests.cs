@@ -107,10 +107,12 @@ public class AssemblyBoundaryTests
     [Fact]
     public void PublicSurface_ExposesNoPrivateKeyMaterial()
     {
-        // The only public members that produce bytes are the backup ones, and they produce a
-        // codec's protected container by contract. Nothing public returns a platform key, its
-        // parameters, or anything named for a private value.
-        var byteProducers = new[] { "ExportBackup", "Write" };
+        // The only public members that produce bytes are the backup ones, which produce a codec's
+        // protected container by contract, and the storage seams: a protector's blob (Protect), the
+        // envelope a storage holds (Read), and the one seam through which a scalar returns to the
+        // store from the platform's protection (Unprotect), which only custody code calls. Nothing
+        // public returns a platform key, its parameters, or anything named for a private value.
+        var byteProducers = new[] { "ExportBackup", "Write", "Protect", "Unprotect", "Read" };
         foreach (var type in Personas.GetExportedTypes())
         {
             Assert.True(type.IsEnum || type.IsInterface || type.IsSealed || type.IsAbstract, $"{type.Name} is neither sealed, static, abstract, an enum nor an interface");

@@ -26,6 +26,7 @@ enum AetherFrame.Personas.PersonaError
     const PersonaError BackupCannotBeOpened
     const PersonaError BackupMalformed
     const PersonaError BackupUnsupported
+    const PersonaError CustodyFailed
     const PersonaError DuplicateIdentity
     const PersonaError InvalidBackupInspection
     const PersonaError InvalidIdentifier
@@ -98,3 +99,16 @@ struct AetherFrame.Personas.PersonaSlotId
     const Int32 ByteLength
     const Int32 TextLength
     const String Prefix
+interface AetherFrame.Personas.Storage.IPersonaKeyBlobStorage
+    Byte[] Read(PersonaSlotId slot)
+    Void WriteNew(PersonaSlotId slot, ReadOnlySpan<Byte> blob)
+interface AetherFrame.Personas.Storage.IPersonaKeyProtector
+    Byte[] Protect(ReadOnlySpan<Byte> secret, ReadOnlySpan<Byte> context)
+    Byte[] Unprotect(ReadOnlySpan<Byte> blob, ReadOnlySpan<Byte> context)
+    String Id { get; }
+sealed class AetherFrame.Personas.Storage.ProtectedPersonaKeyStore
+    IPersonaSigner OpenSigner(PersonaSlotId slot)
+    PersonaKeyMaterial GenerateKey()
+    PersonaKeyMaterial OpenKey(PersonaSlotId slot)
+    Void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
+    new(IPersonaKeyBlobStorage storage, IPersonaKeyProtector protector, Action<String> report)
