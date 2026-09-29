@@ -37,6 +37,9 @@ public class PluginAssemblyBoundaryTests
     /// <summary>The namespaces the networking code lives in, whichever assembly compiles it.</summary>
     private static readonly string[] NetworkingNamespaces = ["AetherFrame.Protocol", "AetherFrame.Personas"];
 
+    /// <summary>The namespaces of the plugin's own networking folders, which a player build does not compile.</summary>
+    private static readonly string[] PluginNetworkingNamespaces = ["AetherFrame.Services.Network", "AetherFrame.Hosting.Network", "AetherFrame.Windows.Network"];
+
     /// <summary>What a plugin source outside the networking folders may never name.</summary>
     private static readonly string[] NetworkingNames = ["AetherFrame.Protocol", "AetherFrame.Personas", "Services.Network", "Hosting.Network", "Windows.Network"];
 
@@ -107,12 +110,12 @@ public class PluginAssemblyBoundaryTests
 
         using var pe = new PEReader(File.OpenRead(path));
         var metadata = pe.GetMetadataReader();
-        var networking = metadata.TypeDefinitions
+        var namespaces = metadata.TypeDefinitions
             .Select(handle => metadata.GetString(metadata.GetTypeDefinition(handle).Namespace))
-            .Where(ns => NetworkingNamespaces.Any(n => ns == n || ns.StartsWith(n + ".", StringComparison.Ordinal)))
             .Distinct()
             .OrderBy(ns => ns, StringComparer.Ordinal)
             .ToList();
+        var networking = namespaces.Where(ns => Within(ns, NetworkingNamespaces)).ToList();
 
         if (PreviewFlavour)
         {
@@ -122,8 +125,13 @@ public class PluginAssemblyBoundaryTests
         else
         {
             Assert.True(networking.Count == 0, "The player build holds: " + string.Join(", ", networking));
+            var folders = namespaces.Where(ns => Within(ns, PluginNetworkingNamespaces)).ToList();
+            Assert.True(folders.Count == 0, "The player build holds its networking folders' code: " + string.Join(", ", folders));
         }
     }
+
+    private static bool Within(string ns, string[] roots) =>
+        roots.Any(root => ns == root || ns.StartsWith(root + ".", StringComparison.Ordinal));
 
     [Fact]
     public void ThePluginConfiguration_HasNoPersonaMembers()
@@ -229,7 +237,8 @@ public class PluginAssemblyBoundaryTests
 /// of <c>#if !AETHERFRAME_NETWORK_PREVIEW</c>, are compiled only into the preview flavour and are
 /// not scanned. The <c>#else</c> and <c>#elif</c> branches of a preview block, every other
 /// conditional block, and a compound condition that merely mentions the symbol are scanned,
-/// however deeply the blocks nest. Comment lines are not scanned.
+/// however deeply the blocks nest. A source that defines or undefines the symbol itself is
+/// reported: only the build decides the flavour. Comment lines are not scanned.
 /// </summary>
 internal static class PlayerBuildSourceScan
 {
@@ -247,6 +256,12 @@ internal static class PlayerBuildSourceScan
             if (trimmed.StartsWith('#'))
             {
                 var directive = Directive(trimmed, out var condition);
+                if (directive is "define" or "undef" && condition == Symbol)
+                {
+                    offending.Add(lineNumber);
+                    continue;
+                }
+
                 if (directive == "if")
                 {
                     blocks.Push((condition == Symbol, condition == "!" + Symbol));
@@ -296,8 +311,8 @@ internal static class PlayerBuildSourceScan
             text = text[..comment];
         }
 
-        var space = text.IndexOf(' ');
-        condition = space < 0 ? string.Empty : text[(space + 1)..].Trim();
-        return space < 0 ? text.Trim() : text[..space];
+        var end = text.IndexOfAny([' ', '\t']);
+        condition = end < 0 ? string.Empty : text[(end + 1)..].Trim();
+        return end < 0 ? text.Trim() : text[..end];
     }
 }

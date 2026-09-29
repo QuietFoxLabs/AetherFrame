@@ -99,6 +99,52 @@ public class PlayerBuildSourceScanTests
     }
 
     [Fact]
+    public void KeepsSkippingTheElseOfANegatedBlockNestedInAPreviewBlock()
+    {
+        Assert.Empty(
+            Offending(
+                "#if AETHERFRAME_NETWORK_PREVIEW",
+                "#if !AETHERFRAME_NETWORK_PREVIEW",
+                "using AetherFrame.Personas;",
+                "#else",
+                "using AetherFrame.Personas;",
+                "#endif",
+                "#endif"));
+    }
+
+    [Fact]
+    public void ScansThroughStrayAndUnrelatedDirectives()
+    {
+        Assert.Equal(
+            new[] { 2, 4, 6 },
+            Offending(
+                "#else",
+                "using AetherFrame.Personas;",
+                "#region Local",
+                "using AetherFrame.Personas;",
+                "#pragma warning disable CS0000",
+                "using AetherFrame.Personas;",
+                "#endregion"));
+    }
+
+    [Fact]
+    public void ReportsASourceThatDefinesOrUndefinesTheSymbolItself()
+    {
+        Assert.Equal(
+            new[] { 1, 2 },
+            Offending(
+                "#define AETHERFRAME_NETWORK_PREVIEW",
+                "#undef AETHERFRAME_NETWORK_PREVIEW",
+                "#define DEBUG"));
+    }
+
+    [Fact]
+    public void RecognisesATabAfterTheDirective()
+    {
+        Assert.Empty(Offending("#if\tAETHERFRAME_NETWORK_PREVIEW", "using AetherFrame.Personas;", "#endif"));
+    }
+
+    [Fact]
     public void AllowsATrailingCommentOnTheDirective()
     {
         Assert.Equal(
