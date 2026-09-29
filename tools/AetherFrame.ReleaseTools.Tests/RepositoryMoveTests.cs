@@ -225,9 +225,19 @@ public class RepositoryMoveTests
         var entry = RepositoryGenerator.Build(config, null, package, true, DateTimeOffset.Parse("2026-09-27T23:58:31Z"));
         var text = Encoding.UTF8.GetString(RepositoryDocument.Serialize(new[] { entry }))
             .Replace(TestPackages.RepoUrl, Previous, StringComparison.Ordinal);
-        // Every source and download address is the old one; the icon's address is not a repository address.
-        Assert.DoesNotContain(TestPackages.RepoUrl, text);
-        return Encoding.UTF8.GetBytes(text);
+        var bytes = Encoding.UTF8.GetBytes(text);
+
+        // Every source and download address is the old one, so the history path is what the callers
+        // exercise. The icon's address, which names QuietFoxLabs, is not a repository address.
+        var written = RepositoryDocument.Parse(bytes, "published before the move").Single();
+        Assert.Equal(Previous, written.RepoUrl);
+        foreach (var link in new[] { written.DownloadLinkInstall, written.DownloadLinkUpdate, written.DownloadLinkTesting })
+        {
+            Assert.StartsWith(Previous + "/releases/download/", link);
+        }
+
+        Assert.DoesNotContain("QuietFoxLabs", text.Replace(TestPackages.IconUrl, string.Empty, StringComparison.Ordinal));
+        return bytes;
     }
 
     private static PackageReport Report(TempDirectory directory, string version, string repoUrl, RepositoryConfiguration config)
