@@ -74,7 +74,7 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 
 **Independent concurrence.** The change touches the ownership key a server uses, so a security-focused reviewer with no shared context examined it at `96deff5` (September 29, 2026) and **concurred**. Its findings:
 - The profile pair is still derived only from the verified key and the decoded payload.
-- No other assembly can derive a document type or construct a `VerifiedDocument`. It checked this by compiling against the built DLL.
+- No other assembly can derive a document type or construct a `VerifiedDocument`, apart from the unshipped test assembly, which the protocol opens its internals to. It checked this by compiling against the built DLL.
 - A null `Profile` fails closed: it doesn't compile where a key is expected, and it never compares equal to a real key.
 - No signed byte, codec, verification step or vector changed.
 
@@ -86,7 +86,7 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
   - `AetherFrame.Personas` (#23) already models that policy with `IPersonaKeyStore` and the manager's `TryOpenActiveSigner`, which returns a typed availability and a revocable lease. Nothing implemented or used the provider.
 - **The server limits.** `ProtocolLimits.FuturePolicy` is removed, and those limits become documentation only:
   - elements and Components per layout, processed image size, profiles per persona, active shares, and storage per persona;
-  - their values are recorded, unchanged, in NETWORK0.md, section 7 ("Resource limits"). The specification's server obligation 8 names the server-only limits and points there;
+  - their values are recorded, unchanged, in NETWORK0.md, section 7 ("Resource limits"). The specification's server obligation 8 names some of them (profiles per persona, storage per persona, active shares) and points there;
   - the protocol neither declares nor enforces them.
 - `ProtocolLimits` keeps every limit the codecs enforce, unchanged.
 
