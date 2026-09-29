@@ -19,29 +19,41 @@ public class ProfileOwnershipTests
         using var b = TestPersonas.CreateB();
 
         var published = SignedDocumentCodec.Verify(SignedDocumentCodec.Sign(Samples.Snapshot(), a));
-        Assert.Equal(new RemoteProfileKey(a.PublicKey.Id, Samples.Profile), published.Profile);
+        Assert.Equal(new RemoteProfileKey(a.PublicKey.Id, Samples.Profile), ProtocolAssert.ProfileOf(published));
 
         // B retracts, and republishes, the same profile id: those are B's own profile of that id,
         // unrelated to A's, so a server keyed by the pair touches nothing of A's.
         var retractedByB = SignedDocumentCodec.Verify(SignedDocumentCodec.Sign(new ProfileRetraction(Samples.Profile, Samples.IssuedAt), b));
         var republishedByB = SignedDocumentCodec.Verify(SignedDocumentCodec.Sign(Samples.Snapshot(), b));
-        Assert.Equal(new RemoteProfileKey(b.PublicKey.Id, Samples.Profile), retractedByB.Profile);
-        Assert.Equal(retractedByB.Profile, republishedByB.Profile);
-        Assert.NotEqual(published.Profile, retractedByB.Profile);
-        Assert.NotEqual(published.Profile, republishedByB.Profile);
+        Assert.Equal(new RemoteProfileKey(b.PublicKey.Id, Samples.Profile), ProtocolAssert.ProfileOf(retractedByB));
+        Assert.Equal(ProtocolAssert.ProfileOf(retractedByB), ProtocolAssert.ProfileOf(republishedByB));
+        Assert.NotEqual(ProtocolAssert.ProfileOf(published), ProtocolAssert.ProfileOf(retractedByB));
+        Assert.NotEqual(ProtocolAssert.ProfileOf(published), ProtocolAssert.ProfileOf(republishedByB));
 
         // A's own retraction names A's profile.
         var retractedByA = SignedDocumentCodec.Verify(SignedDocumentCodec.Sign(new ProfileRetraction(Samples.Profile, Samples.IssuedAt), a));
-        Assert.Equal(published.Profile, retractedByA.Profile);
+        Assert.Equal(ProtocolAssert.ProfileOf(published), ProtocolAssert.ProfileOf(retractedByA));
     }
 
     [Fact]
-    public void RemoteDocument_ExposesTheProfileIdOfEitherType()
+    public void RemoteProfileDocument_ExposesTheProfileIdOfEitherType()
     {
-        RemoteDocument snapshot = Samples.Snapshot();
-        RemoteDocument retraction = new ProfileRetraction(Samples.ProfileB, Samples.IssuedAt);
+        RemoteProfileDocument snapshot = Samples.Snapshot();
+        RemoteProfileDocument retraction = new ProfileRetraction(Samples.ProfileB, Samples.IssuedAt);
         Assert.Equal(Samples.Profile, snapshot.ProfileId);
         Assert.Equal(Samples.ProfileB, retraction.ProfileId);
+    }
+
+    [Fact]
+    public void ProfileId_BelongsToTheProfileDocumentTypesOnly()
+    {
+        // Decision N5 (docs/networking/DecisionRegister.md): a later document type that is not about
+        // a profile derives from RemoteDocument without one, so the base type carries no profile id,
+        // and every version 1 document type is a profile document.
+        Assert.Null(typeof(RemoteDocument).GetProperty(nameof(RemoteProfileDocument.ProfileId)));
+        Assert.True(typeof(RemoteProfileDocument).IsSubclassOf(typeof(RemoteDocument)));
+        Assert.True(typeof(ProfileSnapshot).IsSubclassOf(typeof(RemoteProfileDocument)));
+        Assert.True(typeof(ProfileRetraction).IsSubclassOf(typeof(RemoteProfileDocument)));
     }
 
     [Fact]

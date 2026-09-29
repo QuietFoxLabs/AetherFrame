@@ -1,8 +1,9 @@
 # Networking decision register
 
-**Status (2026-09-29): two decisions are the owner's approvals, and two more are approved under the owner's delegation.**
+**Status (2026-09-29): two decisions are the owner's approvals, and four more are approved under the owner's delegation.**
 - **D3** is **APPROVED** by the owner.
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
+- **N5** and **L6** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **D9b** and **P2** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 
 **Every other product and architecture decision below is UNRESOLVED.**
@@ -53,6 +54,55 @@ Approved by the owner, in these words:
 
 These are Claude's decisions under the owner's delegation of September 29, 2026, not the owner's own. The owner can overrule any of them in the Owner inbox, and the reversal is recorded here.
 
+### N5: the profile id belongs to profile documents only. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Applied by NETWORK1 increment 1, the protocol API tidy ([#32](https://github.com/QuietFoxLabs/AetherFrame/pull/32)).
+- `RemoteDocument` no longer has a `ProfileId`.
+- A new abstract `RemoteProfileDocument : RemoteDocument` carries it. `ProfileSnapshot` and `ProfileRetraction` derive from it. Its constructor is private protected, so the document hierarchy stays closed to other assemblies.
+- `VerifiedDocument.Profile` becomes `RemoteProfileKey?`:
+  - for a profile document, it is the (signing persona, profile id) pair, exactly as before;
+  - for a document that isn't about a profile, it is null. No such type exists in version 1, so it is never null today.
+- Signed bytes don't change. Payloads, signing inputs, the specification's wire format and the committed vectors are all unchanged: the vector tests pass against the committed `vectors-v1.json`.
+
+**Rationale.**
+- This is the recommendation of the NETWORK0 review. Request proofs, share grants and persona statements aren't about a profile. Leaving the id on every document would force a breaking change once NETWORK1 code depends on the API; making the change now costs only the public API list.
+- A nullable `Profile` makes every caller handle "no profile" when it compiles. An empty key instead could be stored or compared by mistake, and the profile pair is what a server keys ownership by.
+- An intermediate abstract class, rather than an interface, keeps the hierarchy closed: another assembly can't make its own type claim to be a profile document.
+
+**Not settled:**
+- which later document types exist (S1 request proofs, S4 persona revocation, share grants), and how each names its subject;
+- N1, the scope of revision and asset ids.
+
+**Independent concurrence.** The change touches the ownership key a server uses, so a security-focused reviewer with no shared context examined it at `96deff5` (September 29, 2026) and **concurred**. Its findings:
+- The profile pair is still derived only from the verified key and the decoded payload.
+- No other assembly can derive a document type or construct a `VerifiedDocument`, apart from the unshipped test assembly, which the protocol opens its internals to. It checked this by compiling against the built DLL.
+- A null `Profile` fails closed: it doesn't compile where a key is expected, and it never compares equal to a real key.
+- No signed byte, codec, verification step or vector changed.
+
+### L6: no key storage seam or server policy in the protocol. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Applied by the same change.
+- **The key provider.** `IPersonaKeyProvider`, and with it the `AetherFrame.Protocol.Integration` namespace, is removed from the protocol.
+  - Key storage and choosing the active persona are plugin policy. The protocol's only signing seam is `IPersonaSigner`.
+  - `AetherFrame.Personas` (#23) already models that policy with `IPersonaKeyStore` and the manager's `TryOpenActiveSigner`, which returns a typed availability and a revocable lease. Nothing implemented or used the provider.
+- **The server limits.** `ProtocolLimits.FuturePolicy` is removed, and those limits become documentation only:
+  - elements and Components per layout, processed image size, profiles per persona, active shares, and storage per persona;
+  - their values are recorded, unchanged, in NETWORK0.md, section 7 ("Resource limits"). The specification's server obligation 8 names some of them (profiles per persona, storage per persona, active shares) and points there;
+  - the protocol neither declares nor enforces them.
+- `ProtocolLimits` keeps every limit the codecs enforce, unchanged.
+
+**Rationale.**
+- It follows the register's recommendation for both parts.
+- The provider was a placeholder. Its synchronous single-signer getter can't express several personas (D3), an unavailable or locked key, prompting, or lease revocation. The persona foundation already replaces it on the plugin side.
+- Server policy compiled into callers as constants means an assembly built earlier keeps old numbers after the policy changes. Documentation keeps one home for the numbers without making them a protocol contract. The recommendation also allowed "internal", but internal constants nothing reads would be dead code.
+
+**Not settled:**
+- the key store's shape and storage (K2, K9, increment 5);
+- L4 (a public-only key accepted by the signer until its first `Sign`);
+- the limit values themselves, which a backend (G4) confirms and enforces with its own configuration.
+
+**Independent concurrence.** The same security-focused review concurred. Nothing referenced or enforced the provider or the limits, so removing them takes away no check or guarantee, and `IPersonaSigner` remains the only signing seam.
+
 ### D9b: how the protocol code ships in the plugin. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Applied by the plugin integration skeleton (NETWORK1 increment 3).
@@ -96,7 +146,7 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 
 ## 1. Decisions that must be approved before any persistent private key is created (G1)
 
-- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE).
+- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b and P2 (APPROVED, Claude, under the owner's delegation of September 29, 2026).
 - **Every other row in this table must still be approved** before a persistent private key is created outside tests.
 - **"D2 details"** has its own gate: before any `.afpersona` file is written or restored outside tests.
 - **Approved rows** state the approved option in the recommendation column.
@@ -108,8 +158,8 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 | D3 | How many personas an installation holds, and how one is chosen | Undefined | Approved: several independent personas; manual selection and switching; one active at a time for identity-dependent operations; never bound automatically to game identifiers; switching never alters saved Plates or triggers publishing (see "Approved decisions") | no | **APPROVED (2026-09-28)** |
 | D9b | How the protocol code ships in the plugin (fourth DLL or sources compiled in) | The preview flavour compiles the sources in; player builds compile none | Approved: the sources compiled into AetherFrame.dll, the package at three files, the standalone projects canonical, and only in the preview flavour (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | N3 | Whether draft documents are distinguishable from final v1 in the signed bytes | Drafts use version 1 and the `…SignedDocument.v1` tag | A distinct draft version and tag until the freeze | **yes** | UNRESOLVED |
-| N5 | Whether the profile id stays on every `RemoteDocument` | It does | Move it to profile document types only, before NETWORK1 code depends on the API | no (public API) | UNRESOLVED |
-| L6 | Where the provisional `IPersonaKeyProvider` and `FuturePolicy` live | Both public, marked provisional | Remove the provider from the protocol (key storage is plugin policy); make the policy numbers internal or documentation only | no (public API) | UNRESOLVED |
+| N5 | Whether the profile id stays on every `RemoteDocument` | It did, until the protocol API tidy | Approved: the profile id moves to a closed abstract `RemoteProfileDocument` that the snapshot and retraction derive from; `VerifiedDocument.Profile` is null for a document that isn't about a profile; no signed-byte change (see "Decisions approved under the delegation") | no (public API) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| L6 | Where the provisional `IPersonaKeyProvider` and `FuturePolicy` live | Both were public and marked provisional, until the protocol API tidy | Approved: both removed from the protocol. Key storage and the active persona are plugin policy (`AetherFrame.Personas`); the server-only limits are documentation only, in NETWORK0.md, section 7 (see "Decisions approved under the delegation") | no (public API) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K1 | Persona key algorithm | P-256 ECDSA, P1363, low-S (NETWORK0) | Keep it. Tested working on native Windows and native Linux. | no | UNRESOLVED |
 | K2 | Key storage on native Windows | Undefined | DPAPI, CurrentUser scope, UI forbidden, fixed purpose entropy, in the plugin's own files. Never through plugin configuration or Dalamud reliable storage. It works on Windows under both runtimes tested. | no | UNRESOLVED |
 | K3 | Platform enablement policy | The architecture review first proposed disabling personas under Wine | Enable persona features only where a startup capability test of the full chain passes; never decide by operating system label; local features always unaffected; no product statement excluding non-Windows players (NETWORK1_CryptoCompatibility.md, section 6) | no | UNRESOLVED |

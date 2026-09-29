@@ -4,8 +4,9 @@ namespace AetherFrame.Protocol;
 /// Every size limit of the remote protocol in one place (docs/networking/NETWORK0.md, "Resource
 /// limits"). The members of this class are enforced by the version 1 codecs on every document
 /// written and every document read. The limits that only a server can enforce, because they depend
-/// on state a document does not carry, are declared in <see cref="FuturePolicy"/> and enforced by
-/// nothing here.
+/// on state a document does not carry, are server policy, not protocol: they are documented in
+/// docs/networking/NETWORK0.md, "Resource limits", and nothing here declares or enforces them
+/// (decision L6, docs/networking/DecisionRegister.md).
 /// </summary>
 public static class ProtocolLimits
 {
@@ -54,40 +55,4 @@ public static class ProtocolLimits
     /// instant <see cref="System.DateTimeOffset"/> can represent. Timestamps are never negative.
     /// </summary>
     public const long MaxUnixSeconds = 253_402_300_799;
-
-    /// <summary>
-    /// Approved product limits that no version 1 document can enforce: they are server policy over
-    /// state a document does not carry (how many profiles a persona has published, how much it
-    /// stores), or they belong to the layout schema NETWORK1 will define. Declared here so the
-    /// numbers have one home; nothing in this assembly checks them.
-    ///
-    /// PROVISIONAL (review finding L6): these are policy, not protocol, and as constants they compile
-    /// into any caller, so a later change would not reach code built against an older assembly.
-    /// Whether they stay here, move to backend configuration or become documentation only is an
-    /// open decision (docs/networking/NETWORK0.md, "Open product decisions"); nothing should read
-    /// them as a contract before it is made.
-    /// </summary>
-    public static class FuturePolicy
-    {
-        /// <summary>The most elements a remote profile layout may hold. Reserved for the layout schema; no version 1 document carries elements.</summary>
-        public const int MaxElementsPerProfile = 256;
-
-        /// <summary>The most Components a remote profile layout may hold. Reserved for the layout schema; no version 1 document carries Components.</summary>
-        public const int MaxComponentsPerProfile = 32;
-
-        /// <summary>The largest width or height of the processed copy a server serves. The server downscales; a document never declares it.</summary>
-        public const int MaxProcessedImageDimension = 4096;
-
-        /// <summary>The most profiles one persona may publish. Server state.</summary>
-        public const int MaxProfilesPerPersona = 20;
-
-        /// <summary>The most shares one persona may keep active. Server state; sharing is not part of NETWORK0.</summary>
-        public const int MaxActiveShares = 10;
-
-        /// <summary>The storage a persona may use in total (250 MiB). Server accounting.</summary>
-        public const long PersonaStorageTargetBytes = 250L * 1024 * 1024;
-
-        /// <summary>The storage a persona may use in its first seven days (50 MiB). Server accounting.</summary>
-        public const long PersonaFirstWeekStorageTargetBytes = 50L * 1024 * 1024;
-    }
 }

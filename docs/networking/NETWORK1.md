@@ -1,14 +1,14 @@
 # NETWORK1: planned architecture boundaries
 
 **Status (2026-09-29): the boundaries are in force; the six systems are planned.**
-- Of this document, only the integration skeleton is implemented (increment 3: the preview flavour, the boundary tests and the log redaction). None of the six systems is.
+- Of this document, only the protocol API tidy (increment 1) and the integration skeleton (increment 3: the preview flavour, the boundary tests and the log redaction) are implemented. None of the six systems is.
 - No persona key exists.
 - Protocol Specification v1 is still a **DRAFT**.
 - The plugin still has no network code. A player build holds no `AetherFrame.Protocol` or `AetherFrame.Personas` type; only the networking preview flavour compiles them in (D9b, P2).
 - This document fixes *boundaries*, meaning what each part may and may not touch. It does not settle product decisions; those are recorded in [DecisionRegister.md](DecisionRegister.md). As of 2026-09-29:
   - **D3** (several independent personas, chosen manually) is **approved**, and this document follows it.
   - **D2** (encrypted, portable `.afpersona` backups; no plaintext key export) is **approved in principle**. Its technical details await security approval.
-  - **D9b** (the networking code ships as sources compiled into `AetherFrame.dll`) and **P2** (a compile-time preview flavour only) are **approved under the owner's delegation**.
+  - **N5** (the profile id belongs to profile documents only), **L6** (no key storage seam or server policy in the protocol), **D9b** (the networking code ships as sources compiled into `AetherFrame.dll`) and **P2** (a compile-time preview flavour only) are **approved under the owner's delegation**.
   - Every other decision is unresolved.
 - Platform findings are in [NETWORK1_CryptoCompatibility.md](NETWORK1_CryptoCompatibility.md). NETWORK0's approved behaviour is in [NETWORK0.md](NETWORK0.md) and [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md).
 
@@ -113,3 +113,5 @@ Each increment needs its own approval, and none may cross a gate in DecisionRegi
 | 9 | Preview wiring in game | P2, K4 |
 | 10 | Wine, Proton and macOS measurements | K3, K8, K9 |
 | 11 | Acceptance and independent review | all of the above |
+
+`[updated 2026-09-29: increment 1 is implemented. N5 and L6 are APPROVED (Claude, under the owner's delegation of September 29, 2026) in DecisionRegister.md. The profile id moved to RemoteProfileDocument, and IPersonaKeyProvider and ProtocolLimits.FuturePolicy left the protocol. No signed byte and no committed vector changed, and nothing reaches the plugin.]`
