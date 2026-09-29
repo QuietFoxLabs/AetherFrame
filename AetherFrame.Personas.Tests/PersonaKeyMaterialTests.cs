@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using System.Security.Cryptography;
+using AetherFrame.Protocol;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
 using Xunit;
@@ -99,8 +100,22 @@ public class PersonaKeyMaterialTests
         {
             Assert.Equal(SyntheticKeys.NegatedBasePoint, last.PublicKey);
             AssertHoldsScalar(last, SyntheticKeys.Fixed32(SyntheticKeys.Order - 1));
+            // The point of n - 1 is -G, so verification's u1·G + u2·Q collapses to (u1 - u2)·G: a
+            // degenerate case for a platform's combined multiplication. The windows-2022 runner's CNG
+            // produced a signature that did not verify once in four CI runs (#23 at 21ce00e); Windows
+            // 11 and OpenSSL never did. What holds everywhere is the codec's guarantee: a document
+            // comes out only if it verifies, and otherwise signing is refused as a mismatch.
             using var signer = last.CreateSigner();
-            Assert.Equal(last.PublicKey.Id, SignedDocumentCodec.Verify(Documents.SignedRetraction(signer)).Persona);
+            byte[]? signed = null;
+            var refused = Record.Exception(() => signed = Documents.SignedRetraction(signer));
+            if (refused is null)
+            {
+                Assert.Equal(last.PublicKey.Id, SignedDocumentCodec.Verify(signed).Persona);
+            }
+            else
+            {
+                Assert.Equal(ProtocolError.SignatureMismatch, Assert.IsType<ProtocolException>(refused).Error);
+            }
         }
     }
 
