@@ -5,7 +5,7 @@
 - No persona key exists.
 - Protocol Specification v1 is still a **DRAFT**.
 - The plugin still has no network code. A player build holds no `AetherFrame.Protocol` or `AetherFrame.Personas` type; only the networking preview flavour compiles them in (D9b, P2).
-- [NETWORK2.md](NETWORK2.md) (2026-09-29) plans the path from here to a two-player test, at the owner's priority. Increments 2, 4, 7, 8 and part of 9 continue inside it, and 6 and 10 come after it. Safeguard 1 (no network code) holds until NETWORK2's boundary amendment is decided and applied.
+- [NETWORK2.md](NETWORK2.md) (2026-09-29) plans the path from here to a two-player test, after the owner's request of that day. Increment 2 continues there as N2-2, 4 and 8 as N2-6, 7 as N2-4, and 9 across N2-5, N2-9 and N2-10; 6 and 10 come after it, and 11's acceptance happens at N2-11 and again after them. Safeguards 2 to 8 below hold throughout NETWORK2. Safeguard 1 (no network code) holds until NETWORK2's boundary amendment is decided (N2-1) and applied (N2-9).
 - This document fixes *boundaries*, meaning what each part may and may not touch. It does not settle product decisions; those are recorded in [DecisionRegister.md](DecisionRegister.md). As of 2026-09-29:
   - **D3** (several independent personas, chosen manually) is **approved**, and this document follows it.
   - **D2** (encrypted, portable `.afpersona` backups; no plaintext key export) is **approved in principle**. Its technical details await security approval.
