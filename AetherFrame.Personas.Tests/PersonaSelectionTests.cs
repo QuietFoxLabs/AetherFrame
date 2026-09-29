@@ -329,6 +329,36 @@ public class PersonaSelectionTests
     }
 
     [Fact]
+    public async Task AStoresSigner_IsDisposedUnderTheLock_SoTheStoreIsNeverCalledMeanwhile()
+    {
+        // The store and its signers are never called concurrently, disposal included: while a lease
+        // is disposing the store's signer, a create (which calls the store) waits for it.
+        using var world = new World();
+        var signers = new List<BlockingSigner>();
+        world.Store.SignerOverride = slot =>
+        {
+            var signer = new BlockingSigner(world.Store.Held(slot).CreateSigner()) { BlockDispose = true };
+            signers.Add(signer);
+            return signer;
+        };
+        world.Manager.Select(world.Main.Slot);
+        world.Manager.TryOpenActiveSigner(out var opened);
+        var signer = signers[^1];
+
+        var disposing = Task.Run(opened!.Dispose);
+        Assert.True(signer.DisposeEntered.Wait(TimeSpan.FromSeconds(10)));
+        var addsBefore = world.Store.CallsTo("AddKey");
+        var creating = Task.Run(() => world.Manager.Create("Meanwhile"));
+        Assert.NotSame(creating, await Task.WhenAny(creating, Task.Delay(300)));
+        Assert.Equal(addsBefore, world.Store.CallsTo("AddKey"));
+
+        signer.DisposeRelease.Set();
+        await disposing;
+        await creating;
+        Assert.Equal(addsBefore + 1, world.Store.CallsTo("AddKey"));
+    }
+
+    [Fact]
     public void TryOpenActiveSigner_DisposesAStoreSignerItRefuses()
     {
         using var world = new World();

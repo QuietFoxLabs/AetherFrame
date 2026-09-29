@@ -522,6 +522,13 @@ internal sealed class BlockingSigner : IPersonaSigner, IDisposable
 
     public bool DisposedWhileSigning { get; private set; }
 
+    /// <summary>When set, <see cref="Dispose"/> announces itself on <see cref="DisposeEntered"/> and waits for <see cref="DisposeRelease"/>.</summary>
+    public bool BlockDispose { get; init; }
+
+    public ManualResetEventSlim DisposeEntered { get; } = new();
+
+    public ManualResetEventSlim DisposeRelease { get; } = new();
+
     public PersonaPublicKey PublicKey => inner.PublicKey;
 
     public ProtocolSignature Sign(SigningInput input)
@@ -544,6 +551,15 @@ internal sealed class BlockingSigner : IPersonaSigner, IDisposable
     {
         DisposedWhileSigning |= Volatile.Read(ref signing) != 0;
         Events.Enqueue("dispose");
+        if (BlockDispose)
+        {
+            DisposeEntered.Set();
+            if (!DisposeRelease.Wait(TimeSpan.FromSeconds(20)))
+            {
+                throw new TimeoutException("The test never released the disposal.");
+            }
+        }
+
         inner.Dispose();
     }
 }
