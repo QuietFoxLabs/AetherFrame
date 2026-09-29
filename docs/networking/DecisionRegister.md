@@ -1,11 +1,12 @@
 # Networking decision register
 
-**Status (2026-09-29): two decisions are the owner's approvals, and eight more are approved under the owner's delegation.**
+**Status (2026-09-29): two decisions are the owner's approvals, and twenty-two more are approved under the owner's delegation.**
 - **D3** is **APPROVED** by the owner.
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
 - **N5** and **L6** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **D9b** and **P2** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **K1**, **K2**, **K6** and **K7** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
+- **N3**, **D4**, **D5**, **D8**, **D9a**, **I1**, **N1**, **N7**, **P1**, **K3**, **K4**, and the new **R1**, **R2** and **R3**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decision batch A for NETWORK2".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
 
 **Every other product and architecture decision below is UNRESOLVED.**
@@ -196,6 +197,260 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 
 **Independent concurrence.** The same security-focused review **concurred**: platform `ECDsa` and random numbers, with crypt32 called directly for DPAPI (so no `ProtectedData` package is added), satisfy AUTOPILOT.md's rule against custom cryptography. It asked for the exemption of the existing managed validation checks, now stated above.
 
+### Decision batch A for NETWORK2 (N2-1), September 29, 2026
+
+The entries below were decided together for [NETWORK2.md](NETWORK2.md)'s increments. They are researched against the primary sources cited in each and recorded here before any code depends on them. None changes bytes by itself: N3 and D4 are applied by N2-2, and D5's wording by N2-3. Both increments change signed bytes, which the owner approved in advance on conditions (see "Approved decisions").
+
+### N3: draft documents are marked in the signed bytes. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Applied by N2-2. Until the owner freezes version 1, every document the library writes or accepts is a draft, marked in two places:
+- **The envelope and the signing input** carry `protocolVersion` = `0x8001` (32,769) instead of `1`. The high bit marks a draft, and the low fifteen bits name the version it drafts.
+- **The signing input's tag** is `AetherFrame.Protocol.SignedDocument.v1-draft` (44 ASCII bytes, length byte `0x2c`) instead of `…SignedDocument.v1`.
+
+**Readers and later changes:**
+- A draft-period reader accepts only `0x8001`, and refuses `1` as `UnsupportedVersion`. At the freeze the library accepts only `1` with the `v1` tag and refuses `0x8001`. No reader ever accepts both.
+- **The persona identity derivation (`PersonaId.v1`) does not change.** An identity is a hash of a public key, not a signature, so a persona made during the draft period keeps its identity after the freeze; only its documents must be signed again.
+- Every later signing context, starting with N2-3's request proof, carries a draft marker in its own tag in the same way.
+- N2-2 regenerates the vectors and updates the specification, the reference implementation in the tests, and the independent checker, all together.
+
+**Rationale.** The two marks do different jobs:
+- **The version number makes a mismatch fail early and plainly.** A reader stops at step 3 of the specification's section 7.2 with `UnsupportedVersion`, before any cryptography, instead of reporting `SignatureMismatch`.
+- **The tag separates the signature domains.** Even a reader misconfigured to accept the draft number could never verify a draft signature as a final one, because the digest differs. This is the rule the specification's section 10 already sets for new versions.
+
+The two-player test's server accepts drafts. After the freeze, no document signed during testing can be presented as a version 1 document.
+
+**Not settled:**
+- the freeze itself, which is the owner's alone;
+- whether a later draft revision needs a number of its own. Schema versions already separate payload layouts inside one envelope version.
+
+### D4: the rule for a remote Plate's `name`. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Applied by N2-2 to schema 1's `name`, and by N2-3 to schema 2's. A `name` is valid when all of these hold:
+- it is **1 to 64 Unicode scalar values** and **at most 256 bytes** of UTF-8;
+- it contains none of these code points:
+  - the C0 controls U+0000 to U+001F, U+007F, and the C1 controls U+0080 to U+009F (General_Category Cc in the Unicode Character Database);
+  - U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR;
+  - U+FEFF;
+  - the twelve directional formatting characters of [UAX #9](https://www.unicode.org/reports/tr9/) (revision 52, Unicode 18.0): U+061C, U+200E, U+200F, U+202A to U+202E, and U+2066 to U+2069.
+
+**Nothing is normalized**, as for every protocol text (specification, section 2.3).
+
+**Errors, in the specification's reading order (section 9.1):**
+- an empty name is `InvalidLength` as soon as its length is read;
+- a byte length over 256, or more than 64 scalars, is `LimitExceeded`;
+- a refused code point is `InvalidText`.
+
+The rule governs `name` only. Other texts are schema 2's (N2-3), and N7 governs how every text is displayed.
+
+**The local Plate name is never altered to fit.** `PlateNaming` already turns control and format characters into spaces and caps a name at 64 UTF-16 units. So only U+2028, U+2029 or an unpaired surrogate can make a local name fail this rule. The publish flow then refuses, asking the player to rename. Local naming, files and packages are unchanged.
+
+**Rationale.**
+- A Plate's name is what a viewer reads first, in lists and in logs. Control and directional characters let a name hide text or display it reversed: the "Trojan Source" technique, CVE-2021-42574.
+- The limits keep a name to a line.
+- Refusing is better than normalizing, which would change signed bytes after the fact.
+- The recommended list is kept exactly, and verified against UAX #9's table of directional formatting characters.
+
+**Not settled:**
+- confusable names ([UTS #39](https://www.unicode.org/reports/tr39/)), which a first test does not need;
+- persona names, which do not exist (D9a).
+
+### D5: an image digest covers the prepared copy. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** An `ImageReference`'s `sha256`, `format`, `byteLength`, `width` and `height` describe the **prepared copy** the client uploads, never the player's original file:
+- **How a copy is prepared.** The publisher decodes the managed copy the Plate already uses and encodes the pixels again, through Dalamud's texture pipeline (`GetRawImageAsync` and `SaveToStreamAsync`), with no new dependency. The result is PNG, or JPEG for a JPEG source; N2-6 sets the encoder parameters.
+- **What that drops.** Rebuilding the container drops every metadata block: EXIF, including GPS position; XMP; PNG text chunks; embedded ICC profiles; thumbnails.
+- **What the publisher never touches.** It reads only the managed copy. It never touches the player's original file, and never puts the original's bytes or digest into a document.
+
+The server verifies received bytes against the declaration before serving them (specification, section 13, rule 7). Whether it also processes them again is I2 (batch B).
+
+N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the source image bytes" to the prepared copy. That is wording only: there is no salt, and the layout doesn't change.
+
+**Rationale.**
+- A digest of the original would let anyone holding the original file confirm which persona published it.
+- The original's metadata can carry a location, a device and an editing history.
+- Rebuilding the container is the only reliable way to drop every kind of metadata.
+- The consent screen shows the prepared copy, so the player sees what is sent.
+
+**Not settled:**
+- I2;
+- the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result).
+
+### D8: no metadata-only snapshot reaches players. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Schema 1 of `ProfileSnapshot` (a name and image references) stays a test schema:
+- the plugin never builds one to publish;
+- the server (N2-7) refuses to publish one;
+- the library keeps reading it, and its vectors stay, apart from N3's marker.
+
+The first schema players publish is schema 2, with the layout (N2-3).
+
+**Rationale.** A Plate without its layout is not what the owner means by showing a Plate. Publishing one would put documents into the world that no viewer can show properly and that would later need retracting.
+
+**Not settled:** nothing further.
+
+### D9a: a persona's label is private. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** A persona's label lives only in the persona registry on the player's computer, and nowhere else:
+- no document, request, share code or server record;
+- no log.
+
+The protocol has no persona display name; what others see is the Plate's own content. The provisional `PersonaLabel` of #23 becomes this decision's implementation. A public persona name, if one is ever wanted, would be a per-snapshot field decided on its own.
+
+**Rationale.** D3 keeps personas independent. A label such as "Main, Aria on Twintania" would tie a persona to a character the moment it was published.
+
+**Not settled:** a public name (stage 2 at the earliest).
+
+### I1: which images can be shared. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Publishing takes the images a Plate already holds as managed copies. Those are PNG, JPEG or WebP, whatever local import accepted through Dalamud's decoders (`ImageFormatSupport`). It shares only their prepared copies (D5), which are:
+- 8-bit RGB or RGBA;
+- the **first frame** of an animated image;
+- at most 8,192 pixels a side and 20,000,000 pixels in all;
+- at most 8 MiB each.
+
+The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is refused with a message; nothing is downscaled silently.** The consent screen shows the prepared copies, so a first frame instead of an animation, or colours after conversion, are visible before anything leaves.
+
+**Deviation from the recommendation.** It proposed refusing animated WebP and CMYK JPEG. Preparation encodes the pixels again, so neither reaches a viewer in its original form, and the viewer only ever decodes 8-bit PNG or JPEG. Refusing them would only turn away images the player already uses locally, while the risk the recommendation guarded against (what a viewer must decode) is covered.
+
+**Rationale.**
+- The specification's limits (section 8.2) already bound the decoded size.
+- Showing the prepared copy makes the player's consent informed.
+- One rule for all animations is simpler than one per format.
+
+**Not settled:** I2, and schema 2's count limit.
+
+### N1: identifier scope. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Every identifier is scoped to a persona:
+- **Revision ids** are scoped to (persona, profile id): the uniqueness in the specification's section 13, rule 4, is checked within that pair only.
+- **Asset ids and image digests** are scoped to the persona. A server:
+  - stores and serves an asset under (persona, asset id);
+  - never deduplicates or compares digests across personas;
+  - never answers whether another persona holds an asset or a digest.
+- **Profile ids** are already scoped (specification, section 8.4).
+- **The client** picks every identifier from a cryptographically secure generator (specification, section 2.6) and never reuses one across personas.
+
+**Rationale.** Deduplicating across personas would let one persona probe whether another holds an image (upload a digest and see whether it is already stored), or reference or overwrite another's asset. Scoping costs only storage. N2-7 applies it, and the specification's section 13 loses its "open" paragraph in N2-3.
+
+**Not settled:** nothing further.
+
+### N7: names and texts are plain text. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Every consumer of a document treats every text in it (the name, and every text of schema 2) as plain text. Consumers are the plugin's viewer, the server, logs and any tool. A text is never interpreted as any of these:
+- markup, or a format string;
+- a game text command, a chat macro or an `SeString` payload;
+- a path, a URL or a command.
+
+How texts are handled:
+- **Display.** Texts are drawn through calls that don't format their argument, and are never auto-linked.
+- **Logs.** Texts are logged only through the plugin's redacting log, with a length bound.
+- **The server.** It never puts a text into HTML without escaping it, and in stage 1 it serves no HTML page of a Plate at all.
+
+N2-3 writes this into the specification as a consumer obligation.
+
+**Rationale.** Texts come from other players. Format strings, game text payloads and HTML are the usual ways plain text turns into behaviour.
+
+**Not settled:** nothing further.
+
+### P1: where "this Plate was published" is remembered. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** A **publication index**, one per persona, in the plugin's own files under its networking directory. For each published profile it records:
+- the local Plate's id;
+- the profile id;
+- the latest revision id;
+- the share code;
+- the time of the last publish.
+
+**Where it never appears.** Never in Plate JSON, character bindings, `.aetherframe` packages, Templates or the plugin configuration. Profile ids and share codes are never logged in the clear (the log redaction of NETWORK1's safeguard 7).
+
+**Deleting or renaming a Plate never publishes or unpublishes anything by itself.** The sharing view lists published profiles whose Plate is gone and offers to unpublish them. Losing the index loses no Plate. It does lose the local list of what was published: a signed request that lets the server list a persona's profiles is batch B's to decide.
+
+**Rationale.** Plate JSON travels: export, Duplicate and Save as Template copy it, including unknown fields. Publication state stored there would leak into copies and packages (NETWORK1.md, system 4).
+
+**Not settled:** recovering the list from the server (batch B).
+
+### K3: where persona features turn on. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Persona features (creating, opening or using a key, and publishing) turn on for a session only when both of these hold:
+1. **A capability probe passes.** Once per session, off the framework thread, the probe runs the exact chain the plugin uses, with a throwaway key and never a persona key:
+   - generate, export, and import through `PersonaKeyMaterial`'s checks;
+   - sign, and verify through the protocol;
+   - protect and unprotect through the protector, with an envelope header as context;
+   - write and read the key file storage in a temporary directory.
+2. **The protector in use claims protection on this platform.** The DPAPI protector (N2-4) claims it only on native Windows. Under Wine, DPAPI is obfuscation only (NETWORK1_CryptoCompatibility.md, section 3), so it claims none there, and persona features stay off until K9 decides a store for that case.
+
+**Deciding by capability, not by name.** Which operations work is decided by the probe, never by the operating system's name. The one platform fact used is the protector's own statement about protection, which no probe can measure.
+
+**When either condition fails:**
+- persona features are off for the session, with one message naming the missing capability, distinct from a protocol refusal;
+- **viewing** a shared Plate needs no persona, and turns on whenever the probe's verification step passes (K8 decides a verification path where it doesn't);
+- every local feature stays on;
+- nothing states that players on other systems are excluded; the message says the feature isn't available on this system yet.
+
+**Rationale.** This is the recommendation (NETWORK1_CryptoCompatibility.md, section 6), plus the one gap it left: a probe tests function, not protection. A store that only obfuscates must not be offered as protection (section 5).
+
+**Not settled:** K8, K9, macOS.
+
+### K4: what comes before a persona's first real publish. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Before a persona's first publish to a real server, the player either has an encrypted backup of it, or explicitly acknowledges, for that persona, the following. Losing its key means never being able to update or unpublish what it published, and no account exists to recover it.
+
+**In NETWORK2's first stage there is no backup,** so the acknowledgement is required:
+- it is a separate confirmation with that text;
+- it is recorded per persona in the persona registry, and asked once per persona;
+- it is repeated in the persona window whenever a persona is created.
+
+Once the backup exists (stage 2), the first publish offers the backup first and the acknowledgement as the alternative.
+
+**Rationale.** Without the key nothing can be retracted: that is D2's premise. The player has to know it before content leaves the computer.
+
+**Not settled:** the backup (the D2 details, K5).
+
+### R1: how a viewer finds a Plate in the first test. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** **Share codes.**
+- The server issues one random code per published profile (persona, profile id) and returns it only to the publisher.
+- Anyone holding the code can view that profile's latest revision until it is unpublished.
+- In stage 1 the code is the only way to reach a profile. There is no directory, search, listing or enumeration, and no lookup by persona, character, World or anything else.
+- A code binds nothing to a character.
+
+**Left to batch B:** the code's format and length, with at least 64 bits from a cryptographically secure generator, and rate limits on lookups.
+
+**Target lookup** (by targeting a character in game) is stage 2, with its own privacy decision and an opt-in binding.
+
+**Rationale.** Sharing that the publisher starts deliberately and the viewer opens explicitly, with no character binding (ROADMAP.md, section 4, rule 8). A code is a capability in the sense of the W3C TAG's [Good Practices for Capability URLs](https://www.w3.org/TR/capability-urls/). Anyone who has it can use it, so it leaks the way a link does, and unpublishing revokes it.
+
+**Not settled:** the format, the length and the rate limits (batch B); target lookup (stage 2).
+
+### R2: the transport. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Applied by N2-9 and N2-7.
+- **HTTPS only**, to one DNS hostname fixed in the preview build (set in N2-8):
+  - the certificate is validated normally, never disabled or pinned to a self-signed one;
+  - there is no plain HTTP, no user-entered server address, and redirects are not followed.
+- **The client stack.** .NET's `HttpClient` over `SocketsHttpHandler`, with Dalamud's `Dalamud.Networking.Http.HappyEyeballsCallback` as its connect callback for dual-stack connections (Dalamud v9 and later). Timeouts are explicit, response sizes are bounded, and every call runs off the framework thread.
+- **Traffic only on a player's action:** publish, unpublish, open a code, refresh. No polling, no background traffic, no telemetry.
+- **Request and response bodies.** Requests carry the signed documents' exact bytes and the prepared image bytes. Responses are small JSON objects with closed schemas, parsed strictly with bounded sizes.
+- **Version checks.** Every request names the plugin's version, so the server can refuse an outdated client with a clear message.
+- **No cookies and no accounts.** Identity comes only from signatures (specification, section 13, rule 2).
+
+**Rationale.** Dalamud requires HTTPS with a certificate from a trusted authority, and a DNS hostname rather than an IP address. It recommends dual-stack support and version checks ([Plugin Technical Considerations](https://dalamud.dev/plugin-development/technical-considerations/), [What's New in Dalamud v9](https://dalamud.dev/versions/v9/)). A fixed hostname means no one can point a player's plugin at a hostile server.
+
+**Not settled:** the hostname (N2-8), and the server's endpoints (N2-7).
+
+### R3: where network code may live. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Only one place may use a networking API:
+- **The preview flavour, only under `Services/Network`,** may use `System.Net.Http` and Dalamud's `HappyEyeballsCallback`. Nothing else in the plugin may.
+- **Refused everywhere:** `System.Net.Sockets`, `System.Net.WebSockets`, and every other networking API.
+- **The player flavour** contains no networking API at all, as today.
+
+The boundary tests change in N2-9, the first change that brings network code, to enforce exactly this. Until then they keep refusing every networking API everywhere, which is NETWORK1.md's safeguard 1.
+
+**Rationale.** It is the smallest surface R2 needs. Dalamud's callback provides dual-stack connections without opening sockets in the plugin.
+
+**Not settled:** nothing further.
+
 ## Gates
 
 | Gate | Must be decided before |
@@ -210,7 +465,7 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 
 ## 1. Decisions that must be approved before any persistent private key is created (G1)
 
-- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b, P2, K1, K2, K6 and K7 (APPROVED, Claude, under the owner's delegation of September 29, 2026).
+- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b, P2, K1, K2, K6, K7, N3, K3 and P1 (APPROVED, Claude, under the owner's delegation of September 29, 2026). **Every row of this table except "D2 details", which has its own gate, is now approved,** so G1 is complete for native Windows. K8 and K9 below still gate any other platform, and the "D2 details" still gate any `.afpersona` file.
 - **Every other row in this table must still be approved** before a persistent private key is created outside tests.
 - **"D2 details"** has its own gate: before any `.afpersona` file is written or restored outside tests.
 - **Approved rows** state the approved option in the recommendation column.
@@ -221,15 +476,15 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 | D2 details | Backup encryption scheme, password policy, key derivation parameters, recovery warnings, implementation | Undefined | Subject to later security approval. Related proposals, not approved: K4, K5, K7. No `.afpersona` file may be written or restored outside tests before this is approved. | no | UNRESOLVED |
 | D3 | How many personas an installation holds, and how one is chosen | Undefined | Approved: several independent personas; manual selection and switching; one active at a time for identity-dependent operations; never bound automatically to game identifiers; switching never alters saved Plates or triggers publishing (see "Approved decisions") | no | **APPROVED (2026-09-28)** |
 | D9b | How the protocol code ships in the plugin (fourth DLL or sources compiled in) | The preview flavour compiles the sources in; player builds compile none | Approved: the sources compiled into AetherFrame.dll, the package at three files, the standalone projects canonical, and only in the preview flavour (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
-| N3 | Whether draft documents are distinguishable from final v1 in the signed bytes | Drafts use version 1 and the `…SignedDocument.v1` tag | A distinct draft version and tag until the freeze | **yes** | UNRESOLVED |
+| N3 | Whether draft documents are distinguishable from final v1 in the signed bytes | Drafts use version 1 and the `…SignedDocument.v1` tag | Approved: drafts carry `protocolVersion` `0x8001` and the tag `…SignedDocument.v1-draft` until the owner's freeze; readers accept exactly one of draft and final; identities unchanged (see "Decision batch A") | **yes** | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | N5 | Whether the profile id stays on every `RemoteDocument` | It did, until the protocol API tidy | Approved: the profile id moves to a closed abstract `RemoteProfileDocument` that the snapshot and retraction derive from; `VerifiedDocument.Profile` is null for a document that isn't about a profile; no signed-byte change (see "Decisions approved under the delegation") | no (public API) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | L6 | Where the provisional `IPersonaKeyProvider` and `FuturePolicy` live | Both were public and marked provisional, until the protocol API tidy | Approved: both removed from the protocol. Key storage and the active persona are plugin policy (`AetherFrame.Personas`); the server-only limits are documentation only, in NETWORK0.md, section 7 (see "Decisions approved under the delegation") | no (public API) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K1 | Persona key algorithm | P-256 ECDSA, P1363, low-S (NETWORK0); the key store core holds P-256 scalars only | Approved: keep it (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | K2 | Key storage on native Windows | The store core, the envelope and the directory storage exist behind a protector seam; no protector ships | Approved as the target: DPAPI, CurrentUser scope, UI forbidden, entropy from the envelope header, in the plugin's own files named by slot; never plugin configuration or Dalamud reliable storage. The DPAPI protector itself is increment 7 with its own review (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
-| K3 | Platform enablement policy | The architecture review first proposed disabling personas under Wine | Enable persona features only where a startup capability test of the full chain passes; never decide by operating system label; local features always unaffected; no product statement excluding non-Windows players (NETWORK1_CryptoCompatibility.md, section 6) | no | UNRESOLVED |
+| K3 | Platform enablement policy | The architecture review first proposed disabling personas under Wine | Approved: persona features only where a full-chain capability probe passes and the protector claims protection on this platform (DPAPI: native Windows only); viewing needs only the probe's verification step; local features always unaffected (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K6 | Key rotation | None; the store has no replace and no delete | Approved: none in v1. Migrating means a new persona, republishing, and retracting the old profiles with the old key (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | K7 | Where cryptographic implementations come from | Platform only (.NET over CNG/NCrypt) | Approved: platform implementations only, .NET or the same platform's APIs called directly. A third-party library or an algorithm in our own code is a separate owner decision with its own review, and is never chosen to keep the package at three files (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
-| P1 | Where "this Plate was published" is remembered | Undefined | A separate private index per persona, never in Plate JSON, character bindings, packages or logs | no | UNRESOLVED |
+| P1 | Where "this Plate was published" is remembered | Undefined | Approved: a private publication index per persona in the plugin's networking files; never in Plate JSON, bindings, packages, Templates, configuration or logs (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | P2 | Who can create keys during NETWORK1 | Nobody yet: the preview flavour holds the code, no key store exists | Approved: preview builds only, by the compile-time switch `AetherFrameNetworkPreview`; player and official builds contain none of the networking code (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 
 Only if persona features are pursued under Wine, Proton or macOS. These must be decided before a persistent key is created there, and only after measurements under those platforms:
@@ -243,11 +498,11 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 
 | Id | Question | Baseline | Recommendation (not approved) | Bytes | Status |
 |---|---|---|---|---|---|
-| D4 | Rules for the schema-1 `name` | Any text without U+0000, up to 32,000 scalars | 1–64 scalars, a 256-byte limit, and a fixed list of refused code points (C0/C1 controls, line and paragraph separators, BOM, bidi controls), with no normalisation | **yes** | UNRESOLVED |
-| D5 | What an image digest covers; metadata | "The source image bytes" | The digest of the prepared upload copy, never the original. The client strips metadata by rebuilding the container; the server always re-processes. | wording only, unless a salt is added | UNRESOLVED |
-| D8 | Whether metadata-only schema 1 is ever exposed to players | Test-only | No; the first public schema includes the layout | no | UNRESOLVED |
-| D9a | Persona display name | None in the protocol. `AetherFrame.Personas` (#23) implements the recommendation provisionally as `PersonaLabel`, so the persona model can be exercised; the plugin does not reference that assembly. | A private local label only; any public name later, per snapshot | no (for now) | UNRESOLVED |
-| I1 | Which images can be shared | Undefined | Still PNG, JPEG and WebP. The first frame of animated PNG. Refuse animated WebP, CMYK JPEG and oversize images; no silent downscaling. | no | UNRESOLVED |
+| D4 | Rules for the schema-1 `name` | Any text without U+0000, up to 32,000 scalars | Approved: 1–64 scalars, at most 256 bytes, refusing C0/C1 controls and DEL, U+2028, U+2029, U+FEFF and UAX #9's twelve directional formatting characters; no normalisation (see "Decision batch A") | **yes** | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| D5 | What an image digest covers; metadata | "The source image bytes" | Approved: the digest and declarations describe the prepared copy (decoded and encoded again, which drops all metadata), never the original (see "Decision batch A") | wording only, unless a salt is added | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| D8 | Whether metadata-only schema 1 is ever exposed to players | Test-only | Approved: no; schema 1 stays a test schema the plugin never publishes and the server refuses, and players publish schema 2 with the layout (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| D9a | Persona display name | None in the protocol. `AetherFrame.Personas` (#23) implements the recommendation provisionally as `PersonaLabel`, so the persona model can be exercised; the plugin does not reference that assembly. | Approved: a private local label only, never in any document, request, record or log; no public persona name in v1 (see "Decision batch A") | no (for now) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| I1 | Which images can be shared | Undefined | Approved: managed PNG, JPEG and WebP images, shared only as prepared 8-bit RGB(A) PNG or JPEG copies, first frame of an animation, within the specification's limits; over-limit images refused, never silently downscaled (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 
 ## 3. Decisions needed before the freeze or the first real server (G3)
 
@@ -256,10 +511,13 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | D1 | What a retraction means | A signed, terminal retraction with a permanent minimal record | Keep it signed and terminal; republishing uses a new profile id | yes, only if changed | UNRESOLVED |
 | D6 | Whether viewers receive signed envelopes or server-checked content | Undecided | Server-checked content (reversible later; signed proofs handed out cannot be recalled) | no | UNRESOLVED |
 | D7 | Whether documents are bound to a deployment | Not bound | Bind through a short-lived publish request proof. The alternative is a deployment id in the signing input, which is only possible before the freeze. | yes, only for the alternative | UNRESOLVED |
-| K4 | Whether a backup is required before the first real publish | Undefined | Required, or an explicit acknowledgement that losing the key means never being able to unpublish | no | UNRESOLVED |
+| K4 | Whether a backup is required before the first real publish | Undefined | Approved: a backup, or (while none exists) an explicit per-persona acknowledgement that a lost key means never updating or unpublishing, before the first real publish (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K5 | Backup passphrase rules and key derivation route | Undefined | At least 15 characters, or a generated code; NFC; never truncated. The key derivation must use a route verified on every supported platform: `Rfc2898DeriveBytes.Pbkdf2` fails under Wine before 11.3, from source and a published report. Because D2 is approved in principle, this is also needed before any `.afpersona` file is written outside tests (part of "D2 details"). | no | UNRESOLVED |
-| N1 | Scope of revision and asset ids | Profile scoping only | Revisions per (persona, profile); assets per persona; nothing global; no deduplication across personas | no | UNRESOLVED |
-| N7 | Whether consumers must escape names before display or logging | Nothing obliges them | Oblige every consumer to treat names as plain text | no | UNRESOLVED |
+| N1 | Scope of revision and asset ids | Profile scoping only | Approved: revisions per (persona, profile); assets and digests per persona, never deduplicated or compared across personas (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| N7 | Whether consumers must escape names before display or logging | Nothing obliges them | Approved: every consumer treats every text as plain text: no markup, format strings, game text payloads, paths, URLs or commands; never auto-linked; escaped in any HTML (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| R1 | How a viewer finds a Plate in the first test | None | Approved: share codes issued per published profile, the only way to reach one in stage 1; no directory, search or lookup; target lookup is stage 2 (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| R2 | The transport | None | Approved: HTTPS to one fixed DNS hostname, `HttpClient` with Dalamud's dual-stack callback, traffic only on a player's action, signed bytes as bodies, strict small JSON responses, version checks, no cookies or accounts (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| R3 | Where network code may live | Nowhere (NETWORK1.md, safeguard 1) | Approved: in the preview flavour, only under `Services/Network`, only `System.Net.Http` and Dalamud's dual-stack callback; nothing in the player flavour (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 
 ## 4. Backend-time decisions (G4)
 
