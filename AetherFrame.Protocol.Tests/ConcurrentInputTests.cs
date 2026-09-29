@@ -18,13 +18,17 @@ namespace AetherFrame.Protocol.Tests;
 /// network buffer, a mapped file). Every reader copies its input before checking it, so such a
 /// buffer can only make an input invalid: every accept is the genuine value, every refusal is a
 /// protocol exception, and a value that passed a check is the value used afterwards. These tests
-/// hammer each reader for a fraction of a second while another thread flips its input; they cannot
+/// hammer each reader for a fraction of a second (longer, up to a bound, where a race must be seen
+/// to have run) while another thread flips its input; they cannot
 /// prove the absence of a race, but the check-then-copy versions of these readers failed them
 /// within milliseconds (docs/networking/NETWORK0_HANDOFF.md, "Remediation").
 /// </summary>
 public class ConcurrentInputTests
 {
     private static readonly TimeSpan Duration = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>The longest a race keeps going to see the outcomes it requires.</summary>
+    private static readonly TimeSpan MaximumDuration = TimeSpan.FromSeconds(20);
 
     [Fact]
     public void Verify_WhileTheKeyIsRewritten_AcceptsOnlyTheGenuineDocumentOrRefusesCleanly()
@@ -98,28 +102,35 @@ public class ConcurrentInputTests
         // (An id such as a1a1…a1 with one byte rewritten never becomes empty and tests nothing.)
         var id = new byte[16];
         id[15] = 1;
-        var idOutcomes = Race(id, 15, 0, buffer =>
+        var idOutcomes = Race(id, 15, [0], buffer =>
         {
             var parsed = ProfileId.FromBytes(buffer);
             if (parsed.IsEmpty)
             {
                 throw new XunitException("FromBytes returned an empty profile id.");
             }
-        });
+        }, RequiredOutcomes(ProtocolError.InvalidValue));
         AssertRaceWasExercised(idOutcomes, ProtocolError.InvalidValue);
 
         var digest = new byte[32];
         digest[31] = 1;
-        var digestOutcomes = Race(digest, 31, 0, buffer =>
+        var digestOutcomes = Race(digest, 31, [0], buffer =>
         {
             var image = new ImageReference(Samples.Asset1, buffer, ImageFormat.Png, 1, 1, 1);
             if (image.Sha256.IndexOfAnyExcept((byte)0) < 0)
             {
                 throw new XunitException("ImageReference holds an all-zero digest.");
             }
-        });
+        }, RequiredOutcomes(ProtocolError.InvalidValue));
         AssertRaceWasExercised(digestOutcomes, ProtocolError.InvalidValue);
     }
+
+    /// <summary>
+    /// The outcomes a race must produce to have exercised anything: an acceptance and the expected
+    /// refusal. None on one core, where the scheduler decides and a race can only be vacuous, never wrong.
+    /// </summary>
+    private static string[] RequiredOutcomes(ProtocolError expectedRefusal) =>
+        Environment.ProcessorCount < 2 ? [] : ["accepted", expectedRefusal.ToString()];
 
     /// <summary>
     /// A race that never produced both an acceptance and the expected refusal exercised nothing: the
@@ -170,15 +181,20 @@ public class ConcurrentInputTests
     /// <summary>
     /// Runs <paramref name="attempt"/> on a shared buffer for <see cref="Duration"/> while another
     /// thread keeps rewriting <paramref name="alternative"/> over the original bytes at
-    /// <paramref name="offset"/>. Anything but a protocol exception or a return is a failure.
+    /// <paramref name="offset"/>. Anything but a protocol exception or a return is a failure. Timing
+    /// starts once the writer is running. A race given <paramref name="required"/> outcomes keeps
+    /// going past <see cref="Duration"/>, up to <see cref="MaximumDuration"/>, until it has seen them
+    /// all: on a loaded machine the writer may get little time in the first fraction of a second.
     /// </summary>
-    private static Dictionary<string, int> Race(byte[] template, int offset, byte[] alternative, Action<byte[]> attempt)
+    private static Dictionary<string, int> Race(byte[] template, int offset, byte[] alternative, Action<byte[]> attempt, string[]? required = null)
     {
         var shared = (byte[])template.Clone();
         var original = template.AsSpan(offset, alternative.Length).ToArray();
         var stop = 0;
+        var running = 0;
         var writer = new Thread(() =>
         {
+            Volatile.Write(ref running, 1);
             while (Volatile.Read(ref stop) == 0)
             {
                 alternative.CopyTo(shared, offset);
@@ -190,8 +206,14 @@ public class ConcurrentInputTests
         var outcomes = new Dictionary<string, int>();
         try
         {
+            var spin = new SpinWait();
+            while (Volatile.Read(ref running) == 0)
+            {
+                spin.SpinOnce();
+            }
+
             var stopwatch = Stopwatch.StartNew();
-            while (stopwatch.Elapsed < Duration)
+            while (stopwatch.Elapsed < Duration || (stopwatch.Elapsed < MaximumDuration && !SeenAll(outcomes, required)))
             {
                 string outcome;
                 try
@@ -224,4 +246,7 @@ public class ConcurrentInputTests
         Assert.NotEmpty(outcomes);
         return outcomes;
     }
+
+    private static bool SeenAll(Dictionary<string, int> outcomes, string[]? required) =>
+        required is null || Array.TrueForAll(required, outcomes.ContainsKey);
 }
