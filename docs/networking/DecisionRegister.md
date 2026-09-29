@@ -51,6 +51,28 @@ Approved by the owner, in these words:
 
 **Still UNRESOLVED:** the encryption scheme, password policy, key derivation parameters, recovery warnings and implementation. They are tracked as "D2 details" in section 1 and relate to K4, K5 and K7. No `.afpersona` file may be written or restored outside tests until they have security approval.
 
+### Signed-byte changes in NETWORK2 (N2-2 and N2-3). APPROVED IN ADVANCE by the owner, with conditions (September 29, 2026)
+
+NETWORK1.md's safeguard 3 lets signed bytes change only "in an increment the owner explicitly approves". Claude asked the owner in chat how to approve NETWORK2's two increments that change them:
+- N2-2: the draft marker and the name rule;
+- N2-3: ProfileSnapshot schema 2 (the layout) and the request proof.
+
+The owner chose "Approve both now", whose stated terms were:
+
+> You approve N2-2 and N2-3 in advance, as long as each has its decisions recorded, a clean independent and security review, and green CI.
+
+**Scope.** The approval covers exactly those two increments, as [NETWORK2.md](NETWORK2.md), section 5, describes them. Each merges only when all of these hold:
+- its decisions (N3 and D4; D5, D8, D9a, I1, S1, D7 and L8) are recorded in this register;
+- an independent reviewer and a security-focused reviewer are clean on it;
+- CI is green on its exact head.
+
+**What it does not approve:**
+- any of those decisions themselves, which are made and recorded in their own entries;
+- any other change to signed bytes;
+- the protocol freeze, which stays the owner's alone.
+
+Only the owner can change this approval.
+
 ## Decisions approved under the delegation
 
 These are Claude's decisions under the owner's delegation of September 29, 2026, not the owner's own. The owner can overrule any of them in the Owner inbox, and the reversal is recorded here.
