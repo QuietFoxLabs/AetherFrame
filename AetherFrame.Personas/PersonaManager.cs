@@ -108,7 +108,7 @@ public sealed class PersonaManager
     /// Makes the persona with <paramref name="slot"/> the active one. Nothing else changes: no
     /// record and no key. Selecting a different persona revokes every lease opened before, so an
     /// operation never signs for a persona that is no longer active (see <see cref="PersonaSignerLease"/>;
-    /// an interim, fail-closed policy awaiting an owner decision).
+    /// an interim, fail-closed policy awaiting decision L10 in the decision register).
     /// </summary>
     /// <exception cref="PersonaException"><see cref="PersonaError.UnknownPersona"/>; the selection is unchanged then.</exception>
     public PersonaRecord Select(PersonaSlotId slot)
