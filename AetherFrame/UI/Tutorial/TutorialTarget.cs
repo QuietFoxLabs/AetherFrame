@@ -64,7 +64,7 @@ internal enum TutorialTarget
     AdvancedInspector,
     AdvancedInspectorElementTab,
     AdvancedInspectorCanvasTab,
-    AdvancedInspectorComponentsTab,
+    AdvancedInspectorComponents,
     AdvancedZoom,
     AdvancedStatusBar,
     AdvancedTextContent,

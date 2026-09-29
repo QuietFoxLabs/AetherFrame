@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
@@ -36,6 +37,7 @@ internal sealed class EditorActionBar
     private readonly EditorSurfaceKind mode;
     private readonly Action openMyPlates;
     private readonly Action switchMode;
+    private readonly Func<HelpMenu?> help;
 
     // Requested from the bar, opened at window level (one id-stack scope, see ProfileEditorWindow).
     private bool pendingRevertPrompt;
@@ -44,13 +46,18 @@ internal sealed class EditorActionBar
     /// <param name="mode">Which editor this bar belongs to (its half of the Basic / Advanced switch is highlighted).</param>
     /// <param name="openMyPlates">Opens My Plates, or brings it forward when it's already open.</param>
     /// <param name="switchMode">Hands the open Plate to the other editor mode.</param>
-    internal EditorActionBar(EditorDocumentCommands commands, EditorSurfaceKind mode, Action openMyPlates, Action switchMode)
+    /// <param name="help">The Help menu, once the plugin has attached it to the window (null before that).</param>
+    internal EditorActionBar(EditorDocumentCommands commands, EditorSurfaceKind mode, Action openMyPlates, Action switchMode, Func<HelpMenu?> help)
     {
         this.commands = commands;
         this.mode = mode;
         this.openMyPlates = openMyPlates;
         this.switchMode = switchMode;
+        this.help = help;
     }
+
+    /// <summary>The Help menu to draw at the bar's right edge, or null when the plugin hasn't attached one.</summary>
+    private HelpMenu? Help => help();
 
     internal EditorDocumentCommands Commands => commands;
 

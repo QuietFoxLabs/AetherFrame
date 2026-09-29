@@ -104,7 +104,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         this.openLibrary = openLibrary;
         this.surfaces = surfaces;
         backgroundPanel = new BackgroundStylePanel(editorSession, renderResources, OpenImageFileDialog);
-        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Advanced, openLibrary, openBasicEditor);
+        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Advanced, openLibrary, openBasicEditor, () => Help);
         closeGuard = new EditorCloseGuard(editorSession, commands);
         cleanPreview = new CleanPreviewPresenter(this, editorSession, profileService, renderResources, EditorFlags);
 

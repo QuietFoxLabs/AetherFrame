@@ -215,6 +215,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             onboarding = new OnboardingCoordinator(new ConfigurationTutorialStore(Configuration, log), TutorialScript.Chapters, TutorialScript.Version);
             var tutorialHost = new TutorialHost(this);
             tutorialOverlay = new TutorialOverlay(onboarding, tutorialHost);
+
+            // A player taking the tour is being shown both editors: the one-time Basic suggestion
+            // would only get in the way of a step, so it counts as handled once the tour starts.
+            onboarding.Started += basicGuidance.MarkHandled;
             var helpMenu = new HelpMenu(onboarding, tutorialHost);
             plateLibraryWindow.Help = helpMenu;
             basicProfileEditorWindow.Help = helpMenu;

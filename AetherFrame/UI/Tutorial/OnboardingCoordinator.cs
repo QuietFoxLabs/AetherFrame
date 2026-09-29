@@ -34,6 +34,9 @@ internal sealed class OnboardingCoordinator
 
     internal TutorialSession Session { get; }
 
+    /// <summary>Raised whenever the tutorial starts or resumes (the plugin uses it to settle other one-time prompts).</summary>
+    internal event Action? Started;
+
     internal TutorialPreferences Preferences => store.Preferences;
 
     internal int ScriptVersion => scriptVersion;
@@ -149,6 +152,7 @@ internal sealed class OnboardingCoordinator
         }
 
         RememberPlaceOrFinish();
+        Started?.Invoke();
     }
 
     /// <summary>Continues a tutorial that stopped partway; starts over when there's nothing to resume.</summary>
@@ -163,6 +167,7 @@ internal sealed class OnboardingCoordinator
         IsOfferOpen = false;
         Session.Resume(snapshot, Preferences.LastChapter, Preferences.LastStep);
         RememberPlaceOrFinish();
+        Started?.Invoke();
     }
 
     internal void Next(TutorialContextSnapshot snapshot)
