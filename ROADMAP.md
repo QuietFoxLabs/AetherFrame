@@ -8,7 +8,7 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 10:04 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 10:48 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
   - a verdict on test build `01a14a5`, which gates the 0.1.7 release. The game runs it now: Dalamud's Dev Plugin Locations point at its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`;
@@ -68,7 +68,7 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
-| Item | Verified state (September 30, 2026, 10:04 UTC) |
+| Item | Verified state (September 30, 2026, 10:48 UTC) |
 | --- | --- |
 | Default branch | `master` at `9351f6e`, after [#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54) merged at 09:55 UTC; CI passed on both platforms by 09:59 UTC. #53 and #54 changed documents and tooling only, so its plugin code is `302af2f`'s, after [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), checked locally before that merge: 0 build warnings, with every suite passing (3234 plugin, 407 protocol, 482 persona, 468 release tooling). |
 | Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |

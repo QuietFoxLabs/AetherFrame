@@ -62,10 +62,18 @@ internal enum PublishResult
     /// <summary>The persona's index holds as many profiles as it can (256), and this Plate has none of them.</summary>
     IndexFull,
 
-    /// <summary>The candidate was signed once already: anything after a signature builds a new candidate, so no two revisions share an asset id (N1).</summary>
+    /// <summary>
+    /// The candidate was claimed by an earlier signing attempt, even one that failed: every result
+    /// past the claim needs a new candidate, and so a new consent screen.
+    /// </summary>
     CandidateUsed,
 
-    /// <summary>The persona the consent screen named isn't the active one any more, or was switched away from while signing (L10). Nothing is signed; the player retries.</summary>
+    /// <summary>
+    /// The persona the consent screen named isn't the active one any more (L10), and nothing is
+    /// signed. Found before signing, the same candidate can be tried again once that persona is
+    /// active; found during signing (the persona was switched away from), the candidate was already
+    /// claimed, and a retry builds a new one.
+    /// </summary>
     ActivePersonaChanged,
 
     /// <summary>The persona's key can't be opened now.</summary>
@@ -90,8 +98,9 @@ internal enum PublishResult
     /// <summary>
     /// The outbox entry or the index couldn't be saved. Unless <see cref="PublishOutcome.Indeterminate"/>
     /// is set, the index certainly still names what it named before, and the new entry was deleted
-    /// again. When it is set, the move of the new index failed after it may have reached the disk:
-    /// the new entry is kept, and the next load shows which index stands.
+    /// again, or is deleted by the next load. When it is set, the move of the new index failed after
+    /// it may have reached the disk: the new entry is kept, and the next load shows which index
+    /// stands. Either way nothing the saved index doesn't name is ever sent.
     /// </summary>
     NotSaved,
 }

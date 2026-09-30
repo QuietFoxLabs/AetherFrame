@@ -297,10 +297,11 @@ internal sealed class SnapshotCandidate
         new(profileId, revisionId, createdAtUnixSeconds, Name, CanvasWidth, CanvasHeight, Background, Items, Images);
 
     /// <summary>
-    /// Claims the candidate for its one signature: true the first time, false ever after. Its
-    /// prepared copies carry asset ids drawn for it alone, and a signed revision takes them for good
-    /// (N1), so no two revisions, and no two personas, ever share one: a candidate is signed at most
-    /// once, and anything after a signature builds a new candidate.
+    /// Claims the candidate for its one signing attempt: true the first time, false ever after, even
+    /// when that attempt failed. A signed revision takes its asset ids for good (N1), so a candidate
+    /// is signed at most once, and every result past the claim builds a new candidate. That keeps
+    /// two revisions from sharing an asset id only while every candidate has ids of its own: N2-6c's
+    /// second part draws them afresh for each candidate it builds.
     /// </summary>
     internal bool TryClaimForSigning() => Interlocked.Exchange(ref claimed, 1) == 0;
 }
