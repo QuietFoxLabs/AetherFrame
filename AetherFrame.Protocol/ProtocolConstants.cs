@@ -6,7 +6,8 @@ namespace AetherFrame.Protocol;
 /// <summary>
 /// The fixed bytes of protocol version 1: the document magic, the version number and the domain
 /// separation tags. Every value here is part of the wire format (docs/networking/ProtocolSpecification-v1.md)
-/// and can never change within version 1; a new version gets new tags.
+/// and is fixed for version 1, except that the freeze replaces the draft marker below (the version
+/// and the signature tag) with the final one; a new version gets new tags.
 /// <para>
 /// Until the owner freezes version 1, this build writes and reads only drafts of it (decision N3,
 /// docs/networking/DecisionRegister.md): the version is <see cref="DraftVersionFlag"/> | 1 and the
