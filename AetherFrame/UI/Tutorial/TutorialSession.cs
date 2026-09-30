@@ -157,11 +157,33 @@ internal sealed class TutorialSession
     }
 
     /// <summary>
-    /// Whether Next is held on the current step: it waits for the player to do something
-    /// (<see cref="TutorialStep.WaitsForAction"/>) and they haven't yet.
+    /// What Next waits for on the current step, or <see cref="TutorialCondition.None"/> when it
+    /// isn't held. It is held while the step needs something first and spotlights the control that
+    /// gets there (switching to the Advanced Editor, say), and while a step that waits for the
+    /// player (<see cref="TutorialStep.WaitsForAction"/>) hasn't been done yet. The owner's rule
+    /// (September 30, 2026): a step never moves on without showing its control.
     /// </summary>
-    internal bool IsNextHeld(TutorialContextSnapshot snapshot) =>
-        CurrentStep is { WaitsForAction: true } step && !snapshot.Satisfies(step.AdvanceWhen);
+    internal TutorialCondition NextWaitsFor(TutorialContextSnapshot snapshot)
+    {
+        if (CurrentStep is not { } step)
+        {
+            return TutorialCondition.None;
+        }
+
+        if (ShowsTheWayThere(step) && !snapshot.Satisfies(step.Requires))
+        {
+            return step.Requires;
+        }
+
+        return step.WaitsForAction && !snapshot.Satisfies(step.AdvanceWhen) ? step.AdvanceWhen : TutorialCondition.None;
+    }
+
+    /// <summary>Whether Next is held on the current step (<see cref="NextWaitsFor"/>).</summary>
+    internal bool IsNextHeld(TutorialContextSnapshot snapshot) => NextWaitsFor(snapshot) != TutorialCondition.None;
+
+    // A step that needs something first, and points at the control that gets there.
+    private static bool ShowsTheWayThere(TutorialStep step) =>
+        step.Mode != TutorialStepMode.Narrative && !step.SkipIfUnmet && step.Requires != TutorialCondition.None && step.FallbackTarget != TutorialTarget.None;
 
     /// <summary>
     /// The next step; past the last, the tutorial completes. On a step whose Next is held

@@ -38,10 +38,13 @@ public class TutorialSessionTests
     ];
 
     /// <summary><paramref name="snapshot"/> after the player has done what <paramref name="condition"/> waits for.</summary>
-    private static TutorialContextSnapshot Meeting(TutorialContextSnapshot snapshot, TutorialCondition condition) => condition switch
+    internal static TutorialContextSnapshot Meeting(TutorialContextSnapshot snapshot, TutorialCondition condition) => condition switch
     {
         TutorialCondition.CreatingOrEditingPlate or TutorialCondition.TemplateChooserOpen => snapshot with { TemplateChooserOpen = true },
-        TutorialCondition.AnyEditorOpen or TutorialCondition.BasicEditorOpen => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Basic, PlateOpen = true },
+        TutorialCondition.MyPlatesOpen => snapshot with { MyPlatesOpen = true },
+        TutorialCondition.AnyEditorOpen or TutorialCondition.BasicEditorOpen or TutorialCondition.PlateOpen => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Basic, PlateOpen = true },
+        TutorialCondition.AdvancedEditorOpen => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Advanced, PlateOpen = true },
+        TutorialCondition.ElementSelected => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Advanced, PlateOpen = true, ElementSelected = true },
         TutorialCondition.TextElementSelected => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Advanced, PlateOpen = true, ElementSelected = true, TextElementSelected = true },
         _ => throw new ArgumentOutOfRangeException(nameof(condition), condition, "Add how the player meets this condition."),
     };
@@ -428,16 +431,22 @@ public class TutorialSessionTests
                 Assert.True(++guard < 200, "the tutorial never ends");
                 if (session.IsNextHeld(snapshot))
                 {
-                    // A step that waits for the player holds Next and says what it waits for; once
-                    // the player has done it, Next moves on, and the walk continues in the original
-                    // state, so every later step is still walked from it.
+                    // A held step shows the way (its own control, or the one that gets there) and
+                    // Next waits until the player has done it; then Next moves on, and the walk
+                    // continues in the original state, so every later step is still walked from it.
                     Assert.True(view.NextHeld);
-                    Assert.True(session.CurrentStep!.WaitsForAction);
-                    Assert.False(string.IsNullOrWhiteSpace(session.CurrentStep.WaitHint));
-                    var held = session.CurrentStep;
+                    var held = session.CurrentStep!;
+                    Assert.True(held.WaitsForAction || held.FallbackTarget != TutorialTarget.None, held.Id);
                     Assert.True(session.Next(snapshot));
                     Assert.Same(held, session.CurrentStep);
-                    session.Next(Meeting(snapshot, held.AdvanceWhen));
+                    var met = snapshot;
+                    for (var i = 0; session.IsNextHeld(met); i++)
+                    {
+                        Assert.True(i < 4, held.Id);
+                        met = Meeting(met, session.NextWaitsFor(met));
+                    }
+
+                    session.Next(met);
                     Assert.NotSame(held, session.CurrentStep);
                     continue;
                 }
@@ -472,6 +481,37 @@ public class TutorialSessionTests
         Assert.Equal("text.add", session.CurrentStep!.Id);
         session.Next(Advanced with { ElementSelected = true, TextElementSelected = true });
         Assert.Equal("text.content", session.CurrentStep!.Id);
+    }
+
+    [Fact]
+    public void RealScript_AStepThatNeedsAnotherEditor_HoldsNextUntilTheSwitch()
+    {
+        // The owner's report (September 30): step 19, the Advanced Editor's tools, let Next past it
+        // while the Basic Editor was open. It now waits for the switch it points at.
+        var session = new TutorialSession(TutorialScript.Chapters);
+        session.JumpToChapter(Basic, 4);
+        Assert.Equal("advanced.switch", session.CurrentStep!.Id);
+        session.Next(Basic);
+        Assert.Equal("advanced.toolbar", session.CurrentStep!.Id);
+
+        var view = session.Evaluate(Basic, AllAvailable);
+        Assert.Equal(TutorialStepPresentation.Prerequisite, view.Presentation);
+        Assert.Equal(TutorialTarget.EditorModeSwitch, view.Target);
+        Assert.True(view.NextHeld);
+        Assert.Equal(TutorialCondition.AdvancedEditorOpen, session.NextWaitsFor(Basic));
+        session.Next(Basic);
+        Assert.Equal("advanced.toolbar", session.CurrentStep!.Id);
+
+        var advanced = Basic with { ActiveEditor = EditorSurfaceKind.Advanced };
+        Assert.False(session.IsNextHeld(advanced));
+        session.Next(advanced);
+        Assert.Equal("advanced.layers", session.CurrentStep!.Id);
+
+        // A step whose requirement only offers a button (no control to point at) still lets Next on.
+        var library = new TutorialSession(TutorialScript.Chapters);
+        library.JumpToChapter(Nothing, 1);
+        Assert.Equal("library.home", library.CurrentStep!.Id);
+        Assert.False(library.IsNextHeld(Nothing));
     }
 
     [Fact]
