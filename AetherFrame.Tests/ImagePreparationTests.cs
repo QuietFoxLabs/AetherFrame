@@ -177,8 +177,9 @@ public sealed class ImagePreparationTests
     [Fact]
     public void WhatWindowsEncoderWrites_IsCleanedToExactlyTheInventory()
     {
-        // Real WIC output, kept in ImageFixtures: a PNG with sRGB, gAMA and pHYs before its image data,
-        // and a JPEG with its 16-byte JFIF APP0, two DQT, SOF0 at 4:2:0, four DHT and one scan.
+        // Real WIC output, kept in ImageFixtures and encoded through WPF's encoders, which wrap WIC:
+        // a PNG with sRGB, gAMA and pHYs before its image data (Dalamud's own call writes the first
+        // two), and a JPEG with its 16-byte JFIF APP0, two DQT, SOF0 at 4:2:0, four DHT and one scan.
         var png = Fixture("wic-rgba-4x2.png");
         Assert.Equal(new[] { "IHDR", "sRGB", "gAMA", "pHYs", "IDAT", "IEND" }, PngChunks(png));
         var cleanedPng = PreparedContainer.Clean(png, ImageFormat.Png)!;
@@ -548,13 +549,18 @@ public sealed class ImagePreparationTests
         return types.ToArray();
     }
 
-    /// <summary>The EXIF block Dalamud's own call adds, as a JPEG holds it: big-endian TIFF whose IFD0 points to an Exif sub-IFD holding the colour space.</summary>
+    /// <summary>
+    /// The EXIF block Dalamud's own call adds, as the general review measured it: a 52-byte body of
+    /// big-endian TIFF whose IFD0 points to an Exif sub-IFD holding the colour space (0), then two
+    /// bytes of padding.
+    /// </summary>
     private static byte[] DalamudExif() => Segment(0xE1,
     [
         .. "Exif"u8, 0, 0,
         (byte)'M', (byte)'M', 0, 0x2A, 0, 0, 0, 8,
         0, 1, 0x87, 0x69, 0, 4, 0, 0, 0, 1, 0, 0, 0, 26, 0, 0, 0, 0,
-        0, 1, 0xA0, 0x01, 0, 3, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0,
+        0, 1, 0xA0, 0x01, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
     ]);
 
     /// <summary>A small EXIF block: little-endian TIFF with one ColorSpace tag.</summary>
