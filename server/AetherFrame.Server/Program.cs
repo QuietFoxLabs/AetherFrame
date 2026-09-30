@@ -4,6 +4,7 @@ using System.Net;
 using AetherFrame.Server;
 using AetherFrame.Server.Endpoints;
 using AetherFrame.Server.Hosting;
+using AetherFrame.Server.Images;
 using AetherFrame.Server.Limits;
 using AetherFrame.Server.Lodestone;
 using AetherFrame.Server.Requests;
@@ -17,6 +18,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+ServerOptions.RefuseForwardedHeadersSwitch(builder.Configuration);
 
 // Decision S5: nothing that logs a request's URL, address or headers. ASP.NET Core's hosting
 // diagnostics log each request at Information, and HttpClient's handlers log each URL, which holds a
@@ -52,8 +54,13 @@ builder.Services.AddSingleton<LodestoneBudget>();
 builder.Services.AddSingleton<LodestoneReader>();
 builder.Services.AddSingleton<ILodestonePages, LodestoneHttpPages>();
 builder.Services.AddSingleton<Rereads>();
+builder.Services.AddSingleton<ContentStore>();
+builder.Services.AddSingleton<PublishSlots>();
+builder.Services.AddSingleton<Viewing>();
+builder.Services.AddSingleton<IImageProcessor, NoImageProcessor>();
 builder.Services.AddHostedService<DatabaseStartup>();
 builder.Services.AddHostedService<CheckpointRetries>();
+builder.Services.AddHostedService<Housekeeping>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Rereads>());
 builder.Services.AddHttpClient(LodestoneHttpPages.ClientName, (services, client) =>
     {
@@ -83,6 +90,7 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseMiddleware<RequestLog>();
 CharacterEndpoints.Map(app);
+PlateEndpoints.Map(app);
 app.Run();
 
 /// <summary>The entry point, named so the tests' host can start it.</summary>

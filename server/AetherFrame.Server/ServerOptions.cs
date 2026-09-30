@@ -63,6 +63,21 @@ public sealed class ServerOptions
     /// <summary>The checked deployment name.</summary>
     internal DeploymentName Deployment { get; private set; } = null!;
 
+    /// <summary>
+    /// Refuses ASP.NET Core's own forwarded-headers switch, from any configuration source (the
+    /// environment with or without the <c>ASPNETCORE_</c> prefix, a settings file or the command
+    /// line): it clears the trusted proxy lists, so any client could then set the address every
+    /// limit counts (decision R4).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The switch is on.</exception>
+    public static void RefuseForwardedHeadersSwitch(Microsoft.Extensions.Configuration.IConfiguration configuration)
+    {
+        if (string.Equals(configuration["ForwardedHeaders_Enabled"], "true", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("ForwardedHeaders_Enabled must not be set: the server trusts forwarded headers from AetherFrame:KnownProxies alone.");
+        }
+    }
+
     /// <summary>Checks every value, and refuses to start on the first bad one.</summary>
     /// <exception cref="InvalidOperationException">A value that would make the server unsafe or unusable.</exception>
     internal void Validate()
@@ -92,12 +107,6 @@ public sealed class ServerOptions
             throw new InvalidOperationException("AetherFrame:KnownProxies holds a value that is not an address.");
         }
 
-        // ASP.NET Core's own switch for forwarded headers clears the trusted proxy lists, so any
-        // client could then set the address every limit counts (decision R4).
-        if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED"), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("ASPNETCORE_FORWARDEDHEADERS_ENABLED must not be set: the server trusts forwarded headers from AetherFrame:KnownProxies alone.");
-        }
 
         if (!Version.TryParse(MinimumPlugin, out _))
         {

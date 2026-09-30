@@ -458,6 +458,7 @@ static class AetherFrame.Protocol.Requests.RequestProofCodec
     Byte[] Sign(ReadOnlySpan<Byte> document, DeploymentName deployment, RequestChallenge challenge, IPersonaSigner signer)
     Byte[] SignAction(RequestProofKind kind, ReadOnlySpan<Byte> body, DeploymentName deployment, RequestChallenge challenge, IPersonaSigner signer)
     VerifiedAction VerifyAction(ReadOnlySpan<Byte> proof, ReadOnlySpan<Byte> body, DeploymentName deployment, RequestProofKind expected)
+    VerifiedRequestProof CheckSubmissionProof(ReadOnlySpan<Byte> proof, DeploymentName deployment)
     VerifiedSubmission VerifySubmission(ReadOnlySpan<Byte> proof, ReadOnlySpan<Byte> document, DeploymentName deployment)
 enum AetherFrame.Protocol.Requests.RequestProofKind
     Byte value__

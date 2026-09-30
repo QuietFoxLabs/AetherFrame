@@ -62,6 +62,9 @@ internal sealed class ServerDatabase
             bytes BLOB NOT NULL,
             PRIMARY KEY (persona, profile_id, idx)
         ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS taken_over (
+            persona TEXT PRIMARY KEY
+        ) WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS reports (
             id INTEGER PRIMARY KEY,
             lodestone_id INTEGER NOT NULL,
@@ -127,6 +130,21 @@ internal sealed class ServerDatabase
     /// deletion has committed, so a client that goes away can't skip it.
     /// </summary>
     public async Task<bool> CheckpointAsync(CancellationToken cancellation)
+    {
+        try
+        {
+            return await TryCheckpointAsync(cancellation);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // The deletion before it has committed: the checkpoint is owed, and the request succeeds.
+            CheckpointOwed = true;
+            logger.LogWarning("A truncating checkpoint failed with {ErrorKind}; it is retried.", e.GetType().Name);
+            return false;
+        }
+    }
+
+    private async Task<bool> TryCheckpointAsync(CancellationToken cancellation)
     {
         var delay = TimeSpan.FromMilliseconds(20);
         var deadline = DateTime.UtcNow + CheckpointPatience;

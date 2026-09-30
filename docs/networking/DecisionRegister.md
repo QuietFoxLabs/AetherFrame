@@ -1233,6 +1233,15 @@ All of these are now above.
 
 **Recorded risk.** A failed check takes at least 3 seconds, and "try again later" is decided before anything that differs between ids, but a Lodestone fetch longer than 3 seconds can happen only for an id on the allowlist. In stage 1 that tells someone who holds a key and a live code, and who guesses a Lodestone id, whether it is one of the two testers': that the character uses AetherFrame, and so Dalamud. It is accepted for the two-player test; widening the allowlist needs a floor that covers the fetch, or a fetch for every id.
 
+**Part 2** (publishing and viewing) adds, under the same approval (ServerApi-v1.md, section 7):
+- pausing (C3) as the opting-out kind with `{"mode": "pause"}` in its signed body: the Plate is deleted and the binding kept. It adds no request kind, since C9's kind 5 already turns a character's sharing off, and the body is signed;
+- publishing accepts only schema 2 snapshots. Retraction documents are refused: opting out and pausing replace them in stage 1, which has no tombstones (C4);
+- a key whose character was taken over is remembered by its identity alone until it binds again or opts out, so its plugin can be told (C1's "the old key's plugin learns it at its next request");
+- publishing is limited to 120 an hour per address, and two at a time;
+- until the image worker exists (N2-7c), every image is refused rather than served unprocessed (I2);
+- a publish is authenticated before it holds a publish slot or has its body read past the proof: section 14.4's first two steps, a live challenge, and a bound, allowed signer. The protocol library gains `RequestProofCodec.CheckSubmissionProof` for those two steps. It changes no signed byte and authorizes nothing: `VerifySubmission`, with the document, is still what lets the server act. The specification's section 14.4 says a server may take its first two steps early;
+- a taken-over key's identity is kept, with no time, until that key binds again or opts out, so its plugin can be told. It never expires on its own: in stage 1 that is at most a row per takeover among two testers, and C7's list of what is kept names it.
+
 N2-7b's security review examined these with the code (September 30, 2026). It asked for the day-number rule and the check's floor above, a limit on opting out per address, challenges from a `409` counted against the address, a deadline over the whole Lodestone fetch, re-reads applied only to the character they read, and checkpoints that a disconnect can't skip. All are applied.
 
 ## Gates

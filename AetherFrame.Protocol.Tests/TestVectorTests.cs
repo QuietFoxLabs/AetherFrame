@@ -387,6 +387,45 @@ public class TestVectorTests
     }
 
     [Fact]
+    public void CheckingTheProofFirst_AgreesWithVerifyingTheSubmission()
+    {
+        // Section 14.4's steps 1 and 2 on their own: every valid proof passes them, and every
+        // rejected proof either fails them with the error the whole check gives, or passes them and
+        // is refused by a later step, with the document.
+        var fixture = VectorFixture.Load();
+        foreach (var vector in fixture.RequestProofs)
+        {
+            var proof = RequestProofCodec.CheckSubmissionProof(Hex.Parse(vector.Proof), DeploymentName.Parse(vector.Deployment));
+            Assert.Equal(RequestProofKind.DocumentSubmission, proof.Kind);
+            Assert.Equal(RequestChallenge.Parse(vector.Challenge), proof.Challenge);
+        }
+
+        var later = 0;
+        foreach (var vector in fixture.RejectedProofs)
+        {
+            var document = vector.DocumentSet is null
+                ? Hex.Parse(fixture.Documents.Single(d => d.Name == vector.Document).Document!)
+                : Hex.Parse(fixture.Rejected.Single(r => r.Name == vector.Document).Document);
+            var deployment = DeploymentName.Parse(vector.Deployment);
+            var whole = ProtocolAssert.Rejects(() => RequestProofCodec.VerifySubmission(Hex.Parse(vector.Proof), document, deployment)).Error;
+            try
+            {
+                RequestProofCodec.CheckSubmissionProof(Hex.Parse(vector.Proof), deployment);
+                later++;
+            }
+            catch (ProtocolException early)
+            {
+                Assert.True(early.Error == whole, $"{vector.Name}: {early.Error} early, {whole} in the whole check");
+            }
+        }
+
+        // proof-for-another-document, proof-by-another-persona and proof-of-a-document-that-does-not-verify.
+        Assert.Equal(3, later);
+        var action = Hex.Parse(fixture.ActionProofs[0].Proof);
+        Assert.Equal(ProtocolError.ProofMismatch, ProtocolAssert.Rejects(() => RequestProofCodec.CheckSubmissionProof(action, DeploymentName.Parse(fixture.ActionProofs[0].Deployment))).Error);
+    }
+
+    [Fact]
     public void RejectedProofs_AreRefusedWithTheirError()
     {
         var fixture = VectorFixture.Load();

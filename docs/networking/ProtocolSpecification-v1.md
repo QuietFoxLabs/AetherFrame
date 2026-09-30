@@ -635,7 +635,7 @@ A server that receives a document with its proof checks, in this order, and stop
 4. The document, as section 7.2.
 5. The document's key equals the proof's key: otherwise `ProofMismatch`.
 
-Only then does the server consume the challenge (section 13, rule 10), and only after that does it act on the document. It stores the exact bytes it hashed and verified in steps 3 and 4 (rule 3), never the request's buffer read a second time.
+Only then does the server consume the challenge (section 13, rule 10), and only after that does it act on the document. It stores the exact bytes it hashed and verified in steps 3 and 4 (rule 3), never the request's buffer read a second time. A server may take steps 1 and 2 as soon as the proof has arrived, before it reads the document, to refuse a request early; it still takes all five with the document before it acts.
 
 What a server does with a submission is decided by the proof's kind and the document, and by nothing else in the request. No header, query or other field may change what is stored, which profile it is applied to, or any setting. A parameter that should change the outcome needs a proof kind that signs it.
 
