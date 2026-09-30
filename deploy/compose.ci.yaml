@@ -1,0 +1,17 @@
+# CI's check of the deployment kit (.github/workflows/build.yml): the same services, on plain HTTP
+# at a name reserved for tests, with no certificate to obtain, logging to Docker's own files.
+services:
+  caddy:
+    logging: !override
+      driver: json-file
+    ports: !override
+      - "8088:80"
+    volumes:
+      - ./Caddyfile.ci:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+  server:
+    logging: !override
+      driver: json-file
+    environment:
+      AetherFrame__AllowTestDeploymentName: "true"

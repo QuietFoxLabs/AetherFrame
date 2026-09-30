@@ -12,13 +12,61 @@ using AetherFrame.Server.Storage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+var reloaded = false;
+
+// The operator's configuration file (N2-8): the allowlist lives here, and edits to it take effect as
+// soon as it reloads, which the deployment's polling watcher makes a few seconds (decision C8).
+if (Environment.GetEnvironmentVariable("AETHERFRAME_CONFIG_FILE") is { Length: > 0 } configFile)
+{
+    var fileSource = new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+    {
+        Path = configFile,
+        Optional = false,
+        ReloadOnChange = true,
+        OnLoadException = failure =>
+        {
+            // At start a bad file stops the server. On a reload, .NET drops the file's values, so the
+            // allowlist is empty, and allows no one, until the file is fixed; the log says so (the
+            // file itself is never logged).
+            if (reloaded)
+            {
+                failure.Ignore = true;
+                Console.Error.WriteLine("The configuration file can't be read: the allowlist is empty until it is fixed.");
+            }
+        },
+    };
+    fileSource.ResolveFileProvider();
+
+    // Before the environment variables, so the file can't override what the deployment sets there.
+    var environment = builder.Configuration.Sources.ToList().FindIndex(source => source is Microsoft.Extensions.Configuration.EnvironmentVariables.EnvironmentVariablesConfigurationSource);
+    builder.Configuration.Sources.Insert(environment < 0 ? builder.Configuration.Sources.Count : environment, fileSource);
+    reloaded = true;
+}
+
 ServerOptions.RefuseForwardedHeadersSwitch(builder.Configuration);
+
+// The operator's commands (docs/networking/Runbook.md) run instead of the server.
+if (args is ["admin", .. var command])
+{
+    var adminOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new ServerOptions();
+
+    // The allowlist command shows the file's entries as they are, even ones that make the options
+    // invalid, so the operator can see what to fix; every other command needs valid options.
+    if (command is not ["allowlist"])
+    {
+        adminOptions.Validate();
+    }
+
+    var adminDatabase = new ServerDatabase(Options.Create(adminOptions), Microsoft.Extensions.Logging.Abstractions.NullLogger<ServerDatabase>.Instance);
+    return await AdminCommands.RunAsync(command, adminDatabase, new BindingStore(adminDatabase, TimeProvider.System), Console.Out, adminOptions.AllowedLodestoneIds);
+}
 
 // Decision S5: nothing that logs a request's URL, address or headers. ASP.NET Core's hosting
 // diagnostics log each request at Information, and HttpClient's handlers log each URL, which holds a
@@ -66,6 +114,7 @@ builder.Services.AddSingleton<IImageProcessor>(services =>
 builder.Services.AddHostedService<DatabaseStartup>();
 builder.Services.AddHostedService<CheckpointRetries>();
 builder.Services.AddHostedService<Housekeeping>();
+builder.Services.AddHostedService<Backups>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Rereads>());
 builder.Services.AddHttpClient(LodestoneHttpPages.ClientName, (services, client) =>
     {
@@ -96,7 +145,8 @@ app.UseForwardedHeaders();
 app.UseMiddleware<RequestLog>();
 CharacterEndpoints.Map(app);
 PlateEndpoints.Map(app);
-app.Run();
+await app.RunAsync();
+return 0;
 
 /// <summary>The entry point, named so the tests' host can start it.</summary>
 public partial class Program;

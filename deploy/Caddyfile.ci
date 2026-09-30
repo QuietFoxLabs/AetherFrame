@@ -1,0 +1,18 @@
+# CI only: the deployment's Caddyfile on plain HTTP, since CI has no domain to certify.
+{
+	log default {
+		exclude http.log.error http.handlers.reverse_proxy http.stdlib
+	}
+}
+
+:80 {
+	request_body {
+		max_size 43MB
+	}
+
+	reverse_proxy server:8080
+
+	header {
+		-Server
+	}
+}

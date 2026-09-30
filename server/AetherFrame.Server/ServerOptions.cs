@@ -54,6 +54,9 @@ public sealed class ServerOptions
     /// </summary>
     public string ImageWorkerSocket { get; set; } = "";
 
+    /// <summary>The folder the daily backup is written to (N2-8), or empty for none.</summary>
+    public string BackupFolder { get; set; } = "";
+
     /// <summary>The oldest plugin version the server answers, told to plugins by <c>/v1/status</c>.</summary>
     public string MinimumPlugin { get; set; } = "0.1.6";
 

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
 using System.Threading;
@@ -29,7 +30,18 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
     /// <summary>How long a worker has to answer a job.</summary>
     internal TimeSpan JobDeadline { get; set; } = TimeSpan.FromSeconds(30);
 
-    private readonly Channel<Socket> connected = Channel.CreateBounded<Socket>(new BoundedChannelOptions(4) { FullMode = BoundedChannelFullMode.DropWrite });
+    /// <summary>
+    /// How old a waiting connection may be and still be given a job: under the worker run's own
+    /// <c>WorkerRun.IdleTimeout</c> (15 seconds), after which the run ends, so a job is never handed
+    /// to a run that is timing out. The deployment also ends every run from outside after its life
+    /// (N2-8).
+    /// </summary>
+    internal TimeSpan MaxConnectionAge { get; set; } = TimeSpan.FromSeconds(12);
+
+    // Worker runs that have connected, newest last. When it is full, the oldest is dropped and closed.
+    private readonly Channel<(Socket Socket, long Arrived)> connected = Channel.CreateBounded<(Socket Socket, long Arrived)>(
+        new BoundedChannelOptions(4) { FullMode = BoundedChannelFullMode.DropOldest },
+        static dropped => dropped.Socket.Dispose());
     private readonly SemaphoreSlim queue = new(MaxQueued, MaxQueued);
 
     // One job at a time: decoders never run in parallel (decision I2).
@@ -67,7 +79,12 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
                     Socket worker;
                     try
                     {
-                        worker = await connected.Reader.ReadAsync(waiting.Token);
+                        (worker, var arrived) = await connected.Reader.ReadAsync(waiting.Token);
+                        if (Stopwatch.GetElapsedTime(arrived) > MaxConnectionAge)
+                        {
+                            worker.Dispose();
+                            continue;
+                        }
                     }
                     catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
                     {
@@ -146,7 +163,7 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
         while (!stoppingToken.IsCancellationRequested)
         {
             var worker = await listener.AcceptAsync(stoppingToken);
-            if (!connected.Writer.TryWrite(worker))
+            if (!connected.Writer.TryWrite((worker, Stopwatch.GetTimestamp())))
             {
                 worker.Dispose();
             }

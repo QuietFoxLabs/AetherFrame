@@ -1,0 +1,20 @@
+# Caddy in front of the AetherFrame server (N2-8). Automatic certificates for the one hostname
+# (decision R2). No access log, which is Caddy's default (S5); and the loggers that would record a
+# client's address (request errors, proxy round trips, TLS handshake errors) are left out too.
+{
+	log default {
+		exclude http.log.error http.handlers.reverse_proxy http.stdlib
+	}
+}
+
+{$AETHERFRAME_DOMAIN} {
+	request_body {
+		max_size 43MB
+	}
+
+	reverse_proxy server:8080
+
+	header {
+		-Server
+	}
+}

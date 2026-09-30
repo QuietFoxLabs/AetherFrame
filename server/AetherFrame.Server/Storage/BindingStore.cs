@@ -278,6 +278,26 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
         return deleted;
     }
 
+    /// <summary>
+    /// The operator's removal of a character (decisions S3 and C4): its binding and everything
+    /// published for it, deleted as opting out deletes them. True when the id was bound.
+    /// </summary>
+    public async Task<bool> RemoveCharacterAsync(long lodestoneId, CancellationToken cancellation)
+    {
+        await using var connection = await database.OpenAsync(cancellation);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellation);
+        var binding = await FindAsync(connection, transaction, "lodestone_id = $value", lodestoneId, cancellation);
+        if (binding is null)
+        {
+            return false;
+        }
+
+        await DeleteAsync(connection, transaction, binding.Persona, cancellation);
+        await transaction.CommitAsync(cancellation);
+        await database.CheckpointAsync(CancellationToken.None);
+        return true;
+    }
+
     private static async Task<bool> DeleteAsync(SqliteConnection connection, SqliteTransaction transaction, PersonaId persona, CancellationToken cancellation)
     {
         await using var command = connection.CreateCommand();

@@ -1,0 +1,2 @@
+# The deployment kit runs on Linux: its scripts and files keep LF line endings on every checkout.
+* text eol=lf
