@@ -16,7 +16,7 @@ namespace AetherFrame.UI.Tutorial;
 /// </summary>
 internal static class TutorialScript
 {
-    internal const int Version = 1;
+    internal const int Version = 2;
 
     private const string OpenAPlate = "Open a Plate first: double-click one in My Plates, or use Create Plate. Then this chapter continues on its own.";
     private const string SwitchToBasic = "Switch to the Basic Editor: the Basic | Advanced switch at the top of the editor moves this Plate between the two without losing anything.";
@@ -47,7 +47,7 @@ internal static class TutorialScript
                 "Create Plate starts a new Plate from a Template. Adventure Plate Classic gives you the familiar layout for the Basic Editor; Blank Canvas starts empty for freeform work in the Advanced Editor.",
                 TutorialTarget.LibraryCreatePlate, Requires: TutorialCondition.MyPlatesOpen, FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("library.grid", "Your Plates",
-                "Each card is one saved Plate, shown as it looks. Double-click a card to edit it, or right-click it for everything else: View, open in either editor, Set Active, Duplicate, Rename, Save as Template, Export and Delete. Drag cards to reorder them.",
+                "Each card is one saved Plate, shown as it looks. Double-click a card to edit it, or right-click it for everything else: View, open in either editor, Set Active, Duplicate, Save as Template, Export, Rename and Delete. Drag cards to reorder them.",
                 TutorialTarget.LibraryPlateGrid, Requires: TutorialCondition.MyPlatesOpen, FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("library.card", "A saved Plate",
                 "This is one of your Plates. The gold Active badge marks the Plate your character currently presents; each character can choose its own. Keep as many Plates as you like and switch the Active one whenever you want.",
@@ -68,12 +68,12 @@ internal static class TutorialScript
                 FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates,
                 WaitsForAction: true, WaitHint: "Click Create Plate to continue, or double-click a Plate you already have."),
             new TutorialStep("first.template", "Choose a Template",
-                "Pick a Template, then choose Use Template. Adventure Plate Classic is the best start: it opens in the Basic Editor with every familiar section in place. The new Plate takes the Template's name; rename it any time from its card's right-click menu.\n\nThe tour continues as soon as the editor opens.",
+                "Pick a Template, then choose Use Template. Adventure Plate Classic is the best start: it opens in the Basic Editor with every familiar section in place. The new Plate takes the Template's name; rename it any time from the Plate menu at the top of the editor.\n\nThe tour continues as soon as the editor opens.",
                 TutorialTarget.LibraryTemplateChooser, TutorialStepMode.Interact, Requires: TutorialCondition.TemplateChooserOpen, AdvanceWhen: TutorialCondition.AnyEditorOpen,
                 SkipIfUnmet: true, FallbackBody: "The chooser was closed. Click Create Plate to open it again: the tour continues once your new Plate opens.", FallbackTarget: TutorialTarget.LibraryCreatePlate,
                 WaitsForAction: true, WaitHint: "Create your Plate to continue: pick a Template and choose Use Template. If the chooser was closed, click Create Plate to open it again."),
             new TutorialStep("first.workspace", "The editor",
-                "A Plate is open. At the top of every editor: the way back to My Plates, the Basic | Advanced switch, the Plate's name, Undo and Redo, and on the right whether it is saved, plus Preview, Revert and Save.",
+                "A Plate is open. At the top of every editor: the way back to My Plates, the Basic | Advanced switch, the Plate menu under the Plate's name, Undo and Redo, and on the right whether it is saved, plus Preview, Revert and Save.",
                 TutorialTarget.EditorModeSwitch, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
         ]),
 
@@ -176,8 +176,11 @@ internal static class TutorialScript
             new TutorialStep("saving.preview", "Preview",
                 "Preview shows the finished Plate alone, over the game, exactly as others would see it. Press Escape (while the preview is focused) or click its close button to come back.",
                 TutorialTarget.EditorPreview, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
+            new TutorialStep("saving.plate-menu", "The Plate menu",
+                "Click the Plate menu (the card icon and the Plate's name) to stay in the editor: View shows the Plate over the game in the movable Plate Viewer, Set Active makes it your character's Active Plate, and Save as New Plate keeps what you see as a new Plate. Save as Template, Export and Rename are here too. Set Active, Save as Template and Export use the last saved version, so save first to include your changes.",
+                TutorialTarget.EditorPlateMenu, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("saving.library", "Back in My Plates",
-                "Every saved Plate is a card in My Plates, where you make it Active for your character, duplicate it to try a variation, or export it to share.",
+                "Every saved Plate is also a card in My Plates. Its right-click menu has the same actions, plus Delete.",
                 TutorialTarget.EditorMyPlates, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
         ]),
 
@@ -187,14 +190,14 @@ internal static class TutorialScript
                 "Every new Plate starts from a Template, chosen in Create Plate. Adventure Plate Classic and Blank Canvas are built in and always available.",
                 TutorialTarget.LibraryCreatePlate, Requires: TutorialCondition.MyPlatesOpen, FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("templates.own", "Your own Templates",
-                "Right-click any Plate card and choose Save as Template to reuse its design. Your Templates appear in Create Plate beside the built-in ones, and Manage Templates (a link at the bottom of the chooser) renames, duplicates or removes them.",
+                "Save as Template, in the editor's Plate menu or a card's right-click menu, reuses a Plate's design. Your Templates appear in Create Plate beside the built-in ones, and Manage Templates (a link at the bottom of the chooser) renames, duplicates or removes them.",
                 TutorialTarget.LibraryPlateGrid, Requires: TutorialCondition.MyPlatesOpen, FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates),
         ]),
 
         new TutorialChapter("sharing", "Import and export", "Sharing a Plate as a file, safely.",
         [
             new TutorialStep("sharing.export", "Export",
-                "Right-click a card and choose Export to save the Plate as one .aetherframe file, images included. Give that file to anyone; it contains only that Plate.",
+                "Export, in the editor's Plate menu or a card's right-click menu, saves a Plate as one .aetherframe file, images included. Give that file to anyone; it contains only that Plate.",
                 TutorialTarget.LibraryPlateGrid, Requires: TutorialCondition.MyPlatesOpen, FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("sharing.import", "Import",
                 "Import opens an .aetherframe file from your PC. It is checked and previewed first, and always added as a new Plate: nothing you have is ever replaced.",

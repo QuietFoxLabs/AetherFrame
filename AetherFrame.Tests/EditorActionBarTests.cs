@@ -239,4 +239,122 @@ public class EditorActionBarTests
         Assert.True(rightX >= centerX + 60f + 10f);
         Assert.Equal(0f, nameWidth);
     }
+
+    [Fact]
+    public void ThePlateMenu_GetsTheRoomUpToTheHistoryGroup_ForTheName()
+    {
+        // The left group ends at 150, the control starts one gap later at its minimum width 40, and
+        // the history group is centered: the name may widen the control to one gap before it.
+        const float controlStart = 160f;
+        const float controlMinimum = 40f;
+        var (centerX, _, _) = EditorActionBarLayout.Arrange(0f, 1000f, controlStart + controlMinimum, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        var room = EditorActionBarLayout.NameRoom(controlStart, controlMinimum, centerX, spacing: 10f);
+
+        Assert.Equal(470f, centerX);
+        Assert.Equal(470f - 10f - 200f, room);
+        Assert.True(controlStart + controlMinimum + room <= centerX - 10f);
+    }
+
+    [Fact]
+    public void OnTheNarrowestRow_ThePlateMenuKeepsItsPlace_WithNoRoomForTheName()
+    {
+        // Narrower than everything together: the groups keep their order, the history group is
+        // pushed right after the control, and the control keeps its minimum width.
+        const float controlStart = 160f;
+        const float controlMinimum = 40f;
+        var (centerX, rightX, _) = EditorActionBarLayout.Arrange(0f, 300f, controlStart + controlMinimum, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        Assert.Equal(0f, EditorActionBarLayout.NameRoom(controlStart, controlMinimum, centerX, spacing: 10f));
+        Assert.Equal(controlStart + controlMinimum + 10f, centerX);
+        Assert.True(rightX >= centerX + 60f + 10f);
+    }
+
+    [Fact]
+    public void WhenEverythingFits_TheBarIsOneRow_AsArrangeLaysItOut()
+    {
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 1000f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+        var (centerX, rightX, _) = EditorActionBarLayout.Arrange(0f, 1000f, 200f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        Assert.False(rows.TwoRows);
+        Assert.Equal(centerX, rows.CenterX);
+        Assert.Equal(rightX, rows.RightX);
+        Assert.Equal(EditorActionBarLayout.NameRoom(160f, 40f, centerX, 10f), rows.NameRoom);
+    }
+
+    [Fact]
+    public void WhenOneRowCantHoldEverything_TheDocumentGroupTakesASecondRow()
+    {
+        // 200 (left group and control) + 10 + 60 (history) + 10 + 300 (document group) needs 580.
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 400f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+
+        Assert.True(rows.TwoRows);
+        Assert.Equal(400f - 60f, rows.CenterX);
+        Assert.Equal(400f - 300f, rows.RightX);
+        Assert.Equal(400f - 60f - 10f - 200f, rows.NameRoom);
+        Assert.True(rows.RightX + 300f <= 400f);
+    }
+
+    [Fact]
+    public void AtExactlyEnoughRoom_TheBarStaysOneRow()
+    {
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 580f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+        Assert.False(rows.TwoRows);
+        Assert.True(rows.RightX + 300f <= 580f);
+
+        Assert.True(EditorActionBarLayout.ArrangeRows(0f, 579f, 160f, 40f, 60f, 300f, 300f, 10f).TwoRows);
+    }
+
+    [Fact]
+    public void OnARowNarrowerThanTheDocumentGroup_ItStartsAtTheRowStart()
+    {
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 250f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+
+        Assert.True(rows.TwoRows);
+        Assert.Equal(0f, rows.RightX);
+        Assert.Equal(210f, rows.CenterX);
+        Assert.Equal(0f, rows.NameRoom);
+    }
+
+    [Fact]
+    public void TheSaveStateChanging_NeverMovesTheRowsTheHistoryOrTheName()
+    {
+        // At 560, the group fits with "Saved" (width 250) but not with "Unsaved changes" (300):
+        // the rows are chosen from the widest, so a first edit moves only the state text.
+        var saved = EditorActionBarLayout.ArrangeRows(0f, 560f, 160f, 40f, 60f, rightWidth: 250f, widestRightWidth: 300f, spacing: 10f);
+        var unsaved = EditorActionBarLayout.ArrangeRows(0f, 560f, 160f, 40f, 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+
+        Assert.True(saved.TwoRows);
+        Assert.Equal(unsaved.TwoRows, saved.TwoRows);
+        Assert.Equal(unsaved.CenterX, saved.CenterX);
+        Assert.Equal(unsaved.NameRoom, saved.NameRoom);
+
+        // On one row, too: only the document group follows its width, against the end.
+        var wideSaved = EditorActionBarLayout.ArrangeRows(0f, 1000f, 160f, 40f, 60f, rightWidth: 250f, widestRightWidth: 300f, spacing: 10f);
+        var wideUnsaved = EditorActionBarLayout.ArrangeRows(0f, 1000f, 160f, 40f, 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+        Assert.False(wideSaved.TwoRows);
+        Assert.Equal(wideUnsaved.CenterX, wideSaved.CenterX);
+        Assert.Equal(wideUnsaved.NameRoom, wideSaved.NameRoom);
+        Assert.Equal(1000f - 250f, wideSaved.RightX);
+        Assert.Equal(1000f - 300f, wideUnsaved.RightX);
+
+        // Near the threshold, where the history group is clamped short of the widest document group:
+        // it stays there in both states, rather than centring further right when "Saved" is shorter.
+        var nearSaved = EditorActionBarLayout.ArrangeRows(0f, 600f, 160f, 40f, 60f, rightWidth: 250f, widestRightWidth: 300f, spacing: 10f);
+        var nearUnsaved = EditorActionBarLayout.ArrangeRows(0f, 600f, 160f, 40f, 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+        Assert.False(nearSaved.TwoRows);
+        Assert.False(nearUnsaved.TwoRows);
+        Assert.Equal(230f, nearSaved.CenterX);
+        Assert.Equal(230f, nearUnsaved.CenterX);
+        Assert.Equal(20f, nearSaved.NameRoom);
+        Assert.Equal(20f, nearUnsaved.NameRoom);
+        Assert.Equal(600f - 250f, nearSaved.RightX);
+        Assert.Equal(600f - 300f, nearUnsaved.RightX);
+    }
+
+    [Fact]
+    public void TheNameRoom_IsNeverNegative()
+    {
+        Assert.Equal(0f, EditorActionBarLayout.NameRoom(controlStart: 100f, controlMinimum: 50f, centerX: 120f, spacing: 10f));
+    }
 }

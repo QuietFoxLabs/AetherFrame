@@ -31,7 +31,7 @@ internal enum TutorialTarget
     // ---- the action bar both editors share
     EditorMyPlates,
     EditorModeSwitch,
-    EditorPlateName,
+    EditorPlateMenu,
     EditorHistory,
     EditorSaveState,
     EditorPreview,
