@@ -102,6 +102,31 @@ public class PersonaSelectionTests
         }),
         ("Select(PersonaSlotId)", "unknown slot fails", w => Refused(() => w.Manager.Select(PersonaSlotId.NewId()))),
         ("Select(PersonaSlotId)", "empty slot fails", w => Refused(() => w.Manager.Select(default))),
+        ("Acknowledge(PersonaSlotId)", "succeeds", w => Assert.True(w.Manager.Acknowledge(w.Alt.Slot).Acknowledged)),
+        ("Acknowledge(PersonaSlotId)", "the active persona", w => w.Manager.Acknowledge(w.Main.Slot)),
+        ("Acknowledge(PersonaSlotId)", "unknown slot", w => Refused(() => w.Manager.Acknowledge(PersonaSlotId.NewId()))),
+        ("Audit()", "audit", w => Assert.Empty(w.Manager.Audit().Unusable)),
+        ("VerifyOrphan(PersonaSlotId)", "a record's slot", w => Assert.Null(w.Manager.VerifyOrphan(w.Main.Slot))),
+        ("VerifyOrphan(PersonaSlotId)", "an orphan", w => Assert.NotNull(w.Manager.VerifyOrphan(w.PlantOrphan()))),
+        ("RestoreOrphan(PersonaSlotId, String)", "an orphan", w => Assert.False(w.Manager.RestoreOrphan(w.PlantOrphan(), "Found").Acknowledged)),
+        ("RestoreOrphan(PersonaSlotId, String)", "a record's slot", w => Refused(() => w.Manager.RestoreOrphan(w.Main.Slot, "Main again"))),
+        ("RestoreOrphan(PersonaSlotId, String)", "no key held", w => Refused(() => w.Manager.RestoreOrphan(PersonaSlotId.NewId(), "Nothing"))),
+        ("TryOpenSigner(PersonaSlotId, PersonaPublicKey, PersonaSignerLease&)", "the persona shown", w =>
+        {
+            if (w.Manager.TryOpenSigner(w.Main.Slot, w.Main.PublicKey, out var lease) == PersonaSignerAvailability.Available)
+            {
+                using (lease)
+                {
+                    Documents.SignedRetraction(lease!.Signer);
+                }
+            }
+        }),
+        ("TryOpenSigner(PersonaSlotId, PersonaPublicKey, PersonaSignerLease&)", "another persona shown", w =>
+            Assert.Equal(PersonaSignerAvailability.ActivePersonaChanged, w.Manager.TryOpenSigner(w.Alt.Slot, w.Alt.PublicKey, out _))),
+        ("Load(IPersonaKeyStore, IPersonaBackupCodec, IPersonaRegistryStorage)", "a first run", w =>
+            Assert.Empty(PersonaManager.Load(w.Store, w.Codec, new InMemoryRegistryStorage()).Personas)),
+        ("Load(IPersonaKeyStore, IPersonaBackupCodec, IPersonaRegistryStorage)", "an unreadable registry", w =>
+            Refused(() => PersonaManager.Load(w.Store, w.Codec, new InMemoryRegistryStorage { Bytes = [1, 2, 3] }))),
     ];
 
     public static TheoryData<int, bool> EveryOtherOperation()
@@ -600,6 +625,15 @@ public class PersonaSelectionTests
         public byte[] AltBackup { get; }
 
         public byte[] FarBackup { get; }
+
+        /// <summary>Puts a fresh key in the store under a new slot that no record names, as a registry save that failed after the key was held leaves one.</summary>
+        public PersonaSlotId PlantOrphan()
+        {
+            var slot = PersonaSlotId.NewId();
+            using var material = PersonaKeyMaterial.Generate();
+            Store.AddKey(slot, material);
+            return slot;
+        }
 
         public void Dispose()
         {

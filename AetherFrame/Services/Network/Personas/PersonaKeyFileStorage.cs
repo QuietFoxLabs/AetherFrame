@@ -117,6 +117,47 @@ public sealed class PersonaKeyFileStorage : IPersonaKeyBlobStorage
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lists the directory's entries once: every <c>.afkey</c> file whose name is a slot's text form
+    /// is a slot; any other entry (a temporary file from an interrupted write, a stray file or folder)
+    /// is counted as skipped and never read. On Windows, where a name that differs only in case is
+    /// the same file, a name is compared as <see cref="Read"/> would find it, so a key the store can
+    /// open is never counted as a stray entry. A directory that does not exist yet holds nothing. Any
+    /// other failure (access denied; on Windows, a file where the directory should be, which other
+    /// systems report as not found) throws, so that it is reported as a failed listing and never
+    /// taken for an empty one.
+    /// </remarks>
+    public PersonaKeyListing List()
+    {
+        var ignoreCase = OperatingSystem.IsWindows();
+        var slots = new System.Collections.Generic.List<PersonaSlotId>();
+        var skipped = 0;
+        try
+        {
+            foreach (var entry in System.IO.Directory.EnumerateFileSystemEntries(directory))
+            {
+                var name = Path.GetFileName(entry);
+                if (name.EndsWith(Extension, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                    && File.Exists(entry)
+                    && PersonaSlotId.TryParse(ignoreCase ? name[..^Extension.Length].ToLowerInvariant() : name[..^Extension.Length], out var slot))
+                {
+                    slots.Add(slot);
+                }
+                else
+                {
+                    skipped++;
+                }
+            }
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return new PersonaKeyListing(Array.Empty<PersonaSlotId>(), 0);
+        }
+
+        return new PersonaKeyListing(slots, skipped);
+    }
+
     private string FileFor(PersonaSlotId slot)
     {
         if (slot.IsEmpty)

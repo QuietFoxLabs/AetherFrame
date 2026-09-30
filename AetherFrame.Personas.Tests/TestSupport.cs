@@ -251,6 +251,25 @@ internal sealed class InMemoryPersonaKeyStore : IPersonaKeyStore
         return material;
     }
 
+    public AetherFrame.Personas.Storage.PersonaKeyListing ListHeld()
+    {
+        Calls.Add(nameof(ListHeld));
+        return new AetherFrame.Personas.Storage.PersonaKeyListing(new List<PersonaSlotId>(keys.Keys), 0);
+    }
+
+    public AetherFrame.Personas.Storage.PersonaKeyPeekStatus PeekPublicKey(PersonaSlotId slot, out AetherFrame.Protocol.Identity.PersonaPublicKey? publicKey)
+    {
+        Calls.Add(nameof(PeekPublicKey));
+        publicKey = keys.TryGetValue(slot, out var material) ? material.PublicKey : null;
+        return publicKey is null ? AetherFrame.Personas.Storage.PersonaKeyPeekStatus.Missing : AetherFrame.Personas.Storage.PersonaKeyPeekStatus.Held;
+    }
+
+    public AetherFrame.Protocol.Identity.PersonaPublicKey? OpenPublicKey(PersonaSlotId slot)
+    {
+        Calls.Add(nameof(OpenPublicKey));
+        return Resolve(slot)?.PublicKey;
+    }
+
     public void Lock(PersonaSlotId slot) => locked.Add(slot);
 
     public void Unlock(PersonaSlotId slot) => locked.Remove(slot);

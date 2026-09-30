@@ -1,6 +1,6 @@
 # NETWORK2: from local preparation to a two-player test
 
-**Status (2026-09-30): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`), N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) and N2-4 (the DPAPI key protector and the capability probe, [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), `2d98245`) are merged. Nothing reaches a player.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
+**Status (2026-09-30): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`), N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) and N2-4 (the DPAPI key protector and the capability probe, [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), `2d98245`) are merged. N2-5a, the persona registry in the library, is this change. Nothing reaches a player.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
 
 **Safeguards.** Safeguards 2 to 8 of [NETWORK1.md](NETWORK1.md), section 4, hold throughout NETWORK2:
 - no persistent key before G1 is complete;
@@ -107,13 +107,16 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 | N2-3a | Protocol: ProfileSnapshot schema 2, the layout as a resolved paint list (specification, section 8.5) | D8, D5, D9a, I1, N1, N7; the owner's approval under safeguard 3, given in advance with conditions | N2-2 |
 | N2-3b | Protocol: the request proof context | S1, D7, L8; the owner's approval under safeguard 3, given in advance with conditions | N2-3a |
 | N2-4 | Plugin: the Windows DPAPI protector and the capability probe (NETWORK1 increment 7) | K2 (approved), K3 | N2-2 (NETWORK1's gate for increment 7) |
-| N2-5 | Plugin: the persisted persona registry and the persona window; L12 detection; the written-through move; K4's step | G1 complete (with N3, K3 and P1 from batch A), K4, L10, L12 | N2-2 (the draft marker exists before any persistent key signs), N2-4 |
+| N2-5a | Library: the persisted persona registry in `AetherFrame.Personas`: its bytes, persist then apply, the audit of key files no record names and their restore, K4's flag, and the signer bound to the persona an operation showed | L10, L12, P3 (decided in it), K4 | N2-4 |
+| N2-5b | Plugin: the registry file and the key file's written-through move, the single-writer lock, the capability probe at session start, the persona window and K4's step | G1 complete (with N3, K3 and P1 from batch A), K4, L10, L12, P3 | N2-2 (the draft marker exists before any persistent key signs), N2-4, N2-5a |
 | N2-6 | Plugin: the snapshot builder for schema 2, image preparation, the publication index and the outbox (NETWORK1 increments 4 and 8) | P1, D4, D5, D8, I1 | N2-3a, N2-5 |
 | N2-7 | Server: verify, store and serve; share codes; retraction; quotas and rate limits; version checks; its own test suite in CI | Decision batch B: D1, D6, K5, N2, N6, S2, S3, S4, I2; the share-code format; server logging | N2-3a, N2-3b |
 | N2-8 | Deployment kit: container, Caddy, the deploy workflow with owner approval, the runbook | G3 complete (D1, D6, D7, K4, K5, N1, N7) before the deployed server accepts documents signed by real keys; the owner's hosting (section 4) | N2-7 |
 | N2-9 | Plugin: the transport, publish and unpublish, the consent screen, share codes | The boundary amendment and the transport (batch A) | N2-5, N2-6, N2-7 |
 | N2-10 | Plugin: the viewer (open by code, check per D6, render read-only, refresh) | N7, I1, K3 (viewing), D6, I2 | N2-3a, N2-7, N2-9 |
 | N2-11 | The preview test kit and the two-player checklist | The tester kit (P2's unsettled item) and the matching AUTOPILOT.md procedure; G3 complete | everything above, and the owner's server |
+
+`[updated 2026-09-30: N2-5 is delivered in two parts, N2-5a (the library) and N2-5b (the plugin), as N2-3 was; "N2-5" elsewhere in this plan means both.]`
 
 N2-7's server runs locally in its own tests and in the plugin's integration tests, so everything up to N2-10 can be built and tested before the owner's server exists. Only the real test needs it.
 

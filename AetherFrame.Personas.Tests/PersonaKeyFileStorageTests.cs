@@ -132,6 +132,111 @@ public class PersonaKeyFileStorageTests : IDisposable
     }
 
     [Fact]
+    public void List_IsEmptyBeforeTheDirectoryExists_AndMakesNothing()
+    {
+        var storage = NewStorage("later");
+        var listing = storage.List();
+        Assert.Empty(listing.Slots);
+        Assert.Equal(0, listing.Skipped);
+        Assert.False(Directory.Exists(storage.Directory));
+    }
+
+    [Fact]
+    public void List_NamesEverySlotHeld_AndCountsEverythingElseAsSkipped_WithoutReadingIt()
+    {
+        var storage = NewStorage();
+        var first = PersonaSlotId.NewId();
+        var second = PersonaSlotId.NewId();
+        storage.WriteNew(first, Bytes(10, 1));
+        storage.WriteNew(second, Bytes(10, 2));
+
+        // Not a slot's key file: what an interrupted write leaves, a stray file, a key file whose
+        // name is not a slot's text form, and a folder named like a key file.
+        var temporary = Path.Combine(directory.Path, PersonaSlotId.NewId() + PersonaKeyFileStorage.Extension + ".tmp");
+        var stray = Path.Combine(directory.Path, "notes.txt");
+        var misnamed = Path.Combine(directory.Path, "slot_nothex" + PersonaKeyFileStorage.Extension);
+        File.WriteAllBytes(temporary, Bytes(3, 3));
+        File.WriteAllBytes(stray, Bytes(3, 4));
+        File.WriteAllBytes(misnamed, Bytes(3, 5));
+        Directory.CreateDirectory(Path.Combine(directory.Path, PersonaSlotId.NewId() + PersonaKeyFileStorage.Extension));
+
+        // Every file is held open with no sharing while the directory is listed, so listing that
+        // opened any of them would throw: a listing reads names, never contents.
+        var held = new[] { temporary, stray, misnamed, Path.Combine(directory.Path, first + PersonaKeyFileStorage.Extension) }
+            .Select(file => new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None))
+            .ToList();
+        try
+        {
+            var listing = storage.List();
+            Assert.Equal(new[] { first, second }.OrderBy(s => s.ToString()), listing.Slots.OrderBy(s => s.ToString()));
+            Assert.Equal(4, listing.Skipped);
+        }
+        finally
+        {
+            held.ForEach(stream => stream.Dispose());
+        }
+    }
+
+    [Fact]
+    public void List_NamesAKeyFileAsReadWouldFindIt()
+    {
+        // On Windows a name differing only in case is the same file, which Read opens; List names
+        // it as its slot too, so the audit never counts a key it can open as a stray entry. Other
+        // systems tell the names apart, and Read would not find it: there it is skipped.
+        var storage = NewStorage();
+        var slot = PersonaSlotId.NewId();
+        File.WriteAllBytes(Path.Combine(directory.Path, slot.ToString().ToUpperInvariant() + PersonaKeyFileStorage.Extension), Bytes(3, 6));
+
+        var listing = storage.List();
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(slot, Assert.Single(listing.Slots));
+            Assert.Equal(0, listing.Skipped);
+            Assert.Equal(Bytes(3, 6), storage.Read(slot));
+        }
+        else
+        {
+            Assert.Empty(listing.Slots);
+            Assert.Equal(1, listing.Skipped);
+            Assert.Null(storage.Read(slot));
+        }
+    }
+
+    [Fact]
+    public void List_ThatCannotReadTheDirectory_Throws_RatherThanListNothing()
+    {
+        // Only a directory that doesn't exist lists as empty; the audit reports anything else as a
+        // failed listing. Each system is given a failure it reports as one: Windows refuses to list
+        // a file that stands where the directory should be (Linux reports that as "not found"), and
+        // Linux refuses a directory its owner may not read.
+        if (OperatingSystem.IsWindows())
+        {
+            var blocker = Path.Combine(directory.Path, "blocked");
+            File.WriteAllBytes(blocker, Bytes(1, 0));
+            Assert.ThrowsAny<IOException>(() => new PersonaKeyFileStorage(blocker).List());
+            return;
+        }
+
+        // Mode 000 denies everyone but a privileged process, which reads the directory anyway.
+        if (Environment.IsPrivilegedProcess)
+        {
+            return;
+        }
+
+        var storage = NewStorage("keys");
+        storage.WriteNew(PersonaSlotId.NewId(), Bytes(3, 1));
+        File.SetUnixFileMode(storage.Directory, UnixFileMode.None);
+        try
+        {
+            Assert.Throws<UnauthorizedAccessException>(() => storage.List());
+        }
+        finally
+        {
+            File.SetUnixFileMode(storage.Directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
     public void TheStoreOverFilesRoundTripsAKey()
     {
         var storage = NewStorage("keys");

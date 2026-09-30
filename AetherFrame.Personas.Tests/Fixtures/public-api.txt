@@ -4,9 +4,17 @@ interface AetherFrame.Personas.IPersonaBackupCodec
     PersonaKeyMaterial Open(ReadOnlySpan<Byte> backup, PersonaBackupSecret secret)
 interface AetherFrame.Personas.IPersonaKeyStore
     IPersonaSigner OpenSigner(PersonaSlotId slot)
+    PersonaKeyListing ListHeld()
     PersonaKeyMaterial GenerateKey()
     PersonaKeyMaterial OpenKey(PersonaSlotId slot)
+    PersonaKeyPeekStatus PeekPublicKey(PersonaSlotId slot, ref PersonaPublicKey publicKey)
+    PersonaPublicKey OpenPublicKey(PersonaSlotId slot)
     Void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
+sealed class AetherFrame.Personas.PersonaAudit
+    Boolean ListingFailed { get; }
+    IReadOnlyList<PersonaOrphanKey> Orphans { get; }
+    IReadOnlyList<PersonaUnusableRecord> Unusable { get; }
+    Int32 SkippedEntries { get; }
 sealed class AetherFrame.Personas.PersonaBackupInspection
     Boolean IsSupported { get; }
     Int32 FormatVersion { get; }
@@ -34,6 +42,11 @@ enum AetherFrame.Personas.PersonaError
     const PersonaError InvalidLabel
     const PersonaError KeyUnavailable
     const PersonaError LeaseRevoked
+    const PersonaError NotAnOrphan
+    const PersonaError RegistryFull
+    const PersonaError RegistryNewerVersion
+    const PersonaError RegistryUnreadable
+    const PersonaError RegistryWriteFailed
     const PersonaError UnknownPersona
 sealed class AetherFrame.Personas.PersonaException
     PersonaError Error { get; }
@@ -43,6 +56,11 @@ sealed class AetherFrame.Personas.PersonaKeyMaterial
     PersonaPublicKey PublicKey { get; }
     String ToString()
     Void Dispose()
+enum AetherFrame.Personas.PersonaKeyStatusOfOrphan
+    Int32 value__
+    const PersonaKeyStatusOfOrphan NamesAnotherSlot
+    const PersonaKeyStatusOfOrphan Readable
+    const PersonaKeyStatusOfOrphan Unreadable
 static class AetherFrame.Personas.PersonaLabel
     Boolean TryNormalize(String text, ref String label)
     const Int32 MaxLength
@@ -50,16 +68,31 @@ sealed class AetherFrame.Personas.PersonaManager
     Boolean TryGet(PersonaSlotId slot, ref PersonaRecord persona)
     Byte[] ExportBackup(PersonaSlotId slot, PersonaBackupSecret secret)
     IReadOnlyList<PersonaRecord> Personas { get; }
+    PersonaAudit Audit()
     PersonaBackupInspection InspectBackup(ReadOnlySpan<Byte> backup)
+    PersonaManager Load(IPersonaKeyStore keys, IPersonaBackupCodec backups, IPersonaRegistryStorage registry)
+    PersonaPublicKey VerifyOrphan(PersonaSlotId slot)
+    PersonaRecord Acknowledge(PersonaSlotId slot)
     PersonaRecord Active { get; }
     PersonaRecord Create(String label)
     PersonaRecord Rename(PersonaSlotId slot, String label)
+    PersonaRecord RestoreOrphan(PersonaSlotId slot, String label)
     PersonaRecord Select(PersonaSlotId slot)
     PersonaRestoreResult RestoreBackup(ReadOnlySpan<Byte> backup, PersonaBackupSecret secret, String label)
     PersonaSignerAvailability TryOpenActiveSigner(ref PersonaSignerLease lease)
+    PersonaSignerAvailability TryOpenSigner(PersonaSlotId expectedSlot, PersonaPublicKey expectedKey, ref PersonaSignerLease lease)
     Void Deselect()
+    const Int32 MaxPersonas
+    const Int32 MaxRegistryBytes
     new(IPersonaKeyStore keys, IPersonaBackupCodec backups)
+sealed class AetherFrame.Personas.PersonaOrphanKey
+    Nullable<PersonaId> ClaimedId { get; }
+    PersonaKeyStatusOfOrphan Status { get; }
+    PersonaPublicKey ClaimedPublicKey { get; }
+    PersonaSlotId Slot { get; }
+    String ToString()
 sealed class AetherFrame.Personas.PersonaRecord
+    Boolean Acknowledged { get; }
     PersonaId Id { get; }
     PersonaPublicKey PublicKey { get; }
     PersonaSlotId Slot { get; }
@@ -79,6 +112,7 @@ enum AetherFrame.Personas.PersonaRestoreStatus
     const PersonaRestoreStatus UnsupportedVersion
 enum AetherFrame.Personas.PersonaSignerAvailability
     Int32 value__
+    const PersonaSignerAvailability ActivePersonaChanged
     const PersonaSignerAvailability Available
     const PersonaSignerAvailability KeyUnavailable
     const PersonaSignerAvailability NoActivePersona
@@ -99,16 +133,43 @@ struct AetherFrame.Personas.PersonaSlotId
     const Int32 ByteLength
     const Int32 TextLength
     const String Prefix
+enum AetherFrame.Personas.PersonaUnusableReason
+    Int32 value__
+    const PersonaUnusableReason KeyMissing
+    const PersonaUnusableReason KeyNamesAnotherKey
+    const PersonaUnusableReason KeyNamesAnotherSlot
+    const PersonaUnusableReason KeyUnreadable
+sealed class AetherFrame.Personas.PersonaUnusableRecord
+    PersonaRecord Record { get; }
+    PersonaUnusableReason Reason { get; }
+    String ToString()
 interface AetherFrame.Personas.Storage.IPersonaKeyBlobStorage
     Byte[] Read(PersonaSlotId slot)
+    PersonaKeyListing List()
     Void WriteNew(PersonaSlotId slot, ReadOnlySpan<Byte> blob)
 interface AetherFrame.Personas.Storage.IPersonaKeyProtector
     Byte[] Protect(ReadOnlySpan<Byte> secret, ReadOnlySpan<Byte> context)
     Byte[] Unprotect(ReadOnlySpan<Byte> blob, ReadOnlySpan<Byte> context)
     String Id { get; }
+interface AetherFrame.Personas.Storage.IPersonaRegistryStorage
+    Byte[] Read()
+    Void Replace(ReadOnlySpan<Byte> bytes)
+sealed class AetherFrame.Personas.Storage.PersonaKeyListing
+    IReadOnlyList<PersonaSlotId> Slots { get; }
+    Int32 Skipped { get; }
+    new(IReadOnlyList<PersonaSlotId> slots, Int32 skipped)
+enum AetherFrame.Personas.Storage.PersonaKeyPeekStatus
+    Int32 value__
+    const PersonaKeyPeekStatus Held
+    const PersonaKeyPeekStatus Missing
+    const PersonaKeyPeekStatus NamesAnotherSlot
+    const PersonaKeyPeekStatus Unreadable
 sealed class AetherFrame.Personas.Storage.ProtectedPersonaKeyStore
     IPersonaSigner OpenSigner(PersonaSlotId slot)
+    PersonaKeyListing ListHeld()
     PersonaKeyMaterial GenerateKey()
     PersonaKeyMaterial OpenKey(PersonaSlotId slot)
+    PersonaKeyPeekStatus PeekPublicKey(PersonaSlotId slot, ref PersonaPublicKey publicKey)
+    PersonaPublicKey OpenPublicKey(PersonaSlotId slot)
     Void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
     new(IPersonaKeyBlobStorage storage, IPersonaKeyProtector protector, Action<String> report)

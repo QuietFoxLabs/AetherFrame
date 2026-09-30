@@ -77,7 +77,8 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
     /// prove to hold this key, or the storage refused the write, nothing is held. When the write
     /// returned but what the storage holds could not be read back or differs, the store cannot take
     /// the write back (it has no delete, K6): the envelope may stay under this fresh slot, which the
-    /// caller never records or reuses (L12 in docs/networking/DecisionRegister.md).
+    /// caller never records or reuses on its own. It is an orphan, which only the player's
+    /// <see cref="PersonaManager.RestoreOrphan"/> records (L12 in docs/networking/DecisionRegister.md).
     /// </exception>
     public void AddKey(PersonaSlotId slot, PersonaKeyMaterial material)
     {
@@ -159,6 +160,56 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
 
     /// <inheritdoc />
     public PersonaKeyMaterial? OpenKey(PersonaSlotId slot) => Open(slot);
+
+    /// <inheritdoc />
+    public PersonaKeyListing ListHeld() => storage.List();
+
+    /// <inheritdoc />
+    public PersonaKeyPeekStatus PeekPublicKey(PersonaSlotId slot, out PersonaPublicKey? publicKey)
+    {
+        publicKey = null;
+        byte[]? envelope;
+        try
+        {
+            envelope = slot.IsEmpty ? null : storage.Read(slot);
+        }
+        catch (Exception)
+        {
+            return PersonaKeyPeekStatus.Unreadable;
+        }
+
+        if (envelope is null)
+        {
+            return PersonaKeyPeekStatus.Missing;
+        }
+
+        if (!ProtectedKeyEnvelope.TryDecode(envelope, out var decoded))
+        {
+            return PersonaKeyPeekStatus.Unreadable;
+        }
+
+        // In the order opening checks: the slot, then the protector. Another protector's envelope
+        // never opens here, so it is not a key this store holds usably.
+        if (decoded.Slot != slot)
+        {
+            return PersonaKeyPeekStatus.NamesAnotherSlot;
+        }
+
+        if (!string.Equals(decoded.ProtectorId, protector.Id, StringComparison.Ordinal))
+        {
+            return PersonaKeyPeekStatus.Unreadable;
+        }
+
+        publicKey = decoded.PublicKey;
+        return PersonaKeyPeekStatus.Held;
+    }
+
+    /// <inheritdoc />
+    public PersonaPublicKey? OpenPublicKey(PersonaSlotId slot)
+    {
+        using var material = Open(slot);
+        return material?.PublicKey;
+    }
 
     /// <summary>
     /// The envelope decoded, unprotected and imported: the key the slot holds, or null with a
