@@ -147,6 +147,12 @@ internal static class PlateEndpoints
             return SignedRequests.Fail(http, StatusCodes.Status413PayloadTooLarge, "body:too-large");
         }
 
+        // Kestrel fixes the minimum rate when the body is first read, so it is set before the proof.
+        if (http.Features.Get<IHttpMinRequestBodyDataRateFeature>() is { } rate)
+        {
+            rate.MinDataRate = MinBodyRate;
+        }
+
         // The proof first, within a short deadline.
         byte[]? proof;
         using (var proofDeadline = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted))
@@ -195,11 +201,6 @@ internal static class PlateEndpoints
 
         try
         {
-            if (http.Features.Get<IHttpMinRequestBodyDataRateFeature>() is { } rate)
-            {
-                rate.MinDataRate = MinBodyRate;
-            }
-
             byte[]? payloadBytes;
             using (var bodyDeadline = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted))
             {
