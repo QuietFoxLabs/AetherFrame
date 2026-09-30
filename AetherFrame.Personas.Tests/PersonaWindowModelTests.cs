@@ -30,6 +30,7 @@ public sealed class PersonaWindowModelTests
         }
 
         Assert.Contains("never update or unpublish", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+        Assert.Contains("no account can recover it", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("Any program running as you, other Dalamud plugins included, can use it", PersonaWindowModel.K2Disclosure, StringComparison.Ordinal);
         Assert.Contains("wherever your Windows password is known", PersonaWindowModel.K2Disclosure, StringComparison.Ordinal);
         Assert.Contains("your organisation may be able to recover it", PersonaWindowModel.K2Disclosure, StringComparison.Ordinal);
@@ -71,6 +72,14 @@ public sealed class PersonaWindowModelTests
         Assert.Equal(sibling, PersonaWindowModel.DisplayPath(sibling, root));
         Assert.Equal(keys, PersonaWindowModel.DisplayPath(keys, ""));
         Assert.Equal("%APPDATA%" + keys[root.Length..], PersonaWindowModel.DisplayPath(keys, root + Path.DirectorySeparatorChar));
+
+        // A launcher installed elsewhere under the profile, in Documents say: from %USERPROFILE% on.
+        var profile = Path.Combine("C:", "Users", "SomeoneSecret");
+        var documents = Path.Combine(profile, "Documents", "Launcher", "pluginConfigs", "AetherFrame");
+        var shownFromProfile = PersonaWindowModel.DisplayPath(documents, root, profile);
+        Assert.Equal("%USERPROFILE%" + documents[profile.Length..], shownFromProfile);
+        Assert.DoesNotContain("SomeoneSecret", shownFromProfile, StringComparison.Ordinal);
+        Assert.Equal("%APPDATA%" + keys[root.Length..], PersonaWindowModel.DisplayPath(keys, root, profile));
     }
 
     [Fact]
@@ -125,14 +134,43 @@ public sealed class PersonaWindowModelTests
     }
 
     [Fact]
-    public void EveryUnusableReason_HasPlainWords_AndAnUnreadableKeyNamesBothCauses()
+    public void EveryUnusableReason_HasPlainWords_AndAHeaderThatCantBeReadNamesItsOwnCauses()
     {
         foreach (var reason in Enum.GetValues<PersonaUnusableReason>())
         {
             Assert.False(string.IsNullOrWhiteSpace(PersonaWindowModel.Describe(reason)));
         }
 
-        Assert.Contains(PersonaWindowModel.UnreadableCauses, PersonaWindowModel.Describe(PersonaUnusableReason.KeyUnreadable), StringComparison.Ordinal);
+        // A key made on another Windows account has a readable header, so it is never among the
+        // causes of one that can't be read; it shows only when the key is opened (Check).
+        var unreadable = PersonaWindowModel.Describe(PersonaUnusableReason.KeyUnreadable);
+        Assert.Contains(PersonaWindowModel.UnreadableHeaderCauses, unreadable, StringComparison.Ordinal);
+        Assert.DoesNotContain("another Windows account", unreadable, StringComparison.Ordinal);
+        Assert.Contains("in use by another program", unreadable, StringComparison.Ordinal);
+
+        // A header's claim is unverified (L12): the words say what it names, never whose key it is.
+        Assert.Equal("Its key file is a copy of another key file.", PersonaWindowModel.Describe(PersonaUnusableReason.KeyNamesAnotherSlot));
+        Assert.Equal("Its key file names a different key than this persona's.", PersonaWindowModel.Describe(PersonaUnusableReason.KeyNamesAnotherKey));
+        foreach (var reason in Enum.GetValues<PersonaUnusableReason>())
+        {
+            Assert.DoesNotContain("another persona", PersonaWindowModel.Describe(reason), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void AKeyFileThatCantBeRead_IsDescribedByItsHeadersCauses_AndACopiedOneAsACopy()
+    {
+        var slot = PersonaSlotId.NewId();
+        var unreadable = PersonaWindowModel.Describe(new PersonaOrphanKey(slot, PersonaKeyStatusOfOrphan.Unreadable, null), [], check: null);
+        Assert.Equal("Can't be read: " + PersonaWindowModel.UnreadableHeaderCauses + ".", unreadable.Description);
+        Assert.False(unreadable.CanCheck);
+        Assert.False(unreadable.CanRestore);
+        Assert.Equal(slot, unreadable.Slot);
+
+        var copied = PersonaWindowModel.Describe(new PersonaOrphanKey(slot, PersonaKeyStatusOfOrphan.NamesAnotherSlot, null), [], check: null);
+        Assert.Equal("A copy of another key file, which can't open under this name.", copied.Description);
+        Assert.False(copied.CanCheck);
+        Assert.False(copied.CanRestore);
     }
 
     [Fact]
@@ -159,6 +197,15 @@ public sealed class PersonaWindowModelTests
         Assert.Equal(failures.Length, messages.Distinct().Count());
         Assert.Contains("256", messages[0], StringComparison.Ordinal);
         Assert.Equal("Something went wrong. AetherFrame's log names what kind.", PersonaWindowModel.Message(PersonaAction.Create, PersonaOperationOutcome.Failed(null), null, "x"));
+
+        // The limit counts UTF-16 code units, so the words say some characters count as more than one.
+        Assert.Contains("64 characters", messages[1], StringComparison.Ordinal);
+        Assert.Contains("count as two or more", messages[1], StringComparison.Ordinal);
+
+        // A failed custody may leave the key file behind (L12), where the audit that follows lists it.
+        Assert.Equal(
+            "AetherFrame couldn't store the new key safely, so no persona was added. If its key file was left behind, it shows under Keys without a persona.",
+            messages[3]);
     }
 
     [Fact]
@@ -187,8 +234,15 @@ public sealed class PersonaWindowModelTests
             store.AddKey(orphan, material);
         }
 
-        Assert.NotNull(PersonaWindowModel.Work(PersonaAction.CheckKey, orphan, null)(manager).Opened);
-        Assert.Null(PersonaWindowModel.Work(PersonaAction.CheckKey, PersonaSlotId.NewId(), null)(manager).Opened);
+        var checkedKey = PersonaWindowModel.Work(PersonaAction.CheckKey, orphan, null)(manager);
+        Assert.NotNull(checkedKey.Opened);
+        Assert.Equal(orphan, Assert.Single(checkedKey.Audit!.Orphans).Slot);
+
+        // A check audits again, so a key file gone since the last audit leaves the list rather than
+        // reading as one that doesn't open.
+        var gone = PersonaWindowModel.Work(PersonaAction.CheckKey, PersonaSlotId.NewId(), null)(manager);
+        Assert.Null(gone.Opened);
+        Assert.Equal(orphan, Assert.Single(gone.Audit!.Orphans).Slot);
         var restored = PersonaWindowModel.Work(PersonaAction.RestoreKey, orphan, "Found")(manager);
         Assert.Equal(orphan, restored.Persona!.Slot);
         Assert.Empty(restored.Audit!.Orphans);

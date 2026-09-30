@@ -28,6 +28,7 @@ internal sealed class PersonaWindow : Window
     private readonly string keysDirectory;
     private readonly string registryPath;
     private readonly string applicationData;
+    private readonly string userProfile;
     private readonly AetherWindowChrome chrome = new();
     private readonly Dictionary<PersonaSlotId, PersonaKeyCheck> checks = new();
     private readonly Dictionary<PersonaSlotId, string> restoreNames = new();
@@ -35,9 +36,11 @@ internal sealed class PersonaWindow : Window
     private PersonaSlotId renaming;
     private string renameText = "";
     private PersonaSlotId acknowledging;
+    private bool revealAcknowledgement;
     private bool understood;
     private (PersonaAction Action, PersonaSlotId Slot, string? Label)? pending;
     private PersonaOperationOutcome? handled;
+    private PersonaAudit? seenAudit;
     private string? message;
     private bool messageIsProblem;
 
@@ -48,6 +51,7 @@ internal sealed class PersonaWindow : Window
         this.keysDirectory = keysDirectory;
         this.registryPath = registryPath;
         applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(460f, 320f),
@@ -67,6 +71,17 @@ internal sealed class PersonaWindow : Window
     public override void Draw()
     {
         var view = session.View;
+
+        // A check describes the key files as one audit found them: a newer audit, after a create,
+        // a restore, a check, a refresh or a retry, may hold different files under the same names,
+        // so what was checked is checked again rather than trusted (L12). A check's own audit
+        // arrives with its outcome, which is taken below, so its result survives this.
+        if (!ReferenceEquals(view.Audit, seenAudit))
+        {
+            checks.Clear();
+            seenAudit = view.Audit;
+        }
+
         TakeOutcome(view);
         Wrapped(PersonaWindowModel.Intro, AetherPalette.TextMuted);
         AetherControls.Divider();
@@ -114,8 +129,7 @@ internal sealed class PersonaWindow : Window
                     break;
                 case PersonaAction.Create when outcome.Persona is { } created:
                     // K4 asks for the acknowledgement whenever a persona is made.
-                    acknowledging = created.Slot;
-                    understood = false;
+                    Acknowledge(created.Slot);
                     newName = "";
                     break;
                 case PersonaAction.Acknowledge:
@@ -127,12 +141,27 @@ internal sealed class PersonaWindow : Window
                 case PersonaAction.RestoreKey:
                     restoreNames.Remove(asked.Slot);
                     checks.Remove(asked.Slot);
+
+                    // A restored persona starts without K4's acknowledgement, as a new one does.
+                    if (outcome.Persona is { } restored)
+                    {
+                        Acknowledge(restored.Slot);
+                    }
+
                     break;
             }
         }
 
         message = PersonaWindowModel.Message(asked.Action, outcome, session.Active, asked.Label);
         messageIsProblem = !outcome.Succeeded;
+    }
+
+    /// <summary>Opens K4's step for a persona, scrolled into view on the next frame.</summary>
+    private void Acknowledge(PersonaSlotId slot)
+    {
+        acknowledging = slot;
+        understood = false;
+        revealAcknowledgement = true;
     }
 
     private void Start(PersonaAction action, PersonaSlotId slot = default, string? label = null)
@@ -199,7 +228,7 @@ internal sealed class PersonaWindow : Window
             if (view.Audit is { } audit)
             {
                 DrawOrphans(audit, personas);
-                DrawUnusable(audit);
+                DrawUnusable(audit, personas);
             }
 
             AetherControls.SectionHeader("Where your keys are");
@@ -294,8 +323,7 @@ internal sealed class PersonaWindow : Window
             ImGui.SameLine();
             if (AetherControls.GhostButton("Before first share..."))
             {
-                acknowledging = persona.Slot;
-                understood = false;
+                Acknowledge(persona.Slot);
             }
         }
 
@@ -324,7 +352,16 @@ internal sealed class PersonaWindow : Window
         if (persona is null || persona.Acknowledged)
         {
             acknowledging = default;
+            revealAcknowledgement = false;
             return;
+        }
+
+        // The step sits below the list, which can be long: when it opens, scroll it to the top of
+        // the window rather than leave it out of sight.
+        if (revealAcknowledgement)
+        {
+            ImGui.SetScrollHereY(0f);
+            revealAcknowledgement = false;
         }
 
         using var id = ImRaii.PushId("acknowledge");
@@ -422,7 +459,7 @@ internal sealed class PersonaWindow : Window
         }
     }
 
-    private static void DrawUnusable(PersonaAudit audit)
+    private static void DrawUnusable(PersonaAudit audit, IReadOnlyList<PersonaRecord> personas)
     {
         if (audit.Unusable.Count == 0)
         {
@@ -433,7 +470,18 @@ internal sealed class PersonaWindow : Window
         for (var index = 0; index < audit.Unusable.Count; index++)
         {
             var unusable = audit.Unusable[index];
-            ImGui.TextUnformatted(unusable.Record.Label);
+
+            // The audit keeps the record as it was then; a rename since shows under its new name.
+            var label = unusable.Record.Label;
+            for (var current = 0; current < personas.Count; current++)
+            {
+                if (personas[current].Slot == unusable.Record.Slot)
+                {
+                    label = personas[current].Label;
+                }
+            }
+
+            ImGui.TextUnformatted(label);
             Wrapped(PersonaWindowModel.Describe(unusable.Reason), AetherPalette.TextSecondary);
         }
     }
@@ -441,7 +489,7 @@ internal sealed class PersonaWindow : Window
     /// <summary>A path as the window shows it, from <c>%APPDATA%</c> on when it lies there, with a button that copies that same form.</summary>
     private void DrawPath(string caption, string id, string path)
     {
-        var shown = PersonaWindowModel.DisplayPath(path, applicationData);
+        var shown = PersonaWindowModel.DisplayPath(path, applicationData, userProfile);
         using var pushed = ImRaii.PushId(id);
         ImGui.TextUnformatted(caption);
         Wrapped(shown, AetherPalette.TextSecondary);
