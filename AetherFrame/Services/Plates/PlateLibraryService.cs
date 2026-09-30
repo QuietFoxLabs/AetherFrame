@@ -810,7 +810,7 @@ internal sealed class PlateLibraryService
     /// logged in — and is never Active; an unbound source gives an unbound copy.
     /// </summary>
     internal Task<Guid> DuplicatePlateAsync(Guid sourcePlateId) =>
-        RunExclusiveAsync(() => InsertCopyAsync(sourcePlateId, source => ParseObject(source.RawJson!), "duplicated"));
+        RunExclusiveAsync(() => InsertCopyAsync(sourcePlateId, source => ParseObject(source.RawJson!), "duplicated", DuplicateLinkFailure));
 
     /// <summary>
     /// Saves the open Plate as the editor holds it, unsaved changes included, as a brand-new Plate
@@ -824,15 +824,16 @@ internal sealed class PlateLibraryService
         RunExclusiveAsync(() =>
         {
             snapshot.Version = ProfileDocument.CurrentSchemaVersion;
-            return InsertCopyAsync(snapshot.ProfileId, _ => PlateDocuments.ToJson(snapshot), "copied");
+            return InsertCopyAsync(snapshot.ProfileId, _ => PlateDocuments.ToJson(snapshot), "copied", SaveCopyLinkFailure);
         });
 
     /// <summary>
     /// The shared body of <see cref="DuplicatePlateAsync"/> and <see cref="SaveCopyAsync"/>: writes
     /// <paramref name="content"/>'s document as a new Plate after the source, then copies the
-    /// source's associations. <paramref name="action"/> finishes "it can't be ..." in a refusal.
+    /// source's associations. <paramref name="action"/> finishes "it can't be ..." in a refusal;
+    /// <paramref name="linkFailure"/> is what the player is told when the copy exists but a link failed.
     /// </summary>
-    private async Task<Guid> InsertCopyAsync(Guid sourcePlateId, Func<PlateRecord, JsonObject> content, string action)
+    private async Task<Guid> InsertCopyAsync(Guid sourcePlateId, Func<PlateRecord, JsonObject> content, string action, string linkFailure)
     {
         RequireLoaded();
 
@@ -904,7 +905,7 @@ internal sealed class PlateLibraryService
         if (failedAssociations > 0)
         {
             // The copy exists and is intact; only its character links are incomplete.
-            throw new PlateLibraryException("The copy was made, but it couldn't be linked to every character that uses the original." + advice);
+            throw new PlateLibraryException(linkFailure + advice);
         }
 
         return newId;
@@ -1430,6 +1431,16 @@ internal sealed class PlateLibraryService
     /// <summary>An unreadable Plate's problem when its file couldn't be opened at all: likely intact.</summary>
     internal const string UnavailablePlateProblem =
         "This Plate's file couldn't be opened; another program may be using it. It has been left untouched. Restart the game to try again.";
+
+    /// <summary>What the player is told when Duplicate made the copy but couldn't link it to every character that uses the original.</summary>
+    internal const string DuplicateLinkFailure = "The copy was made, but it couldn't be linked to every character that uses the original.";
+
+    /// <summary>
+    /// The same for Save as New Plate, which also says the unsaved changes are in the new Plate, so
+    /// the player doesn't save a second one.
+    /// </summary>
+    internal const string SaveCopyLinkFailure =
+        "The new Plate was saved with your changes, but it couldn't be linked to every character that uses the original. It's in My Plates, so there's no need to save it again.";
 
     /// <summary>What the player is told when a write is refused because its result wouldn't load again.</summary>
     internal const string UnloadableWriteMessage = "AetherFrame couldn't save this change: the result wouldn't load again, so nothing was written.";

@@ -176,7 +176,7 @@ internal static class TutorialScript
                 "Preview shows the finished Plate alone, over the game, exactly as others would see it. Press Escape (while the preview is focused) or click its close button to come back.",
                 TutorialTarget.EditorPreview, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("saving.plate-menu", "The Plate menu",
-                "Click the Plate's name for the Plate menu, without leaving the editor: View shows the Plate over the game in the movable Plate Viewer, Set Active makes it your character's Active Plate, and Save as New Plate keeps what you see as a new Plate. Save as Template, Export and Rename are here too; they and Set Active use the last saved version, so save first.",
+                "Click the Plate menu (the card icon and the Plate's name) to stay in the editor: View shows the Plate over the game in the movable Plate Viewer, Set Active makes it your character's Active Plate, and Save as New Plate keeps what you see as a new Plate. Save as Template, Export and Rename are here too. Set Active, Save as Template and Export use the last saved version, so save first to include your changes.",
                 TutorialTarget.EditorPlateMenu, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("saving.library", "Back in My Plates",
                 "Every saved Plate is also a card in My Plates. Its right-click menu has the same actions, plus Delete.",

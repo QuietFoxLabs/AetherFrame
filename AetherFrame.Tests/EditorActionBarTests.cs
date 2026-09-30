@@ -271,6 +271,52 @@ public class EditorActionBarTests
     }
 
     [Fact]
+    public void WhenEverythingFits_TheBarIsOneRow_AsArrangeLaysItOut()
+    {
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 1000f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+        var (centerX, rightX, _) = EditorActionBarLayout.Arrange(0f, 1000f, 200f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        Assert.False(rows.TwoRows);
+        Assert.Equal(centerX, rows.CenterX);
+        Assert.Equal(rightX, rows.RightX);
+        Assert.Equal(EditorActionBarLayout.NameRoom(160f, 40f, centerX, 10f), rows.NameRoom);
+    }
+
+    [Fact]
+    public void WhenOneRowCantHoldEverything_TheDocumentGroupTakesASecondRow()
+    {
+        // 200 (left group and control) + 10 + 60 (history) + 10 + 300 (document group) needs 580.
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 400f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        Assert.True(rows.TwoRows);
+        Assert.Equal(400f - 60f, rows.CenterX);
+        Assert.Equal(400f - 300f, rows.RightX);
+        Assert.Equal(400f - 60f - 10f - 200f, rows.NameRoom);
+        Assert.True(rows.RightX + 300f <= 400f);
+    }
+
+    [Fact]
+    public void AtExactlyEnoughRoom_TheBarStaysOneRow()
+    {
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 580f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+        Assert.False(rows.TwoRows);
+        Assert.True(rows.RightX + 300f <= 580f);
+
+        Assert.True(EditorActionBarLayout.ArrangeRows(0f, 579f, 160f, 40f, 60f, 300f, 10f).TwoRows);
+    }
+
+    [Fact]
+    public void OnARowNarrowerThanTheDocumentGroup_ItStartsAtTheRowStart()
+    {
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 250f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        Assert.True(rows.TwoRows);
+        Assert.Equal(0f, rows.RightX);
+        Assert.Equal(210f, rows.CenterX);
+        Assert.Equal(0f, rows.NameRoom);
+    }
+
+    [Fact]
     public void TheNameRoom_IsNeverNegative()
     {
         Assert.Equal(0f, EditorActionBarLayout.NameRoom(controlStart: 100f, controlMinimum: 50f, centerX: 120f, spacing: 10f));

@@ -18,6 +18,8 @@ Section 7 adds a second, deeper pass (September 30, 2026): every journey counted
 
 AetherFrame has no settings window: Dalamud's settings button toggles My Plates.
 
+`[updated 2026-09-30: this table is the audit's snapshot. Since then, task 1 ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)) gave both editors a Plate menu under the Plate's name, and the card menu's Preview became View; section 7.5 records the choices.]`
+
 ## 2. Tasks and the trips they take
 
 A **trip** is leaving the window where the player is working to do something elsewhere, usually coming back. Each task counts its trips that way: leaving and coming back is one trip.

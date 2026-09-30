@@ -126,6 +126,11 @@ internal sealed class PlateMenu
     {
         var ready = plate.IsReady;
 
+        if (profileService.OpenPlateId == plate.PlateId && editorSession.IsDirty)
+        {
+            DrawNote(PlateActions.CardUsesLastSavedNote);
+        }
+
         using (ImRaii.Disabled(!ready))
         {
             if (ImGui.MenuItem("View"))
@@ -186,13 +191,7 @@ internal sealed class PlateMenu
     {
         if (hasUnsavedChanges)
         {
-            using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + EditorWidgets.Scaled(300f)))
-            using (ImRaii.PushColor(ImGuiCol.Text, EditorWidgets.WarningColor))
-            {
-                ImGui.TextWrapped(PlateActions.UsesLastSavedNote);
-            }
-
-            ImGui.Separator();
+            DrawNote(PlateActions.UsesLastSavedNote);
         }
 
         if (ImGui.MenuItem("View"))
@@ -256,6 +255,18 @@ internal sealed class PlateMenu
     }
 
     // ---------------------------------------------------------------- items
+
+    /// <summary>A menu's first line, in the warning tone, wrapped to a menu's width.</summary>
+    private static void DrawNote(string note)
+    {
+        using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + EditorWidgets.Scaled(300f)))
+        using (ImRaii.PushColor(ImGuiCol.Text, EditorWidgets.WarningColor))
+        {
+            ImGui.TextWrapped(note);
+        }
+
+        ImGui.Separator();
+    }
 
     private void DrawSetActiveItem(PlateSummary plate, CharacterContext? character, Guid? activePlateId)
     {

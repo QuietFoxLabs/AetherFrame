@@ -468,6 +468,29 @@ public class PlateActionsTests
     }
 
     [Fact]
+    public async Task WhenTheCopysCharacterLinkFails_TheCopyStays_AndThePlateKeepsItsChanges()
+    {
+        var store = new FaultInjectingStore();
+        using var harness = await PlateActionsHarness.CreateAsync(store);
+        var original = harness.OpenId;
+        harness.Edit();
+        var characters = harness.Editor.Fixture.Paths.CharactersDirectory;
+        store.FailWrite = path => path.StartsWith(characters, StringComparison.OrdinalIgnoreCase);
+
+        harness.Actions.SaveAsNewPlate();
+        await harness.FinishAsync();
+
+        // The copy exists, with the changes; the editor keeps the original, still unsaved, and the
+        // player is told the changes are already saved in the copy.
+        Assert.Equal(PlateLibraryService.SaveCopyLinkFailure, harness.Runner.Error);
+        Assert.Null(harness.Runner.Status);
+        Assert.Equal(original, harness.Editor.Profiles.OpenPlateId);
+        Assert.True(harness.Editor.Session.IsDirty);
+        var copy = Assert.Single(harness.Library.GetOrderedPlates(), p => p.PlateId != original);
+        Assert.Contains(harness.Library.GetSavedDocument(copy.PlateId)!.Elements, e => e is TextProfileElement { Text: "An unsaved line" });
+    }
+
+    [Fact]
     public async Task SaveAsNewPlate_WhileAnotherActionRuns_IsRefused()
     {
         using var harness = await PlateActionsHarness.CreateAsync();
@@ -488,6 +511,9 @@ public class PlateActionsTests
         Assert.Contains("Set Active", PlateActions.UsesLastSavedNote);
         Assert.Contains("Save as Template", PlateActions.UsesLastSavedNote);
         Assert.Contains("Export", PlateActions.UsesLastSavedNote);
+        Assert.DoesNotContain("Rename", PlateActions.UsesLastSavedNote);
+        Assert.Contains("Duplicate", PlateActions.CardUsesLastSavedNote);
+        Assert.DoesNotContain("Rename", PlateActions.CardUsesLastSavedNote);
         Assert.Contains("unsaved changes included", PlateActions.SaveAsNewPlateTooltip);
 
         // View is the Plate Viewer over the game; Preview stays the editors' own.

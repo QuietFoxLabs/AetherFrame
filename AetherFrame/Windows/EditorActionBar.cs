@@ -23,7 +23,8 @@ namespace AetherFrame.Windows;
 /// It is drawn at the top of the window, outside every scrolling region, so it stays in view while
 /// the editor's content scrolls. The Plate's name opens the Plate menu (<see cref="EditorPlateMenu"/>),
 /// whose control keeps its icon and caret at every width; the name shows in whatever room is left,
-/// and the menu's results and errors show on a line of their own under the save state.
+/// and the menu's results and errors show on a line of their own under the save state. When the
+/// window is too narrow for one row, the save state and its buttons move to a second row.
 /// Availability comes from <see cref="EditorDocumentCommands"/>: Save
 /// and Revert only with unsaved changes, Undo and Redo only when there's something to undo or redo.
 /// Revert always asks first (and the revert itself can be undone). Everything an editor mode adds
@@ -122,15 +123,15 @@ internal sealed class EditorActionBar
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : frame + style.ItemSpacing.X);
 
-        var (centerX, rightX, _) = EditorActionBarLayout.Arrange(
-            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart + controlMinimum, centerWidth, rightWidth, gap);
+        var rows = EditorActionBarLayout.ArrangeRows(
+            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart, controlMinimum, centerWidth, rightWidth, gap);
 
         // ---- the Plate menu, always drawn, with the Plate's name in whatever room is left
         ImGui.SameLine(controlStart);
-        plateMenu.DrawControl(profile, EditorActionBarLayout.NameRoom(controlStart, controlMinimum, centerX, gap));
+        plateMenu.DrawControl(profile, rows.NameRoom);
 
         // ---- center: history
-        ImGui.SameLine(centerX);
+        ImGui.SameLine(rows.CenterX);
         var historyMin = ImGui.GetCursorScreenPos();
         using (ImRaii.Disabled(!commands.CanUndo))
         {
@@ -151,8 +152,17 @@ internal sealed class EditorActionBar
 
         TutorialAnchorMarks.MarkRect(TutorialTarget.EditorHistory, historyMin, ImGui.GetItemRectMax());
 
-        // ---- right: save state, Preview, Revert, Save, Help
-        ImGui.SameLine(rightX);
+        // ---- right: save state, Preview, Revert, Save, Help; on a row of their own when one row can't
+        // hold everything, so none of them is ever cut off
+        if (rows.TwoRows)
+        {
+            ImGui.SetCursorPosX(rows.RightX);
+        }
+        else
+        {
+            ImGui.SameLine(rows.RightX);
+        }
+
         ImGui.AlignTextToFramePadding();
         ImGui.TextColored(stateColor, stateText);
         TutorialAnchorMarks.Mark(TutorialTarget.EditorSaveState);

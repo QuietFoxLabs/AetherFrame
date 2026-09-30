@@ -29,6 +29,9 @@ internal sealed class PlateActions
     /// <summary>The editors' Plate menu line while the open Plate has unsaved changes.</summary>
     internal const string UsesLastSavedNote = "Unsaved changes: Set Active, Save as Template and Export use the last saved version. Save first to include them.";
 
+    /// <summary>A card's menu line when its Plate is open in the editor with unsaved changes.</summary>
+    internal const string CardUsesLastSavedNote = "Open in the editor with unsaved changes: Set Active, Duplicate, Save as Template and Export use the last saved version. Save first to include them.";
+
     /// <summary>The editors' View: the Plate Viewer over the game, not the editor's own Preview.</summary>
     internal const string ViewTooltip = "Shows this Plate over the game in the Plate Viewer, which you can move and resize.\nUnsaved changes show there too.";
 
