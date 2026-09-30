@@ -98,9 +98,9 @@ internal enum PublishResult
     /// <summary>
     /// The outbox entry or the index couldn't be saved. Unless <see cref="PublishOutcome.Indeterminate"/>
     /// is set, the index certainly still names what it named before, and the new entry was deleted
-    /// again, or is deleted by the next load. When it is set, the move of the new index failed after
-    /// it may have reached the disk: the new entry is kept, and the next load shows which index
-    /// stands. Either way nothing the saved index doesn't name is ever sent.
+    /// again, or is deleted by a later load once an index exists. When it is set, the move of the
+    /// new index failed after it may have reached the disk: the new entry is kept, and the next load
+    /// shows which index stands. Either way nothing the saved index doesn't name is ever sent.
     /// </summary>
     NotSaved,
 }
