@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Protocol.Identity;
@@ -245,6 +246,8 @@ internal readonly record struct PlateSnapshotProblem(PlateSnapshotRefusal Refusa
 /// </summary>
 internal sealed class SnapshotCandidate
 {
+    private int claimed;
+
     internal SnapshotCandidate(
         Guid plateId, string name, int canvasWidth, int canvasHeight, LayoutBackground background,
         IReadOnlyList<LayoutItem> items, IReadOnlyList<ProfileElementRole?> roles, IReadOnlyList<ImageReference> images,
@@ -292,6 +295,15 @@ internal sealed class SnapshotCandidate
     /// <summary>The snapshot this candidate is, under the given ids and time (the commit's own).</summary>
     internal ProfileLayoutSnapshot ToSnapshot(ProfileId profileId, RevisionId revisionId, long createdAtUnixSeconds) =>
         new(profileId, revisionId, createdAtUnixSeconds, Name, CanvasWidth, CanvasHeight, Background, Items, Images);
+
+    /// <summary>
+    /// Claims the candidate for its one signing attempt: true the first time, false ever after, even
+    /// when that attempt failed. A signed revision takes its asset ids for good (N1), so a candidate
+    /// is signed at most once, and every result past the claim builds a new candidate. That keeps
+    /// two revisions from sharing an asset id only while every candidate has ids of its own: N2-6c's
+    /// second part draws them afresh for each candidate it builds.
+    /// </summary>
+    internal bool TryClaimForSigning() => Interlocked.Exchange(ref claimed, 1) == 0;
 }
 
 /// <summary>A candidate built from a saved Plate, or the reasons it can't be built. Exactly one of the two.</summary>
