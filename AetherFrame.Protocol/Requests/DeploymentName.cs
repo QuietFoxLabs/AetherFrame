@@ -30,8 +30,11 @@ public sealed class DeploymentName : IEquatable<DeploymentName>
     /// True for a name no real deployment can have, which only tests may use: a single label,
     /// <c>localhost</c> or a name under it, a name under the reserved top-level domains <c>test</c>,
     /// <c>example</c> and <c>invalid</c> (RFC 2606 and RFC 6761), or <c>example.com</c>,
-    /// <c>example.net</c>, <c>example.org</c> or a name under them. A server that accepts documents
-    /// signed by real keys refuses to start with such a name (section 13, rule 10).
+    /// <c>example.net</c>, <c>example.org</c> or a name under them; and a name under the special-use
+    /// or infrastructure domains <c>local</c> (RFC 6762), <c>alt</c> (RFC 9476), <c>onion</c>
+    /// (RFC 7686), <c>internal</c> and <c>arpa</c>, which are not ordinary public DNS names. A server
+    /// that accepts documents signed by real keys refuses to start with such a name (section 13,
+    /// rule 10).
     /// </summary>
     public bool IsReservedForTesting
     {
@@ -39,7 +42,7 @@ public sealed class DeploymentName : IEquatable<DeploymentName>
         {
             var labels = Value.Split('.');
             var last = labels[^1];
-            if (labels.Length == 1 || last is "localhost" or "test" or "example" or "invalid")
+            if (labels.Length == 1 || last is "localhost" or "test" or "example" or "invalid" or "local" or "alt" or "onion" or "internal" or "arpa")
             {
                 return true;
             }

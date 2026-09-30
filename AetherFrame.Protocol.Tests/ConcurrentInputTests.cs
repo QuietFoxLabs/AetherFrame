@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Threading;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
+using AetherFrame.Protocol.Requests;
 using AetherFrame.Protocol.Signing;
 using Xunit;
 using Xunit.Sdk;
@@ -57,6 +59,28 @@ public class ConcurrentInputTests
         var genuine = Samples.SignedSnapshot(signer);
         var offset = Layout.Payload + 42 + 4; // the first byte of the name
         Race(genuine, offset, (byte)'X', buffer => AcceptGenuine(buffer, genuine, signer.PublicKey.Id));
+    }
+
+    [Fact]
+    public void VerifySubmission_WhileTheDocumentIsRewritten_HashesVerifiesAndReturnsOneCopy()
+    {
+        // Section 14.4: the bytes hashed are the bytes verified and the bytes a server stores. With
+        // the document changing under the reader, an accept returns the genuine bytes and every
+        // refusal is the digest's. A reader that hashed one read of the buffer and verified another
+        // would also refuse some copies by their signature instead.
+        using var signer = TestPersonas.CreateA();
+        var genuine = Samples.SignedSnapshot(signer);
+        var deployment = DeploymentName.Parse(ProofSamples.DeploymentText);
+        var proof = RequestProofCodec.Sign(genuine, deployment, RequestChallenge.Parse(ProofSamples.ChallengeText), signer);
+        var outcomes = Race(genuine, Layout.Payload + 42 + 4, [(byte)'X'], buffer =>
+        {
+            var submission = RequestProofCodec.VerifySubmission(proof, buffer, deployment);
+            if (!submission.DocumentBytes.SequenceEqual(genuine))
+            {
+                throw new XunitException("VerifySubmission accepted bytes that are not the genuine document.");
+            }
+        }, required: ["accepted", nameof(ProtocolError.ProofMismatch)]);
+        Assert.Equal(["ProofMismatch", "accepted"], outcomes.Keys.OrderBy(k => k, StringComparer.Ordinal));
     }
 
     [Fact]

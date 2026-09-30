@@ -405,7 +405,6 @@ sealed class AetherFrame.Protocol.Requests.RequestChallenge
     const String Prefix
 static class AetherFrame.Protocol.Requests.RequestProofCodec
     Byte[] Sign(ReadOnlySpan<Byte> document, DeploymentName deployment, RequestChallenge challenge, IPersonaSigner signer)
-    VerifiedRequestProof Verify(ReadOnlySpan<Byte> proof)
     VerifiedSubmission VerifySubmission(ReadOnlySpan<Byte> proof, ReadOnlySpan<Byte> document, DeploymentName deployment)
 enum AetherFrame.Protocol.Requests.RequestProofKind
     Byte value__
@@ -448,4 +447,3 @@ sealed class AetherFrame.Protocol.Signing.SigningInput
     ReadOnlySpan<Byte> Bytes { get; }
     SigningContext Context { get; }
     SigningInput Create(DocumentType documentType, PersonaPublicKey publicKey, ReadOnlySpan<Byte> payload)
-    SigningInput CreateRequestProof(RequestProofKind kind, PersonaPublicKey publicKey, DeploymentName deployment, RequestChallenge challenge, ReadOnlySpan<Byte> subjectDigest)

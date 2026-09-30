@@ -108,6 +108,14 @@ public class DeploymentNameTests
     [InlineData("plates.aetherframe.net", false)]
     [InlineData("test.com", false)]
     [InlineData("localhost.com", false)]
+    [InlineData("printer.local", true)]
+    [InlineData("plates.internal", true)]
+    [InlineData("plates.alt", true)]
+    [InlineData("abcdefghijklmnop.onion", true)]
+    [InlineData("1.0.0.127.in-addr.arpa", true)]
+    [InlineData("local.example.net", true)]
+    [InlineData("plates.local.com", false)]
+    [InlineData("internal.dev", false)]
     public void ReservedNames_AreOnlyForTests(string text, bool reserved)
     {
         Assert.Equal(reserved, DeploymentName.Parse(text).IsReservedForTesting);

@@ -64,7 +64,7 @@ internal static class VectorBuilder
         var baseDocument = Hex.Parse(fixture.Documents[0].Document!);
         var retractionDocument = Hex.Parse(fixture.Documents.Single(d => d.Name == "profile-retraction").Document!);
         fixture.Rejected = RejectedVectorBuilder.Build(baseDocument, retractionDocument, a, b.PublicKey);
-        foreach (var vector in fixture.Rejected)
+        foreach (var vector in fixture.Rejected.Where(r => !r.Deterministic))
         {
             vector.Document = KeepSignature(committed?.Rejected.SingleOrDefault(r => r.Name == vector.Name)?.Document, vector.Document);
         }
@@ -80,15 +80,17 @@ internal static class VectorBuilder
         fixture.RequestProofs = RequestProofVectorBuilder.BuildValid(DocumentNamed, signers);
         foreach (var vector in fixture.RequestProofs)
         {
-            if (committed?.RequestProofs.SingleOrDefault(p => p.Name == vector.Name) is { } kept && kept.SigningInput == vector.SigningInput)
+            if (committed?.RequestProofs.SingleOrDefault(p => p.Name == vector.Name) is { } kept && kept.SigningInput == vector.SigningInput
+                && ReferenceP256.Verify(Hex.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PublicKey), Hex.Parse(vector.Digest), Hex.Parse(kept.Signature)))
             {
                 vector.Signature = kept.Signature;
                 vector.Proof = kept.Proof;
             }
         }
 
-        fixture.RejectedProofs = RequestProofVectorBuilder.BuildRejected(Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed, a, b);
-        foreach (var vector in fixture.RejectedProofs)
+        byte[] RejectedNamed(string name) => Hex.Parse(fixture.Rejected.Single(r => r.Name == name).Document);
+        fixture.RejectedProofs = RequestProofVectorBuilder.BuildRejected(Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed, RejectedNamed, a, b);
+        foreach (var vector in fixture.RejectedProofs.Where(r => !r.Deterministic))
         {
             vector.Proof = KeepSignature(committed?.RejectedProofs.SingleOrDefault(r => r.Name == vector.Name)?.Proof, vector.Proof);
         }
@@ -97,9 +99,11 @@ internal static class VectorBuilder
     }
 
     /// <summary>
-    /// The committed hex when it differs from the fresh one only in its last 64 bytes (the
-    /// signature, or in a few rejected vectors a signature-derived value): the same construction,
-    /// signed at another time. The vector tests check every kept vector as they check a fresh one.
+    /// The committed hex when it differs from the fresh one only in its last 64 bytes: the same
+    /// construction, signed at another time. Used only for vectors that end in a fresh signature
+    /// (the non-deterministic rejected vectors and the server obligations); a deterministic vector
+    /// follows from its base exactly and is always rebuilt. The vector tests check every kept vector
+    /// as they check a fresh one.
     /// </summary>
     public static string KeepSignature(string? committed, string fresh)
     {

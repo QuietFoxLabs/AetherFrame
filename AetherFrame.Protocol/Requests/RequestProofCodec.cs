@@ -11,8 +11,8 @@ namespace AetherFrame.Protocol.Requests;
 /// The request proof (docs/networking/ProtocolSpecification-v1.md, section 14; decisions S1 and
 /// D7): a persona's signature, in its own signing context, authorizing one submission of one exact
 /// document to one deployment, under a challenge the server issued. <see cref="Sign"/> is how a
-/// client makes one, and <see cref="VerifySubmission"/> how a server checks one together with the
-/// document it came with; <see cref="Verify"/> reads a proof on its own, which authorizes nothing.
+/// client makes one, and <see cref="VerifySubmission"/> the only way a server checks one: together
+/// with the document it came with, since a proof read on its own authorizes nothing.
 /// </summary>
 public static class RequestProofCodec
 {
@@ -75,11 +75,13 @@ public static class RequestProofCodec
     /// <summary>
     /// Reads a request proof from hostile bytes (section 14.3): framing, version, kind, the
     /// deployment name, the challenge, lengths and trailing bytes are checked, then the key and the
-    /// signature. The input is copied once before anything is read from it. A proof that verifies
-    /// here authorizes nothing yet: only <see cref="VerifySubmission"/> matches it with a request.
+    /// signature. The input is copied once before anything is read from it. Internal: a proof that
+    /// verifies here authorizes nothing yet, and a server that stopped here would skip the
+    /// deployment, the document and the key (section 14.4), so only <see cref="VerifySubmission"/>
+    /// offers it.
     /// </summary>
     /// <exception cref="ProtocolException">The first rule the input breaks, in the order of section 14.3.</exception>
-    public static VerifiedRequestProof Verify(ReadOnlySpan<byte> proof)
+    internal static VerifiedRequestProof Verify(ReadOnlySpan<byte> proof)
     {
         if (proof.Length > ProtocolLimits.MaxRequestProofBytes)
         {

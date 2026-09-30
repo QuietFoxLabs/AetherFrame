@@ -29,9 +29,9 @@ public static class ProtocolConstants
     public static ReadOnlySpan<byte> RequestProofMagic => "AFRQ"u8;
 
     /// <summary>
-    /// The domain separation tag that starts every signing input, so a signature over a document can
-    /// never be a valid signature over anything else AetherFrame signs (docs/networking/ProtocolSpecification-v1.md,
-    /// "Signing input"). Written as a one-byte length followed by these ASCII bytes. The "-draft"
+    /// The domain separation tag that starts every document's signing input, so a signature over a
+    /// document can never be a valid signature over anything else AetherFrame signs
+    /// (docs/networking/ProtocolSpecification-v1.md, sections 5 and 5.1). Written as a one-byte length followed by these ASCII bytes. The "-draft"
     /// suffix (decision N3) keeps a draft signature from ever verifying under the final version's tag.
     /// </summary>
     public static ReadOnlySpan<byte> SignatureDomainTag => "AetherFrame.Protocol.SignedDocument.v1-draft"u8;

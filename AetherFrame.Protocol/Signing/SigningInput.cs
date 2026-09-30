@@ -76,13 +76,14 @@ public sealed class SigningInput
 
     /// <summary>
     /// Builds the signing input of a request proof: the proof's own tag, then exactly the bytes the
-    /// proof carries between its magic and its signature.
+    /// proof carries between its magic and its signature. Internal: only <see cref="RequestProofCodec"/>
+    /// makes or checks proofs.
     /// </summary>
     /// <exception cref="ProtocolException">
     /// <see cref="ProtocolError.InvalidValue"/> for an unknown kind, or <see cref="ProtocolError.InvalidLength"/>
     /// for a subject digest that is not <see cref="ProtocolConstants.DigestLength"/> bytes.
     /// </exception>
-    public static SigningInput CreateRequestProof(RequestProofKind kind, PersonaPublicKey publicKey, DeploymentName deployment, RequestChallenge challenge, ReadOnlySpan<byte> subjectDigest)
+    internal static SigningInput CreateRequestProof(RequestProofKind kind, PersonaPublicKey publicKey, DeploymentName deployment, RequestChallenge challenge, ReadOnlySpan<byte> subjectDigest)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(deployment);

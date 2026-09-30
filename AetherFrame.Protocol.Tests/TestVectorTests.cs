@@ -56,7 +56,7 @@ public class TestVectorTests
         Assert.Equal("AetherFrame.Protocol.PersonaId.v1", fixture.PersonaIdDomainTag);
         Assert.Equal("AetherFrame.Protocol.RequestProof.v1-draft", fixture.RequestProofDomainTag);
         Assert.Equal(RequestProofVectorBuilder.Valid().Select(p => p.Name), fixture.RequestProofs.Select(p => p.Name));
-        Assert.True(fixture.RejectedProofs.Count >= 35);
+        Assert.True(fixture.RejectedProofs.Count >= 43);
         Assert.Equal(["A", "B"], fixture.Personas.Select(p => p.Name));
         Assert.Equal(VectorBuilder.Models().Select(m => m.Name), fixture.Documents.Select(d => d.Name));
         Assert.True(fixture.Rejected.Count >= 40);
@@ -311,7 +311,12 @@ public class TestVectorTests
         foreach (var vector in fixture.RejectedProofs)
         {
             var expected = Enum.Parse<ProtocolError>(vector.Error);
-            var document = Hex.Parse(fixture.Documents.Single(d => d.Name == vector.Document).Document!);
+            var document = vector.DocumentSet switch
+            {
+                null => Hex.Parse(fixture.Documents.Single(d => d.Name == vector.Document).Document!),
+                "rejected" => Hex.Parse(fixture.Rejected.Single(r => r.Name == vector.Document).Document),
+                _ => throw new InvalidDataException(vector.Name + ": unknown document set " + vector.DocumentSet),
+            };
             var actual = ProtocolAssert.Rejects(() => RequestProofCodec.VerifySubmission(Hex.Parse(vector.Proof), document, DeploymentName.Parse(vector.Deployment))).Error;
             Assert.True(expected == actual, $"{vector.Name}: expected {expected}, got {actual}");
         }
@@ -324,12 +329,14 @@ public class TestVectorTests
         using var a = TestPersonas.CreateA();
         using var b = TestPersonas.CreateB();
         byte[] DocumentNamed(string name) => Hex.Parse(fixture.Documents.Single(d => d.Name == name).Document!);
-        var rebuilt = RequestProofVectorBuilder.BuildRejected(Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed, a, b);
+        byte[] RejectedNamed(string name) => Hex.Parse(fixture.Rejected.Single(r => r.Name == name).Document);
+        var rebuilt = RequestProofVectorBuilder.BuildRejected(Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed, RejectedNamed, a, b);
         Assert.Equal(rebuilt.Select(r => r.Name), fixture.RejectedProofs.Select(r => r.Name));
         foreach (var (expected, actual) in rebuilt.Zip(fixture.RejectedProofs))
         {
             Assert.Equal(expected.Error, actual.Error);
             Assert.Equal(expected.Document, actual.Document);
+            Assert.Equal(expected.DocumentSet, actual.DocumentSet);
             Assert.Equal(expected.Deployment, actual.Deployment);
             Assert.Equal(expected.Deterministic, actual.Deterministic);
             if (expected.Deterministic)

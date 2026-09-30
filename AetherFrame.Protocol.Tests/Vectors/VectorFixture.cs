@@ -153,7 +153,7 @@ internal sealed class RejectedVector
 
     public string Reason { get; set; } = "";
 
-    /// <summary>False when the vector embeds a fresh signature and so differs on every regeneration.</summary>
+    /// <summary>False when the vector ends in a fresh signature; a regeneration keeps the committed one while the rest is unchanged.</summary>
     public bool Deterministic { get; set; } = true;
 }
 
@@ -231,8 +231,11 @@ internal sealed class RejectedProofVector
 
     public string Proof { get; set; } = "";
 
-    /// <summary>The name of the vector in <see cref="VectorFixture.Documents"/> submitted with the proof.</summary>
+    /// <summary>The name of the vector submitted with the proof, in <see cref="VectorFixture.Documents"/> unless <see cref="DocumentSet"/> names another list.</summary>
     public string Document { get; set; } = "";
+
+    /// <summary>Null for <see cref="VectorFixture.Documents"/>; <c>rejected</c> for <see cref="VectorFixture.Rejected"/>.</summary>
+    public string? DocumentSet { get; set; }
 
     /// <summary>The deployment the server checking the proof is.</summary>
     public string Deployment { get; set; } = "";
@@ -241,6 +244,6 @@ internal sealed class RejectedProofVector
 
     public string Reason { get; set; } = "";
 
-    /// <summary>False when the proof holds a fresh signature, which a regeneration changes.</summary>
+    /// <summary>False when the proof ends in a fresh signature; a regeneration keeps the committed one while the rest is unchanged.</summary>
     public bool Deterministic { get; set; } = true;
 }

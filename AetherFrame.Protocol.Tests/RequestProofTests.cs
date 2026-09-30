@@ -66,6 +66,45 @@ public class RequestProofTests
     }
 
     [Fact]
+    public void TheLongestAndShortestNames_MakeTheLargestAndSmallestProofs()
+    {
+        using var a = TestPersonas.CreateA();
+        var document = Samples.SignedSnapshot(a);
+
+        var longest = DeploymentName.Parse(ProofSamples.LongestDeploymentText);
+        Assert.Equal(ProtocolLimits.MaxDeploymentNameBytes, longest.Bytes.Length);
+        var largest = RequestProofCodec.Sign(document, longest, Challenge, a);
+        Assert.Equal(ProtocolLimits.MaxRequestProofBytes, largest.Length);
+        Assert.Equal(454, largest.Length);
+        Assert.Equal(longest, RequestProofCodec.VerifySubmission(largest, document, longest).Proof.Deployment);
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => RequestProofCodec.Verify(Append(largest, 0)));
+
+        var shortest = DeploymentName.Parse("a");
+        var smallest = RequestProofCodec.Sign(document, shortest, Challenge, a);
+        Assert.Equal(202, smallest.Length);
+        Assert.Equal(shortest, RequestProofCodec.VerifySubmission(smallest, document, shortest).Proof.Deployment);
+    }
+
+    [Fact]
+    public void Verify_ChecksEachRuleAtItsPlaceInReadingOrder()
+    {
+        // Inputs with two faults are refused for the first in the order of section 14.3.
+        using var a = TestPersonas.CreateA();
+        var proof = ProofSamples.Proof(a);
+        var n = Deployment.Bytes.Length;
+
+        // The kind, the name and the challenge as soon as each is read, before a later truncation.
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Truncate(Mutate(proof, 6, 2), 20)));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Truncate(Mutate(proof, 73, (byte)'P'), 73 + n)));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Truncate(Substitute(proof, 73 + n, new byte[32]), 105 + n)));
+
+        // Trailing bytes before the key, the key before the signature's form, the form before the verification.
+        ProtocolAssert.Throws(ProtocolError.TrailingBytes, () => RequestProofCodec.Verify(Append(Mutate(proof, 7, 0x02), 0)));
+        ProtocolAssert.Throws(ProtocolError.InvalidKey, () => RequestProofCodec.Verify(ProofSamples.WithHighS(Mutate(proof, 7, 0x02))));
+        ProtocolAssert.Throws(ProtocolError.InvalidSignature, () => RequestProofCodec.Verify(ProofSamples.WithHighS(Flip(proof, 105 + n))));
+    }
+
+    [Fact]
     public void Verify_RefusesEachFramingFaultWithItsOwnError()
     {
         using var a = TestPersonas.CreateA();
@@ -185,6 +224,15 @@ public class RequestProofTests
         ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => RequestProofCodec.VerifySubmission(proof, new byte[ProtocolLimits.MaxDocumentBytes + 1], Deployment));
         e = ProtocolAssert.Throws(ProtocolError.ProofMismatch, () => RequestProofCodec.VerifySubmission(proof, Flip(document, 0), Deployment));
         Assert.Contains("another document", e.Message, StringComparison.Ordinal);
+
+        // Then the document's own verification, before the keys are compared: persona B's valid
+        // proof over a copy of A's document whose signature is broken fails as the document, not
+        // as a key mismatch, so no key is ever compared on bytes that did not verify.
+        using var b = TestPersonas.CreateB();
+        var broken = Flip(document, document.Length - 1);
+        var brokenDigest = SHA256.HashData(broken);
+        var bProof = RequestProofCodec.Assemble(RequestProofKind.DocumentSubmission, b.PublicKey, Deployment, Challenge, brokenDigest, b.Sign(SigningInput.CreateRequestProof(RequestProofKind.DocumentSubmission, b.PublicKey, Deployment, Challenge, brokenDigest)));
+        ProtocolAssert.Throws(ProtocolError.SignatureMismatch, () => RequestProofCodec.VerifySubmission(bProof, broken, Deployment));
     }
 
     [Fact]
@@ -194,7 +242,8 @@ public class RequestProofTests
         using var b = TestPersonas.CreateB();
         var document = Samples.SignedSnapshot(a);
 
-        ProtocolAssert.Throws(ProtocolError.ProofMismatch, () => RequestProofCodec.Sign(document, Deployment, Challenge, b));
+        var e = ProtocolAssert.Throws(ProtocolError.ProofMismatch, () => RequestProofCodec.Sign(document, Deployment, Challenge, b));
+        Assert.Contains("another persona", e.Message, StringComparison.Ordinal);
         ProtocolAssert.Throws(ProtocolError.SignatureMismatch, () => RequestProofCodec.Sign(Flip(document, document.Length - 1), Deployment, Challenge, a));
         ProtocolAssert.Throws(ProtocolError.InvalidFraming, () => RequestProofCodec.Sign([1, 2, 3, 4], Deployment, Challenge, a));
         ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => RequestProofCodec.Sign(new byte[ProtocolLimits.MaxDocumentBytes + 1], Deployment, Challenge, a));
@@ -269,6 +318,10 @@ internal static class ProofSamples
     public const string DeploymentText = "plates.example.com";
 
     public const string ChallengeText = "chl_d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7";
+
+    /// <summary>The longest deployment name, 253 bytes, under a name reserved for tests: it makes the largest proof, 454 bytes.</summary>
+    public static readonly string LongestDeploymentText =
+        new string('a', 63) + "." + new string('b', 63) + "." + new string('c', 63) + "." + new string('d', 49) + ".example.com";
 
     public static byte[] Proof(IPersonaSigner signer) =>
         RequestProofCodec.Sign(Samples.SignedSnapshot(signer), DeploymentName.Parse(DeploymentText), RequestChallenge.Parse(ChallengeText), signer);

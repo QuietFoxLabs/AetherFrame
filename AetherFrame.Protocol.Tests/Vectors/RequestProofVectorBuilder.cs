@@ -12,22 +12,25 @@ namespace AetherFrame.Protocol.Tests;
 
 /// <summary>
 /// The request proof vectors (docs/networking/ProtocolSpecification-v1.md, sections 11 and 14):
-/// valid proofs for three of the document vectors, and proofs a server refuses, each with one
-/// fault, or valid but checked with another deployment, another document or another persona's
-/// document. Every rule of the proof's reading order (section 14.3) and of its matching with a
-/// submission (section 14.4) has an entry.
+/// valid proofs for three of the document vectors, one of them again at the longest deployment
+/// name (the largest proof), and proofs a server refuses, each with one fault, or valid but checked
+/// with another deployment, another document, another persona's document or a document that does
+/// not verify. Every rule of the proof's reading order (section 14.3) and of its matching with a
+/// submission (section 14.4) has an entry, except the document's size limit, which the unit tests
+/// cover.
 /// </summary>
 internal static class RequestProofVectorBuilder
 {
     public const string Deployment = ProofSamples.DeploymentText;
 
-    public sealed record ValidProof(string Name, string Persona, string Document, string Challenge);
+    public sealed record ValidProof(string Name, string Persona, string Document, string Deployment, string Challenge);
 
     public static IReadOnlyList<ValidProof> Valid() =>
     [
-        new("submit-profile-snapshot", "A", "profile-snapshot", ProofSamples.ChallengeText),
-        new("submit-profile-layout-snapshot", "A", "profile-layout-snapshot", "chl_" + string.Concat(Enumerable.Repeat("e8", 32))),
-        new("submit-profile-retraction", "B", "profile-retraction", "chl_" + string.Concat(Enumerable.Repeat("f9", 32))),
+        new("submit-profile-snapshot", "A", "profile-snapshot", Deployment, ProofSamples.ChallengeText),
+        new("submit-profile-layout-snapshot", "A", "profile-layout-snapshot", Deployment, "chl_" + string.Concat(Enumerable.Repeat("e8", 32))),
+        new("submit-profile-retraction", "B", "profile-retraction", Deployment, "chl_" + string.Concat(Enumerable.Repeat("f9", 32))),
+        new("submit-at-the-longest-deployment-name", "A", "profile-snapshot", ProofSamples.LongestDeploymentText, "chl_" + string.Concat(Enumerable.Repeat("a5", 32))),
     ];
 
     public static List<RequestProofVector> BuildValid(Func<string, byte[]> document, IReadOnlyDictionary<string, EcdsaPersonaSigner> signers)
@@ -37,7 +40,7 @@ internal static class RequestProofVectorBuilder
         {
             var signer = signers[valid.Persona];
             var bytes = document(valid.Document);
-            var deployment = DeploymentName.Parse(Deployment);
+            var deployment = DeploymentName.Parse(valid.Deployment);
             var challenge = RequestChallenge.Parse(valid.Challenge);
             var proof = RequestProofCodec.Sign(bytes, deployment, challenge, signer);
             var digest = SHA256.HashData(bytes);
@@ -47,7 +50,7 @@ internal static class RequestProofVectorBuilder
                 Name = valid.Name,
                 Persona = valid.Persona,
                 Document = valid.Document,
-                Deployment = Deployment,
+                Deployment = valid.Deployment,
                 Challenge = valid.Challenge,
                 SubjectDigest = Hex.Of(digest),
                 SigningInput = Hex.Of(input.Bytes),
@@ -65,11 +68,11 @@ internal static class RequestProofVectorBuilder
     /// profile-snapshot document at <see cref="Deployment"/>. Checked with that document and that
     /// deployment unless the entry names others.
     /// </summary>
-    public static List<RejectedProofVector> BuildRejected(byte[] baseProof, Func<string, byte[]> document, EcdsaPersonaSigner a, EcdsaPersonaSigner b)
+    public static List<RejectedProofVector> BuildRejected(byte[] baseProof, Func<string, byte[]> document, Func<string, byte[]> rejectedDocument, EcdsaPersonaSigner a, EcdsaPersonaSigner b)
     {
         var list = new List<RejectedProofVector>();
-        void Add(string name, byte[] proof, ProtocolError error, string reason, string documentName = "profile-snapshot", string deployment = Deployment, bool deterministic = true) =>
-            list.Add(new RejectedProofVector { Name = name, Proof = Hex.Of(proof), Document = documentName, Deployment = deployment, Error = error.ToString(), Reason = reason, Deterministic = deterministic });
+        void Add(string name, byte[] proof, ProtocolError error, string reason, string documentName = "profile-snapshot", string deployment = Deployment, bool deterministic = true, string? documentSet = null) =>
+            list.Add(new RejectedProofVector { Name = name, Proof = Hex.Of(proof), Document = documentName, DocumentSet = documentSet, Deployment = deployment, Error = error.ToString(), Reason = reason, Deterministic = deterministic });
 
         var n = Deployment.Length;
         var challenge = 73 + n;
@@ -80,7 +83,8 @@ internal static class RequestProofVectorBuilder
         var subject = baseProof.AsSpan(digest, 32).ToArray();
         var challengeBytes = baseProof.AsSpan(challenge, 32).ToArray();
         var baseSignature = baseProof.AsSpan(signature, 64).ToArray();
-        byte[] Renamed(string name) => ReferenceProtocol.Proof(1, key, System.Text.Encoding.ASCII.GetBytes(name), challengeBytes, subject, baseSignature);
+        byte[] RenamedBytes(byte[] name) => ReferenceProtocol.Proof(1, key, name, challengeBytes, subject, baseSignature);
+        byte[] Renamed(string name) => RenamedBytes(System.Text.Encoding.ASCII.GetBytes(name));
 
         // Framing, version and kind (section 14.3, steps 1 to 4).
         Add("proof-bad-magic", Mutate(baseProof, 3, (byte)'X'), ProtocolError.InvalidFraming, "magic AFRX");
@@ -104,6 +108,9 @@ internal static class RequestProofVectorBuilder
         Add("proof-deployment-underscore", Renamed("plates_example.com"), ProtocolError.InvalidValue, "an underscore");
         Add("proof-deployment-label-64", Renamed(new string('a', 64) + ".com"), ProtocolError.InvalidValue, "a label of 64 bytes");
         Add("proof-deployment-leading-hyphen", Renamed("-plates.example.com"), ProtocolError.InvalidValue, "a label starting with a hyphen");
+        Add("proof-deployment-trailing-hyphen", Renamed("plates-.example.com"), ProtocolError.InvalidValue, "a label ending with a hyphen");
+        Add("proof-deployment-utf8-letter", RenamedBytes(System.Text.Encoding.UTF8.GetBytes("pl" + char.ConvertFromUtf32(0xE4) + "tes.example.com")), ProtocolError.InvalidValue, "U+00E4 in UTF-8: a byte outside ASCII; names carry A-labels only");
+        Add("proof-deployment-ideographic-full-stop", RenamedBytes(System.Text.Encoding.UTF8.GetBytes("plates" + char.ConvertFromUtf32(0x3002) + "example.com")), ProtocolError.InvalidValue, "U+3002, which IDNA mapping would turn into a dot: names are never mapped");
         Add("proof-challenge-all-zero", Substitute(baseProof, challenge, new byte[32]), ProtocolError.InvalidValue, "the all-zero challenge");
 
         // Lengths and trailing bytes.
@@ -138,6 +145,14 @@ internal static class RequestProofVectorBuilder
         var bInput = SigningInput.CreateRequestProof(RequestProofKind.DocumentSubmission, b.PublicKey, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), subject);
         var bProof = RequestProofCodec.Assemble(RequestProofKind.DocumentSubmission, b.PublicKey, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), subject, b.Sign(bInput));
         Add("proof-by-another-persona", bProof, ProtocolError.ProofMismatch, "persona B's valid proof over persona A's document: the proof and the document are signed by different keys", deterministic: false);
+
+        // A valid proof over a document that fails its own verification: only step 4 of section
+        // 14.4 refuses it, so an implementation that trusted a matching digest would accept it.
+        var broken = rejectedDocument("signature-bit-flipped");
+        var brokenDigest = SHA256.HashData(broken);
+        var brokenInput = SigningInput.CreateRequestProof(RequestProofKind.DocumentSubmission, a.PublicKey, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), brokenDigest);
+        var brokenProof = RequestProofCodec.Assemble(RequestProofKind.DocumentSubmission, a.PublicKey, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), brokenDigest, a.Sign(brokenInput));
+        Add("proof-of-a-document-that-does-not-verify", brokenProof, ProtocolError.SignatureMismatch, "persona A's valid proof over the rejected document signature-bit-flipped: the digest matches, and the document's own signature fails (section 14.4, step 4)", documentName: "signature-bit-flipped", documentSet: "rejected", deterministic: false);
         return list;
     }
 }

@@ -1,12 +1,13 @@
 # Networking decision register
 
-**Status (2026-09-29): two decisions are the owner's approvals, and twenty-two more are approved under the owner's delegation.**
+**Status (2026-09-29): two decisions are the owner's approvals, and twenty-five more are approved under the owner's delegation.**
 - **D3** is **APPROVED** by the owner.
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
 - **N5** and **L6** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **D9b** and **P2** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **K1**, **K2**, **K6** and **K7** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **N3**, **D4**, **D5**, **D8**, **D9a**, **I1**, **N1**, **N7**, **P1**, **K3**, **K4**, and the new **R1**, **R2** and **R3**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decision batch A for NETWORK2".
+- **S1**, **D7** and **L8** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The request proof's decisions (N2-3b)".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
 
 **Every other product and architecture decision below is UNRESOLVED.**
@@ -514,6 +515,10 @@ The boundary tests change in N2-9, the first change that brings network code, to
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which refused `System.Net.Sockets` outright although R2's callback can't be constructed without `AddressFamily`, and a status code needs `HttpStatusCode`. It asked for this exact allowlist, and **concurred** with the amended entry on its recheck of `779e873`. It confirmed that the list is exactly what its compiled probe referenced, and that both ways of overriding certificate validation reference `SslPolicyErrors`, outside the list, so the type check refuses them too.
 
+### The request proof's decisions (N2-3b), September 29, 2026
+
+The entries below were decided for NETWORK2's increment N2-3b, the request proof, and are applied by it. They are researched against the primary sources cited in each, and a security-focused reviewer examined the design before any code and the implementation after. The request proof adds a signing context, a signed-byte change the owner approved in advance on conditions (see "Approved decisions").
+
 ### S1: request proofs. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Every document submission to a server carries a request proof (specification, section 14): snapshots and retractions alike. Viewing by share code needs none. A proof is signed by the document's own key, in its own signing context (L8), and binds:
@@ -563,7 +568,7 @@ A server refuses a submission whose proof fails section 14.4, resubmissions incl
 
 Version 1 has two contexts: the signed document and the request proof. Applied by N2-3b.
 
-**Rationale.** One persona key signs in both contexts. ECDSA's standard security notion, existential unforgeability under chosen messages, holds for any set of messages that cannot be confused, and the length-prefixed tags make every input of one context differ from every input of the other from the first byte. The known dangers of reusing a key come from using it with different primitives (signing and key agreement), not from separated messages under one scheme. Signing nothing a server supplies except inside a fixed field of a tagged input keeps a hostile server from using a client as a signing oracle.
+**Rationale.** One persona key signs in both contexts. ECDSA's standard security notion, existential unforgeability under chosen messages, holds for any set of messages that cannot be confused, and the length-prefixed tags make every input of one context differ from every input of the other (here already at the first byte, since the tags' lengths differ). The known dangers of reusing a key come from using it with different primitives (signing and key agreement), not from separated messages under one scheme. Signing nothing a server supplies except inside a fixed field of a tagged input keeps a hostile server from using a client as a signing oracle.
 
 **Not settled:** later contexts (share grants, key rotation statements), which each follow these rules.
 
