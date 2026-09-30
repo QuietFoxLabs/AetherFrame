@@ -9,8 +9,7 @@ namespace AetherFrame.Services.Network.Personas;
 /// The plugin's key blob storage: one directory of the plugin's own files, one <c>.afkey</c> file
 /// per slot, named by the slot's text form and nothing else (docs/networking/NETWORK1.md, system 2:
 /// never the plugin configuration, never Dalamud's reliable storage, and no persona identity in a
-/// name). Compiled only in the networking preview flavour, like everything under Services/Network;
-/// nothing wires it yet, so no key file exists outside tests.
+/// name). Compiled only in the networking preview flavour, like everything under Services/Network.
 /// <para>
 /// <see cref="WriteNew"/> writes a temporary file (<c>.afkey.tmp</c>) with create-new semantics,
 /// flushes it to disk, reads it back and compares, then moves it into place without overwriting,
@@ -19,12 +18,10 @@ namespace AetherFrame.Services.Network.Personas;
 /// here deletes a key.
 /// </para>
 /// <para>
-/// Durability falls short of the storage contract in one place: the file's bytes reach the disk
-/// before the move, but the move itself is not written through, so a power loss just after this
-/// returns can leave the key only in the temporary file, which is never trusted. Before anything
-/// persists a record of a key written here (increment 9), the move must be written through
-/// (<c>MoveFileEx</c> with <c>MOVEFILE_WRITE_THROUGH</c> on Windows), as the register's K2 entry
-/// requires.
+/// Durability: the file's bytes reach the disk before the move, and the move itself is written
+/// through (<see cref="WrittenThroughMove.MoveNew"/>, <c>MoveFileExW</c> with
+/// <c>MOVEFILE_WRITE_THROUGH</c>), so once this returns the key is under its final name on disk
+/// before the persona registry records it (K2 and P3 in docs/networking/DecisionRegister.md).
 /// </para>
 /// </summary>
 public sealed class PersonaKeyFileStorage : IPersonaKeyBlobStorage
@@ -108,7 +105,7 @@ public sealed class PersonaKeyFileStorage : IPersonaKeyBlobStorage
             }
 
             // No overwrite: a file that appeared under the final name meanwhile makes this throw.
-            File.Move(temporary, final);
+            WrittenThroughMove.MoveNew(temporary, final);
         }
         catch
         {

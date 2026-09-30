@@ -115,7 +115,7 @@ internal static class PersonaRegistryCodec
         }
 
         // The magic and the version first, which need only six bytes, so a later version is told
-        // apart whatever its size; then this version's own minimum.
+        // apart however short it is; then this version's own minimum.
         if (bytes.Length < 4 + 2)
         {
             reason = "it is shorter than a registry's header";

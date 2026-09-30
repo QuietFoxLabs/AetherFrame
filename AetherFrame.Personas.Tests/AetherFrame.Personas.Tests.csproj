@@ -33,6 +33,11 @@
        (crypt32 on Windows, refusing elsewhere) and the capability probe. -->
   <ItemGroup>
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaKeyFileStorage.cs" Link="Linked\PersonaKeyFileStorage.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\WrittenThroughMove.cs" Link="Linked\WrittenThroughMove.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaRegistryFileStorage.cs" Link="Linked\PersonaRegistryFileStorage.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaInstanceLock.cs" Link="Linked\PersonaInstanceLock.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\NoBackupCodec.cs" Link="Linked\NoBackupCodec.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaSession.cs" Link="Linked\PersonaSession.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\DpapiPersonaKeyProtector.cs" Link="Linked\DpapiPersonaKeyProtector.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaCapabilityProbe.cs" Link="Linked\PersonaCapabilityProbe.cs" />
   </ItemGroup>
