@@ -348,7 +348,7 @@ public class TestVectorTests
             Assert.True(expected == actual, $"{vector.Name}: expected {expected}, got {actual}");
         }
 
-        var rebuilt = RequestProofVectorBuilder.BuildRejectedActions(fixture.ActionProofs.Single(p => p.Name == "action-lookup"), Hex.Parse(fixture.RequestProofs[0].Proof));
+        var rebuilt = RequestProofVectorBuilder.BuildRejectedActions(fixture.ActionProofs.Single(p => p.Name == "action-lookup"), Hex.Parse(fixture.RequestProofs[0].Proof), Hex.Parse(fixture.Documents.Single(d => d.Name == fixture.RequestProofs[0].Document).Document!));
         Assert.Equal(rebuilt.Select(r => (r.Name, r.Proof, r.CheckedAs, r.Body, r.Deployment, r.Error)), fixture.RejectedActions.Select(r => (r.Name, r.Proof, r.CheckedAs, r.Body, r.Deployment, r.Error)));
     }
 
@@ -419,6 +419,27 @@ public class TestVectorTests
         var cross = Hex.Parse(fixture.RejectedProofs.Single(r => r.Name == "proof-signed-in-the-document-context").Proof);
         var signatureOffset = cross.Length - 64;
         Assert.True(SignatureVerifier.Verify(SigningInput.Create(DocumentType.ProfileSnapshot, keyA, cross.AsSpan(4, signatureOffset - 4)), ProtocolSignature.FromBytes(cross.AsSpan(signatureOffset))));
+
+        // The cross-kind vectors: each is a valid proof whose deployment, key and digest match what
+        // it is checked with, so only the kind check refuses it (section 14.4, step 1; section 14.5,
+        // step 2).
+        var snapshot = Hex.Parse(fixture.Documents.Single(d => d.Name == "profile-snapshot").Document!);
+        var actionAsSubmission = fixture.RejectedProofs.Single(r => r.Name == "proof-of-an-action-as-a-submission");
+        var lookup = RequestProofCodec.Verify(Hex.Parse(actionAsSubmission.Proof));
+        Assert.Equal("profile-snapshot", actionAsSubmission.Document);
+        Assert.Null(actionAsSubmission.DocumentSet);
+        Assert.Equal(RequestProofKind.Lookup, lookup.Kind);
+        Assert.Equal(keyA, lookup.PublicKey);
+        Assert.Equal(SHA256.HashData(snapshot), lookup.SubjectDigest.ToArray());
+        Assert.Equal(DeploymentName.Parse(actionAsSubmission.Deployment), lookup.Deployment);
+
+        var submissionAsAction = fixture.RejectedActions.Single(r => r.Name == "submission-checked-as-an-action");
+        var submission = RequestProofCodec.Verify(Hex.Parse(submissionAsAction.Proof));
+        Assert.Equal(RequestProofKind.DocumentSubmission, submission.Kind);
+        Assert.Equal(nameof(RequestProofKind.Lookup), submissionAsAction.CheckedAs);
+        Assert.Equal(SHA256.HashData(Hex.Parse(submissionAsAction.Body)), submission.SubjectDigest.ToArray());
+        Assert.Equal(DeploymentName.Parse(submissionAsAction.Deployment), submission.Deployment);
+        Assert.True(Hex.Parse(submissionAsAction.Body).Length <= ProtocolLimits.MaxActionBodyBytes);
 
         // The largest valid proof.
         var longest = fixture.RequestProofs.Single(p => p.Name == "submit-at-the-longest-deployment-name");

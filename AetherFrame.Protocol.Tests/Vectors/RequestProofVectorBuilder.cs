@@ -155,9 +155,11 @@ internal static class RequestProofVectorBuilder
         var brokenProof = RequestProofCodec.Assemble(RequestProofKind.DocumentSubmission, a.PublicKey, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), brokenDigest, a.Sign(brokenInput));
         Add("proof-of-a-document-that-does-not-verify", brokenProof, ProtocolError.SignatureMismatch, "persona A's valid proof over the rejected document signature-bit-flipped: the digest matches, and the document's own signature fails (section 14.4, step 4)", documentName: "signature-bit-flipped", documentSet: "rejected", deterministic: false);
 
-        // An action's valid proof is never a submission (section 14.4, step 1).
-        var lookup = RequestProofCodec.SignAction(RequestProofKind.Lookup, subject, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), a);
-        Add("proof-of-an-action-as-a-submission", lookup, ProtocolError.ProofMismatch, "persona A's valid lookup proof submitted with a document: an action never authorizes a submission", deterministic: false);
+        // An action's valid proof is never a submission (section 14.4, step 1). The lookup is signed
+        // over the document's own bytes, so its deployment, key and digest all match the submission:
+        // only the kind refuses it.
+        var lookup = RequestProofCodec.SignAction(RequestProofKind.Lookup, snapshot, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), a);
+        Add("proof-of-an-action-as-a-submission", lookup, ProtocolError.ProofMismatch, "persona A's valid lookup proof whose body is profile-snapshot's own bytes, submitted with that document: everything matches but the kind, and an action never authorizes a submission", deterministic: false);
         return list;
     }
 
@@ -211,9 +213,11 @@ internal static class RequestProofVectorBuilder
 
     /// <summary>
     /// Action requests a server refuses (section 14.5), derived from the lookup vector and the first
-    /// submission vector: each is checked as the action named, with the body and deployment named.
+    /// submission vector (<paramref name="submissionProof"/>, persona A's proof of
+    /// <paramref name="submittedDocument"/>): each is checked as the action named, with the body and
+    /// deployment named.
     /// </summary>
-    public static List<RejectedActionVector> BuildRejectedActions(ActionProofVector lookup, byte[] submissionProof)
+    public static List<RejectedActionVector> BuildRejectedActions(ActionProofVector lookup, byte[] submissionProof, byte[] submittedDocument)
     {
         var list = new List<RejectedActionVector>();
         void Add(string name, byte[] proof, RequestProofKind checkedAs, byte[] body, ProtocolError error, string reason, string deployment = Deployment) =>
@@ -226,7 +230,7 @@ internal static class RequestProofVectorBuilder
         Add("action-for-another-deployment", proof, RequestProofKind.Lookup, body, ProtocolError.ProofMismatch, "a valid lookup proof checked by staging.example.com", deployment: "staging.example.com");
         Add("action-with-another-body", proof, RequestProofKind.Lookup, System.Text.Encoding.UTF8.GetBytes("{\"name\":\"John Doe\",\"world\":\"Gilgamesh\"}"), ProtocolError.ProofMismatch, "a valid lookup proof sent with another character's name");
         Add("action-body-over-the-limit", proof, RequestProofKind.Lookup, new byte[ProtocolLimits.MaxActionBodyBytes + 1], ProtocolError.LimitExceeded, "a body of 4,097 bytes, one over the limit");
-        Add("submission-checked-as-an-action", submissionProof, RequestProofKind.Lookup, body, ProtocolError.ProofMismatch, "a valid document submission proof checked as a lookup: a submission never authorizes an action");
+        Add("submission-checked-as-an-action", submissionProof, RequestProofKind.Lookup, submittedDocument, ProtocolError.ProofMismatch, "a valid document submission proof checked as a lookup whose body is the document it proves: everything matches but the kind, and a submission never authorizes an action");
         return list;
     }
 }

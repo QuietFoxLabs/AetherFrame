@@ -8,11 +8,13 @@ using AetherFrame.Protocol.Signing;
 namespace AetherFrame.Protocol.Requests;
 
 /// <summary>
-/// The request proof (docs/networking/ProtocolSpecification-v1.md, section 14; decisions S1 and
-/// D7): a persona's signature, in its own signing context, authorizing one submission of one exact
-/// document to one deployment, under a challenge the server issued. <see cref="Sign"/> is how a
-/// client makes one, and <see cref="VerifySubmission"/> the only way a server checks one: together
-/// with the document it came with, since a proof read on its own authorizes nothing.
+/// The request proof (docs/networking/ProtocolSpecification-v1.md, section 14; decisions S1, D7
+/// and C9): a persona's signature, in its own signing context, authorizing one request to one
+/// deployment under a challenge the server issued: either one submission of one exact document, or
+/// one action (section 14.5) with one exact body. <see cref="Sign"/> and <see cref="SignAction"/> are
+/// how a client makes one, and <see cref="VerifySubmission"/> and <see cref="VerifyAction"/> the only
+/// ways a server checks one: together with the document or body it came with, and the kind the
+/// server expects, since a proof read on its own authorizes nothing.
 /// </summary>
 public static class RequestProofCodec
 {
@@ -76,9 +78,9 @@ public static class RequestProofCodec
     /// Reads a request proof from hostile bytes (section 14.3): framing, version, kind, the
     /// deployment name, the challenge, lengths and trailing bytes are checked, then the key and the
     /// signature. The input is copied once before anything is read from it. Internal: a proof that
-    /// verifies here authorizes nothing yet, and a server that stopped here would skip the
-    /// deployment, the document and the key (section 14.4), so only <see cref="VerifySubmission"/>
-    /// offers it.
+    /// verifies here authorizes nothing yet, and a server that stopped here would skip the kind, the
+    /// deployment, and the document or body (sections 14.4 and 14.5), so only
+    /// <see cref="VerifySubmission"/> and <see cref="VerifyAction"/> offer it.
     /// </summary>
     /// <exception cref="ProtocolException">The first rule the input breaks, in the order of section 14.3.</exception>
     internal static VerifiedRequestProof Verify(ReadOnlySpan<byte> proof)
@@ -261,7 +263,12 @@ public static class RequestProofCodec
         return new VerifiedAction(verifiedProof, bodyBytes);
     }
 
-    private static bool IsKnown(RequestProofKind kind) => kind is >= RequestProofKind.DocumentSubmission and <= RequestProofKind.Report;
+    /// <summary>
+    /// Whether version 1 defines <paramref name="kind"/> (section 14.3, step 4). The one statement of
+    /// the range, shared with <see cref="SigningInput.CreateRequestProof"/>, so a new kind is added
+    /// in one place.
+    /// </summary>
+    internal static bool IsKnown(RequestProofKind kind) => kind is >= RequestProofKind.DocumentSubmission and <= RequestProofKind.Report;
 
     /// <summary>A private copy of an action's body, taken only once its size is within the limit.</summary>
     private static byte[] CopyBody(ReadOnlySpan<byte> body)

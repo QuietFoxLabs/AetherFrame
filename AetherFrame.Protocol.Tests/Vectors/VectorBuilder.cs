@@ -106,7 +106,7 @@ internal static class VectorBuilder
             }
         }
 
-        fixture.RejectedActions = RequestProofVectorBuilder.BuildRejectedActions(fixture.ActionProofs.Single(p => p.Name == "action-lookup"), Hex.Parse(fixture.RequestProofs[0].Proof));
+        fixture.RejectedActions = RequestProofVectorBuilder.BuildRejectedActions(fixture.ActionProofs.Single(p => p.Name == "action-lookup"), Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed(fixture.RequestProofs[0].Document));
         return fixture;
     }
 

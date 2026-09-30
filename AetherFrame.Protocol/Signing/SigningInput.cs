@@ -88,7 +88,7 @@ public sealed class SigningInput
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(challenge);
-        if (kind is < RequestProofKind.DocumentSubmission or > RequestProofKind.Report)
+        if (!RequestProofCodec.IsKnown(kind))
         {
             throw new ProtocolException(ProtocolError.InvalidValue, $"Request proof kind {ProtocolText.Number((byte)kind)} is not known.");
         }
