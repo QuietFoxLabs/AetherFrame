@@ -202,6 +202,13 @@ Each difference is chosen, and recorded, in the pull request of the task named. 
 | The word for showing a Plate over the game | Preview, the card menu's word; the tutorial's "View" becomes "Preview". | View, with Preview kept for Clean Preview inside the editor, so one word never names two features. | 1 |
 | A character's first Plate | Active automatically. The chooser says so beforehand (Windows/PlateLibraryWindow.Templates.cs:733), and My Plates' footer after (Templates.cs:431-434). | A checkbox in the chooser, checked by default, so the player can also say no, since ROADMAP.md, section 5, says activation is explicit. | 10 |
 
+**Chosen in task 1** ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59), September 30, 2026; APPROVED (Claude, under the owner's delegation of September 29, 2026), with the rationale in ROADMAP.md, section 5):
+- Delete in the editor's Plate menu: the first pass. Delete stays on My Plates' cards.
+- Trying a variation: the second pass, named **Save as New Plate** for what it makes. The editor continues on the new Plate, and the original keeps its last saved version. Cards keep Duplicate.
+- Seeing the open Plate over the game: the second pass. The editors' Plate menu has **View**, which raises the Plate Viewer with the live document.
+- Set Active with unsaved changes: the first pass. While there are unsaved changes, the menu says that Set Active, Save as Template and Export use the last saved version.
+- The word for showing a Plate over the game: the second pass. **View** in both menus and in Manage Templates; Preview is only the editors' own. The tutorial already said View.
+
 ### 7.6 The second pass's tasks
 
 The second pass's direction is "the Plate in hand": wherever a Plate is (in the editor, on a card, in the viewer), one Plate menu offers every action on it, with the same words in the same order. Its target structure, which tasks 1 and 2 build towards:
