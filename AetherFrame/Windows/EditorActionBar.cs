@@ -36,6 +36,9 @@ internal sealed class EditorActionBar
     private const string PreviewLabel = "Preview";
     private const string RevertLabel = "Revert";
     private const string SaveLabel = "Save";
+    private const string SavingText = "Saving...";
+    private const string UnsavedText = "Unsaved changes";
+    private const string SavedText = "Saved";
 
     private static readonly Vector4 SavingColor = new(0.85f, 0.85f, 0.4f, 1f);
 
@@ -118,13 +121,14 @@ internal sealed class EditorActionBar
         var centerWidth = (frame * 2f) + historyGap;
 
         var (stateText, stateColor) = SaveState();
-        var rightWidth = ImGui.CalcTextSize(stateText).X
-            + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
+        var buttonsWidth = ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : frame + style.ItemSpacing.X);
+        var widestState = Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
 
         var rows = EditorActionBarLayout.ArrangeRows(
-            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart, controlMinimum, centerWidth, rightWidth, gap);
+            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart, controlMinimum, centerWidth,
+            ImGui.CalcTextSize(stateText).X + buttonsWidth, widestState + buttonsWidth, gap);
 
         // ---- the Plate menu, always drawn, with the Plate's name in whatever room is left
         ImGui.SameLine(controlStart);
@@ -272,9 +276,9 @@ internal sealed class EditorActionBar
     }
 
     private (string Text, Vector4 Color) SaveState() =>
-        commands.IsSaving ? ("Saving...", SavingColor)
-        : commands.IsDirty ? ("Unsaved changes", EditorWidgets.WarningColor)
-        : ("Saved", EditorWidgets.SuccessColor with { W = 0.75f });
+        commands.IsSaving ? (SavingText, SavingColor)
+        : commands.IsDirty ? (UnsavedText, EditorWidgets.WarningColor)
+        : (SavedText, EditorWidgets.SuccessColor with { W = 0.75f });
 
     private static float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f);
 }

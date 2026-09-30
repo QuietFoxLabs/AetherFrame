@@ -38,22 +38,29 @@ internal static class EditorActionBarLayout
     /// The whole bar with the Plate menu's control: <see cref="Arrange"/>'s one row when all three
     /// groups fit on it. Otherwise the document group takes a second row, against its end, and the
     /// history group ends the first, which leaves the Plate's name the most room.
+    ///
+    /// <para>The document group's width changes with the save state ("Saved", "Unsaved changes"),
+    /// so the rows, the history group and the name's room are worked out from its widest,
+    /// <paramref name="widestRightWidth"/>: the first edit after a save never moves anything but the
+    /// state text. Only the document group itself is placed with its width now, against the end.</para>
     /// </summary>
     /// <param name="rowStart">The row's first usable x.</param>
     /// <param name="rowEnd">The row's last usable x.</param>
     /// <param name="controlStart">Where the Plate menu's control starts, after the left group.</param>
     /// <param name="controlMinimum">The control's width without the name.</param>
     /// <param name="centerWidth">The history group's width.</param>
-    /// <param name="rightWidth">The document group's width.</param>
+    /// <param name="rightWidth">The document group's width now.</param>
+    /// <param name="widestRightWidth">The document group's width with its widest save state.</param>
     /// <param name="spacing">The gap kept between groups.</param>
     internal static EditorActionBarRows ArrangeRows(
-        float rowStart, float rowEnd, float controlStart, float controlMinimum, float centerWidth, float rightWidth, float spacing)
+        float rowStart, float rowEnd, float controlStart, float controlMinimum, float centerWidth, float rightWidth, float widestRightWidth, float spacing)
     {
         var leftEnd = controlStart + controlMinimum;
-        if (leftEnd + spacing + centerWidth + spacing + rightWidth <= rowEnd)
+        var widest = Math.Max(rightWidth, widestRightWidth);
+        if (leftEnd + spacing + centerWidth + spacing + widest <= rowEnd)
         {
-            var (centerX, rightX, _) = Arrange(rowStart, rowEnd, leftEnd, centerWidth, rightWidth, spacing);
-            return new EditorActionBarRows(centerX, rightX, NameRoom(controlStart, controlMinimum, centerX, spacing), TwoRows: false);
+            var (centerX, _, _) = Arrange(rowStart, rowEnd, leftEnd, centerWidth, widest, spacing);
+            return new EditorActionBarRows(centerX, rowEnd - rightWidth, NameRoom(controlStart, controlMinimum, centerX, spacing), TwoRows: false);
         }
 
         var historyX = Math.Max(leftEnd + spacing, rowEnd - centerWidth);

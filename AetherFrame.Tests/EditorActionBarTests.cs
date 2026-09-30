@@ -273,7 +273,7 @@ public class EditorActionBarTests
     [Fact]
     public void WhenEverythingFits_TheBarIsOneRow_AsArrangeLaysItOut()
     {
-        var rows = EditorActionBarLayout.ArrangeRows(0f, 1000f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 1000f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
         var (centerX, rightX, _) = EditorActionBarLayout.Arrange(0f, 1000f, 200f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
 
         Assert.False(rows.TwoRows);
@@ -286,7 +286,7 @@ public class EditorActionBarTests
     public void WhenOneRowCantHoldEverything_TheDocumentGroupTakesASecondRow()
     {
         // 200 (left group and control) + 10 + 60 (history) + 10 + 300 (document group) needs 580.
-        var rows = EditorActionBarLayout.ArrangeRows(0f, 400f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 400f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
 
         Assert.True(rows.TwoRows);
         Assert.Equal(400f - 60f, rows.CenterX);
@@ -298,22 +298,45 @@ public class EditorActionBarTests
     [Fact]
     public void AtExactlyEnoughRoom_TheBarStaysOneRow()
     {
-        var rows = EditorActionBarLayout.ArrangeRows(0f, 580f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 580f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
         Assert.False(rows.TwoRows);
         Assert.True(rows.RightX + 300f <= 580f);
 
-        Assert.True(EditorActionBarLayout.ArrangeRows(0f, 579f, 160f, 40f, 60f, 300f, 10f).TwoRows);
+        Assert.True(EditorActionBarLayout.ArrangeRows(0f, 579f, 160f, 40f, 60f, 300f, 300f, 10f).TwoRows);
     }
 
     [Fact]
     public void OnARowNarrowerThanTheDocumentGroup_ItStartsAtTheRowStart()
     {
-        var rows = EditorActionBarLayout.ArrangeRows(0f, 250f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+        var rows = EditorActionBarLayout.ArrangeRows(0f, 250f, controlStart: 160f, controlMinimum: 40f, centerWidth: 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
 
         Assert.True(rows.TwoRows);
         Assert.Equal(0f, rows.RightX);
         Assert.Equal(210f, rows.CenterX);
         Assert.Equal(0f, rows.NameRoom);
+    }
+
+    [Fact]
+    public void TheSaveStateChanging_NeverMovesTheRowsTheHistoryOrTheName()
+    {
+        // At 560, the group fits with "Saved" (width 250) but not with "Unsaved changes" (300):
+        // the rows are chosen from the widest, so a first edit moves only the state text.
+        var saved = EditorActionBarLayout.ArrangeRows(0f, 560f, 160f, 40f, 60f, rightWidth: 250f, widestRightWidth: 300f, spacing: 10f);
+        var unsaved = EditorActionBarLayout.ArrangeRows(0f, 560f, 160f, 40f, 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+
+        Assert.True(saved.TwoRows);
+        Assert.Equal(unsaved.TwoRows, saved.TwoRows);
+        Assert.Equal(unsaved.CenterX, saved.CenterX);
+        Assert.Equal(unsaved.NameRoom, saved.NameRoom);
+
+        // On one row, too: only the document group follows its width, against the end.
+        var wideSaved = EditorActionBarLayout.ArrangeRows(0f, 1000f, 160f, 40f, 60f, rightWidth: 250f, widestRightWidth: 300f, spacing: 10f);
+        var wideUnsaved = EditorActionBarLayout.ArrangeRows(0f, 1000f, 160f, 40f, 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+        Assert.False(wideSaved.TwoRows);
+        Assert.Equal(wideUnsaved.CenterX, wideSaved.CenterX);
+        Assert.Equal(wideUnsaved.NameRoom, wideSaved.NameRoom);
+        Assert.Equal(1000f - 250f, wideSaved.RightX);
+        Assert.Equal(1000f - 300f, wideUnsaved.RightX);
     }
 
     [Fact]
