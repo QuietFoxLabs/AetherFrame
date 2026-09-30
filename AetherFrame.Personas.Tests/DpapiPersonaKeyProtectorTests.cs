@@ -75,8 +75,9 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
         Assert.Null(protector.Unprotect(tampered, context));
         Assert.Null(protector.Unprotect(blob.AsSpan(0, blob.Length - 1), context));
 
-        // DPAPI ignores bytes after the blob it made (see the protector's remarks), so an extended
-        // blob is not asserted either way: the envelope's length prefix is what fixes a blob's bytes.
+        // DPAPI authenticates neither bytes appended after a blob nor its provider identifier (see the
+        // protector's remarks), so neither change is asserted here: with either, the same key opens,
+        // never another, and the store checks the key it opens against the envelope's public key.
     }
 
     [Fact]
@@ -94,7 +95,7 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
             return;
         }
 
-        Assert.ThrowsAny<Exception>(() => protector.Protect(new byte[32], Context(1)));
+        Assert.Throws<DllNotFoundException>(() => protector.Protect(new byte[32], Context(1)));
     }
 
     [Theory]
@@ -111,7 +112,7 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
     }
 
     [Fact]
-    public void TheStore_KeepsAndOpensAKeyThroughDpapi_AndABlobMovedToAnotherSlotDoesNotOpen()
+    public void TheStore_KeepsAndOpensAKeyThroughDpapi_AndItsBlobOpensUnderNoOtherHeader()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -128,11 +129,20 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
             Assert.Equal(material.PublicKey, ((AetherFrame.Protocol.Signing.IPersonaSigner)signer).PublicKey);
         }
 
-        // The same envelope under another slot's name: the header no longer matches the slot, so
-        // the store refuses it before or at DPAPI, and the key stays unavailable there.
-        var other = PersonaSlotId.NewId();
-        File.Copy(Path.Combine(directory.Path, slot + PersonaKeyFileStorage.Extension), Path.Combine(directory.Path, other + PersonaKeyFileStorage.Extension));
-        Assert.Null(store.OpenSigner(other));
+        // The same envelope under another slot's name: its header still names the old slot, so the
+        // store's own slot check refuses it before DPAPI is called.
+        var envelope = File.ReadAllBytes(Path.Combine(directory.Path, slot + PersonaKeyFileStorage.Extension));
+        var copied = PersonaSlotId.NewId();
+        File.WriteAllBytes(Path.Combine(directory.Path, copied + PersonaKeyFileStorage.Extension), envelope);
+        Assert.Null(store.OpenSigner(copied));
+
+        // A forged header: the slot inside the envelope rewritten to the new slot's (bytes 6 to 21),
+        // so every check before DPAPI passes and only DPAPI's entropy, the original header, refuses it.
+        var forged = PersonaSlotId.NewId();
+        var rewritten = (byte[])envelope.Clone();
+        forged.WriteBytes(rewritten.AsSpan(6, 16));
+        File.WriteAllBytes(Path.Combine(directory.Path, forged + PersonaKeyFileStorage.Extension), rewritten);
+        Assert.Null(store.OpenSigner(forged));
     }
 
     [Fact]

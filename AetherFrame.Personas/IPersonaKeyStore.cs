@@ -8,8 +8,8 @@ namespace AetherFrame.Personas;
 /// never keeps a private key; an implementation keeps keys and never a record. The implementation
 /// for real keys is <see cref="Storage.ProtectedPersonaKeyStore"/> (the key store core, K1, K2, K6
 /// and K7 in docs/networking/DecisionRegister.md), which keeps protected envelopes in a storage and
-/// through a protector the plugin supplies; no protector exists outside tests yet (increment 7), and
-/// nothing wires a store to the plugin. Nothing about this interface makes a key safe: that is a
+/// through a protector the plugin supplies: the Windows DPAPI protector (N2-4, NETWORK1 increment 7)
+/// is compiled only into the networking preview flavour, and nothing wires a store to the plugin yet. Nothing about this interface makes a key safe: that is a
 /// property of an implementation and its protector, and only a reviewed one may claim it.
 /// <para>
 /// The manager makes every call to a store, and to the signers it returns (signing and disposal

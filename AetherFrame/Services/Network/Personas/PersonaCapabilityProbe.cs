@@ -58,7 +58,7 @@ public sealed class PersonaCapabilities
     /// </summary>
     public string? Message { get; }
 
-    /// <summary>For the log: the step that failed and the kind of failure, never a key, a blob or a path.</summary>
+    /// <summary>For the log: the step that failed and the kinds of failure, never a key, a blob or a path.</summary>
     public string? Detail { get; }
 
     internal static PersonaCapabilities All { get; } = new(true, true, PersonaCapability.None, null, null);
@@ -77,16 +77,18 @@ public sealed class PersonaCapabilities
 /// framework thread, before any persona feature turns on. It decides by what works, never by the
 /// operating system's name. It checks, in order:
 /// <list type="number">
-/// <item>that a committed known-answer document verifies and a tampered copy of it is refused as a
-/// signature mismatch, since a round trip alone doesn't show that verification works;</item>
+/// <item>that a committed known-answer document verifies as its persona and a tampered copy of it
+/// is refused as a signature mismatch, since a round trip alone doesn't show that verification
+/// works; viewing depends on this step alone;</item>
 /// <item>the exact key chain the plugin uses, with a throwaway key and never a persona's: generate,
 /// protect under the envelope's header, write and read the key file storage in a scratch directory,
 /// open again through the key material's checks, sign, and verify through the protocol;</item>
 /// <item>that the protector claims protection for a blob it has just made, opens that blob, and
 /// refuses it under another context.</item>
 /// </list>
-/// It never throws: any failure turns the capabilities off. It deletes its scratch directory
-/// whatever happens, and it never touches a persona's key or the plugin's own key directory.
+/// It never throws on a platform or storage failure: any failure turns the capabilities off. It
+/// tries to delete its scratch directory whatever happens. Its caller passes a temporary directory
+/// as the scratch root, never the plugin's key directory.
 /// </summary>
 public static class PersonaCapabilityProbe
 {
@@ -98,30 +100,48 @@ public static class PersonaCapabilityProbe
     internal const string KnownAnswerHex =
         "414650448001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f000000c00001a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2000000006553f1000000000c53616d706c6520506c61746500000002c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c311111111111111111111111111111111111111111111111111111111111111110100000000000004d200000280000001e0d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4222222222222222222222222222222222222222222222222222222222222222202000000000000162e00000780000004383793f5e9e31a01a9ed5c3dbd764672a1f7e3a072d144436292915ec45a99a4c81c6d573a6ca6153ea21cf5a7529c4c58628b197576d8a7e0382e4c27f2ea4a16";
 
-    /// <summary>Where a signed document's payload starts: magic, version, type, key and payload length come first.</summary>
-    private const int KnownAnswerPayloadOffset = 4 + 2 + 1 + ProtocolConstants.PublicKeyLength + 4;
-
     /// <summary>The persona the known-answer document verifies as.</summary>
     internal const string KnownAnswerPersona = "psn_7d73559d8dd350e595d7a8b22481f9b74b7fe7399348f6a515efc655971677f5";
 
-    /// <summary>
-    /// Runs the probe with <paramref name="protector"/>, whose protection is judged by
-    /// <paramref name="claimsProtection"/> on a blob it has just made (for DPAPI,
-    /// <see cref="DpapiPersonaKeyProtector.CarriesWindowsProvider"/>), in a fresh directory under
-    /// <paramref name="scratchRoot"/>. Blocking: call it off the framework thread.
-    /// </summary>
-    public static PersonaCapabilities Run(IPersonaKeyProtector protector, Func<byte[], bool> claimsProtection, string scratchRoot) =>
-        Run(protector, claimsProtection, scratchRoot, Convert.FromHexString(KnownAnswerHex));
+    /// <summary>Where a signed document's payload starts: magic, version, type, key and payload length come first.</summary>
+    private const int KnownAnswerPayloadOffset = 4 + 2 + 1 + ProtocolConstants.PublicKeyLength + 4;
 
-    /// <summary>The probe with another known answer, so the tests can show a verification failure turns everything off.</summary>
-    internal static PersonaCapabilities Run(IPersonaKeyProtector protector, Func<byte[], bool> claimsProtection, string scratchRoot, byte[] knownAnswer)
+    /// <summary>
+    /// Runs the probe with the Windows DPAPI protector, whose protection claim is the Windows
+    /// provider identifier on a blob it has just made (<see cref="DpapiPersonaKeyProtector.CarriesWindowsProvider"/>),
+    /// in a fresh directory under <paramref name="scratchRoot"/>. The claim is bound here, never
+    /// passed in, so no caller can turn it on. Blocking: call it off the framework thread.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="scratchRoot"/> is not a full path.</exception>
+    public static PersonaCapabilities Run(DpapiPersonaKeyProtector protector, string scratchRoot)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        return Run(protector, blob => DpapiPersonaKeyProtector.CarriesWindowsProvider(blob), scratchRoot);
+    }
+
+    /// <summary>
+    /// The probe with any protector and its own claim, a known answer and a verifier. Internal: a
+    /// later platform protector gets its own public entry point with its claim bound, as
+    /// <see cref="Run(DpapiPersonaKeyProtector, string)"/> binds DPAPI's; the tests use the rest to
+    /// show each failure turns the right capabilities off.
+    /// </summary>
+    internal static PersonaCapabilities Run(
+        IPersonaKeyProtector protector,
+        Func<byte[], bool> claimsProtection,
+        string scratchRoot,
+        byte[]? knownAnswer = null,
+        Func<byte[], VerifiedDocument>? verify = null)
     {
         ArgumentNullException.ThrowIfNull(protector);
         ArgumentNullException.ThrowIfNull(claimsProtection);
         ArgumentNullException.ThrowIfNull(scratchRoot);
-        ArgumentNullException.ThrowIfNull(knownAnswer);
+        if (!Path.IsPathFullyQualified(scratchRoot))
+        {
+            throw new ArgumentException("The scratch root must be a full path, so it never resolves against the game's directory.", nameof(scratchRoot));
+        }
 
-        if (VerificationFails(knownAnswer) is { } verification)
+        if (VerificationFails(knownAnswer ?? Convert.FromHexString(KnownAnswerHex), verify ?? (bytes => SignedDocumentCodec.Verify(bytes))) is { } verification)
         {
             return PersonaCapabilities.Without(PersonaCapability.SignatureVerification, verification);
         }
@@ -139,26 +159,27 @@ public static class PersonaCapabilityProbe
         return PersonaCapabilities.All;
     }
 
-    private static string? VerificationFails(byte[] knownAnswer)
+    private static string? VerificationFails(byte[] knownAnswer, Func<byte[], VerifiedDocument> verify)
     {
         try
         {
-            if (SignedDocumentCodec.Verify(knownAnswer).Persona.ToString() != KnownAnswerPersona)
+            if (verify(knownAnswer).Persona.ToString() != KnownAnswerPersona)
             {
                 return "the known-answer document verified as another persona";
             }
         }
         catch (Exception e)
         {
-            return "the known-answer document did not verify (" + e.GetType().Name + ")";
+            return "the known-answer document did not verify (" + Describe(e) + ")";
         }
 
-        // One bit of the payload changed: a verifier that accepts this verifies nothing.
+        // One bit of the payload changed: a verifier that accepts this verifies nothing, and one that
+        // refuses it for any reason but the signature doesn't check signatures.
         var tampered = (byte[])knownAnswer.Clone();
         tampered[KnownAnswerPayloadOffset] ^= 0x01;
         try
         {
-            SignedDocumentCodec.Verify(tampered);
+            verify(tampered);
             return "a tampered copy of the known-answer document verified";
         }
         catch (ProtocolException e) when (e.Error == ProtocolError.SignatureMismatch)
@@ -167,7 +188,7 @@ public static class PersonaCapabilityProbe
         }
         catch (Exception e)
         {
-            return "a tampered copy of the known-answer document was refused for the wrong reason (" + e.GetType().Name + ")";
+            return "a tampered copy of the known-answer document was refused for the wrong reason (" + Describe(e) + ")";
         }
     }
 
@@ -177,7 +198,7 @@ public static class PersonaCapabilityProbe
         string? directory = null;
         try
         {
-            directory = Path.Combine(Path.GetFullPath(scratchRoot), "aetherframe-probe-" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8)));
+            directory = Path.Combine(scratchRoot, "aetherframe-probe-" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8)));
             var store = new ProtectedPersonaKeyStore(new PersonaKeyFileStorage(directory), protector);
 
             step = "generating a key";
@@ -212,7 +233,7 @@ public static class PersonaCapabilityProbe
         }
         catch (Exception e)
         {
-            return step + " failed (" + e.GetType().Name + ")";
+            return step + " failed (" + Describe(e) + ")";
         }
         finally
         {
@@ -222,12 +243,13 @@ public static class PersonaCapabilityProbe
 
     private static string? ProtectionFails(IPersonaKeyProtector protector, Func<byte[], bool> claimsProtection)
     {
-        var secret = RandomNumberGenerator.GetBytes(32);
-        var context = RandomNumberGenerator.GetBytes(32);
+        byte[]? secret = null;
         byte[]? opened = null;
         byte[]? elsewhere = null;
         try
         {
+            secret = RandomNumberGenerator.GetBytes(32);
+            var context = RandomNumberGenerator.GetBytes(32);
             var blob = protector.Protect(secret, context);
             if (!claimsProtection(blob))
             {
@@ -247,22 +269,26 @@ public static class PersonaCapabilityProbe
         }
         catch (Exception e)
         {
-            return "the protector failed (" + e.GetType().Name + ")";
+            return "the protector failed (" + Describe(e) + ")";
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(secret);
-            if (opened is not null)
+            foreach (var buffer in new[] { secret, opened, elsewhere })
             {
-                CryptographicOperations.ZeroMemory(opened);
-            }
-
-            if (elsewhere is not null)
-            {
-                CryptographicOperations.ZeroMemory(elsewhere);
+                if (buffer is not null)
+                {
+                    CryptographicOperations.ZeroMemory(buffer);
+                }
             }
         }
     }
+
+    /// <summary>
+    /// A failure's kind, and its cause's when it wraps one (the store wraps every custody failure):
+    /// type names only, which name no key, blob or path.
+    /// </summary>
+    private static string Describe(Exception e) =>
+        e.InnerException is { } inner ? e.GetType().Name + " from " + inner.GetType().Name : e.GetType().Name;
 
     private static void DeleteQuietly(string? directory)
     {

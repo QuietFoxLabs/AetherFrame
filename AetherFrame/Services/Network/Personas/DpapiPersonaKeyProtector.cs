@@ -13,22 +13,25 @@ namespace AetherFrame.Services.Network.Personas;
 /// everything under Services/Network.
 /// <para>
 /// What it protects against, and what not: a key file copied to another account or another machine
-/// does not open. Anything running as the same Windows user can open it, other plugins in the game
-/// process included, and a roaming profile or a domain's backup key can recover it on another
-/// machine (K2's rationale). It claims protection only when a blob it just made carries the Windows
-/// DPAPI provider identifier (<see cref="CarriesWindowsProvider"/>, K3): Wine's DPAPI obfuscates
-/// only, and writes its own marker instead.
+/// does not open without that account's Windows password. Anything running as the same Windows user
+/// can open it, other plugins in the game process included; a roaming profile or a domain's backup
+/// key can recover it on another machine; and an account without a password protects nothing (K2's
+/// rationale). It claims protection only when a blob it has just made carries the Windows DPAPI
+/// provider identifier (<see cref="CarriesWindowsProvider"/>, K3): Wine's DPAPI obfuscates only,
+/// and writes its own marker instead.
 /// </para>
 /// <para>
-/// Every buffer that held a secret is zeroed: the managed copy of the input before it is released,
+/// Every buffer that holds a secret lives on the pinned object heap, so the garbage collector never
+/// moves it and leaves no copy behind, and is zeroed before it is released: the copy of the input,
 /// and DPAPI's output before <c>LocalFree</c>. On a system without crypt32, <see cref="Protect"/>
 /// throws and <see cref="Unprotect"/> returns null, as the protector contract says.
 /// </para>
 /// <para>
-/// DPAPI opens a blob it made even with bytes appended after it, so a blob's bytes are not fixed by
-/// DPAPI but by the envelope, which carries the blob's exact length; the store checks the key it
-/// opens against the envelope's public key in any case. Appending needs write access to the key
-/// file, which already means the same user, who can open the key anyway.
+/// DPAPI authenticates neither bytes appended after a blob nor the blob's 16-byte provider
+/// identifier (measured on Windows 11): several byte strings can therefore open one key, but none
+/// opens a different key. The ciphertext and the entropy are authenticated, and the store checks
+/// the scalar it opens against the envelope's public key, the application-level check Microsoft's
+/// <c>CryptUnprotectData</c> documentation advises. Nothing identifies a key by its file's bytes.
 /// </para>
 /// </summary>
 public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
@@ -36,8 +39,11 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
     /// <summary>The protector id every envelope this protector makes carries.</summary>
     public const string ProtectorId = "windows.dpapi.currentuser.v1";
 
-    /// <summary>The largest blob this protector accepts or returns: far above DPAPI's form of a 32-byte scalar.</summary>
-    public const int MaxBlobLength = 16 * 1024;
+    /// <summary>
+    /// The largest blob this protector accepts or returns, the same as the key envelope's own limit:
+    /// far above DPAPI's form of a 32-byte scalar (about 260 bytes).
+    /// </summary>
+    public const int MaxBlobLength = 4096;
 
     // CRYPTPROTECT_UI_FORBIDDEN: a call that would need to prompt fails instead.
     private const int UiForbidden = 0x1;
@@ -56,8 +62,9 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
     /// <summary>
     /// True when <paramref name="blob"/> starts as a Windows DPAPI blob does: version 1 and the
     /// Windows provider's identifier. The only evidence this protector accepts that it runs on
-    /// native Windows DPAPI (K3): never the operating system's name, a Wine version or an
-    /// environment variable.
+    /// native Windows DPAPI (K3), never the operating system's name, a Wine version or an
+    /// environment variable. It means something only for a blob this process's crypt32 has just
+    /// made: Windows does not authenticate the identifier, so it is never read from a stored blob.
     /// </summary>
     public static bool CarriesWindowsProvider(ReadOnlySpan<byte> blob) => blob.StartsWith(WindowsBlobPrefix);
 
@@ -77,15 +84,13 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
             throw new ArgumentException("A blob is always bound to a context.", nameof(context));
         }
 
-        var input = secret.ToArray();
-        var entropy = context.ToArray();
-        var inputHandle = GCHandle.Alloc(input, GCHandleType.Pinned);
-        var entropyHandle = GCHandle.Alloc(entropy, GCHandleType.Pinned);
+        var input = Pinned(secret);
         var output = default(NativeMethods.DataBlob);
         try
         {
-            var inputBlob = new NativeMethods.DataBlob(input.Length, inputHandle.AddrOfPinnedObject());
-            var entropyBlob = new NativeMethods.DataBlob(entropy.Length, entropyHandle.AddrOfPinnedObject());
+            var entropy = Pinned(context);
+            var inputBlob = new NativeMethods.DataBlob(input.Length, Marshal.UnsafeAddrOfPinnedArrayElement(input, 0));
+            var entropyBlob = new NativeMethods.DataBlob(entropy.Length, Marshal.UnsafeAddrOfPinnedArrayElement(entropy, 0));
             if (!NativeMethods.CryptProtectData(ref inputBlob, null, ref entropyBlob, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output))
             {
                 throw new CryptographicException(Marshal.GetLastPInvokeError());
@@ -96,8 +101,6 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
         finally
         {
             CryptographicOperations.ZeroMemory(input);
-            inputHandle.Free();
-            entropyHandle.Free();
             ZeroAndFree(output);
         }
     }
@@ -110,15 +113,13 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
             return null;
         }
 
-        var input = blob.ToArray();
-        var entropy = context.ToArray();
-        var inputHandle = GCHandle.Alloc(input, GCHandleType.Pinned);
-        var entropyHandle = GCHandle.Alloc(entropy, GCHandleType.Pinned);
         var output = default(NativeMethods.DataBlob);
         try
         {
-            var inputBlob = new NativeMethods.DataBlob(input.Length, inputHandle.AddrOfPinnedObject());
-            var entropyBlob = new NativeMethods.DataBlob(entropy.Length, entropyHandle.AddrOfPinnedObject());
+            var input = Pinned(blob);
+            var entropy = Pinned(context);
+            var inputBlob = new NativeMethods.DataBlob(input.Length, Marshal.UnsafeAddrOfPinnedArrayElement(input, 0));
+            var entropyBlob = new NativeMethods.DataBlob(entropy.Length, Marshal.UnsafeAddrOfPinnedArrayElement(entropy, 0));
             return NativeMethods.CryptUnprotectData(ref inputBlob, IntPtr.Zero, ref entropyBlob, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output)
                 ? CopyOut(output)
                 : null;
@@ -129,10 +130,16 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
         }
         finally
         {
-            inputHandle.Free();
-            entropyHandle.Free();
             ZeroAndFree(output);
         }
+    }
+
+    /// <summary>A copy of <paramref name="bytes"/> on the pinned object heap, where it never moves.</summary>
+    private static byte[] Pinned(ReadOnlySpan<byte> bytes)
+    {
+        var copy = GC.AllocateUninitializedArray<byte>(bytes.Length, pinned: true);
+        bytes.CopyTo(copy);
+        return copy;
     }
 
     /// <summary>A managed copy of DPAPI's output, or null when it is empty or larger than any blob this protector handles.</summary>

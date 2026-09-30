@@ -130,14 +130,68 @@ public class PluginAssemblyBoundaryTests
         }
     }
 
+    [Fact]
+    public void ThePlugin_LoadsNoNativeLibraryItself_AndDeclaresNoComImport()
+    {
+        // The other ways into native code that a P/Invoke declaration doesn't show: loading a
+        // library and calling through a function pointer or a delegate made from one, or a COM
+        // import. Neither flavour uses any of them.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var metadata = pe.GetMetadataReader();
+        var found = new List<string>();
+        foreach (var handle in metadata.TypeReferences)
+        {
+            var reference = metadata.GetTypeReference(handle);
+            if (metadata.GetString(reference.Namespace) == "System.Runtime.InteropServices" && metadata.GetString(reference.Name) == "NativeLibrary")
+            {
+                found.Add("System.Runtime.InteropServices.NativeLibrary");
+            }
+        }
+
+        foreach (var handle in metadata.MemberReferences)
+        {
+            var member = metadata.GetMemberReference(handle);
+            var name = metadata.GetString(member.Name);
+            if (name is not ("GetDelegateForFunctionPointer" or "GetFunctionPointerForDelegate") || member.Parent.Kind != HandleKind.TypeReference)
+            {
+                continue;
+            }
+
+            var parent = metadata.GetTypeReference((TypeReferenceHandle)member.Parent);
+            if (metadata.GetString(parent.Namespace) == "System.Runtime.InteropServices" && metadata.GetString(parent.Name) == "Marshal")
+            {
+                found.Add("Marshal." + name);
+            }
+        }
+
+        foreach (var handle in metadata.TypeDefinitions)
+        {
+            var type = metadata.GetTypeDefinition(handle);
+            if ((type.Attributes & System.Reflection.TypeAttributes.Import) != 0)
+            {
+                found.Add("COM import " + metadata.GetString(type.Namespace) + "." + metadata.GetString(type.Name));
+            }
+        }
+
+        Assert.True(found.Count == 0, "The plugin reaches native code itself through: " + string.Join(", ", found));
+    }
+
     private static bool Within(string ns, string[] roots) =>
         roots.Any(root => ns == root || ns.StartsWith(root + ".", StringComparison.Ordinal));
 
     [Fact]
-    public void NativeCalls_AreDpapisAlone_AndOnlyInThePreviewFlavour()
+    public void DeclaredNativeCalls_AreDpapisAlone_AndOnlyInThePreviewFlavour()
     {
-        // The player build calls no native function at all. The preview flavour calls exactly the
-        // three DPAPI needs (docs/networking/DecisionRegister.md, K2), all from the DPAPI protector.
+        // The player build declares no P/Invoke of its own (it reaches native code only through
+        // Dalamud and ImGui, like every plugin). The preview flavour declares exactly the three DPAPI
+        // needs (docs/networking/DecisionRegister.md, K2), all in the DPAPI protector. This reads the
+        // P/Invoke declarations, which LibraryImport's generated stubs also make.
         var path = RepositoryPaths.PluginAssembly();
         if (path is null)
         {
