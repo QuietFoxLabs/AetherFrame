@@ -29,6 +29,9 @@ internal sealed class TutorialCardWindow : Window
     // How long the spotlight flashes after Next is pressed on a step that waits for the player.
     private const double FlashSeconds = 1.2;
 
+    // Next pressed while a step needs something first: the highlighted control is the way there.
+    private const string GetThereFirst = "Use the highlighted control to continue: this step needs it first.";
+
     private const string CloseTooltip ="Close the tutorial for now. Help in My Plates resumes it where you left off.";
 
     private readonly OnboardingCoordinator coordinator;
@@ -199,7 +202,7 @@ internal sealed class TutorialCardWindow : Window
         {
             heldStep = null;
         }
-        else if (view.Step.WaitHint is { } hint)
+        else if ((view.Presentation == TutorialStepPresentation.Prerequisite ? GetThereFirst : view.Step.WaitHint) is { } hint)
         {
             ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceXs * scale));
             Note(FontAwesomeIcon.ExclamationCircle, AetherPalette.Warning, hint);
