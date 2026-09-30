@@ -896,6 +896,22 @@ internal sealed partial class EditorSession
         return StateMatches(baseline, profile.CanvasWidth, profile.CanvasHeight, profile.Background, profile.BasicIdentity, profile.BasicPlate, profile.Elements, profile.Components);
     }
 
+    /// <summary>
+    /// Whether the open document is exactly <paramref name="state"/>, with no edit in progress: how
+    /// Save as New Plate knows nothing changed while its copy was being written, before it opens
+    /// the copy in place of this document.
+    /// </summary>
+    internal bool LiveDocumentMatches(ProfileService.DocumentState state)
+    {
+        if (ActiveInteraction != ElementInteractionKind.None || pendingEditBefore is not null || pendingBackgroundBefore is not null || pendingDocumentBefore is not null)
+        {
+            return false;
+        }
+
+        return profileService.CurrentProfile is { } profile
+            && StateMatches(state, profile.CanvasWidth, profile.CanvasHeight, profile.Background, profile.BasicIdentity, profile.BasicPlate, profile.Elements, profile.Components);
+    }
+
     private static bool StatesEqual(ProfileService.DocumentState a, ProfileService.DocumentState b) =>
         StateMatches(a, b.CanvasWidth, b.CanvasHeight, b.Background, b.BasicIdentity, b.BasicPlate, b.Elements, b.Components);
 

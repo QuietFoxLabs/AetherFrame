@@ -42,7 +42,6 @@ internal sealed partial class PlateLibraryWindow
     }
 
     private const string TemplateChooserPopupId = "Create Plate##AetherFrameTemplateChooser";
-    private const string SaveAsTemplatePopupId = "Save as Template##AetherFrameSaveAsTemplate";
     private const string TemplateRenamePopupId = "Rename Template##AetherFrameTemplateRename";
     private const string TemplateDeletePopupId = "Delete Template##AetherFrameTemplateDelete";
 
@@ -74,11 +73,6 @@ internal sealed partial class PlateLibraryWindow
     // the popup is open would be wasteful and would leak a prewarm cache entry per frame.
     private Guid? chooserPreviewedTemplateId;
     private ProfileDocument? chooserPreviewDocument;
-
-    private bool pendingSaveAsTemplatePopup;
-    private Guid saveAsTemplateSourcePlateId;
-    private string saveAsTemplateBuffer = string.Empty;
-    private string? saveAsTemplateError;
 
     private bool pendingTemplateRenamePopup;
     private Guid templateRenameTargetId;
@@ -334,7 +328,7 @@ internal sealed partial class PlateLibraryWindow
 
         using (ImRaii.Disabled(!ready || selected is { SupportsPreview: false }))
         {
-            if (ImGui.Button("Preview"))
+            if (ImGui.Button("View"))
             {
                 var document = templates.GetSavedDocument(selected!.TemplateId, new PlateStarterContent(characterIdentity.CurrentInfo));
                 if (document is not null)
@@ -345,7 +339,7 @@ internal sealed partial class PlateLibraryWindow
         }
 
         EditorWidgets.Tooltip(selected is { SupportsPreview: false }
-            ? "This Template has nothing to preview."
+            ? "This Template has nothing to show."
             : "Show this Template in the Plate Viewer. Nothing about it changes.");
 
         ImGui.SameLine();
@@ -374,7 +368,7 @@ internal sealed partial class PlateLibraryWindow
             if (ImGui.Button("Duplicate"))
             {
                 var sourceId = selected!.TemplateId;
-                RunOperation<Guid>("duplicate the Template", () => templates.DuplicateTemplateAsync(sourceId), newId => selectedTemplateId = newId);
+                runner.Run<Guid>("duplicate the Template", () => templates.DuplicateTemplateAsync(sourceId), newId => selectedTemplateId = newId);
             }
 
             ImGui.SameLine();
@@ -395,11 +389,11 @@ internal sealed partial class PlateLibraryWindow
         {
             ImGui.TextDisabled("Working...");
         }
-        else if (errorMessage is { } error)
+        else if (runner.Error is { } error)
         {
             ImGui.TextColored(EditorWidgets.ErrorColor, error);
         }
-        else if (statusMessage is { } status)
+        else if (runner.Status is { } status)
         {
             ImGui.TextColored(EditorWidgets.SuccessColor with { W = 0.85f }, status);
         }
@@ -423,14 +417,14 @@ internal sealed partial class PlateLibraryWindow
     {
         var character = characterIdentity.CurrentCharacter;
         var starter = new PlateStarterContent(characterIdentity.CurrentInfo);
-        RunOperation<PlateCreationResult>("use the Template", () => templates.InstantiateAsync(templateId, character, starter), result =>
+        runner.Run<PlateCreationResult>("use the Template", () => templates.InstantiateAsync(templateId, character, starter), result =>
         {
             activeView = LibraryView.MyPlates;
             selectedPlateId = result.PlateId;
             searchText = string.Empty;
             if (result.BecameActive && character is not null)
             {
-                statusMessage = MyPlatesCharacterText.FirstPlateCreated;
+                runner.Status = MyPlatesCharacterText.FirstPlateCreated;
             }
 
             var basic = EditorSurfaceChooser.ForDocument(library.GetSavedDocument(result.PlateId)) == EditorSurfaceKind.Basic;
@@ -645,7 +639,7 @@ internal sealed partial class PlateLibraryWindow
 
         if (ImGui.MenuItem("Duplicate"))
         {
-            RunOperation<Guid>("duplicate the Template", () => templates.DuplicateTemplateAsync(templateId), newId =>
+            runner.Run<Guid>("duplicate the Template", () => templates.DuplicateTemplateAsync(templateId), newId =>
             {
                 chosenTemplateId = newId;
                 selectedTemplateId = newId;
@@ -814,65 +808,6 @@ internal sealed partial class PlateLibraryWindow
             : null;
     }
 
-    // ---------------------------------------------------------------- Save as Template
-
-    private void DrawSaveAsTemplatePopup()
-    {
-        if (pendingSaveAsTemplatePopup)
-        {
-            ImGui.OpenPopup(SaveAsTemplatePopupId);
-            pendingSaveAsTemplatePopup = false;
-        }
-
-        if (!ImGui.BeginPopupModal(SaveAsTemplatePopupId, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
-        {
-            return;
-        }
-
-        EditorWidgets.Hint("Saves this Plate's last saved state. Changes you haven't saved yet won't be included.");
-        ImGui.Spacing();
-
-        if (ImGui.IsWindowAppearing())
-        {
-            ImGui.SetKeyboardFocusHere();
-        }
-
-        ImGui.SetNextItemWidth(EditorWidgets.Scaled(300f));
-        var submitted = ImGui.InputText("##TemplateName", ref saveAsTemplateBuffer, TemplateNaming.MaxNameLength, ImGuiInputTextFlags.EnterReturnsTrue);
-
-        if (saveAsTemplateError is { } error)
-        {
-            ImGui.TextColored(EditorWidgets.ErrorColor, error);
-        }
-
-        ImGui.Spacing();
-        using (ImRaii.Disabled(IsBusy))
-        {
-            if (ImGui.Button("Save as Template", EditorWidgets.Scaled(new Vector2(160f, 0f))) || submitted)
-            {
-                if (!TemplateNaming.TryNormalizeName(saveAsTemplateBuffer, out var name, out var validationError))
-                {
-                    saveAsTemplateError = validationError;
-                }
-                else
-                {
-                    var plateId = saveAsTemplateSourcePlateId;
-                    RunOperation<Guid>("save the Template", () => templates.SaveAsTemplateAsync(plateId, name),
-                        _ => statusMessage = $"Saved \"{name}\" as a Template.");
-                    ImGui.CloseCurrentPopup();
-                }
-            }
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
-        {
-            ImGui.CloseCurrentPopup();
-        }
-
-        ImGui.EndPopup();
-    }
-
     // ---------------------------------------------------------------- Template rename
 
     private void DrawTemplateRenamePopup()
@@ -913,7 +848,7 @@ internal sealed partial class PlateLibraryWindow
                 else
                 {
                     var templateId = templateRenameTargetId;
-                    RunOperation("rename the Template", () => templates.RenameTemplateAsync(templateId, name));
+                    runner.Run("rename the Template", () => templates.RenameTemplateAsync(templateId, name));
                     ImGui.CloseCurrentPopup();
                 }
             }
@@ -963,14 +898,14 @@ internal sealed partial class PlateLibraryWindow
                 {
                     var templateId = template.TemplateId;
                     var name = template.DisplayName;
-                    RunOperation("delete the Template", () => templates.DeleteTemplateAsync(templateId), () =>
+                    runner.Run("delete the Template", () => templates.DeleteTemplateAsync(templateId), () =>
                     {
                         if (selectedTemplateId == templateId)
                         {
                             selectedTemplateId = null;
                         }
 
-                        statusMessage = $"Deleted \"{name}\".";
+                        runner.Status = $"Deleted \"{name}\".";
                     });
                     ImGui.CloseCurrentPopup();
                 }

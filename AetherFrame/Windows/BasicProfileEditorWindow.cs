@@ -116,7 +116,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         Action openLibrary,
         EditorSurfaceCoordinator surfaces,
         EditorDocumentCommands commands,
-        KeyboardShortcutService keyboardShortcuts)
+        KeyboardShortcutService keyboardShortcuts,
+        EditorPlateMenu plateMenu)
         : base("AetherFrame Basic Editor##BasicProfileEditorWindow")
     {
         SizeConstraints = new WindowSizeConstraints
@@ -138,7 +139,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         this.openLibrary = openLibrary;
         this.surfaces = surfaces;
         backgroundPanel = new BackgroundStylePanel(editorSession, renderResources, OpenImageFileDialog);
-        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Basic, openLibrary, openAdvancedEditor, () => Help);
+        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Basic, openLibrary, openAdvancedEditor, () => Help, plateMenu);
         this.keyboardShortcuts = keyboardShortcuts;
         closeGuard = new EditorCloseGuard(editorSession, commands);
         cleanPreview = new CleanPreviewPresenter(this, editorSession, profileService, renderResources, ImGuiWindowFlags.None);
@@ -224,6 +225,10 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         // Drawn unconditionally so an in-progress file pick isn't stranded if the Plate
         // becomes unavailable (e.g. it's deleted from My Plates) while the dialog is open.
         fileDialogManager.Draw();
+
+        // Before the open Plate is read: a Plate action that opens another Plate (Save as New
+        // Plate) takes effect before anything is drawn.
+        actionBar.PlateMenu.DrawFrame();
 
         // Before the null check, so closing or deleting the open Plate also resets the session.
         editorSession.SyncWithCurrentProfile();

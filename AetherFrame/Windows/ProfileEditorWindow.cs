@@ -88,7 +88,8 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         Action openBasicEditor,
         Action openLibrary,
         EditorSurfaceCoordinator surfaces,
-        EditorDocumentCommands commands)
+        EditorDocumentCommands commands,
+        EditorPlateMenu plateMenu)
         : base("AetherFrame Advanced Editor##ProfileEditorWindow")
     {
         SizeConstraints = new WindowSizeConstraints
@@ -105,7 +106,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         this.openLibrary = openLibrary;
         this.surfaces = surfaces;
         backgroundPanel = new BackgroundStylePanel(editorSession, renderResources, OpenImageFileDialog);
-        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Advanced, openLibrary, openBasicEditor, () => Help);
+        actionBar = new EditorActionBar(commands, EditorSurfaceKind.Advanced, openLibrary, openBasicEditor, () => Help, plateMenu);
         closeGuard = new EditorCloseGuard(editorSession, commands);
         cleanPreview = new CleanPreviewPresenter(this, editorSession, profileService, renderResources, EditorFlags);
 
@@ -220,6 +221,10 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         // Drawn unconditionally so an in-progress file pick isn't stranded if the profile
         // becomes unavailable (e.g. character logs out) while the dialog is open.
         fileDialogManager.Draw();
+
+        // Before the open Plate is read: a Plate action that opens another Plate (Save as New
+        // Plate) takes effect before anything is drawn.
+        actionBar.PlateMenu.DrawFrame();
 
         editorSession.SyncWithCurrentProfile();
 

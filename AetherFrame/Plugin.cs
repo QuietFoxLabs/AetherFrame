@@ -15,6 +15,7 @@ using AetherFrame.Services.Templates;
 using AetherFrame.Services.Thumbnails;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
+using AetherFrame.UI.Library;
 using AetherFrame.UI.Rendering;
 using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows;
@@ -73,6 +74,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly PlateThumbnailService templateThumbnailService;
     private readonly PlateThumbnailTextures templateThumbnailTextures;
     private readonly EditorSurfaceCoordinator editorSurfaces;
+
+    // The Plate menu both editors' action bar shares (interface task 1).
+    private readonly EditorPlateMenu editorPlateMenu;
     private readonly PlateLibraryWindow plateLibraryWindow;
     private readonly BasicProfileEditorWindow basicProfileEditorWindow;
     private readonly ProfileEditorWindow profileEditorWindow;
@@ -209,29 +213,39 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             keyboardShortcutService = new KeyboardShortcutService();
             startup.OnFailure("keyboard shortcuts", keyboardShortcutService.Dispose);
 
+            // .aetherframe export/import: local files only, chosen by the player; nothing networked.
+            packageService = new PlatePackageService(
+                plateLibrary, assetStorageService, paths, $"AetherFrame {PluginInterface.Manifest.AssemblyVersion}", ImageFormatSupport.IsSupported, log,
+                operations: ownedOperations);
+
             // Undo, Redo, Save and Revert as both editors' shared action bar offers them.
             var documentCommands = new EditorDocumentCommands(profileService, editorSession);
 
+            // The Plate menu both editors' action bar shares (interface task 1): My Plates' card menu's
+            // actions, run and reported where the Plate is being edited, with its own Export dialog.
+            var editorPlateFileDialogs = new FileDialogManager();
+            editorPlateMenu = new EditorPlateMenu(
+                new PlateMenu(
+                    new PlateActions(plateLibrary, templateLibrary, packageService, profileService, editorSession, new PlateOperationRunner(log), log),
+                    plateLibrary, profileService, editorSession, thumbnailService, editorPlateFileDialogs),
+                plateLibrary, characterIdentityService, documentCommands, editorPlateFileDialogs, plateId => profileViewWindow!.ShowPlate(plateId));
+
             basicProfileEditorWindow = new BasicProfileEditorWindow(
                 profileService, editorSession, basicEditorSession, imageTextureCache, renderResources, basicFileDialogManager, gameTitleCatalog, jobCatalog,
-                OpenAdvancedEditor, OpenMyPlates, editorSurfaces, documentCommands, keyboardShortcutService);
+                OpenAdvancedEditor, OpenMyPlates, editorSurfaces, documentCommands, keyboardShortcutService, editorPlateMenu);
             profileEditorWindow = new ProfileEditorWindow(
-                profileService, editorSession, keyboardShortcutService, renderResources, fileDialogManager, OpenBasicEditor, OpenMyPlates, editorSurfaces, documentCommands);
+                profileService, editorSession, keyboardShortcutService, renderResources, fileDialogManager, OpenBasicEditor, OpenMyPlates, editorSurfaces, documentCommands, editorPlateMenu);
             editorSurfaces.Attach(basicProfileEditorWindow, profileEditorWindow);
             // The one place "this character's Active Plate" is resolved (the viewer's default request).
             var activePlates = new ActivePlateResolver(plateLibrary, () => characterIdentityService.CurrentCharacter);
             profileViewWindow = new ProfileViewWindow(profileService, plateLibrary, activePlates, renderResources, OpenMyPlates);
 
-            // .aetherframe export/import: local files only, chosen by the player; nothing networked.
-            packageService = new PlatePackageService(
-                plateLibrary, assetStorageService, paths, $"AetherFrame {PluginInterface.Manifest.AssemblyVersion}", ImageFormatSupport.IsSupported, log,
-                operations: ownedOperations);
             packageImportWindow = new PackageImportWindow(packageService, renderResources, (plateId, name) => plateLibraryWindow!.OnPlateImported(plateId, name));
             plateLibraryWindow = new PlateLibraryWindow(
                 plateLibrary, templateLibrary, profileService, editorSession, characterIdentityService, thumbnailService, thumbnailTextures,
                 templateThumbnailService, templateThumbnailTextures, renderResources, OpenBasicEditor, OpenAdvancedEditor, () => editorSurfaces.ActiveSurface,
                 basicGuidance, profileViewWindow.ShowPlate, profileViewWindow.ShowDocument,
-                packageService, new FileDialogManager(), packageImportWindow.Begin);
+                packageService, new FileDialogManager(), packageImportWindow.Begin, log);
 
             WindowSystem.AddWindow(plateLibraryWindow);
             WindowSystem.AddWindow(basicProfileEditorWindow);
@@ -327,6 +341,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             shareCheckWindow = new ShareCheckWindow(shareCheck, publisher, personaSession, TextureProvider, id => plateLibrary.FindPlate(id)?.DisplayName);
             WindowSystem.AddWindow(shareCheckWindow);
             plateLibraryWindow.CheckSharing = shareCheckWindow.Open;
+            editorPlateMenu.Menu.CheckSharing = shareCheckWindow.Open;
 #endif
 
             // Names the exact build in dalamud.log, so a stale dev DLL is obvious.
@@ -429,6 +444,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         {
             tutorialOverlay.Update();
             WindowSystem.Draw();
+            editorPlateMenu.EndFrame();
         }
         finally
         {

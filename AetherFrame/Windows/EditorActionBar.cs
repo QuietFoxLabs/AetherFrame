@@ -16,11 +16,16 @@ namespace AetherFrame.Windows;
 /// one editor: the same actions, with the same words, in the same places.
 ///
 /// <code>
-/// [My Plates] [Basic|Advanced]  Plate name      [Undo][Redo]      Unsaved changes [Preview] [Revert] [Save]
+/// [My Plates] [Basic|Advanced] [Plate name v]   [Undo][Redo]      Unsaved changes [Preview] [Revert] [Save]
+///                                                                  Exported "Evening Look" to Evening Look.aetherframe.
 /// </code>
 ///
 /// It is drawn at the top of the window, outside every scrolling region, so it stays in view while
-/// the editor's content scrolls. Availability comes from <see cref="EditorDocumentCommands"/>: Save
+/// the editor's content scrolls. The Plate's name opens the Plate menu (<see cref="EditorPlateMenu"/>),
+/// whose control keeps its icon and caret at every width; the name shows in whatever room is left,
+/// and the menu's results and errors show on a line of their own under the save state. When the
+/// window is too narrow for one row, the save state and its buttons move to a second row.
+/// Availability comes from <see cref="EditorDocumentCommands"/>: Save
 /// and Revert only with unsaved changes, Undo and Redo only when there's something to undo or redo.
 /// Revert always asks first (and the revert itself can be undone). Everything an editor mode adds
 /// of its own (Advanced's + Text, Guides...) goes on its own row below this one.
@@ -31,6 +36,9 @@ internal sealed class EditorActionBar
     private const string PreviewLabel = "Preview";
     private const string RevertLabel = "Revert";
     private const string SaveLabel = "Save";
+    private const string SavingText = "Saving...";
+    private const string UnsavedText = "Unsaved changes";
+    private const string SavedText = "Saved";
 
     private static readonly Vector4 SavingColor = new(0.85f, 0.85f, 0.4f, 1f);
 
@@ -39,6 +47,7 @@ internal sealed class EditorActionBar
     private readonly Action openMyPlates;
     private readonly Action switchMode;
     private readonly Func<HelpMenu?> help;
+    private readonly EditorPlateMenu plateMenu;
 
     // Requested from the bar, opened at window level (one id-stack scope, see ProfileEditorWindow).
     private bool pendingRevertPrompt;
@@ -48,19 +57,23 @@ internal sealed class EditorActionBar
     /// <param name="openMyPlates">Opens My Plates, or brings it forward when it's already open.</param>
     /// <param name="switchMode">Hands the open Plate to the other editor mode.</param>
     /// <param name="help">The Help menu, once the plugin has attached it to the window (null before that).</param>
-    internal EditorActionBar(EditorDocumentCommands commands, EditorSurfaceKind mode, Action openMyPlates, Action switchMode, Func<HelpMenu?> help)
+    /// <param name="plateMenu">The Plate menu both editors share.</param>
+    internal EditorActionBar(EditorDocumentCommands commands, EditorSurfaceKind mode, Action openMyPlates, Action switchMode, Func<HelpMenu?> help, EditorPlateMenu plateMenu)
     {
         this.commands = commands;
         this.mode = mode;
         this.openMyPlates = openMyPlates;
         this.switchMode = switchMode;
         this.help = help;
+        this.plateMenu = plateMenu;
     }
 
     /// <summary>The Help menu to draw at the bar's right edge, or null when the plugin hasn't attached one.</summary>
     private HelpMenu? Help => help();
 
     internal EditorDocumentCommands Commands => commands;
+
+    internal EditorPlateMenu PlateMenu => plateMenu;
 
     /// <summary>Asks to revert to the last saved version (confirmed by <see cref="DrawPopups"/>); ignored when there's nothing to revert.</summary>
     internal void RequestRevert()
@@ -72,7 +85,8 @@ internal sealed class EditorActionBar
     }
 
     /// <summary>
-    /// Draws the bar row, then <paramref name="errorMessage"/> (if any) on its own line.
+    /// Draws the bar row, then the Plate menu's last result (if any) and <paramref name="errorMessage"/>
+    /// (if any), each on its own line.
     /// </summary>
     /// <param name="profile">The open Plate.</param>
     /// <param name="previewActive">Whether this editor's Preview is showing (the Preview button is highlighted).</param>
@@ -99,35 +113,29 @@ internal sealed class EditorActionBar
         TutorialAnchorMarks.MarkRect(TutorialTarget.EditorModeSwitch, modeSwitchMin, ImGui.GetItemRectMax());
         var leftEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
 
-        // ---- measure the other two groups
+        // ---- measure the Plate menu's control and the other two groups
+        var controlStart = leftEnd + gap;
+        var controlMinimum = plateMenu.MinimumWidth();
         var frame = ImGui.GetFrameHeight();
         const float historyGap = 2f;
         var centerWidth = (frame * 2f) + historyGap;
 
         var (stateText, stateColor) = SaveState();
-        var rightWidth = ImGui.CalcTextSize(stateText).X
-            + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
+        var buttonsWidth = ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : frame + style.ItemSpacing.X);
+        var widestState = Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
 
-        var (centerX, rightX, nameWidth) = EditorActionBarLayout.Arrange(
-            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, leftEnd, centerWidth, rightWidth, gap);
+        var rows = EditorActionBarLayout.ArrangeRows(
+            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart, controlMinimum, centerWidth,
+            ImGui.CalcTextSize(stateText).X + buttonsWidth, widestState + buttonsWidth, gap);
 
-        // ---- the Plate's name, in whatever room is left
-        if (nameWidth >= 24f * scale)
-        {
-            ImGui.SameLine(leftEnd + gap);
-            ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(FitText(profile.Name, nameWidth));
-            TutorialAnchorMarks.Mark(TutorialTarget.EditorPlateName);
-            if (ImGui.IsItemHovered() && ImGui.CalcTextSize(profile.Name).X > nameWidth)
-            {
-                ImGui.SetTooltip(profile.Name);
-            }
-        }
+        // ---- the Plate menu, always drawn, with the Plate's name in whatever room is left
+        ImGui.SameLine(controlStart);
+        plateMenu.DrawControl(profile, rows.NameRoom);
 
         // ---- center: history
-        ImGui.SameLine(centerX);
+        ImGui.SameLine(rows.CenterX);
         var historyMin = ImGui.GetCursorScreenPos();
         using (ImRaii.Disabled(!commands.CanUndo))
         {
@@ -148,8 +156,17 @@ internal sealed class EditorActionBar
 
         TutorialAnchorMarks.MarkRect(TutorialTarget.EditorHistory, historyMin, ImGui.GetItemRectMax());
 
-        // ---- right: save state, Preview, Revert, Save, Help
-        ImGui.SameLine(rightX);
+        // ---- right: save state, Preview, Revert, Save, Help; on a row of their own when one row can't
+        // hold everything, so none of them is ever cut off
+        if (rows.TwoRows)
+        {
+            ImGui.SetCursorPosX(rows.RightX);
+        }
+        else
+        {
+            ImGui.SameLine(rows.RightX);
+        }
+
         ImGui.AlignTextToFramePadding();
         ImGui.TextColored(stateColor, stateText);
         TutorialAnchorMarks.Mark(TutorialTarget.EditorSaveState);
@@ -194,15 +211,19 @@ internal sealed class EditorActionBar
             help.DrawButton("EditorHelp");
         }
 
+        plateMenu.DrawResult(profile.ProfileId);
+
         if (errorMessage is { } error)
         {
             ImGui.TextColored(EditorWidgets.ErrorColor, error);
         }
     }
 
-    /// <summary>The bar's popups (Revert's confirmation). Call once per frame from the window's outermost scope.</summary>
+    /// <summary>The bar's popups: Revert's confirmation, and the Plate menu's prompts. Call once per frame from the window's outermost scope.</summary>
     internal void DrawPopups()
     {
+        plateMenu.DrawPopups();
+
         if (pendingRevertPrompt)
         {
             pendingRevertPrompt = false;
@@ -255,27 +276,9 @@ internal sealed class EditorActionBar
     }
 
     private (string Text, Vector4 Color) SaveState() =>
-        commands.IsSaving ? ("Saving...", SavingColor)
-        : commands.IsDirty ? ("Unsaved changes", EditorWidgets.WarningColor)
-        : ("Saved", EditorWidgets.SuccessColor with { W = 0.75f });
+        commands.IsSaving ? (SavingText, SavingColor)
+        : commands.IsDirty ? (UnsavedText, EditorWidgets.WarningColor)
+        : (SavedText, EditorWidgets.SuccessColor with { W = 0.75f });
 
     private static float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f);
-
-    /// <summary>The text, shortened with an ellipsis when it's wider than <paramref name="width"/>.</summary>
-    private static string FitText(string text, float width)
-    {
-        if (ImGui.CalcTextSize(text).X <= width)
-        {
-            return text;
-        }
-
-        const string ellipsis = "...";
-        var length = text.Length;
-        while (length > 0 && ImGui.CalcTextSize(string.Concat(text.AsSpan(0, length), ellipsis)).X > width)
-        {
-            length--;
-        }
-
-        return length == 0 ? string.Empty : string.Concat(text.AsSpan(0, length), ellipsis);
-    }
 }

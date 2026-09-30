@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
+using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
 using AetherFrame.Services.Templates;
@@ -28,10 +29,11 @@ namespace AetherFrame.Windows;
 /// <summary>
 /// My Plates: the visual collection of every saved Plate, and the way into the editors and the
 /// Plate Viewer. Cards show a thumbnail (or a fallback built from the Plate's own background),
-/// the name, and whether it's the current character's Active Plate; the selected Plate's actions
-/// sit below the grid. Split across partial files: this one (lifecycle, header, card grid),
-/// <c>.Actions.cs</c> (actions, prompts, and running Library operations), and <c>.Packages.cs</c>
-/// (Export and Import of .aetherframe files).
+/// the name, and whether it's the current character's Active Plate; a card's right-click menu holds
+/// its actions (the shared <see cref="PlateMenu"/>, which the editors' Plate menu uses too). Split
+/// across partial files: this one (lifecycle, header, card grid), <c>.Actions.cs</c> (the footer and
+/// opening Plates), <c>.Templates.cs</c> (the Create Plate chooser and Manage Templates), and
+/// <c>.Packages.cs</c> (Import of .aetherframe files; Export is the Plate menu's).
 ///
 /// Never shows technical identifiers (ids, versions, file names, revisions). Works with no
 /// character logged in — only Set Active needs one.
@@ -84,6 +86,12 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
+    // This window's Library operations, a card's menu with its prompts, and the unsaved-changes
+    // question before another Plate opens.
+    private readonly PlateOperationRunner runner;
+    private readonly PlateMenu plateMenu;
+    private readonly PlateOpenGuard openGuard;
+
     private Guid? selectedPlateId;
     private string searchText = string.Empty;
     private Guid? dragSourcePlateId;
@@ -107,7 +115,8 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         Action<ProfileDocument> showDocumentInViewer,
         PlatePackageService packages,
         FileDialogManager fileDialogManager,
-        Action<string> beginImport)
+        Action<string> beginImport,
+        IAetherFrameLog log)
         : base("My Plates##AetherFramePlateLibrary")
     {
         SizeConstraints = new WindowSizeConstraints
@@ -135,6 +144,23 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         this.packages = packages;
         this.fileDialogManager = fileDialogManager;
         this.beginImport = beginImport;
+
+        runner = new PlateOperationRunner(log);
+        plateMenu = new PlateMenu(
+            new PlateActions(library, templates, packages, profileService, editorSession, runner, log),
+            library, profileService, editorSession, thumbnails, fileDialogManager)
+        {
+            Duplicated = copyId => selectedPlateId = copyId,
+            Deleted = plateId =>
+            {
+                if (selectedPlateId == plateId)
+                {
+                    selectedPlateId = null;
+                }
+            },
+        };
+        openGuard = new PlateOpenGuard(profileService, editorSession);
+        plateMenu.AttachOpenGuard(openGuard, open => OpenNow(open.PlateId, open.Basic));
     }
 
     /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
@@ -144,7 +170,11 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     internal Action? OpenPersonas { get; set; }
 
     /// <summary>Checks what sharing a Plate would send, when this build can; a Plate's menu shows the item only then.</summary>
-    internal Action<Guid>? CheckSharing { get; set; }
+    internal Action<Guid>? CheckSharing
+    {
+        get => plateMenu.CheckSharing;
+        set => plateMenu.CheckSharing = value;
+    }
 
     public void Dispose()
     {
@@ -178,8 +208,8 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
     public override void Draw()
     {
-        AdvanceOperation();
-        AdvanceGuardedOpen();
+        runner.Advance();
+        plateMenu.AdvanceOpenGuard();
 
         if (!library.IsLoaded)
         {
@@ -201,12 +231,8 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         }
 
         DrawTemplateChooserPopup();
-        DrawRenamePopup();
-        DrawDeletePopup(characterIdentity.CurrentCharacter);
-        DrawUnsavedChangesPopup();
+        plateMenu.DrawPopups(characterIdentity.CurrentCharacter);
         DrawBasicGuidancePopup();
-        DrawOverwritePopup();
-        DrawSaveAsTemplatePopup();
 
         // While the Create Plate chooser is open, its own Rename/Delete requests (from a row's
         // context menu) are drawn from inside the chooser's popup scope instead — see
@@ -422,7 +448,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         {
             if (menu.Success)
             {
-                DrawPlateContextMenuItems(plate, character, activePlateId);
+                plateMenu.DrawCardItems(plate, character, activePlateId, showInViewer, RequestOpen);
             }
         }
 
@@ -484,7 +510,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             if (!payload.IsNull && dragSourcePlateId is { } sourceId && sourceId != plate.PlateId)
             {
                 var targetId = plate.PlateId;
-                RunOperation("reorder", () => library.MovePlateAsync(sourceId, targetId, placeAfter));
+                runner.Run("reorder", () => library.MovePlateAsync(sourceId, targetId, placeAfter));
                 dragSourcePlateId = null;
             }
 
