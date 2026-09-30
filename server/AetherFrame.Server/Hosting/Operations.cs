@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Server.Storage;
@@ -112,7 +113,6 @@ internal static class AdminCommands
 
     public static async Task<int> RunAsync(string[] args, ServerDatabase database, BindingStore bindings, TextWriter output, IReadOnlyList<string>? allowlist = null)
     {
-        await database.InitializeAsync(CancellationToken.None);
         switch (args)
         {
             case ["allowlist"]:
@@ -122,7 +122,18 @@ internal static class AdminCommands
                 }
 
                 await output.WriteLineAsync((allowlist?.Count ?? 0) == 1 ? "1 id." : (allowlist?.Count ?? 0) + " ids.");
+                if (allowlist?.Any(text => !Lodestone.LodestoneIds.TryParse(text, out _)) == true)
+                {
+                    await output.WriteLineAsync("An entry isn't a Lodestone id, so the server allows no one until the file is fixed.");
+                    return 1;
+                }
+
                 return 0;
+        }
+
+        await database.InitializeAsync(CancellationToken.None);
+        switch (args)
+        {
             case ["characters"]:
                 await ListAsync(database, "SELECT lodestone_id, name, world, CASE hidden WHEN 0 THEN 'shown' ELSE 'hidden' END FROM bindings ORDER BY lodestone_id;", output);
                 return 0;

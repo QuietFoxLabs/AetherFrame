@@ -122,7 +122,8 @@ public class OperationsTests
         Assert.Equal(2, (await RunAsync()).Code);
 
         using var allowlistOutput = new StringWriter();
-        Assert.Equal(0, await AdminCommands.RunAsync(["allowlist"], database, bindings, allowlistOutput, ["12345678", "0123"]));
+        Assert.Equal(1, await AdminCommands.RunAsync(["allowlist"], database, bindings, allowlistOutput, ["12345678", "0123"]));
+        Assert.Contains("allows no one until the file is fixed", allowlistOutput.ToString(), StringComparison.Ordinal);
         Assert.Contains("12345678", allowlistOutput.ToString(), StringComparison.Ordinal);
         Assert.Contains("0123  (not a Lodestone id: ignored)", allowlistOutput.ToString(), StringComparison.Ordinal);
     }

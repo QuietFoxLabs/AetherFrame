@@ -31,12 +31,12 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
     internal TimeSpan JobDeadline { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// How old a waiting connection may be and still be given a job. A worker run waits
-    /// <c>WorkerRun.IdleTimeout</c> (15 seconds) for a job and then ends, and the deployment ends
-    /// every run from outside after its life (N2-8), so an older connection is a run that is gone,
-    /// or soon will be.
+    /// How old a waiting connection may be and still be given a job: under the worker run's own
+    /// <c>WorkerRun.IdleTimeout</c> (15 seconds), after which the run ends, so a job is never handed
+    /// to a run that is timing out. The deployment also ends every run from outside after its life
+    /// (N2-8).
     /// </summary>
-    internal TimeSpan MaxConnectionAge { get; set; } = TimeSpan.FromSeconds(20);
+    internal TimeSpan MaxConnectionAge { get; set; } = TimeSpan.FromSeconds(12);
 
     // Worker runs that have connected, newest last. When it is full, the oldest is dropped and closed.
     private readonly Channel<(Socket Socket, long Arrived)> connected = Channel.CreateBounded<(Socket Socket, long Arrived)>(

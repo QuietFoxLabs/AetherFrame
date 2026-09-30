@@ -32,12 +32,13 @@ if (Environment.GetEnvironmentVariable("AETHERFRAME_CONFIG_FILE") is { Length: >
         ReloadOnChange = true,
         OnLoadException = failure =>
         {
-            // At start a bad file stops the server; on a reload the last good values stay, and the
-            // log says so (the file itself is never logged).
+            // At start a bad file stops the server. On a reload, .NET drops the file's values, so the
+            // allowlist is empty, and allows no one, until the file is fixed; the log says so (the
+            // file itself is never logged).
             if (reloaded)
             {
                 failure.Ignore = true;
-                Console.Error.WriteLine("The configuration file can't be read; the last good one stays in effect.");
+                Console.Error.WriteLine("The configuration file can't be read: the allowlist is empty until it is fixed.");
             }
         },
     };
@@ -55,7 +56,14 @@ ServerOptions.RefuseForwardedHeadersSwitch(builder.Configuration);
 if (args is ["admin", .. var command])
 {
     var adminOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new ServerOptions();
-    adminOptions.Validate();
+
+    // The allowlist command shows the file's entries as they are, even ones that make the options
+    // invalid, so the operator can see what to fix; every other command needs valid options.
+    if (command is not ["allowlist"])
+    {
+        adminOptions.Validate();
+    }
+
     var adminDatabase = new ServerDatabase(Options.Create(adminOptions), Microsoft.Extensions.Logging.Abstractions.NullLogger<ServerDatabase>.Instance);
     return await AdminCommands.RunAsync(command, adminDatabase, new BindingStore(adminDatabase, TimeProvider.System), Console.Out, adminOptions.AllowedLodestoneIds);
 }

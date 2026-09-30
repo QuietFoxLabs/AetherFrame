@@ -74,7 +74,10 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 | Update to a newer commit | run **Deploy the server** again with that commit |
 | Stop everything | `docker compose down` (the data stays in its volumes) |
 
-- **The allowlist file.** After you edit it, run `admin allowlist` to see the ids the server now has. A file the server can't read is ignored on a reload: the last good list stays, and the log says so. At a restart, a file it can't read stops the server until it is fixed. An entry that isn't a Lodestone id is ignored, and `admin allowlist` marks it.
+- **The allowlist file.** After you edit it, run `admin allowlist` to see the ids it now holds.
+  - If the file can't be read (a missing comma, say), or an entry isn't a Lodestone id, the server allows **no one** until the file is fixed. The log says so, and `admin allowlist` points to the entry at fault.
+  - At a restart, a file it can't read stops the server until it is fixed.
+  - It never lets anyone in by mistake, but a broken edit locks both testers out, so check it each time.
 - **While the server is stopped**, its daily backup and its clean-up don't run, so older copies aren't deleted. Stop it only briefly, or delete old copies by hand (section 4).
 
 - **Reports** are kept for 30 days, or until you close them (decision C5). To act on one, look at the reported character's Plate in game. If it has to go, remove the character, and take its id off the allowlist if needed.

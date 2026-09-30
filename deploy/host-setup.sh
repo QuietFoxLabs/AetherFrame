@@ -91,10 +91,13 @@ systemctl daemon-reload
 systemctl enable --now aetherframe-worker.service
 
 # The deploy user may restart the worker service, so a deploy's new script takes effect, and nothing else.
-cat > /etc/sudoers.d/aetherframe-deploy <<'SUDO'
+# Checked before it is put in place, so a bad file can never break sudo.
+sudoers_draft="$(mktemp)"
+cat > "$sudoers_draft" <<'SUDO'
 aetherframe-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart aetherframe-worker.service
 SUDO
-chmod 440 /etc/sudoers.d/aetherframe-deploy
-visudo -cf /etc/sudoers.d/aetherframe-deploy
+visudo -cf "$sudoers_draft"
+install -m 440 -o root -g root "$sudoers_draft" /etc/sudoers.d/aetherframe-deploy
+rm -f "$sudoers_draft"
 
 echo "Done. Next: the GitHub environment and its secrets (docs/networking/Runbook.md)."

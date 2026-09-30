@@ -24,7 +24,7 @@ public static class WorkerRun
 
     /// <summary>
     /// How long a connected run waits for a job before it ends, so the run the server hands a job to
-    /// is always a recent one (the server skips connections older than 20 seconds).
+    /// is always a recent one (the server skips connections older than 12 seconds).
     /// </summary>
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(15);
 
