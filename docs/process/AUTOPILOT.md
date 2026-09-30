@@ -12,7 +12,7 @@ Claude runs AetherFrame end to end: it plans, decides OPEN items, builds, review
 | Status and queue | ROADMAP.md: section 2 for status, section 8 for the next five tasks |
 | Decisions | `docs/networking/DecisionRegister.md` for networking; ROADMAP.md section 5 for everything else |
 | Owner inbox | The open GitHub issue labelled `owner-inbox`: the only place the autopilot asks the owner for anything |
-| Test build the game loads | `E:\AetherFrame Test Build\` (the owner's Dalamud dev plugin location) |
+| Test build the game loads | `E:\AetherFrame Test Build\`, the one folder that always holds the newest test build. The game loads it only while Dalamud's Dev Plugin Locations (`/xlsettings`, **Experimental**) list `E:\AetherFrame Test Build\AetherFrame.dll`, ticked, and no other AetherFrame; automatic reloading is on for it. `tools/Install-TestBuild.ps1` checks both. |
 | Staged test builds | `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>\` |
 | Plugin data backups | `E:\AetherFrame Archives\Acceptance backups\AetherFrame-data-<yyyyMMdd-HHmmss>\` |
 
@@ -39,7 +39,7 @@ A scheduled task starts one run every two hours. Runs never overlap. Each run:
    3. a PR that meets the [merge gate](#merge-gate): merge it;
    4. an in-game failure the owner reported: fix it;
    5. a build the owner passed: [release it](#releases);
-   6. merged changes that aren't in any test build yet, with no build waiting on a verdict (or the waiting one is now superseded): [make a test build](#test-builds);
+   6. merged changes to the plugin that aren't in the build in `E:\AetherFrame Test Build\` yet: [make a test build](#test-builds);
    7. the next task in ROADMAP.md section 8.
 
    Quick actions (merging, a test build, answering the inbox) can share a run. Do at most one implementation task per run.
@@ -94,37 +94,45 @@ When a task needs an OPEN decision:
 
 ## Test builds
 
-1. **Build.** Make a detached worktree at the `master` commit and run the full CI-equivalent checks. The package is `AetherFrame/bin/x64/Release/AetherFrame/latest.zip` and holds three files.
-2. **Stage.** Extract it to `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>\`.
-3. **Install straight away, whether or not FFXIV is running.** The owner confirmed on September 29, 2026 that installing while the game is open doesn't affect it.
-   - Back up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder.
-   - Replace the three files in `E:\AetherFrame Test Build\`.
+On September 30, 2026 the owner asked, in chat, that whenever a milestone is complete a DLL is made, the owner is told it is ready, and it sits in the same place so the game updates to it by itself (ROADMAP.md, section 5). So every test build goes into the one folder the game loads, `E:\AetherFrame Test Build\`, where Dalamud's automatic reloading picks up the new DLL within about a second while the game runs, or at the next start. This binds every session that merges plugin work, scheduled or interactive.
 
-   If a file can't be replaced because it's locked, leave the build staged, say so in the inbox post, and install it on the next run. If the game is open, the post tells the owner to reload the dev plugin (`/xlplugins` → **Dev Tools**) to pick up the new build. Never delete staged builds or backups.
-4. **Post in the inbox:**
-   - the build id (short sha) and the merged PRs it contains;
-   - numbered in-game checks taken from those PRs' **In game** sections;
-   - where the data backup is;
-   - how to reply.
+**When:** after each merge that changes the plugin, once that session's merges are done, so a batch of merges makes one build. A merge that only changes documents, tooling, tests or the server makes none. A newer build supersedes the one before it; say so in the new post.
 
-   Then send a PushNotification: `AetherFrame test build <sha> is ready: <n> checks in the Owner inbox`.
-5. **One build waits for a verdict at a time.** A newer build supersedes the old one; say so in the new post.
+1. **Build.** Make a detached worktree at the `master` commit and run the full CI-equivalent checks. The player package is `AetherFrame/bin/x64/Release/AetherFrame/latest.zip` and holds three files. For a preview build, see [Preview test builds](#preview-test-builds).
+2. **Install straight away, whether or not FFXIV is running,** with `tools/Install-TestBuild.ps1 -Package <latest.zip or folder> -BuildId <short sha> -Flavour <Player or Preview>` (run it with `powershell -NoProfile -ExecutionPolicy Bypass -File`). The owner confirmed on September 29, 2026 that installing while the game is open doesn't affect it. The script:
+   - refuses a package that isn't exactly the three plugin files, and a DLL of the other flavour;
+   - stages the build in `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>[ preview]\` with `SHA256SUMS.txt`;
+   - backs up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder, skipping only the preview build's `instance.lock`, which holds no data and stays locked while the game runs;
+   - copies the two `.json` files, then the DLL last, over the old files in place, and checks each copy's hash;
+   - reads Dalamud's saved settings, never writing them, and reports in `InGame` whether the build reloaded in game, loads at the next start, or won't load. When Dalamud's Dev Plugin Locations don't list the folder, or list another AetherFrame, a warning names the owner's fix.
+
+   Never install by hand. Dalamud reloads only on a write to the DLL, so deleting the old DLL or renaming a file over it leaves the old build running until the game restarts. If the script can't replace a file, the build stays staged: say so in the post and install it on the next run. Never delete staged builds or backups.
+3. **Tell the owner straight away:**
+   - **Owner inbox post:**
+     - the build id, its flavour and the merged PRs it holds;
+     - the script's `InGame` line;
+     - numbered in-game checks taken from those PRs' **In game** sections;
+     - where the data backup is;
+     - how to reply.
+
+     While the owner has an editor open, the reload closes AetherFrame's windows and loses unsaved changes. The post reminds them to save when a build is due.
+   - **PushNotification:** `AetherFrame <sha> is in game: <what it adds, a few words>. <n> checks in the Owner inbox`. When `InGame` says it won't load, the notification says so and names the fix instead.
+   - **Live status issue:** edit it in place.
+4. **One build waits for a verdict at a time:** the one in the folder.
 
 **Release candidates.** When a milestone is ready to ship:
 - First merge a release-prep PR: `Version.props`, CHANGELOG, and the dry-run fixture ([Releasing](../Releasing.md), steps 1 to 3).
-- Then build the test build from that merge, and call it the release candidate for `vX.Y.Z` in the post.
+- Then build the test build from that merge, and call it the release candidate for `vX.Y.Z` in the post. It is a player build, and it holds the folder until the owner's verdict on it.
 
 ## Preview test builds
 
-A preview build is the networking preview flavour (`-p:AetherFrameNetworkPreview=true`): every player feature plus the networking increments merged so far, sending nothing until the transport exists. Installed in the dev plugin folder it replaces the player build there, since two builds with one internal name can't load side by side. So:
+A preview build is the networking preview flavour (`-p:AetherFrameNetworkPreview=true`): every player feature plus the networking increments merged so far, sending nothing until the transport exists. It replaces the player build in the folder, since two builds with one internal name can't load side by side. So:
 
-1. **Only when the owner asks** in the Owner inbox, and never while a player build waits for a verdict unless the owner says so. A player build's verdict always comes first.
-2. **Build** it like a test build: a detached worktree at the `master` commit, the full CI-equivalent checks, then the preview flavour build with warnings as errors and its boundary tests.
-3. **Stage** it in `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha> preview\`, **back up** as for a test build, and **install** it the same way.
-4. **Post** in the inbox:
+1. **Which flavour goes in the folder.** While NETWORK2 is under way, a milestone's test build is a preview build, since it holds every player feature and the networking work. The exception is a player build that is due, such as a release candidate or a player build the owner asks for; it takes the folder until the owner's verdict, and preview builds resume after it (ROADMAP.md, section 5).
+2. **Build** it like a test build: a detached worktree at the `master` commit, the full CI-equivalent checks, then the preview flavour build into its own output folder, with warnings as errors and its boundary tests, as `.github/workflows/build.yml` does. DalamudPackager writes the manifest only for the player build, so copy `AetherFrame.json` from the player package into that output folder. Then pass the folder to the script with `-Flavour Preview`.
+3. **Post** as for a test build, and add:
    - that it is a preview build, and what it adds;
    - that it sends nothing, and where it writes its persona files (the plugin's configuration directory, `Network\Personas\`);
-   - the numbered In game checks from the merged pull requests;
    - how to go back: install the player build again. The persona files stay where they are, and a later preview build finds them; removing that folder loses those personas for good (K4).
 
 ## Owner replies
