@@ -173,7 +173,9 @@ internal sealed class CharacterSharing
             persona = held;
         }
 
-        persona ??= FreshKey(manager);
+        // Always a new key, never one lying about: a key no entry names may still be bound on the
+        // server (a sharing file moved aside), and a key per failed start is harmless.
+        persona ??= manager.Create(KeyLabel);
         persona = manager.Acknowledge(persona.Slot);
         var entry = existing is { IsBound: true }
             ? existing with { NewSlot = persona.Slot, NewKey = persona.PublicKey.Id }
@@ -232,8 +234,14 @@ internal sealed class CharacterSharing
         var bound = new SharingCharacter(contentId, entry.CheckingSlot, entry.CheckingKey, SharingStage.Shared, lodestoneId, answer.ProfileId, answer.Name, answer.World);
         if (!SameCharacter(bound, name, world))
         {
-            // The server checks this too; a binding to another character is undone, not kept.
+            // The server checks this too; a binding to another character is undone, not kept. A new
+            // key had taken this character's binding over, so the opt-out deleted that too.
             Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.OptOut, SharingWire.Empty());
+            if (entry.ReplacingKey)
+            {
+                Save(Replaced(entry.Unbound(SharingStage.Off)), contentId);
+            }
+
             Notify(contentId, SharingNoticeKind.CheckFailed);
             return;
         }
@@ -389,33 +397,6 @@ internal sealed class CharacterSharing
 
         lease.Dispose();
         return true;
-    }
-
-    /// <summary>
-    /// A key for a character: a "Character key" persona no character names, when one signs (left by
-    /// a start whose save failed, say), or else a new one. A key that can't be opened is never reused.
-    /// </summary>
-    private PersonaRecord FreshKey(PersonaManager manager)
-    {
-        var named = new HashSet<PersonaSlotId>();
-        foreach (var character in view.Characters)
-        {
-            named.Add(character.Slot);
-            if (character.ReplacingKey)
-            {
-                named.Add(character.NewSlot);
-            }
-        }
-
-        foreach (var persona in manager.Personas)
-        {
-            if (string.Equals(persona.Label, KeyLabel, StringComparison.Ordinal) && !named.Contains(persona.Slot) && KeyOpens(manager, persona.Slot, persona.PublicKey))
-            {
-                return persona;
-            }
-        }
-
-        return manager.Create(KeyLabel);
     }
 
     private void RequestCode(PersonaManager manager, SharingCharacter entry)

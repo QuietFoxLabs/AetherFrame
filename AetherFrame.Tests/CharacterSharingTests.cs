@@ -372,6 +372,26 @@ public class CharacterSharingTests
     }
 
     [Fact]
+    public void TurningSharingOnAgain_AfterTheFileWasMovedAside_NeverReusesAKeyTheServerMayStillBind()
+    {
+        using var harness = new SharingHarness();
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        var aria = harness.Sharing.View.Find(Aria)!;
+        File.Delete(Path.Combine(harness.Root, SharingStateFile.FileName));
+        harness.Restart();
+
+        harness.Sharing.TryStart(Bram, newKey: false);
+        var bram = harness.Sharing.View.Find(Bram)!;
+        Assert.NotEqual(aria.Slot, bram.Slot);
+        Assert.NotEqual(aria.Key, bram.Key);
+        Assert.Equal(bram.Key, harness.Server.Actions.Last().Signer);
+
+        harness.Sharing.TryCancelCheck(Bram);
+        Assert.All(harness.Server.Actions.Where(action => action.Path == "/v1/opt-out"), action => Assert.NotEqual(aria.Key, action.Signer));
+    }
+
+    [Fact]
     public void TheSelectionAPersonaHad_IsPutBack()
     {
         using var harness = new SharingHarness();
