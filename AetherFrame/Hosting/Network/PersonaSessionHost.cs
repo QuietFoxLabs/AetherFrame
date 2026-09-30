@@ -16,7 +16,8 @@ namespace AetherFrame.Hosting.Network;
 /// listing of key files never meets the registry or the lock.</item>
 /// <item>The capability probe gets a scratch root in the system's temporary folder, never the key
 /// directory, and only the probe's public entry point is called.</item>
-/// <item>The key store's report lines name a slot and a reason, never an identity or a path.</item>
+/// <item>The key store's report lines name a slot and a reason, never an identity or a path, and
+/// go through the session's log, which writes nothing once the session is closed.</item>
 /// </list>
 /// </summary>
 internal static class PersonaSessionHost
@@ -36,7 +37,7 @@ internal static class PersonaSessionHost
         {
             Probe = () => PersonaCapabilityProbe.Run(protector, Path.GetTempPath()),
             AcquireLock = () => (PersonaInstanceLock.TryAcquire(personas, out var held), held),
-            OpenKeyStore = () => new ProtectedPersonaKeyStore(new PersonaKeyFileStorage(keys), protector, log.Information),
+            OpenKeyStore = report => new ProtectedPersonaKeyStore(new PersonaKeyFileStorage(keys), protector, report),
             OpenRegistry = () => new PersonaRegistryFileStorage(personas),
             BeginOperation = () => operations.TryBegin(out var lease) ? lease : null,
             Stopping = operations.Stopping,

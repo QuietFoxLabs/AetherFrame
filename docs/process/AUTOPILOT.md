@@ -125,7 +125,7 @@ A preview build is the networking preview flavour (`-p:AetherFrameNetworkPreview
    - that it is a preview build, and what it adds;
    - that it sends nothing, and where it writes its persona files (the plugin's configuration directory, `Network\Personas\`);
    - the numbered In game checks from the merged pull requests;
-   - how to go back: install the player build again.
+   - how to go back: install the player build again. The persona files stay where they are, and a later preview build finds them; removing that folder loses those personas for good (K4).
 
 ## Owner replies
 

@@ -282,8 +282,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             });
 
 #if AETHERFRAME_NETWORK_PREVIEW
-            // Starts in the background and writes nothing until the player acts; a load that fails
-            // after this closes it, and its lock is released by whichever of its own work ends last.
+            // Starts in the background. Until the player acts it writes only its lock file (creating
+            // the persona folder) and the capability probe's scratch files, in the temp folder and
+            // deleted again. A load that fails after this closes it, and its lock is released by
+            // whichever of its own work ends last.
             personaSession = PersonaSessionHost.Create(PluginInterface.ConfigDirectory.FullName, log, ownedOperations);
             startup.OnFailure("personas", personaSession.Close);
             personaSession.Start();

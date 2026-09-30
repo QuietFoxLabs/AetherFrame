@@ -125,8 +125,12 @@ public sealed class PersonaSessionSeams
     /// <summary>One attempt at the persona files' lock (P3).</summary>
     public required Func<(PersonaLockOutcome Outcome, IDisposable? Held)> AcquireLock { get; init; }
 
-    /// <summary>The key store over the key files, made once the lock is held.</summary>
-    public required Func<IPersonaKeyStore> OpenKeyStore { get; init; }
+    /// <summary>
+    /// The key store over the key files, made once the lock is held. It is given the session's own
+    /// log for its report lines, which, like every session line, writes nothing once the session
+    /// is closed.
+    /// </summary>
+    public required Func<Action<string>, IPersonaKeyStore> OpenKeyStore { get; init; }
 
     /// <summary>The registry storage, made once the lock is held.</summary>
     public required Func<IPersonaRegistryStorage> OpenRegistry { get; init; }
@@ -165,9 +169,11 @@ public sealed class PersonaSessionSeams
 /// released before that work's unload registration ends, and never at a timeout: a reloaded plugin
 /// that starts meanwhile finds it held, retries, and at worst stays off with a message to try
 /// again. Nothing is left to a finalizer. The start and every operation register with the plugin's
-/// unload tracking, so unloading waits for them within its own budget. An operation still running
-/// when that budget ends runs to its end, since stopping it between a key's commit and the registry
-/// save would only leave an orphan.
+/// unload tracking, so unloading waits for them within its own budget. A start stops at its next
+/// step once the session is closed: nothing is probed, created or locked after that. An operation
+/// still running when the budget ends runs to its end, since stopping it between a key's commit
+/// and the registry save would only leave an orphan; unlike the plugin's other owned operations,
+/// it doesn't stop before its next file step.
 /// </para>
 /// </summary>
 public sealed class PersonaSession
@@ -356,6 +362,13 @@ public sealed class PersonaSession
         IDisposable? unkept = null;
         try
         {
+            // Unloading stops a start at every step it can: nothing is probed, created or locked once
+            // the session is closed. Work already under way (the probe itself) runs to its end.
+            if (closed)
+            {
+                return;
+            }
+
             // The probe runs once per session (K3): a retry reuses its result, and a probe that throws
             // (it never does for a platform failure) counts as one that found nothing, for good.
             PersonaCapabilities found;
@@ -365,6 +378,7 @@ public sealed class PersonaSession
             }
             catch (Exception e)
             {
+                capabilities = PersonaCapabilities.Without(PersonaCapability.SignatureVerification, "the probe failed: " + Describe(e));
                 Log("Personas: off, the capability probe failed: " + Describe(e));
                 result = Unavailable(PersonaUnavailableReason.NotOnThisSystem, ProbeFailedMessage, canRetry: false);
                 return;
@@ -375,6 +389,11 @@ public sealed class PersonaSession
             {
                 Log($"Personas: off on this system ({found.Missing}). {found.Detail}");
                 result = Unavailable(PersonaUnavailableReason.NotOnThisSystem, found.Message ?? ProbeFailedMessage, canRetry: false);
+                return;
+            }
+
+            if (closed)
+            {
                 return;
             }
 
@@ -402,7 +421,7 @@ public sealed class PersonaSession
             PersonaManager loaded;
             try
             {
-                loaded = PersonaManager.Load(seams.OpenKeyStore(), new NoBackupCodec(), seams.OpenRegistry());
+                loaded = PersonaManager.Load(seams.OpenKeyStore(Log), new NoBackupCodec(), seams.OpenRegistry());
             }
             catch (PersonaException e) when (e.Error is PersonaError.RegistryUnreadable or PersonaError.RegistryNewerVersion)
             {
@@ -478,6 +497,7 @@ public sealed class PersonaSession
                     release = heldLock;
                     heldLock = null;
                     manager = null;
+                    view = view.With(busy: false, lastOutcome: null, audit: null);
                 }
                 else
                 {
@@ -503,14 +523,18 @@ public sealed class PersonaSession
         }
     }
 
+    /// <summary>
+    /// The lock, retried while something else holds it. A closed session makes no further attempt:
+    /// it returns without the lock, and its start ends quietly.
+    /// </summary>
     private async Task<(PersonaLockOutcome Outcome, IDisposable? Held)> AcquireLockAsync()
     {
         var waited = TimeSpan.Zero;
         var delay = FirstRetryDelay;
-        while (true)
+        while (!closed)
         {
             var (outcome, held) = seams.AcquireLock();
-            if (outcome != PersonaLockOutcome.HeldElsewhere || waited >= seams.LockRetryBudget || closed)
+            if (outcome != PersonaLockOutcome.HeldElsewhere || waited >= seams.LockRetryBudget)
             {
                 return (outcome, held);
             }
@@ -519,6 +543,8 @@ public sealed class PersonaSession
             waited += delay;
             delay = delay * 2 < LongestRetryDelay ? delay * 2 : LongestRetryDelay;
         }
+
+        return (PersonaLockOutcome.HeldElsewhere, null);
     }
 
     private void Log(string line)

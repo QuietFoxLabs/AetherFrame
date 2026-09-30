@@ -35,6 +35,7 @@ public sealed class PersonaSessionTests
     private bool shuttingDown;
     private int probes;
     private int leasesOpen;
+    private Action<string>? reports;
 
     [Fact]
     public async Task Start_ProbesThenLocksThenLoadsThenAudits_AndIsReady()
@@ -246,6 +247,7 @@ public sealed class PersonaSessionTests
     public async Task Close_DuringAnOperation_LeavesTheLockToIt_ThenItsLeaseEnds_AndNothingIsLogged()
     {
         var session = await ReadySession();
+        var leasesEndedBefore = events.Count(e => e == "lease ended");
         using var release = new ManualResetEventSlim(false);
         session.TryStart("create", manager =>
         {
@@ -261,8 +263,10 @@ public sealed class PersonaSessionTests
         await WaitFor(() => leasesOpen == 0);
         Assert.Equal(new[] { "lock released", "lease ended" }, events.Where(e => e is "lock released" or "lease ended").TakeLast(2));
         Assert.Equal(1, events.Count(e => e == "lock released"));
+        Assert.Equal(leasesEndedBefore + 1, events.Count(e => e == "lease ended"));
         Assert.Equal(linesBefore, log.Count);
         Assert.Equal(PersonaSessionState.Closed, session.View.State);
+        Assert.False(session.View.Busy);
     }
 
     [Fact]
@@ -302,8 +306,64 @@ public sealed class PersonaSessionTests
 
         session.Start();
         await WaitFor(() => leasesOpen == 0 && !session.View.Busy);
+        Assert.Equal(1, events.Count(e => e == "lock"));
         Assert.DoesNotContain("registry", events);
         Assert.DoesNotContain(log, line => line.Contains("couldn't start", StringComparison.Ordinal));
+        Assert.DoesNotContain(log, line => line.Contains("held elsewhere", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Close_DuringTheProbe_StopsTheStartBeforeTheLock()
+    {
+        // A probe slowed by a scanner can outlast unloading's wait: once the session is closed, the
+        // start takes no lock and creates nothing, whenever the probe returns.
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        probe = () =>
+        {
+            entered.Set();
+            release.Wait(Patience);
+            return PersonaCapabilities.All;
+        };
+
+        var session = NewSession();
+        session.Start();
+        Assert.True(entered.Wait(Patience));
+        session.Close();
+        release.Set();
+        await WaitFor(() => leasesOpen == 0);
+
+        Assert.DoesNotContain("lock", events);
+        Assert.DoesNotContain("lock released", events);
+        Assert.Equal(PersonaSessionState.Closed, session.View.State);
+        Assert.False(session.View.Busy);
+    }
+
+    [Fact]
+    public async Task AProbeThatThrows_LeavesAResultThatViewsNothing()
+    {
+        probe = () => throw new InvalidOperationException("probe bug");
+        var session = NewSession();
+        session.Start();
+        await Settled(session);
+
+        Assert.NotNull(session.Capabilities);
+        Assert.False(session.Capabilities!.CanView);
+        Assert.False(session.Capabilities.CanUsePersonas);
+    }
+
+    [Fact]
+    public async Task TheKeyStoresReports_GoThroughTheSessionsLog_AndStopWhenItCloses()
+    {
+        var session = await ReadySession();
+        Assert.NotNull(reports);
+        reports!("The key under a slot is unavailable: no key is held.");
+        Assert.Contains(log, line => line.EndsWith("no key is held.", StringComparison.Ordinal));
+
+        session.Close();
+        var count = log.Count;
+        reports("after close");
+        Assert.Equal(count, log.Count);
     }
 
     [Fact]
@@ -327,9 +387,10 @@ public sealed class PersonaSessionTests
             var outcome = lockOutcome();
             return (outcome, outcome == PersonaLockOutcome.Acquired ? new Recorder(this, "lock released") : null);
         },
-        OpenKeyStore = () =>
+        OpenKeyStore = report =>
         {
             Record("key store");
+            reports = report;
             return store;
         },
         OpenRegistry = () =>
@@ -404,17 +465,13 @@ public sealed class PersonaSessionTests
         }
     }
 
+    /// <summary>Records every <see cref="Dispose"/>, a second one included, so "released exactly once" is checked rather than assumed.</summary>
     private sealed class Recorder(PersonaSessionTests owner, string what, Action? then = null) : IDisposable
     {
-        private int disposed;
-
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref disposed, 1) == 0)
-            {
-                owner.Record(what);
-                then?.Invoke();
-            }
+            owner.Record(what);
+            then?.Invoke();
         }
     }
 
