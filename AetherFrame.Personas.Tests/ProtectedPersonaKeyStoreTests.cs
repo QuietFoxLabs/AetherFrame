@@ -502,6 +502,100 @@ public class ProtectedPersonaKeyStoreTests
     }
 
     [Fact]
+    public void PeekPublicKey_ReadsTheHeaderOnly_AndNeverOpensTheKey()
+    {
+        var store = NewStore();
+        var slot = NewSlot();
+        using var material = store.GenerateKey();
+        store.AddKey(slot, material);
+        protector.Calls.Clear();
+
+        Assert.Equal(PersonaKeyPeekStatus.Held, store.PeekPublicKey(slot, out var publicKey));
+        Assert.Equal(material.PublicKey, publicKey);
+
+        Assert.Equal(PersonaKeyPeekStatus.Missing, store.PeekPublicKey(NewSlot(), out publicKey));
+        Assert.Null(publicKey);
+        Assert.Equal(PersonaKeyPeekStatus.Missing, store.PeekPublicKey(default, out publicKey));
+        Assert.Null(publicKey);
+
+        var other = NewSlot();
+        storage.Plant(other, storage.Held(slot));
+        Assert.Equal(PersonaKeyPeekStatus.NamesAnotherSlot, store.PeekPublicKey(other, out publicKey));
+        Assert.Null(publicKey);
+
+        storage.Plant(other, [1, 2, 3]);
+        Assert.Equal(PersonaKeyPeekStatus.Unreadable, store.PeekPublicKey(other, out publicKey));
+        Assert.Null(publicKey);
+
+        // Held says the header reads here, not that the key opens: locked on this account, it still peeks.
+        protector.Locked = true;
+        Assert.Equal(PersonaKeyPeekStatus.Held, store.PeekPublicKey(slot, out _));
+        protector.Locked = false;
+
+        // Another protector's envelope never opens here.
+        var foreign = NewSlot();
+        using (var foreignKey = PersonaKeyMaterial.Generate())
+        {
+            new ProtectedPersonaKeyStore(storage, new FakeProtector("test.other.v1")).AddKey(foreign, foreignKey);
+        }
+
+        Assert.Equal(PersonaKeyPeekStatus.Unreadable, store.PeekPublicKey(foreign, out publicKey));
+        Assert.Null(publicKey);
+
+        storage.ReadFailure = new System.IO.IOException("The file is being used by another process.");
+        Assert.Equal(PersonaKeyPeekStatus.Unreadable, store.PeekPublicKey(slot, out publicKey));
+        Assert.Null(publicKey);
+
+        Assert.Empty(protector.Calls);
+        Assert.Empty(reports);
+    }
+
+    [Fact]
+    public void OpenPublicKey_ProvesTheKey_AndLeavesNoScalarBehind()
+    {
+        var store = NewStore();
+        var slot = NewSlot();
+        using var material = store.GenerateKey();
+        store.AddKey(slot, material);
+        protector.HandedOut.Clear();
+
+        Assert.Equal(material.PublicKey, store.OpenPublicKey(slot));
+        Assert.All(protector.HandedOut, scalar => Assert.All(scalar, b => Assert.Equal(0, b)));
+
+        Assert.Null(store.OpenPublicKey(NewSlot()));
+        protector.Locked = true;
+        Assert.Null(store.OpenPublicKey(slot));
+    }
+
+    [Fact]
+    public void ListHeld_IsTheStoragesListing()
+    {
+        var store = NewStore();
+        var slot = NewSlot();
+        using var material = store.GenerateKey();
+        store.AddKey(slot, material);
+        storage.SkippedEntries = 1;
+
+        var listing = store.ListHeld();
+        Assert.Equal(slot, Assert.Single(listing.Slots));
+        Assert.Equal(1, listing.Skipped);
+
+        storage.ListFailure = new System.IO.IOException("Access to the path is denied.");
+        Assert.Throws<System.IO.IOException>(() => store.ListHeld());
+    }
+
+    [Fact]
+    public void AListing_IsACopy_AndRefusesWhatCannotBeOne()
+    {
+        var slots = new System.Collections.Generic.List<PersonaSlotId> { NewSlot() };
+        var listing = new PersonaKeyListing(slots, 0);
+        slots.Add(NewSlot());
+        Assert.Single(listing.Slots);
+        Assert.Throws<ArgumentNullException>(() => new PersonaKeyListing(null!, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PersonaKeyListing(slots, -1));
+    }
+
+    [Fact]
     public void TheStoreRefusesAProtectorWithAnInvalidId()
     {
         Assert.Throws<ArgumentException>(() => new ProtectedPersonaKeyStore(storage, new FakeProtector("Bad Id")));

@@ -242,7 +242,7 @@ Its twelve tasks were named UI-1 to UI-12, and the journeys file uses those name
 | UI-9 Import that ends where you want | Task 13 |
 | UI-10 the tour catches up | Task 14 |
 | UI-11 one look and a keyboard path | Task 15, beside proposal 3 |
-| UI-12 sharing seams | Task 16, with N2-5 |
+| UI-12 sharing seams | Task 16, before N2-9 |
 
 **Counts.** Today the journeys take 52 window switches, 26 menus and 5 prompts. After UI-1 to UI-12, they take 33, 26 and 5: 19 switches fewer, about a third. The Plate menu replaces trips to My Plates with a menu where the player already is, so menus stay at 26. By the same count, tasks 1 and 2 remove the switches UI-2, UI-3 and UI-6's New Plate remove, except J09's, which needs the View item of section 7.5.
 
@@ -394,21 +394,21 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
 
 **Interface task 16 (UI-12): Sharing seams, preview builds only (S; best after interface task 1).**
 - *Changes:* hooks that do nothing by default, for Share, Open Code, Sharing, a Delete note, a viewer source and the dim list. Only the preview composition root fills them (AetherFrame/AetherFrame.csproj:46-64, from the repository root).
-- *When:* it lands with N2-5, which NETWORK2 merges before N2-9. If it lands before UI-2, the Share hook sits in today's card menu.
+- *When:* before N2-9, which adds Share. If it lands before task 1, the Share hook sits in today's card menu.
 - *Risk:* network types could leak into player builds. A test asserts that the player DLL has no Sharing type.
 - *Tutorial:* none.
 - *In game:* a player build has no Share item. Share follows Export in a preview build, checked once N2-11's tester kit exists (UNRESOLVED).
 
 ### 7.7 Sharing, in more detail
 
-This adds to section 5. Section 5's Share... and Unpublish in the Plate and card menus open the This Plate page below. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through task 16's hooks. No tutorial step anchors to them, and every local feature works without an account or a network. The persona interface stays OPEN (ROADMAP.md, section 5), so this is a proposal for N2-5, N2-9 and N2-10 to weigh.
+This adds to section 5. Section 5's Share... and Unpublish in the Plate and card menus open the This Plate page below. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through task 16's hooks. No tutorial step anchors to them, and every local feature works without an account or a network. N2-5 has built the persona window; the rest is a proposal for N2-9 and N2-10 to weigh.
 
 | Planned screen | Home in the target structure |
 |---|---|
-| N2-5 persona window | The Persona page of one Sharing window in `Windows/Network`. It opens from My Plates' Sharing button, and from Share when no persona is selected. It is kept away from the character status (Windows/PlateLibraryWindow.cs:286-293; D3). Whether the persona switcher is disabled while an operation that signs is running waits on L10, which is UNRESOLVED. Key files that no persona record names are only listed (L12 is UNRESOLVED). There is room for the backup, but no control for it. |
-| K4 acknowledgement | A short modal in the Sharing window before a persona's first publish to a real server, asked once per persona and recorded in the persona registry. The Persona page repeats it whenever a persona is created (K4). |
+| N2-5 persona window | Built by N2-5c ([#46](https://github.com/QuietFoxLabs/AetherFrame/pull/46), merged as `04e3976`), in the preview flavour only: a Personas button in My Plates opens it. The Sharing window below links to it rather than holding a persona page of its own. |
+| K4 acknowledgement | The persona window already asks for it whenever a persona is made or restored (N2-5c). Share checks it is recorded before a persona's first publish to a real server (K4). |
 | N2-9 consent and publish | The This Plate page, reached from Share in the Plate menu. It starts with the save-first question of task 1, because the builder reads only the saved Plate (NETWORK2.md, section 5). A name refused under D4 is fixed with the Plate menu's Rename. The share code comes with a Copy button. It is a page, not a modal, so it never blocks the tutorial card. |
-| Update and unpublish | The same page, which shows the consent content again each time. Unpublish is also in My Shares, the P1 index, which includes Plates that no longer exist. The Delete prompt says that deleting a Plate doesn't unpublish it. The wording waits on D1. |
+| Update and unpublish | The same page, which shows the consent content again each time. Unpublish is also in My Shares, the P1 index, which includes Plates that no longer exist. The Delete prompt says that deleting a Plate doesn't unpublish it. Its wording follows D1 (DecisionRegister.md). |
 | N2-10 viewer | Open Code in My Plates' header, kept apart from Import. The Plate floats in the viewer through ShowDocument, read-only and never saved (Windows/ProfileViewWindow.cs:114-118). A strip holds Refresh, notes, "no longer shared" and the outdated-client message. There is no author line. Stage 2's "save a copy" reuses Save a Copy, which never activates. |
 
 These rules hold throughout ([DecisionRegister.md](networking/DecisionRegister.md)):
@@ -423,5 +423,5 @@ These rules hold throughout ([DecisionRegister.md](networking/DecisionRegister.m
 - Whether My Plates ever docks into the editor, or the chooser becomes a panel.
 - Replacing a Template, restoring a Plate, the shared gradient and pattern color, and the canvas work.
 - Autosave and history, which ROADMAP.md keeps OPEN.
-- Networking decisions: D1, D6, L10, L12 and the tester kit stay with the register.
+- Networking decisions, which stay with the register.
 - How anything looks. Every count here is from code. The In game lists are where the owner confirms or corrects them.

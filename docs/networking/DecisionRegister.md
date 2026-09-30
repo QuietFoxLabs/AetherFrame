@@ -1,6 +1,6 @@
 # Networking decision register
 
-**Status (2026-09-29): two decisions are the owner's approvals, and twenty-five more are approved under the owner's delegation.**
+**Status (2026-09-30): two decisions are the owner's approvals, and thirty-nine more are approved under the owner's delegation.**
 - **D3** is **APPROVED** by the owner.
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
 - **N5** and **L6** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
@@ -8,6 +8,8 @@
 - **K1**, **K2**, **K6** and **K7** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **N3**, **D4**, **D5**, **D8**, **D9a**, **I1**, **N1**, **N7**, **P1**, **K3**, **K4**, and the new **R1**, **R2** and **R3**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decision batch A for NETWORK2".
 - **S1**, **D7** and **L8** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The request proof's decisions (N2-3b)".
+- **L10**, **L12** and the new **P3** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The persona registry's decisions (N2-5a)".
+- **D1**, **D6**, **N2**, **N6**, **S2**, **S3**, **S4**, **I2**, and the new **R4**, **S5** and **P4**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, and **K5** moves to the "D2 details" gate, where it stays UNRESOLVED. See "Decision batch B for the server (N2-7)".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
 
 **Every other product and architecture decision below is UNRESOLVED.**
@@ -194,6 +196,16 @@ These are Claude's decisions under the owner's delegation of September 29, 2026,
 
 It reports every blob it cannot open as unavailable (null), as the protector seam requires. **Not settled after N2-4:** whether the persona window (N2-5) tells a key locked to another account or machine apart from a damaged one; DPAPI's error codes would allow it, but the seam has no way to say which.
 
+**Applied by N2-5b, September 30, 2026.**
+- **The directory.** `Network\Personas\` under the plugin's configuration directory holds the registry (`registry.afpr`) and the lock (`instance.lock`); the key files are in its `keys\`, named by slot alone. No name holds an identity.
+- **The written-through rename.** A key file's final move is `WrittenThroughMove.MoveNew`: `MoveFileExW` with `MOVEFILE_WRITE_THROUGH`, never `MOVEFILE_COPY_ALLOWED`, on the extended-length path. The registry's is `WrittenThroughMove.Replace`, which adds `MOVEFILE_REPLACE_EXISTING`. The boundary tests allow exactly that declaration, in that class, in the preview flavour only. Off Windows it falls back to `File.Move`, which isn't durable; that serves the persona suite's Linux run only, since persona features never turn on there (K3).
+- **Telling a key locked elsewhere from a damaged one: settled, APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026.** Stage 1 doesn't tell them apart: the protector seam returns null for both, and so does a forged header. The persona window's wording names both causes: "damaged, or made on another Windows account or PC".
+- **Logs.** The persona session logs error kinds (each exception's type name and HResult, and any persona error), never an exception's text, which can hold a path with the Windows user name.
+
+**Independent concurrence (N2-5b).** A security-focused reviewer examined N2-5b's design (September 30, 2026). Revision 1 needed ten changes: startup counted as an operation for dispose; a lock never released at a timeout, retried at start, with Try again; K2's disclosure in the window; this settlement; no exception text in logs; no fallback on Windows, and long paths; spare copies named only after they are checked; a scan for the registry-less constructor; brief retries of a move a scanner blocks; and the window's wording. It **concurred** with revision 2 on four conditions, which N2-5b applies: after the session closes, its lock is released first and nothing is logged; a retry never runs the probe again; the check for the registry-less constructor reads the compiled IL; and the lock's in-process reload is checked in game. The disclosure, the wording that names both causes of an unreadable key, the spare copies and the window's wording reach code only with N2-5c's window. It then examined the implementation at `422b640` (September 30, 2026) and **concurred**: the session takes the lock only after the probe, loads the registry only with the lock held, and has exactly one party release the lock, decided under its monitor and before that work's unload registration ends, so neither a timeout nor a finalizer ever releases it; a probe that fails or throws turns persona features off for the session with no retry; logs carry type names, HResults and persona errors only, tested with a path planted in every failure; and the preview DLL's IL shows nothing outside `PersonaManager` constructing one without its registry. The solution built with 0 warnings, and the persona, plugin and protocol suites and the preview flavour's 12 boundary tests passed. Its one note on the code, that the key store's report lines should go through the session's log so that nothing is written after it closes, is applied. It rechecked `658b837` (September 30, 2026) and its concurrence stands: its note and the general review's fixes are applied, a start closed during the probe stops before the lock, a probe that throws views nothing, a closed view is no longer left busy, and every release is counted.
+
+**Applied by N2-5c, September 30, 2026.** The persona window says what this entry promises: next to K4's step, that a copy of the Windows profile opens the key wherever the Windows password is known (at once when the account has none), that any program running as the player, other Dalamud plugins included, can use it, and that on a work or school PC the organisation may be able to recover it. A key that doesn't open when checked is described with both causes, "damaged, or made on another Windows account or PC", as settled above; a key file whose header can't be read, which the audit finds without opening any key, is described with that case's own causes instead. The key folder's path appears only in the window, from `%APPDATA%` on when it lies there, or else from `%USERPROFILE%` on when it lies under the user's profile, so a screenshot doesn't show the Windows user name, and is copied only on a click.
+
 **Independent concurrence (N2-4).** A security-focused reviewer with no shared context examined `ffed076` and rechecked its fixes at `3a2d1f0` (September 29, 2026), and **concurred**, from Microsoft's `CryptProtectData`, `CryptUnprotectData`, `DATA_BLOB`, `LocalFree` and `GC.KeepAlive` pages, .NET's own DPAPI interop, Wine's `protectdata.c` and measurements on Windows 11. The declarations match the documented signatures, UI is forbidden and no prompt structure is passed. The managed copies of the secret are on the pinned object heap, every buffer passed to DPAPI is kept alive across the call, DPAPI's output is zeroed before `LocalFree`, and the store zeroes what `Unprotect` returns. Changed or missing entropy and truncation are refused, and so is a change to any single byte (measured byte by byte), except bytes appended after the blob and the provider identifier. DPAPI authenticates neither, but with them changed the same key still opens, never a different one. It asked for this reasoning, the narrower boundary claim and the pinned output copy, now made. The general review found, and this review had missed at `e69d049`, that pinned buffers whose addresses had been taken could be collected during the call. This review reproduced that under forced collections (7 of 240,000 openings and 6 of 60,000 round trips failed) and saw no failure after the fix.
 
 ### K6: key rotation. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
@@ -284,6 +296,8 @@ The rule governs `name` only. Other texts are schema 2's (N2-3), and N7 governs 
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. It checked the list against the Unicode Character Database (the 65 Cc code points) and UAX #9 (revision 52, Unicode 18.0.0), confirmed that `PlateNaming` folds Cc and Cf while U+2028, U+2029 and unpaired surrogates pass, and confirmed the CVE-2021-42574 citation. It asked for the exact error order and the invisible format characters, both added above.
 
+`[updated 2026-09-30: N2-6a's snapshot builder refuses a Plate whose name fails this rule, with a reason asking to rename it, never altering the name; ProfileLayoutSnapshot.IsValidName checks the rule exactly as the codec does.]`
+
 ### D5: an image digest covers the prepared copy. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** An `ImageReference`'s `sha256`, `format`, `byteLength`, `width` and `height` describe the **prepared copy** the client uploads, never the player's original file:
@@ -291,7 +305,7 @@ The rule governs `name` only. Other texts are schema 2's (N2-3), and N7 governs 
 - **What that drops.** Rebuilding the container drops every metadata block: EXIF, including GPS position; XMP; PNG text chunks; embedded ICC profiles; thumbnails.
 - **What the publisher never touches.** It reads only the managed copy. It never touches the player's original file, and never puts the original's bytes or digest into a document.
 
-The server verifies received bytes against the declaration before serving them (specification, section 13, rule 7). Whether it also processes them again is I2 (batch B).
+The server verifies received bytes against the declaration before serving them (specification, section 13, rule 7). Whether it also processes them again is I2 (batch B). `[updated 2026-09-30: it does: every image is re-processed by an isolated worker before it is served (I2).]`
 
 N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the source image bytes" to the prepared copy. That is wording only: there is no salt, and the layout doesn't change.
 
@@ -301,10 +315,25 @@ N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the sou
 - The consent screen shows the prepared copy, so the player sees what is sent.
 
 **Not settled:**
-- I2;
-- the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result). N2-6 also clears the colour under fully transparent pixels, which a straight-alpha round trip would otherwise keep, and the consent screen shows each whole prepared image, not only the part a Plate element crops.
+- I2; `[updated 2026-09-30: settled by decision batch B (I2).]`
+- the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result). N2-6 also clears the colour under fully transparent pixels, which a straight-alpha round trip would otherwise keep, and the consent screen shows each whole prepared image, not only the part a Plate element crops. `[updated 2026-09-30: N2-6's design amends this entry, APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026. (1) A prepared copy is cropped to a window the Plate draws of its image: Fill's centred window for an image element or the background, widened to whole pixels equally on both sides so that it stays centred, and the whole image for Stretch, Fit and a component's image. An image drawn with several windows gets a copy of each, except that a window inside another is drawn from that one's copy: both are centred and span the same whole width or height, so Fill on the larger copy gives the smaller window back. Nothing of an image outside what an item draws leaves the machine, beyond the widening to whole pixels (under one pixel on each side), which a union of the windows would not ensure: two windows across each other's axis leave corners neither draws. Preparation refuses a decoded image whose size differs from the size the window was computed from. (2) Colour that alpha hides is cleared, not only under alpha 0: each channel becomes round(round(c*a/255)*255/a), and 0 where a is 0. (3) After encoding, the container is walked against an allowlist measured at the pinned Dalamud (PNG: IHDR, IDAT, IEND; JPEG: SOI, APP0 JFIF, DQT, SOF0, DHT, DRI, SOS, EOI). The EXIF APP1 block Dalamud's encoder adds to every JPEG is stripped, and anything else is refused, before the copy is hashed. A known-answer round trip of a small image with alpha, once a session, must give the expected pixels and inventory, or publishing is off for that session, as K3's probe is for keys. (4) JPEG (quality 0.92, 4:2:0) for an opaque JPEG source, PNG otherwise; no colour conversion and no embedded profile. (5) The consent screen shows each prepared copy, which is now the drawn window, not the whole image. (6) The candidate is built before the consent screen from a private deserialization of the saved Plate's JSON, never from the document an editor holds. The consent record keeps the candidate together with the persona (slot and key) it showed, and the commit signs only that candidate, under that persona, and never reads the Plate again. The consent screen lists every shared text in full beside the rendering, since a text under an opaque item, or running past its box, travels whole. N2-6b applies (1) to (5); N2-6c applies (6)'s build, consent record and commit, and N2-9 its consent screen.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. `GetRawImageAsync` and `SaveToStreamAsync` exist on `ITextureReadbackProvider` in the installed Dalamud; a round trip through a texture cannot carry container metadata; and decoding the player's own managed copies adds no surface beyond import. It asked for the narrower rationale and the two N2-6 points above.
+
+**Independent concurrence (N2-6).** A security-focused reviewer with no shared context examined N2-6's design (September 30, 2026). It did **not concur** with the first revision, and asked for nine changes, all made in the second:
+- a candidate built before the consent screen and signed exactly as shown;
+- one persona-session commit with the publication index as its commit point;
+- only what finished rendering visibly draws, proven by a canary test;
+- each image cropped to what is drawn;
+- colour that alpha hides cleared;
+- the metadata drop enforced on the encoder's actual output;
+- the sniffer's exact rules written into the specification;
+- the renderer matched where it resolves more than the Plate stores (effect opacity, the Basic name's fitting, fonts not yet built, the skip rules shared with it);
+- a bounded, versioned index and outbox, never treated as empty when unreadable.
+
+It read Dalamud's decoder and encoder at the installed commit, which gave (3) above, and answered the design's open questions from primary sources (Microsoft's WIC encoder pages and the PNG specification's third edition), which gave (4). It then **concurred with the second revision on one condition**: preparation checks that the decoded size equals the size a window was computed from, since an animated WebP's first frame can be smaller than its header's canvas. That is (1) above.
+
+**The builder's reviews (N2-6a, #48).** The same reviewer concurred with the builder at `d35d5a0` and asked that the consent record's rules be written down, which is (6) above. A general review then found that the builder cropped each image to the union of the windows drawn of it. The union came from the security reviewer's note on the second revision, which judged it equivalent because each Fill window is recovered exactly; that note, and its concurrences at `7d27c87` and `d35d5a0`, missed that crossing windows leave corners no item draws. (1) now keeps a copy per window, sharing one only when a window lies inside another, and each Fill window is kept exactly centred, so a copy gives its items back exactly the pixels they draw. The security reviewer **concurred** with that at `114a30f`, after a randomized check of 4,000 Plates (every copy some item's own window, every item's copy holding its window, Fill on each copy within 0.0003 px of the item's own).
 
 ### D8: no metadata-only snapshot reaches players. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -329,7 +358,7 @@ The protocol has no persona display name; what others see is the Plate's own con
 
 **Rationale.** D3 keeps personas independent. A label such as "Main, Aria on Twintania" would tie a persona to a character the moment it was published.
 
-**Not settled:** a public name (stage 2 at the earliest). N2-5 removes the "provisional" wording from `PersonaLabel` and `PersonaManager`.
+**Not settled:** a public name (stage 2 at the earliest). N2-5 removes the "provisional" wording from `PersonaLabel` and `PersonaManager`. `[updated 2026-09-30: done in N2-5a. PersonaLabel also refuses unpaired surrogates, so a label survives the registry's round trip exactly (P3).]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: a local-only label is the only option consistent with D3 and ROADMAP.md, section 4, rule 8.
 
@@ -341,11 +370,11 @@ The protocol has no persona display name; what others see is the Plate's own con
 - at most 8,192 pixels a side and 20,000,000 pixels in all;
 - at most 8 MiB each.
 
-The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is refused with a message; nothing is downscaled silently.** The consent screen shows the prepared copies, so a first frame instead of an animation, or colours after conversion, are visible before anything leaves.
+The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is refused with a message; nothing is downscaled silently.** The consent screen shows the prepared copies, so a first frame instead of an animation, or colours after conversion, are visible before anything leaves. `[updated 2026-09-30: N2-6's design converts no colour and embeds no profile (D5), so there is no conversion to show; the consent screen shows each prepared copy, cropped to what the Plate draws.]`
 
 **What a viewer accepts, whoever published.** A hostile publisher can skip preparation, so the limit is enforced where images are received, not trusted from the sender:
 - schema 2's `ImageReference.format` allows only PNG (1) and JPEG (2) (N2-3);
-- the viewer (N2-10) sniffs every image's bytes before decoding anything, and refuses anything but a non-animated 8-bit PNG, or an 8-bit baseline, extended or progressive JPEG (frame types SOF0 to SOF2) with 1 or 3 components, within the specification's section 8.2 limits, whatever I2 and D6 decide.
+- the viewer (N2-10) sniffs every image's bytes before decoding anything `[updated 2026-09-30: by the specification's section 8.2.1, which states the rule exactly, with vectors (N2-6b); the publisher applies it to the copies it prepares and the server to what it receives and to its own re-encodes]` `[updated 2026-09-30, APPROVED (Claude, under the owner's delegation of September 29, 2026): the rule is tighter than this entry's list, after the general review of N2-6b's first part (#49). A JPEG has at most 64 scans, since a decoder's work grows with its scans times its pixels, which the pixel limits don't bound (every encoder the reviewer tried wrote 1 to 10). Only the markers such a JPEG needs are allowed, and in a PNG only the critical chunks IHDR, PLTE, IDAT and IEND, with no iCCP, zTXt or iTXt, whose compressed contents no limit bounds. Every rule is checked in reading order (section 9.1). Our own copies never come near any of it: the publisher's and the server's encoders write fewer scans and fewer kinds of segment and chunk.]`, and refuses anything but a non-animated 8-bit PNG, or an 8-bit baseline, extended or progressive JPEG (frame types SOF0 to SOF2) with 1 or 3 components, within the specification's section 8.2 limits, whatever I2 and D6 decide. `[updated 2026-09-30: both are decided in batch B, and the viewer's sniff stays (D6's conditions for N2-10).]`
 
 **Deviation from the recommendation, on sources only.** It proposed refusing animated WebP and CMYK JPEG. As *sources* they are accepted: preparation encodes the pixels again, so neither reaches a viewer in its original form. The risk the recommendation guarded against, which formats a viewer must decode, is covered by the rule above. Refusing them as sources would only turn away images the player already uses locally.
 
@@ -354,7 +383,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - Showing the prepared copy makes the player's consent informed.
 - One rule for all animations is simpler than one per format.
 
-**Not settled:** I2. `[updated 2026-09-29: schema 2's limits are settled by N2-3a (specification, section 8.5): at most 8 images, whose pixels total at most 33,554,432. The publisher refuses a Plate over them with a message, never dropping or downscaling an image. The security-focused reviewer of N2-3a recommended a cap on the images' total pixels, which bounds what a viewer decodes, and found it sound as implemented at `a388099`, with its exact boundary tested from `3528363`.]`
+**Not settled:** I2. `[updated 2026-09-30: settled by decision batch B (I2).]` `[updated 2026-09-29: schema 2's limits are settled by N2-3a (specification, section 8.5): at most 8 images, whose pixels total at most 33,554,432. The publisher refuses a Plate over them with a message, never dropping or downscaling an image. The security-focused reviewer of N2-3a recommended a cap on the images' total pixels, which bounds what a viewer decodes, and found it sound as implemented at `a388099`, with its exact boundary tested from `3528363`.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which relied on the publisher preparing images honestly, and asked for the receive-side rule, now above. It **concurred** with the amended entry on its recheck of `779e873`, adding that the sniff runs before any decoding and allows only frame types SOF0 to SOF2, also above.
 
@@ -369,7 +398,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - **Profile ids** are already scoped (specification, section 8.4).
 - **The client** picks every identifier from a cryptographically secure generator (specification, section 2.6) and never reuses one across personas.
 
-**Rationale.** Deduplicating across personas would let one persona probe whether another holds an image (upload a digest and see whether it is already stored), or reference or overwrite another's asset. Scoping costs only storage. N2-7 applies it. In N2-3, the specification's section 8.4 loses the N1 half of its "Open" paragraph; the N2 half (replay) stays until batch B.
+**Rationale.** Deduplicating across personas would let one persona probe whether another holds an image (upload a digest and see whether it is already stored), or reference or overwrite another's asset. Scoping costs only storage. N2-7 applies it. In N2-3, the specification's section 8.4 loses the N1 half of its "Open" paragraph; the N2 half (replay) stays until batch B. `[updated 2026-09-30: removed by decision batch B, which decides N2.]`
 
 **Not settled:** nothing further.
 
@@ -406,11 +435,11 @@ N2-3 writes this into the specification as a consumer obligation.
 
 **Where it never appears.** Never in Plate JSON, character bindings, `.aetherframe` packages, Templates or the plugin configuration. Profile ids are never logged in the clear (`LogPrivacy`, NETWORK1's safeguard 7). Share codes must not be either: batch B gives them a fixed prefixed form, and `LogPrivacy` gains it in the same change that first handles a code.
 
-**Deleting or renaming a Plate never publishes or unpublishes anything by itself.** The sharing view lists published profiles whose Plate is gone and offers to unpublish them. Losing the index loses no Plate. It does lose the local list of what was published: a signed request that lets the server list a persona's profiles is batch B's to decide.
+**Deleting or renaming a Plate never publishes or unpublishes anything by itself.** The sharing view lists published profiles whose Plate is gone and offers to unpublish them. Losing the index loses no Plate. It does lose the local list of what was published: a signed request that lets the server list a persona's profiles is batch B's to decide. `[updated 2026-09-30: none in stage 1 (P4); the operator path (S3) covers a lost index.]`
 
 **Rationale.** Plate JSON travels: export, Duplicate and Save as Template copy it, including unknown fields. Publication state stored there would leak into copies and packages (NETWORK1.md, system 4).
 
-**Not settled:** recovering the list from the server (batch B).
+**Not settled:** recovering the list from the server (batch B). `[updated 2026-09-30: stage 2 (P4).]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: Plate JSON travels through export, Duplicate and Save as Template, unknown fields included, so publication state belongs outside it. It noted that share codes aren't redacted yet and that index files must be named by slot, both now stated above.
 
@@ -423,6 +452,8 @@ N2-3 writes this into the specification as a consumer obligation.
    - protect and unprotect through the protector, with an envelope header as context;
    - write and read the key file storage in a temporary directory.
 2. **The protector in use claims protection on this platform.** The DPAPI protector (N2-4) claims it only on native Windows. Under Wine, DPAPI is obfuscation only (NETWORK1_CryptoCompatibility.md, section 3), so it claims none there, and persona features stay off until K9 decides a store for that case.
+
+`[updated 2026-09-30: under D6 a viewer receives server-checked content and verifies no signature, so the probe's verification step protects nothing in viewing: TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined (from source, K8), it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays; on native Windows it passes, and it becomes load-bearing if D6 ever changes. (See D6.)]`
 
 **Deciding by capability, not by name.** Which operations work is decided by the probe, never by the operating system's name. The one platform fact used is the protector's own statement about protection, which no probe can measure.
 
@@ -448,7 +479,7 @@ N2-3 writes this into the specification as a consumer obligation.
 2. The key chain, with a throwaway key in a fresh scratch directory: generate, protect under the envelope's header, store, open again through the key material's checks, sign, and verify through the protocol.
 3. The protector's claim on a blob it has just made (for DPAPI, the Windows provider identifier alone), that it opens that blob, and that it refuses it under another context.
 
-Persona features turn on only after all three. Each failure gives one message naming the missing capability, saying the feature isn't available on this system yet and never that a system is excluded. The probe never throws on a platform or storage failure (only on a missing argument, or a scratch root that isn't a full path), and tries to delete its scratch directory whatever happens. Its public entry point takes the DPAPI protector and binds the claim to the Windows provider identifier. The overload that takes a claim is internal and exists for the tests; N2-5 calls only the public one, and its review checks that. A later platform protector gets its own entry point with its own claim. Nothing runs it yet: N2-5 runs it once per session, off the framework thread, with a temporary directory as the scratch root (never the key directory), before persona features turn on.
+Persona features turn on only after all three. Each failure gives one message naming the missing capability, saying the feature isn't available on this system yet and never that a system is excluded. The probe never throws on a platform or storage failure (only on a missing argument, or a scratch root that isn't a full path), and tries to delete its scratch directory whatever happens. Its public entry point takes the DPAPI protector and binds the claim to the Windows provider identifier. The overload that takes a claim is internal and exists for the tests; N2-5 calls only the public one, and its review checks that. A later platform protector gets its own entry point with its own claim. Nothing runs it yet: N2-5 runs it once per session, off the framework thread, with a temporary directory as the scratch root (never the key directory), before persona features turn on. `[updated 2026-09-30: N2-5b runs it so, through the public entry point only; a boundary test refuses the internal one in plugin sources. A probe that fails or throws turns persona features off for the session with no retry, and the session keeps its result for viewing (N2-10).]`
 
 **Independent concurrence (N2-4).** The same review, of `ffed076` and rechecked at `3a2d1f0`, **concurred**. The probe runs K3's chain in K3's order, and viewing depends on the known-answer step alone. `Verify` checks the signature before decoding the payload, so the one-bit change can fail only as `SignatureMismatch`: together the two checks show that the platform verifier both accepts and refuses. Messages name no path, key or blob. The provider identifier is sound positive evidence against every implementation examined, since Wine's blobs carry `Wine Crypt32 ok` there instead. Windows does not authenticate the identifier, so it shows only what this process's crypt32 has just written, and it is never read from a stored blob. A Wine that copied Windows' format would pass; K9 re-checks this. The public entry point binds the claim; the overload that takes one is internal and exists for the tests, and N2-5's review checks that it calls only the public one.
 
@@ -458,8 +489,9 @@ Persona features turn on only after all three. Each failure gives one message na
 
 **In NETWORK2's first stage there is no backup,** so the acknowledgement is required:
 - it is a separate confirmation with that text, naming the ordinary ways a key is lost: reinstalling Windows, moving to a new PC, deleting the plugin's data, or an administrator resetting the Windows password, which loses the key DPAPI protected it with;
-- it is recorded per persona in the persona registry, and asked once per persona;
+- it is recorded per persona in the persona registry, and asked once per persona; `[updated 2026-09-30: N2-5a records it as bit 0 of the record's flags (P3), set by PersonaManager.Acknowledge; a created or restored persona starts without it. N2-5b's window asks for it.]` `[updated 2026-09-30: N2-5c's persona window asks for it: the step opens, scrolled into view, whenever a persona is created or restored, names the persona, gives this text with K2's disclosure, and records nothing until the player ticks "I understand" and chooses Acknowledge; "Not now" leaves it to be asked again.]`
 - it is repeated in the persona window whenever a persona is created.
+- `[updated 2026-09-30: decision batch B adds to the text: once the key is lost, only the server's operator can remove what the persona published (S3); and the plugin's networking directory holds the keys and the list of what each persona published, which keeping it keeps and which updating or unpublishing needs, but it is no backup of the identity, since on a new PC or a reinstalled Windows its keys normally won't open (P4). The persona window says both.]`
 
 Once the backup exists (stage 2), the first publish offers the backup first and the acknowledgement as the alternative.
 
@@ -477,15 +509,15 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 - In stage 1 the code is the only way to reach a profile. There is no directory, search, listing or enumeration, and no lookup by persona, character, World or anything else.
 - A code binds nothing to a character.
 
-**How codes travel.** A code is sent in a request's body or a header, never in a URL, so no access log records it. The server returns a code only in reply to a publish carrying a fresh request proof (S1), never for a replayed document.
+**How codes travel.** A code is sent in a request's body or a header, never in a URL, so no access log records it. `[updated 2026-09-30: only in a request's body. R4 withdraws "or a header", since Caddy's access log, when enabled, records custom headers.]` The server returns a code only in reply to a publish carrying a fresh request proof (S1), never for a replayed document.
 
-**Left to batch B:** the code's format and length, with at least 64 bits from a cryptographically secure generator; a fixed prefixed text form that `LogPrivacy` redacts; and rate limits on lookups.
+**Left to batch B:** the code's format and length, with at least 64 bits from a cryptographically secure generator; a fixed prefixed text form that `LogPrivacy` redacts; and rate limits on lookups. `[updated 2026-09-30: settled by R4.]`
 
 **Target lookup** (by targeting a character in game) is stage 2, with its own privacy decision and an opt-in binding.
 
 **Rationale.** Sharing that the publisher starts deliberately and the viewer opens explicitly, with no character binding (ROADMAP.md, section 4, rule 8). A code is a capability in the sense of the W3C TAG's [Good Practices for Capability URLs](https://www.w3.org/TR/capability-urls/). Anyone who has it can use it, so it leaks the way a link does, and unpublishing revokes it. Stage 1 departs from two of that document's recommendations on purpose: codes don't expire, and a code can't be replaced without unpublishing. Both would complicate a first test, and both can be added later without changing the protocol.
 
-**Not settled:** the format, the length and the rate limits (batch B); expiring or replacing codes; target lookup (stage 2).
+**Not settled:** the format, the length and the rate limits (batch B); expiring or replacing codes; target lookup (stage 2). `[updated 2026-09-30: the format, the length and the rate limits are R4's.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: a bearer code with no enumeration and no character binding fits rule 8, and at least 64 random bits with rate limits is an adequate floor. It asked for codes to stay out of URLs, for the fresh-proof rule and the prefixed form, and for the TAG departures to be recorded, all now above.
 
@@ -505,7 +537,7 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
   - explicit connect and request timeouts (the defaults are none and 100 seconds), and a response size bound far below the default 2 GiB buffer;
   - certificate revocation is not checked, as by default. The server's Let's Encrypt certificates last 90 days or less, and N2-8 may choose a shorter-lived profile.
 - **Traffic only on a player's action:** publish, unpublish, open a code, refresh. No polling, no background traffic, no telemetry.
-- **Request and response bodies.** Requests carry the signed documents' exact bytes and the prepared image bytes. Responses are small JSON objects with closed schemas, parsed strictly with bounded sizes.
+- **Request and response bodies.** Requests carry the signed documents' exact bytes and the prepared image bytes. Responses are small JSON objects with closed schemas, parsed strictly with bounded sizes. `[updated 2026-09-30: two responses are binary bodies instead, each sent only with HTTP 200: D6's served profile (magic `AFSP`, at most 1,048,576 bytes, the protocol's `MaxDocumentBytes`) and I2's re-processed images, fetched by index. A failure is a status with no body.]`
 - **Version checks.** Every request names the plugin's version, and nothing else about the player or the machine, so the server can refuse an outdated client with a clear message.
 - **No cookies and no accounts.** Identity comes only from signatures (specification, section 13, rule 2).
 
@@ -559,7 +591,7 @@ A server refuses a submission whose proof fails section 14.4, resubmissions incl
 **Consequences, recorded.**
 - A retraction can no longer be signed in advance and submitted later, or by someone else. That matters for K4 and the D2 details, where a pre-signed "emergency unpublish" could have been one answer to a lost key.
 - A retraction needs the challenge endpoint, like any other submission.
-- N6 stays open for a retraction's own `issuedAt` (section 13, rule 6); proofs don't depend on the client's clock.
+- N6 stays open for a retraction's own `issuedAt` (section 13, rule 6); proofs don't depend on the client's clock. `[updated 2026-09-30: N6 exempts retractions from the future-skew check; their issuedAt is checked for form only and recorded nowhere (decision batch B).]`
 
 **Not settled:** the challenge lifetime beyond the 300-second baseline, the rate limits on issuing challenges, and the server's endpoints (N2-7); any later proof kind.
 
@@ -596,6 +628,336 @@ Version 1 has two contexts: the signed document and the request proof. Applied b
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 29, 2026). It found that the proof defeats third-party submission, cross-deployment relay and proofs made in advance, and asked for eight changes before concurring. The changes: the server's name from configuration only, the challenge consumed atomically, a last label that starts with a letter, refusal rather than normalization, separate hostnames and test-only names, a subject digest open to later proof kinds, the whole operation bound, and the verified bytes stored. All eight are applied here. It then examined the implementation at `7e7015e` (September 29, 2026) and **concurred**: the two tags are length-prefixed and of different lengths (44 and 42 bytes; 38 and 36 at the freeze); one writer builds both the proof's signing input and its layout; the tests refuse a signature from either context in the other; and the vectors refuse, as a proof, both a document's own signature and a document-context signature over a proof's fields. Its one note on this entry's wording is applied in `5b39350`.
 
+### The persona registry's decisions (N2-5a), September 30, 2026
+
+The entries below were decided for NETWORK2's increment N2-5a, the persisted persona registry in `AetherFrame.Personas`, and are applied by it. N2-5b applies the rest in the plugin: the registry file, the key file's written-through move, the single-writer lock, the capability probe at session start, the persona window and K4's step. A security-focused reviewer examined the design before any code and the implementation after.
+
+### L10: signing across a persona switch. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** A change of selection revokes every signer lease opened before it, and a revoked lease never signs again, as #23's interim does. An operation is also **bound to the persona it showed the player**:
+- when it starts, it records that persona's slot and public key: for publishing, the persona the consent screen shows;
+- it opens its lease with `PersonaManager.TryOpenSigner(expectedSlot, expectedKey)`, which opens nothing and answers `ActivePersonaChanged` unless exactly that persona is active;
+- it holds no lease across I/O or a dialog: one lease, one signature, disposed at once.
+
+Every signer the plugin opens goes through `TryOpenSigner`. `TryOpenActiveSigner` stays for tests and for callers that show no persona, and N2-5b adds a boundary test refusing it in the plugin's sources. `[updated 2026-09-30: N2-5b adds that boundary test: no plugin source names TryOpenActiveSigner.]` Nothing is sent on a switch: selecting a persona sends nothing (D3), and a signed document waiting in N2-6's outbox is sent only when the player retries while its persona is active. Request proofs already refuse any key but the document's (S1). Applied by N2-5a, the library; N2-6 and N2-9 follow it.
+
+**Rationale.** A switch during the consent screen must never make an operation sign, as the new persona, what the player approved for the old one. Revoking leases stops a lease opened before the switch; binding stops one opened after it. The alternatives are refused:
+- **finishing as the old persona** signs for a persona that is not active, which NETWORK1.md's system 1 forbids;
+- **refusing a switch while a lease is open** would let a stuck operation lock the player out of their own identity choice (D3).
+
+**Not settled:** nothing for version 1.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 30, 2026). It asked for the binding above, because revoking leases alone left a switch possible between showing a persona and signing, and **concurred** once it was applied. It asked for "every plugin caller uses `TryOpenSigner`" to be checkable, which N2-5b's boundary test makes it. It then examined the implementation at `d0de8f0` (September 30, 2026) and **concurred**: `TryOpenSigner` compares the active persona's slot and public key under the manager's lock and opens nothing otherwise, and the selection counter moves only after a switch is saved, so a failed switch revokes no lease and a saved one revokes every earlier lease. The tests show that no signer is opened for a persona other than the one shown, and that a switch after opening revokes the lease. Its concurrence stood on its recheck of `137872e`, which applies its notes.
+
+### L12: key files no record names. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** A key held under a slot no record names is an **orphan**. Orphans come from a check that fails after a key write (`AddKey` reports `CustodyFailed`), a crash between the key write and the registry save, or a registry save that fails after a key was committed (P3). They are:
+- **detected** by `PersonaManager.Audit()`, which lists the key storage and compares it with the records without opening any key. Entries that aren't a slot's name are skipped and counted. A listing that fails is reported, never thrown, and blocks nothing.
+- **checked against the records:** a record whose key is missing or unreadable (damaged, not an envelope, or another protector's), or whose envelope names another slot or another public key, is reported as **unusable**, with that reason. The record stays; nothing is repaired.
+- **reported by slot**, with the identity the envelope's header claims shown as **unverified**, since anyone who can write the key files can forge a header. `PersonaManager.VerifyOrphan(slot)` proves the claim by opening the key on this account (`IPersonaKeyStore.OpenPublicKey`, which disposes the key at once), on demand and off the framework thread.
+- **restored only by the player**, with `PersonaManager.RestoreOrphan(slot, label)`. It checks everything again under the manager's lock: no record names the slot, the registry has room, the key opens on this account and matches its envelope, and no persona holds its identity. The record takes its public key from the key opened then and keeps the slot; it is not selected, starts without K4's acknowledgement, and is saved before it is applied. A key copied from another installation opens only under the same Windows credentials; when it does, its slot exists on two installations, as `PersonaSlotId`'s documentation now says.
+- **never deleted** (K6). The persona window (N2-5c) names where the key files are, and warns that a removed key can never be used again.
+
+Logs name slots only, never identities or paths. `[updated 2026-09-30: N2-5c's persona window shows them. Each key without a persona shows its file name and its header's claim as unverified: "claims to be" an identity, or "claims to be a copy of" a persona's key, until Check opens it; only then does it read as a spare copy, with no restore. Each persona's row names its key file, and a persona whose key can't be used shows what its key file's header names, never whose key it is. Restoring asks for a name and runs RestoreOrphan; nothing is deleted.]`
+
+**Rationale.** A key with no record is still the player's identity. Deleting it could destroy the only means of updating or unpublishing what it signed (D2's premise), and ignoring it would hide that identity. Restoring takes the player's explicit act, because an orphan may be a key the player set aside on purpose, or one planted by software running as the player. That software can already read every key (K2), so the checks guard against mistakes, not against it. A retry after a failed save commits the key under a fresh slot, so the first copy stays an orphan whose identity a record now holds, and restoring it is refused.
+
+**Not settled:** removing or setting aside an orphan from the window, and rejoining a record whose key is unusable to a verified copy of that key held under another slot. How the window shows orphans and unusable records was left here to N2-5b, and N2-5c settles it (above). The window shows an orphan whose claimed identity a record already holds as a spare copy of that persona's key once **Check** proves the claim, since restoring it is refused, and makes clear which key file each persona uses: removing that one makes the persona unusable.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 30, 2026). It asked for the audit to open no key, for records to be checked against their keys, for an orphan's identity to be shown as an unverified claim, for a restore to check everything again under the lock, and for `PersonaSlotId`'s documentation to cover a copied key. It **concurred** on one condition: the check that opens an orphan returns the opened key's public key rather than a yes or no, so the check and the restored record come from one read. `IPersonaKeyStore.OpenPublicKey` does that. It then examined the implementation at `d0de8f0` (September 30, 2026) and **concurred**: `Audit` reads envelope headers only, never calls the protector (tested), and gives every orphan and unusable record its reason without throwing on a failed listing. `RestoreOrphan` checks the slot, the room, the key's opening and its identity again under the lock, and takes the record's key from `OpenPublicKey`'s single read; a forged header's claim is refuted by opening, and a moved key, a copy of a held key and a locked key are refused. Its notes are applied: the key file storage's listing reports a directory it can't read as a failed listing rather than an empty one, and the audit's documentation says it reads every key's envelope under the lock, so the plugin runs it off the framework thread. Its concurrence stood on its recheck of `137872e`, which applies its notes.
+
+**Independent concurrence (N2-5c).** The same security-focused reviewer examined N2-5c's implementation at `1c7fb25` (September 30, 2026) and **concurred**: every label, and every message that holds one, is drawn unformatted (`TextUnformatted`, or `AddText` in a callout), never as an ImGui label or through a formatting call, and widgets are keyed by slot; the window never holds the manager, and every change runs off the framework thread through the session; K4's step names its persona, gives K4's text with K2's disclosure, and records nothing until "I understand" is ticked; a key's claim stays a claim until Check opens it, a spare copy is named only then and offers no restore, and a key that doesn't open names both causes; and the key folder's path is shown and copied from `%APPDATA%` on. The solution built with 0 warnings, and the persona, plugin and protocol suites and the preview flavour's boundary tests passed. Its concurrence stood on its recheck of `d3d7924` (September 30, 2026): its notes are applied, so checks are dropped whenever a new audit arrives and a check audits again, a key file whose header can't be read names that case's own causes while K2's two stay for a key that doesn't open, a path under the user's profile shows from `%USERPROFILE%`, and N2-9 is to tell a player whose key doesn't open at their first share; and a restored persona now opens K4's step, as a new one does.
+
+### P3: how the persona registry is kept. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.**
+- **Where.** One file in the plugin's own networking directory, beside the key files' directory and never inside it: the key storage's listing counts every entry that isn't a key file as skipped, and the audit would report the registry, its temporary file and the lock as such every time. Never the plugin configuration or Dalamud's reliable storage, and no identity in a file name (K2; NETWORK1.md, safeguard 7). The file is N2-5b's; N2-5a defines its bytes and the manager's use of `IPersonaRegistryStorage`.
+- **The bytes**, big-endian: `magic "AFPR" | version u16 = 1 | count u32 (0..256) | records | activeSlot[16] (all zero for none) | sha256[32] of everything before it`. A record is `slot[16] | publicKey[65] | flags u8 (bit 0: K4 acknowledged) | labelLength u16 (UTF-16 code units, 1..64) | label (UTF-16BE code units)`. At most 256 personas and 54,330 bytes, and no private material.
+- **Integrity.** The checksum guards against corruption only, and there is no MAC: whoever can rewrite the file runs as the player and can already read every key (K2). A forged record can't make another key sign, since the signer checks refuse it. A swapped label can't be stopped, so N2-9's consent screen shows the persona's identity as well as its label.
+- **Loading.** `PersonaManager.Load` reads the registry once. No registry (the file or its directory not found) is a first run. A registry that can't be read (access denied, a sharing violation, over 54,330 bytes) or doesn't decode is refused with `RegistryUnreadable`, and is **never overwritten or replaced**. The plugin then turns persona features off with a message naming where the file is; moving the file aside brings every key back as an orphan to restore (L12). A registry of at most 54,330 bytes that names a later version is refused the same way, but as `RegistryNewerVersion`, so the plugin says to update AetherFrame instead: moving it aside after a downgrade would lose its labels and acknowledgements. A larger one can't be read at all, and is `RegistryUnreadable`. Damage that happens to hit the two version bytes and leave a value above 1 also reads as a newer version. Either way, nothing is overwritten. Decoding refuses anything but exactly this layout, checking in order:
+  - the size, then the magic and the version, which need only the first six bytes (every later version keeps both where they are, so a later layout is told apart before anything else is read), then this version's minimum length, the checksum and the count;
+  - each record's slot (non-zero and unique), public key (a valid P-256 point, with a unique identity), flags (bit 0 only) and label (1 to 64 code units, equal to its own normalization);
+  - that no bytes follow the records, and that the selection names a record or none.
+
+  A temporary file is never read. The registry-less constructor stays for tests, and the plugin never falls back to it.
+- **Saving: persist, then apply.** Every change (create, restore from a backup, restore an orphan, rename, select, deselect, acknowledge) encodes the state that would result and has `IPersonaRegistryStorage.Replace` save it atomically and durably. Only then does the manager apply it in memory, under its lock. So:
+  - every registry the manager encodes is decoded again before it is saved, as the document codecs check their own output, so the manager never hands the storage a registry this build's load would refuse;
+  - a failed save is not applied in memory, and reports `RegistryWriteFailed`;
+  - the selection counter moves only when a new selection is applied, so a failed switch revokes no lease;
+  - a change that changes nothing saves nothing;
+  - a save that fails after the storage held the new bytes is indeterminate. Memory keeps the state from before it and the file may hold either, and both are consistent, because a key committed with no record is an orphan (L12).
+- **Before a key is committed**, everything that can be decided in advance is checked: the label, the room (`RegistryFull` at 256), the key's identity against every persona held, and the registry that would result. After `AddKey`, only the save can fail.
+- **Listings** (`Personas`, `Active`, `TryGet`) read an immutable snapshot published after each change, without the lock, so they never wait on a save, a key write or the protector.
+- **The selection** is one for the installation. It is never keyed by a character, Content ID or account, and is restored only from the player's own last Select or Deselect. The first persona is never selected for the player (D3).
+
+**What N2-5b must do with it:**
+- **One writer.** An exclusive lock file, held for the session, taken before `Load` reads anything and released in the plugin's `Dispose`.
+- **The file's replacement.** The temporary file is flushed in the same directory, then moved over the registry with `MoveFileExW` and `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`. A new key file is moved with `MOVEFILE_WRITE_THROUGH`. Never `MOVEFILE_COPY_ALLOWED`.
+- **Not `File.Move`**, which never writes through.
+- **Not `ReplaceFile`**, whose write-through flag is documented as unsupported, and which can leave the registry missing after `ERROR_UNABLE_TO_MOVE_REPLACEMENT`. A missing registry would read as a first run.
+- **The boundary tests and K2's text** are amended for that one native declaration.
+
+Microsoft states `MOVEFILE_WRITE_THROUGH`'s flush guarantee explicitly only for a move that copies and deletes; that residual risk is recorded here.
+
+**Applied by N2-5b, September 30, 2026.**
+- **The file.** `PersonaRegistryFileStorage` keeps `registry.afpr` beside `keys\`. It reads at most one byte beyond the largest registry's 54,330, and throws when that byte is there. A missing file or directory is a first run; anything else throws. A save writes `registry.afpr.tmp`, flushes it, reads it back and compares, then moves it over the registry, written through. A stale temporary file is replaced, and never read.
+- **One writer.** `PersonaInstanceLock` holds `instance.lock` with no sharing for the session.
+  - The session takes it before `Load` reads anything. While it is held elsewhere (an instance still unloading, a scanner), the session retries for about 10 seconds with backoff, and gives up when the plugin starts unloading.
+  - Exactly one party releases it, decided under the session's monitor: `Close` when nothing of the session's runs, or else the work in flight, as it ends and before that work's unload registration ends. It is never released at a timeout, never tied to the plugin's other operations, and never left to a finalizer.
+  - `Close` is the first thing the plugin's `DisposeAsync` does, and a failed load closes it too.
+- **Never without the registry.** A boundary test reads the preview DLL's IL, and nothing outside `PersonaManager` constructs one through the registry-less constructor.
+- **Moves.** A move that meets a sharing violation, a lock violation or a denied access (scanners and indexers open fresh files) is retried three times, 75 ms apart. The rename is one atomic step on NTFS; FAT and exFAT (a launcher on a USB drive) are a remaining risk.
+
+**Rationale.** Persist, then apply means memory never shows a change the file has not accepted. After a failed save the change is not applied, and a key committed with it is one the audit offers back; only when the save's outcome is unknown can a restart show the change after all. Refusing an unreadable registry, rather than starting empty, keeps a sharing violation or a damaged file from erasing every record at the next save. Code units rather than a text encoding keep `System.Text` out of the persona assembly and make a label round-trip exactly. For the same reason `PersonaLabel` refuses unpaired surrogates, a D9a implementation note.
+
+**Not settled:** a later version of the bytes (none exists), and whether the encrypted backup (the D2 details) also covers the registry.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 30, 2026). It asked for:
+- K4's flag in the record;
+- every refusal that can be decided in advance made before a key is committed, and persist, then apply;
+- labels as UTF-16 code units, and the exact layout with every length checked before it is read;
+- an unreadable registry never replaced, and no fallback to a registry-less manager;
+- one global selection;
+- one writer, the written-through replace, and the boundary amendment;
+- no paths in logs, and no identities in names.
+
+It checked the write-through requirements against Microsoft's `MoveFileExW` and `ReplaceFileW` pages and the .NET source. It **concurred** on two conditions:
+- N2-5b takes the lock before `Load` reads anything and releases it deterministically. Dalamud reloads plugins in-process, and a lock left to the finalizer would turn persona features off until the game restarts. This is recorded for N2-5b.
+- Listings never wait on I/O, which the snapshot provides.
+
+Its note to state the size cap is applied: 54,330 bytes. It then examined the implementation at `d0de8f0` (September 30, 2026) and **concurred**: the codec is exact (its layout is pinned byte for byte, and every rule checked after the checksum is refused with a valid checksum, handing out nothing), and every change is encoded (for a new key, before `AddKey`), saved, and only then applied. Listings read a snapshot that a test shows answering while a save holds the lock; the solution built with 0 warnings, and the persona, plugin and protocol suites and the preview flavour's boundary tests passed. Its notes are applied: the magic and the version are read before the checksum, so a registry a newer AetherFrame wrote is refused as `RegistryNewerVersion` and the plugin can say to update rather than to move a damaged file aside; a failed save says the change was not applied, rather than that nothing changed; and the manager decodes every registry it encodes before saving it, as the document codecs check their own output. Its concurrence stood on its recheck of `137872e`, which applies its notes. Its one correction on that recheck, that a newer registry is told apart only within the size limit, is applied above.
+
+### Decision batch B for the server (N2-7), September 30, 2026
+
+The entries below were decided together for NETWORK2's increments N2-7, the server, and N2-8, its deployment. They are researched against the primary sources cited in each, and recorded here before any code depends on them. None changes signed bytes: the served profile (D6) is a response format, not a signed document, and the share code's check symbol (R4) is a usability filter. A security-focused reviewer with no shared context examined five revisions of the batch, and concurred with every entry. N2-7's implementation gets its own review.
+
+### D1: what a retraction means. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** A retraction is the signed, terminal `ProfileRetraction`. Publishing again uses a new profile id, and so gets a new share code.
+
+**Applying one** deletes, at once, every revision document of (persona, profile), every image, the share code, the profile's revision rows (N2) and the retraction document itself. Only the tombstone is kept (S2). So that the deleted content leaves every copy:
+- SQLite runs with `PRAGMA secure_delete = ON` on every connection the server's pool opens (a per-connection setting, off by default), so deleted content doesn't stay in the database file;
+- after every retraction and every removal (S3), the server runs `PRAGMA wal_checkpoint(TRUNCATE)`. Active readers can block it, and then its first result column is 1 and nothing is truncated, so the server reads that column and retries with backoff until it is 0. It also sets `journal_size_limit` low, so the write-ahead log never keeps old pages past one checkpoint (sqlite.org, `pragma.html` and `wal.html`);
+- tests hold a reader open to prove the retry, and read `secure_delete` back from a fresh pooled connection;
+- N2-8's backups have a stated retention, quoted in the consent text, after which a deletion has reached every copy.
+
+**The order of checks** on every submission: section 14.4's proof, then, in stage 1, the persona allowlist (I2), then the tombstone, then rule 4's revision check. Only the key holder ever learns "retracted", and a repeated retraction succeeds.
+
+**Profiles the server never saw** are tombstoned too, rate-limited per persona and per address, since personas cost nothing and these rows are permanent and traceable to no one. A first snapshot still in flight (its challenge lives 300 seconds) that arrives after the unpublish is then refused.
+
+**For N2-9:** one operation at a time per profile, and unpublishing drops that profile's pending outbox entries.
+
+**Rationale.** A terminal retraction needs no ordering by client clocks (specification, section 13, rule 5). S1 already stops anyone but the key holder from submitting, and stops replays. A player who unpublishes expects the content gone, backups included once their stated window has passed.
+
+**Not settled:** the backups' retention period (N2-8).
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design in five revisions (September 30, 2026), from primary sources, and **concurred**. It checked that a terminal retraction needs no ordering by client clocks, and that S1 already confines retractions to the key holder. It asked for the exact deletions, `secure_delete` on every pooled connection, a checkpoint retried until it completes, a stated backup retention, the tombstone checked after section 14.4 and before rule 4, and tombstones for unseen profiles rate-limited per persona and per address, all now above.
+
+### D6: what viewers receive. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** **Server-checked content.** A viewer receives a **served profile**, which the server builds from the stored verified bytes. It is one binary body, sent only with HTTP 200:
+
+```
+magic "AFSP" | version u16 = 1 | marker bytes[16] | the profile, in section 8.5's encodings, with image fields replaced by an index
+```
+
+- **It holds** the name, the canvas, the background and the items. Images are named by index (0 to 7) in the served profile's own image list, and fetched under the share code with the marker and the index.
+- **The marker** is 128 random bits from the server's CSPRNG, stored with the revision. It is never the server's sequence, a time or the document's SHA-256. An image request whose marker isn't the current revision's gets "not found", so a refresh never mixes revisions.
+- **It never holds** a signature, a signed document, a persona id, a profile id, an asset id, a time (neither the server's receipt time nor `createdAt`), or the signed image fields `sha256` and `byteLength`, which re-encoding changes.
+- **A failure** is an HTTP status with no body, and "not found" is one status for every cause. There is no JSON envelope and no multipart, so a viewer runs one strict parser.
+- **Its size** is at most 1,048,576 bytes, the protocol's `MaxDocumentBytes`. It always fits: a served profile is its payload less the image fields and the identifiers, plus 22 bytes.
+- **The protocol library** gains a strict decoder for it: a distinct type, never a `VerifiedDocument`, with vectors, adversarial and fuzz tests. N2-7 tests that no submission ever reaches that decoder, and sends `Cache-Control: no-store` on served profiles and images.
+- **N7** applies to everything served.
+
+**For N2-10:** keep I1's sniff of each image; hold content in memory only; clear the Plate when a refresh answers "not found"; never describe content as signed or verified; and tell the viewer that opening a code sends their address to the server.
+
+**Rationale.** A signed document handed to a viewer is a transferable, non-repudiable statement that persona P published X: it survives retraction and can't be recalled. Off-the-Record messaging leaves messages unsigned for this reason (Borisov, Goldberg and Brewer, WPES 2004). Freshness and retraction rest on the server either way, and integrity on TLS to the one fixed hostname (R2) and on the server's verification (section 13, rule 10). The persona id, the asset ids and the times are left out because each would let code holders link one persona's Plates across characters, or learn when it was last active, which ROADMAP.md, section 4, rule 8 excludes. The choice is reversible later, since the server keeps the verified bytes (rule 3).
+
+**Recorded consequences:**
+- NETWORK0.md's authenticity goal now ends at the server: what a viewer sees is attested by the server, not signed by the creator. NETWORK0.md and the specification's section 13, rule 3 say so.
+- Under D6 the capability probe's verification step protects nothing in viewing, since TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined (from source, K8), it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays; on native Windows it passes, and it becomes load-bearing if D6 ever changes.
+
+**Not settled:** the served profile's specification text and vectors (N2-7, beside section 8.5).
+
+**Independent concurrence.** The same review **concurred**. It found server-checked content the right choice: a signed envelope is a transferable, non-repudiable statement that outlives retraction, while freshness and retraction rest on the server either way. It asked for a served profile with no persona id, no times, no signed image fields and no asset ids, which could link one persona's Plates again across codes; for a random 128-bit revision marker; and for one strict binary body with its own vectors and fuzz tests. All are now above. It checked the size bound: a served profile omits the ids, `createdAt` and the image references, so it is smaller than its payload even with the 22-byte header.
+
+### K5's gate: the "D2 details", not G3. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** K5 (backup passphrase rules and the key derivation route) leaves G3 and joins the "D2 details" gate, which already gates every `.afpersona` file. This is a decision about a gate: **K5 itself stays UNRESOLVED.**
+
+**Rationale.** K5 changes no bytes and gates no server. K4 makes the acknowledgement the stage 1 path, and no backup exists before stage 2. D2's approval already leaves the password policy and the derivation to "later security approval".
+
+**Recorded for when K5 is decided:**
+- it also gates K9's passphrase-wrapped store;
+- SP 800-63B-4's 15-character minimum assumes an online verifier that limits attempts (section 3.2.2), but a backup file faces offline guessing, so K5 also draws on SP 800-132, RFC 8018 and OWASP's current guidance (600,000 iterations of PBKDF2-SHA256), and prefers a generated code;
+- NFC matches SP 800-63B-4, section 3.1.1.2.
+
+**Independent concurrence.** The same review **concurred**, finding the move sound for the reasons above. It asked that K5 also gate K9's passphrase-wrapped store, and that the decision draw on sources for offline guessing, not only on SP 800-63B-4's minimum for an online verifier. Both are recorded above.
+
+### N2: rollback by replaying a pruned revision. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.**
+- **Pruning.** A superseded revision is pruned at once: its document and its images are deleted. The server keeps only (profile, revision id, document SHA-256), with no receipt time, until the profile is retracted or removed (S3). These rows are never expired.
+- **Resubmission.** A known revision id with the same document hash is idempotent and never becomes latest again; one with a different hash is refused (rule 4).
+- **Order.** "Latest" is ordered by a server-assigned sequence, never a clock.
+- **For N2-6 and N2-9:**
+  - ECDSA signatures are randomized, so a revision's exact signed bytes are kept until the server acknowledges them, and a revision id is never signed twice;
+  - the outbox sends only the newest pending snapshot of each profile;
+  - N2-9 asks the player before sending an outbox entry signed more than a day ago.
+
+The specification's section 8.4 "Open (N2)" paragraph is removed; section 13's rule 4 keeps the revision records, and rule 6 names the server's sequence.
+
+**Rationale.** S1 limits replay to the key holder, so what remains is a stale outbox, a restored plugin folder or a second installation resubmitting an old revision. Keeping the ids makes all three harmless. Each row is under 100 bytes, holds no time, reveals only a count of revisions, and goes with its profile. A player who edits something out expects it gone, so fewer signed documents sit at rest.
+
+**Independent concurrence.** The same review **concurred**. It asked for superseded revisions to be pruned at once; for their rows to be kept until retraction and never expired, since expiry would let a restored plugin folder or a second installation roll a Plate back; for "latest" to be ordered by a server sequence; and for exact signed bytes to be kept until the server acknowledges them. All are now above. It noted the one gap no row closes, a restored outbox's never-accepted older revision, which N2-9's prompt covers.
+
+### N6: retractions and a fast client clock. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.**
+- **Retractions** are exempt from the future-skew refusal. Their `issuedAt` is checked for form only, recorded nowhere, and used for nothing.
+- **Snapshots** keep the skew check as a sanity bound, since ordering is by the server's sequence, with a distinct error that N2-9 shows as "your PC's clock is ahead".
+
+**Rationale.** S1's fresh challenge is what stops a retraction signed in advance, not `issuedAt`. A player whose clock runs fast must still be able to unpublish.
+
+**Independent concurrence.** The same review **concurred**: S1's fresh challenge, not `issuedAt`, stops a retraction signed in advance, so exempting retractions from the skew check costs nothing. It asked that `issuedAt` be recorded nowhere, and that snapshots keep the check as a sanity bound with an error the plugin can explain, both above.
+
+### S2: what a tombstone holds. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** A tombstone is HMAC-SHA256 under a tombstone key, over the ASCII label `AetherFrame.Tombstone.v1`, then the 32-byte persona id (the SHA-256 digest a `psn_` id names), then the 16-byte profile id. The row holds that value and the key's version, and nothing else: no date, no document, no identifier in the clear. Tombstones are kept for the deployment's life.
+
+**The key:**
+- 256 random bits, used for tombstones only (SP 800-57 Part 1, section 5.2);
+- from configuration or a secret file, never the database, and excluded from N2-8's backups;
+- checked at startup against a key-check value, HMAC(key, `AetherFrame.Tombstone.KeyCheck.v1`), stored beside the rows, so a missing or wrong key stops the server. Tombstones are never silently forgotten, which would let a stale outbox revive a retracted profile;
+- N2-7 has a known-answer test that pins both inputs byte for byte, since a changed encoding would orphan every tombstone as silently as a lost key.
+
+**Rotation.** After a suspected leak, every row is re-wrapped in one transaction, and the tombstone function becomes the whole chain, HMAC(k2, HMAC(k1, x)), for old and new rows alike. The version names the chain, a lookup is one computation, and each key has its own key-check value. No preimage is needed, so no tombstone is forgotten.
+
+**If the key is truly lost,** the server stays down until the operator records a decision to start a new tombstone set, which forgets every retraction before it (N2-8's runbook).
+
+**Rationale.** A tombstone recognizes a later snapshot of a retracted profile, and nothing more. It is only as private as the deletions around it (D1, N2), which the server makes at once.
+
+**Independent concurrence.** The same review **concurred**. It checked that a keyed hash of the persona and profile ids recognizes a later snapshot of a retracted profile and nothing more. It asked for a 256-bit key used only for tombstones and kept out of the database and its backups; for the exact input bytes and a separately labelled key-check value, pinned by a known-answer test; and for rotation as one re-wrapped chain in one transaction, which, unlike a password pepper (OWASP), needs no preimage. All are now above. It confirmed that the key-check, tombstone and chain inputs are 33, 72 and 32 bytes long, so they can never coincide.
+
+### S3: profiles whose key is lost. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope for stage 1:**
+- no automatic expiry;
+- the operator (the owner) removes a profile on request, and verifies the requester out of band. A share code proves nothing about authorship, since every viewer holds it; in stage 1 only the two testers can ask, since the persona allowlist (I2) lets only their personas publish;
+- a removal is a retraction in every way: the same deletions and the same tombstone (D1, S2);
+- K4's text mentions this path.
+
+**Not settled:** expiry after long inactivity, disclosed in advance, decided before the allowlist is removed.
+
+**Independent concurrence.** The same review **concurred** with no automatic expiry in stage 1. It asked that the operator verify a removal request out of band, since every viewer holds the share code, and that a removal delete and tombstone exactly as a retraction does, both above. When it checked this recording, it asked that the allowlist (I2) enforce "only the two testers".
+
+### S4: a persona-level revocation document. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** Deferred. It would be an additive document type, and a signed-byte addition needing the owner's approval. N2-8's runbook covers a stolen key, since DPAPI doesn't stop malware running as the player (K2): the operator removes the persona's profiles, and refuses the persona in the server's configuration.
+
+**Independent concurrence.** The same review **concurred** with deferring a signed revocation, which would change signed bytes. It asked for the runbook's path for a stolen key, above.
+
+### I2: server image processing. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** Every image is re-processed before it is served, in a way that assumes the decoder can fail badly.
+
+**In the server, before any decoding:**
+- each received image's SHA-256 and byte length must equal the verified snapshot's declaration (rule 7), so only bytes a verified snapshot declared ever reach a decoder;
+- I1's rules: no `acTL` chunk in a PNG (an animated PNG), and JPEG frame types SOF0 to SOF2 with 1 or 3 components.
+
+**A worker decodes and encodes again**, with SixLabors.ImageSharp pinned to a patched version by the lock file, new advisories acted on, and its licence rechecked at each major version:
+- only the PNG and JPEG codecs;
+- `Image.Identify` first, which must match the declaration and the specification's limits;
+- `DecoderOptions` with `MaxFrames = 1`, `SkipMetadata = true` and strict segment integrity;
+- `SimpleGcMemoryAllocator`, so its buffers count against the GC heap limit;
+- an explicit encoding: 8-bit non-interlaced PNG or baseline JPEG, with every metadata block dropped, no rotation, and no colour transform or ICC application (tested).
+
+**The worker's output is untrusted.** A compromised decoder can return any bytes, so before storing an image the server checks, with its own strict parser, the type and the dimensions (the declared ones), the size bound, and the exact inventory of PNG chunks or JPEG segments the configured encoder produces, pinned by tests. Anything else is refused.
+
+**Serving:** only under the share code, by index (D6), never by asset id or digest; with a fixed `Content-Type`, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`.
+
+**Isolation in stage 1:**
+- **Only the testers upload.** The server's configuration holds a persona allowlist: the two testers' persona ids, which the operator receives from them out of band (N2-8's runbook). A submission from any other persona is refused right after section 14.4's proof, before the tombstone, rule 7 or any decoding. Viewing by code stays open to anyone. The repository is public, so without the allowlist anyone could build the preview flavour, or write a client from the specification, make a persona for nothing, and upload to the owner's server.
+- The worker runs in a container of its own: `network_mode: none`, a read-only root filesystem, no database, tombstone key or configuration mounted, its own memory limit and a limit on its number of processes. Its environment carries no secret.
+- The server owns the listening socket, and the worker connects to it over a read-only mount, so the worker has no socket it could replace.
+- Decoders run one at a time. Each starts in its own process group with rlimits, an explicit GC heap hard limit and `oom_score_adj` 1000, and the group is killed when its job ends, whatever the outcome.
+- The server's queue of images is bounded at 16, refusing with a retryable error when full.
+- N2-8 checks at startup that the worker container has no network.
+
+**The limit, recorded.** In stage 1 the decoders run as the worker host's user. An exploit could therefore leave a process behind that outlives its job (a process can leave its group) and reads a later upload through `/proc`: another persona's image. It could also write a later job's output. The checks above see structure, not pixels, so the image could reach its thief in the pixels of the thief's own later upload. It has no network, database or key to reach. This is accepted for the two-player test on the owner's server only, where the allowlist confines uploads to the two testers' personas. **Removing the allowlist, to open a server to more than the two testers, requires S3's decision on expiry, and per-job isolation:** each decode runs as a user or in a namespace of its own, no process of it survives the job, and the host verifies that before the next one starts.
+
+**Rationale.** A hostile client can upload crafted bytes that match its own declaration, and every viewer decodes the result through Dalamud's native texture pipeline. ImageSharp is managed code, but not memory-safe in practice: CVE-2024-27929 was a use-after-free in its PNG decoder, CVE-2024-32036 left buffers uncleared, so output could carry another image's data, and more advisories came in September 2026.
+
+**Independent concurrence.** The same review **concurred**. It found ImageSharp's decoders not memory-safe in practice, and asked for rule 7's hash and length check before any decode; a worker container with no network, database, key or configuration; the server owning the socket; one decoder at a time, killed after its job; bounded memory and a bounded queue; and the worker's output treated as untrusted, down to its chunk inventory. All are now above. It asked for the limit's wording above, and concurred with accepting that risk for the two-player test on the owner's server, once an allowlist restricts uploads to the two testers' personas, with per-job isolation required before any wider server, as proportionate. It asked for that allowlist when it checked this recording (September 30, 2026), since nothing else stopped anyone else from uploading.
+
+### R4: the share-code format. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** This settles what R1 left to batch B.
+
+**The form** is `AF-XXXX-XXXX-XXXX-XXXX`: the fixed prefix `AF-`, then 16 Crockford Base32 symbols in groups of four (crockford.com/base32.html).
+- 15 of the symbols are random: 75 bits from the server's CSPRNG, above R1's floor of 64.
+- The last is a check symbol: a Damm check over GF(2^5) (Damm, "Totally anti-symmetric quasigroups for all orders n ≠ 2, 6", *Discrete Mathematics* 307, 2007), pinned in the specification with vectors:
+  - the field is GF(2^5) with the modulus x^5 + x^2 + 1, which is irreducible over GF(2);
+  - a symbol's Crockford value v (0 to 31) is the field element whose polynomial coefficients are v's five bits, bit i the coefficient of x^i;
+  - the operation is x ∗ y = a·x + y with a = x (the element 2), field multiplication, and addition as XOR: a totally anti-symmetric quasigroup, since a is neither 0 nor 1;
+  - from 0, each of the 15 random symbols in order makes the running value a·value + symbol, and the check symbol is a·value, which brings it to 0. A code is valid when folding all 16 symbols from 0 gives 0.
+
+  Tests show that every single substitution, and every swap of two different neighbours, fails the check. The check is a usability filter, not a security control.
+
+**Reading.** Either case is accepted, `i` and `l` read as `1` and `o` as `0`, and hyphens are optional. The plugin rejects a mistyped code by its check symbol without a request, and the server checks it too.
+
+**One code per published profile** (R1), stable across updates. It dies when the profile is retracted, and no record of retired codes is kept.
+
+**Only in a request body.** R1's "or a header" is withdrawn: Caddy's access log, when enabled, records every request header and redacts only Cookie, Set-Cookie, Authorization and Proxy-Authorization (caddyserver.com, `log`). Never in a URL.
+
+**Answers.** An unknown, malformed or retracted code, or one whose check symbol is wrong, gets the same "not found".
+
+**Rate limits** on lookups:
+- per IPv4 /32, and per IPv6 /64, /56 and /48, after mapping an IPv4-mapped IPv6 address back to IPv4, since under RFC 6177 one site can hold many /64s;
+- a high cap on failed lookups a day, with an alarm. When it trips, only the prefixes producing the failures are tightened, never every client.
+- Behind Caddy, ASP.NET Core trusts forwarded headers from Caddy's address alone (`KnownProxies`; by default it trusts only loopback), and the trusted-proxy lists are never cleared.
+
+**`LogPrivacy`** redacts every spelling the parser accepts, as "[share code]": either case, with `i`, `l` and `o`, and with or without hyphens. One test generates codes and checks every accepted spelling of each. An input box that lets a player leave out `AF-` adds it before parsing, and never logs what was typed. This lands with the change that first handles a code (N2-9).
+
+**In the plugin (N2-9):** share a code by /tell, since chat is logged by other players' plugins; unpublishing and sharing again replaces a leaked code.
+
+**Rationale.** A code is typed or pasted in chat, so it is short and survives misreading. 75 bits keeps guessing hopeless even past the rate limits: a million failed lookups a day against 10,000 live codes finds one with a chance of about 10^-10 a year. The check catches typos before any request.
+
+**Independent concurrence.** The same review **concurred**. It asked for 75 random bits (R1's floor is 64, and SP 800-63B-4, section 5.1, asks for 64 even for session secrets); R1's fixed `AF-` prefix; the Damm check, having verified that x^5 + x^2 + 1 is irreducible and that x ∗ y = a·x + y, with a neither 0 nor 1, is totally anti-symmetric; codes only in request bodies, since Caddy's access log records custom headers; rate limits per IPv4 /32 and per IPv6 /64, /56 and /48; and a failed-lookup cap that raises an alarm rather than slowing every client. It asked that `LogPrivacy` redact every spelling the parser accepts, proved by one test over generated codes, and that an input box supplying `AF-` never log what was typed. All are now above.
+
+### S5: server logging. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.**
+- **No address is stored in stage 1:** only the rate limiter's memory holds addresses, for its window. Truncated addresses can still be personal data (GDPR Recital 26; CJEU C-582/14, *Breyer*), and a /48 can be one customer's whole allocation (RFC 6177).
+- **Logs hold** a request id, the route template, the status, the duration and the error kind. They never hold a document, a proof, a challenge (rule 10), a share code, a revision marker, a persona id or a profile id.
+- **Metrics** are aggregate only, never per code or per persona. The rate limiter's own per-persona and per-address state stays in its memory, for its window.
+- **Keeping the defaults from leaking:**
+  - `Microsoft.AspNetCore` logs at Warning, since its hosting diagnostics log each request's URL at Information;
+  - the rate limiter logs no address, unlike Microsoft's sample;
+  - Caddy's access log stays off, its default.
+- **A log-capture test** in N2-7, over the server and the image worker, finds no address, code or identifier in any line.
+- **Retention:** 14 days, enforced by deleting by time, not by size. Docker's json-file driver doesn't rotate by default, and a size cap doesn't bound time on a quiet server.
+- **The consent text** (NETWORK2.md, section 2) says that the address is seen and not stored; that content and identifiers are kept until unpublishing, plus the backup window; and that logs are kept 14 days, without identifiers.
+
+**Independent concurrence.** The same review **concurred**. It asked that no address be stored in stage 1, since truncated addresses can remain personal data, and that the leaking defaults be pinned: ASP.NET Core's request lines, the address logging in Microsoft's rate-limiter sample, Caddy's access log and Docker's unrotated logs. It also asked for a log-capture test over the server and the worker, and for 14 days enforced by time. All are now above.
+
+### P4: listing a persona's profiles. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** **None in stage 1.** No signed request lists a persona's profiles: one would be a new request kind with its own proof and privacy review.
+
+A lost publication index is covered by the operator path alone (S3). "Unpublishing by share code" has no mechanism: a retraction signs a profile id, D6 keeps profile ids from viewers, and retracting by code would need a signed statement binding the code, a signed-byte change.
+
+**K4's acknowledgement and the consent text** say three things:
+- the plugin's networking directory (`Network\Personas\` under AetherFrame's configuration folder) holds the keys and the list of what each persona published;
+- keeping it keeps that list, which is what lets the player update or unpublish later;
+- it is not a backup of the identity: on a new PC or a reinstalled Windows, the keys in it normally won't open (DPAPI, K2), and then only the operator can remove those Plates (S3).
+
+The publication index (P1) lives in that directory, beside the registry and outside `keys\`, so the texts that name it are right.
+
+**Not settled:** recovering the list from the server (stage 2).
+
+**Independent concurrence.** The same review **concurred** with no listing request in stage 1, since a listing would need a new proof kind and its own privacy review. It asked that the texts not offer "unpublishing by code", which has no mechanism, and say instead what keeping the directory does and doesn't do, as above.
+
 ## Gates
 
 | Gate | Must be decided before |
@@ -610,27 +972,29 @@ Version 1 has two contexts: the signed document and the request proof. Applied b
 
 ## 1. Decisions that must be approved before any persistent private key is created (G1)
 
-- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b, P2, K1, K2, K6, K7, N3, K3 and P1 (APPROVED, Claude, under the owner's delegation of September 29, 2026). **Every row of this table except "D2 details", which has its own gate, is now approved,** so G1 is complete for native Windows. K8 and K9 below still gate any other platform, and the "D2 details" still gate any `.afpersona` file.
-- **No row of this table other than "D2 details" remains to be approved** before a persistent private key is created outside tests on native Windows.
-- **"D2 details"** has its own gate: before any `.afpersona` file is written or restored outside tests.
+- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b, P2, K1, K2, K6, K7, N3, K3, P1 and P3 (APPROVED, Claude, under the owner's delegation of September 29, 2026). **Every row of this table except "D2 details" and K5, which have their own gate, is now approved,** so G1 is complete for native Windows. K8 and K9 below still gate any other platform, and the "D2 details" and K5 still gate any `.afpersona` file.
+- **No row of this table other than "D2 details" and K5 remains to be approved** before a persistent private key is created outside tests on native Windows.
+- **"D2 details"** and **K5**, which decision batch B moved here from G3, have their own gate: before any `.afpersona` file is written or restored outside tests.
 - **Approved rows** state the approved option in the recommendation column.
 
 | Id | Question | Baseline or current state | Recommendation (not approved) | Bytes | Status |
 |---|---|---|---|---|---|
 | D2 | Recovery from key loss | None. Without the key nothing can be retracted, and there is no account. | Approved in principle: encrypted, portable `.afpersona` backups and restoration, including on another computer without a hosted account; no plaintext private key export (see "Approved decisions") | no | **APPROVED IN PRINCIPLE (2026-09-28)** |
 | D2 details | Backup encryption scheme, password policy, key derivation parameters, recovery warnings, implementation | Undefined | Subject to later security approval. Related: K4 and K7 (approved), K5 (UNRESOLVED). No `.afpersona` file may be written or restored outside tests before this is approved. | no | UNRESOLVED |
+| K5 | Backup passphrase rules and key derivation route | Undefined | At least 15 characters, or a generated code; NFC; never truncated. The key derivation must use a route verified on every supported platform: `Rfc2898DeriveBytes.Pbkdf2` fails under Wine before 11.3, from source and a published report. Its gate is "D2 details", not G3 (decision batch B, "K5's gate"): it is needed before any `.afpersona` file is written outside tests, and also gates K9's passphrase-wrapped store. A backup file faces offline guessing, so it draws on SP 800-132, RFC 8018 and OWASP's work factors as well as SP 800-63B-4. | no | UNRESOLVED |
 | D3 | How many personas an installation holds, and how one is chosen | Undefined | Approved: several independent personas; manual selection and switching; one active at a time for identity-dependent operations; never bound automatically to game identifiers; switching never alters saved Plates or triggers publishing (see "Approved decisions") | no | **APPROVED (2026-09-28)** |
 | D9b | How the protocol code ships in the plugin (fourth DLL or sources compiled in) | The preview flavour compiles the sources in; player builds compile none | Approved: the sources compiled into AetherFrame.dll, the package at three files, the standalone projects canonical, and only in the preview flavour (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | N3 | Whether draft documents are distinguishable from final v1 in the signed bytes | Drafts use version 1 and the `…SignedDocument.v1` tag | Approved: drafts carry `protocolVersion` `0x8001` and the tag `…SignedDocument.v1-draft` until the owner's freeze; readers accept exactly one of draft and final; identities unchanged (see "Decision batch A") | **yes** | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | N5 | Whether the profile id stays on every `RemoteDocument` | It did, until the protocol API tidy | Approved: the profile id moves to a closed abstract `RemoteProfileDocument` that the snapshot and retraction derive from; `VerifiedDocument.Profile` is null for a document that isn't about a profile; no signed-byte change (see "Decisions approved under the delegation") | no (public API) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | L6 | Where the provisional `IPersonaKeyProvider` and `FuturePolicy` live | Both were public and marked provisional, until the protocol API tidy | Approved: both removed from the protocol. Key storage and the active persona are plugin policy (`AetherFrame.Personas`); the server-only limits are documentation only, in NETWORK0.md, section 7 (see "Decisions approved under the delegation") | no (public API) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K1 | Persona key algorithm | P-256 ECDSA, P1363, low-S (NETWORK0); the key store core holds P-256 scalars only | Approved: keep it (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
-| K2 | Key storage on native Windows | The store core, the envelope and the directory storage exist behind a protector seam; no protector ships | Approved as the target: DPAPI, CurrentUser scope, UI forbidden, entropy from the envelope header, in the plugin's own files named by slot; never plugin configuration or Dalamud reliable storage. The DPAPI protector itself is increment 7 with its own review (see "Decisions approved under the delegation"). `[updated 2026-09-29: implemented by N2-4, compiled only in the preview flavour and wired by nothing yet.]` | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
+| K2 | Key storage on native Windows | The store core, the envelope and the directory storage exist behind a protector seam; no protector ships | Approved as the target: DPAPI, CurrentUser scope, UI forbidden, entropy from the envelope header, in the plugin's own files named by slot; never plugin configuration or Dalamud reliable storage. The DPAPI protector itself is increment 7 with its own review (see "Decisions approved under the delegation"). `[updated 2026-09-29: implemented by N2-4, compiled only in the preview flavour and wired by nothing yet.]` `[updated 2026-09-30: N2-5b wires it in the preview flavour, under the persona session: see "Applied by N2-5b" in K2 above.]` | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | K3 | Platform enablement policy | The architecture review first proposed disabling personas under Wine | Approved: persona features only where a full-chain capability probe passes and the protector claims protection on this platform (DPAPI: native Windows only); viewing needs only the probe's verification step; local features always unaffected (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K6 | Key rotation | None; the store has no replace and no delete | Approved: none in v1. Migrating means a new persona, republishing, and retracting the old profiles with the old key (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | K7 | Where cryptographic implementations come from | Platform only (.NET over CNG/NCrypt) | Approved: platform implementations only, .NET or the same platform's APIs called directly. A third-party library or an algorithm in our own code is a separate owner decision with its own review, and is never chosen to keep the package at three files (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | P1 | Where "this Plate was published" is remembered | Undefined | Approved: a private publication index per persona in the plugin's networking files; never in Plate JSON, bindings, packages, Templates, configuration or logs (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | P2 | Who can create keys during NETWORK1 | Nobody yet: the preview flavour holds the code, no key store exists | Approved: preview builds only, by the compile-time switch `AetherFrameNetworkPreview`; player and official builds contain none of the networking code (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
+| P3 | How the persona registry is kept | Nothing kept: the manager held its records in memory only | Approved: one file of its own bytes beside the key files (`AFPR`, version 1, at most 256 personas and 54,330 bytes, a SHA-256 checksum against corruption); persist, then apply; an unreadable registry refused and never replaced; the file itself, its written-through replace and the single-writer lock are N2-5b's (see "The persona registry's decisions (N2-5a)") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 
 Only if persona features are pursued under Wine, Proton or macOS. These must be decided before a persistent key is created there, and only after measurements under those platforms:
 
@@ -651,30 +1015,36 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 
 ## 3. Decisions needed before the freeze or the first real server (G3)
 
+**Every row of this table is now approved** (decision batch B, September 30, 2026); K5 moved to the "D2 details" gate. The two-player test's server may accept documents signed by real keys once N2-7 and N2-8 apply these decisions. A server open to anyone else also needs I2's per-job isolation and S3's decision on expiry. The freeze stays the owner's, and L13 (section 5) is due before it.
+
 | Id | Question | Baseline | Recommendation (not approved) | Bytes | Status |
 |---|---|---|---|---|---|
-| D1 | What a retraction means | A signed, terminal retraction with a permanent minimal record | Keep it signed and terminal; republishing uses a new profile id | yes, only if changed | UNRESOLVED |
-| D6 | Whether viewers receive signed envelopes or server-checked content | Undecided | Server-checked content (reversible later; signed proofs handed out cannot be recalled) | no | UNRESOLVED |
+| D1 | What a retraction means | A signed, terminal retraction with a permanent minimal record | Approved: signed and terminal; republishing uses a new profile id; applying one deletes the profile's revisions, images, share code and revision records at once, keeping only a keyed tombstone (S2), with SQLite's secure delete and a truncating checkpoint (see "Decision batch B") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| D6 | Whether viewers receive signed envelopes or server-checked content | Undecided | Approved: server-checked content, a served profile (`AFSP`) holding no signature, identifier or time, with images fetched by index (see "Decision batch B") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | D7 | Whether documents are bound to a deployment | Not bound | Approved: documents stay unbound; each submission is bound through its request proof's deployment name, the canonical DNS hostname (see D7 above) | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K4 | Whether a backup is required before the first real publish | Undefined | Approved: a backup, or (while none exists) an explicit per-persona acknowledgement that a lost key means never updating or unpublishing, before the first real publish (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
-| K5 | Backup passphrase rules and key derivation route | Undefined | At least 15 characters, or a generated code; NFC; never truncated. The key derivation must use a route verified on every supported platform: `Rfc2898DeriveBytes.Pbkdf2` fails under Wine before 11.3, from source and a published report. Because D2 is approved in principle, this is also needed before any `.afpersona` file is written outside tests (part of "D2 details"). | no | UNRESOLVED |
 | N1 | Scope of revision and asset ids | Profile scoping only | Approved: revisions per (persona, profile); assets and digests per persona, never deduplicated or compared across personas (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | N7 | Whether consumers must escape names before display or logging | Nothing obliges them | Approved: every consumer treats every text as plain text: no markup, format strings, game text payloads, paths, URLs or commands; never auto-linked; escaped in any HTML (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | R1 | How a viewer finds a Plate in the first test | None | Approved: share codes issued per published profile, the only way to reach one in stage 1; no directory, search or lookup; target lookup is stage 2 (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
-| R2 | The transport | None | Approved: HTTPS to one fixed DNS hostname, `HttpClient` with Dalamud's dual-stack callback, traffic only on a player's action, signed bytes as bodies, strict small JSON responses, version checks, no cookies or accounts (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| R2 | The transport | None | Approved: HTTPS to one fixed DNS hostname, `HttpClient` with Dalamud's dual-stack callback, traffic only on a player's action, signed bytes as bodies, strict small JSON responses except D6's served profile and I2's images, version checks, no cookies or accounts (see "Decision batch A" and "Decision batch B") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | R3 | Where network code may live | Nowhere (NETWORK1.md, safeguard 1) | Approved: an exact allowlist in the preview flavour under `Services/Network` only: `System.Net.Http` (with `.Headers`), `HttpStatusCode`, Dalamud's dual-stack callback and its `AddressFamily` parameter, `System.Net.Security` only for a TLS option; every other networking type refused; nothing in the player flavour (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 
 ## 4. Backend-time decisions (G4)
 
+**Every row of this table is now approved** (decision batch B, September 30, 2026).
+
 | Id | Question | Recommendation (not approved) | Status |
 |---|---|---|---|
-| N2 | Rollback by replaying a pruned revision | The server keeps every accepted revision id; a replay never becomes "latest" | UNRESOLVED |
-| N6 | Retractions blocked by a fast client clock | Exempt retractions from the future-clock check | UNRESOLVED |
+| N2 | Rollback by replaying a pruned revision | Approved: a superseded revision is pruned at once, and (revision id, document SHA-256) is kept until the profile is retracted or removed; "latest" is ordered by a server sequence (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| N6 | Retractions blocked by a fast client clock | Approved: retractions are exempt from the future-skew check, and their `issuedAt` is recorded nowhere; snapshots keep the check as a sanity bound (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | S1 | Request proofs | Approved: required for every document submission, snapshots and retractions alike, under a single-use server challenge (see S1 above) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
-| S2 | What a tombstone holds | A peppered hash of (persona, profile) and a date | UNRESOLVED |
-| S3 | Profiles whose key is lost | Expiry after long inactivity, disclosed in advance | UNRESOLVED |
-| S4 | A persona-level revocation document | Defer; it would be an additive document type | UNRESOLVED |
-| I2 | Server image processing | Always re-process; serve PNG or JPEG only; no auto-rotation or colour transform | UNRESOLVED |
+| S2 | What a tombstone holds | Approved: HMAC-SHA256 under a tombstone key over (persona id, profile id), with the key's version and nothing else, kept for the deployment's life (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| S3 | Profiles whose key is lost | Approved for stage 1: no automatic expiry; the operator removes a profile on a request verified out of band, exactly as a retraction (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| S4 | A persona-level revocation document | Approved: deferred; the runbook covers a stolen key (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| I2 | Server image processing | Approved: every image re-processed by an isolated worker whose output is checked before storing, and served by index with fixed types; uploads only from an allowlist of the two testers' personas in stage 1, and per-job isolation before the allowlist is removed (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| R4 | The share-code format | Approved: `AF-` and 16 Crockford Base32 symbols, 75 random bits and a Damm check symbol; only in request bodies; lookups rate-limited per IPv4 /32 and per IPv6 /64, /56 and /48 (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| S5 | Server logging | Approved: no address stored in stage 1; logs hold no document, proof, challenge, share code or identifier, and are kept 14 days (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| P4 | A signed request that lists a persona's profiles | Approved: none in stage 1; the operator path (S3) covers a lost publication index (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 
 ## 5. Other open items
 
@@ -685,9 +1055,9 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | L8 | Signing-context rules not yet in the specification | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29**: specification, section 5.1 (see L8 above) |
 | L9 | Whether protocol tests gate plugin releases (`release.yml`) as well as `build.yml` | UNRESOLVED. Its "Linux never ran" part is closed: the ubuntu leg has run green twice (NETWORK0.md, section 13). |
 | I3 | Photo metadata in local `.aetherframe` exports (existing local behaviour, not networking) | UNRESOLVED |
-| L10 | Signer lease on a persona switch: may an operation holding a lease for persona A still sign as A after the player switches to B? The interim in `AetherFrame.Personas` (#23) revokes the lease on any change of selection, never revives it, and fails closed, following NETWORK1.md system 1. The alternatives are letting the operation finish as A (which needs system 1 amended) or refusing a switch while a lease is open. | UNRESOLVED (before the preview wiring, NETWORK1.md increment 9, lets a player start an operation that signs) |
+| L10 | Signer lease on a persona switch: may an operation holding a lease for persona A still sign as A after the player switches to B? The interim in `AetherFrame.Personas` (#23) revokes the lease on any change of selection, never revives it, and fails closed, following NETWORK1.md system 1. The alternatives are letting the operation finish as A (which needs system 1 amended) or refusing a switch while a lease is open. | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30**: revoked on any switch, and each operation bound to the persona it showed (see L10 above) |
 | L11 | Whether the persona suite also gates plugin releases (`release.yml`). Today only `build.yml` runs it. A question of the same kind as L9; L9 itself stays scoped to the protocol suite. | UNRESOLVED (with L9) |
-| L12 | Key files that no persona record names. The store has no delete (K6), so when the check after a durable write fails (a read-back that still fails after its retries, or bytes that differ), `AddKey` reports `CustodyFailed` and the envelope may stay under that fresh slot, which is never recorded or reused. A crash between the key write and the record write leaves the same kind of file. The wiring (increment 9) must detect such files and report them to the player; whether to offer removal, quarantine or recovery is decided there, with a security review. Found by the key store core's independent reviews (September 29, 2026). | UNRESOLVED (before increment 9 persists a record) |
+| L12 | Key files that no persona record names. The store has no delete (K6), so when the check after a durable write fails (a read-back that still fails after its retries, or bytes that differ), `AddKey` reports `CustodyFailed` and the envelope may stay under that fresh slot, which is never recorded or reused. A crash between the key write and the record write leaves the same kind of file. The wiring (increment 9) must detect such files and report them to the player; whether to offer removal, quarantine or recovery is decided there, with a security review. Found by the key store core's independent reviews (September 29, 2026). | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30**: detected and reported, restored only by the player, never deleted (see L12 above) |
 | L13 | The default-ignorable code points D4 does not refuse (4,048 in Unicode 18.0, listed under D4's "Not settled"): a name made only of them is accepted and shows nothing, and a name can hide at least 64 bytes of data in them. Refusing them changes which names are valid: a signed-byte change that NETWORK1.md's safeguard 3 reserves for the owner. The trade-off to weigh: local naming (`PlateNaming`) already folds the format characters among them to spaces, so refusing those costs an honest player nothing; but U+FE0E and U+FE0F choose how an emoji is drawn (U+2764 U+FE0F is a common heart), so refusing every variation selector would refuse names players type. | UNRESOLVED. Due before the freeze, since refusing more names after it would invalidate version 1 documents; with the UTS #39 work if that comes first. It does not gate a server that accepts only drafts (NETWORK2's N2-8 and N2-11), since drafts are signed again after the freeze. Changing the rule needs the owner's approval; the owner, who alone freezes version 1, sees it then either way. |
 
 ## 6. Closed items

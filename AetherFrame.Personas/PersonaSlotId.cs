@@ -7,10 +7,11 @@ namespace AetherFrame.Personas;
 /// <summary>
 /// The local handle of one persona record on this installation: 16 random bytes, written as
 /// <c>slot_</c> and 32 lowercase hex digits. It is minted here, never derived from the persona's
-/// key or identity, never sent anywhere, and never equal on two installations that hold the same
-/// persona. It exists so that logs, file names and error text can refer to a persona without
-/// naming its public identity, which would let two mentions be correlated. The text form is the
-/// in-memory model's; how a slot would be written to disk is not decided by this type.
+/// key or identity, and never sent anywhere. Two installations that hold the same persona hold it
+/// under different slots, except when a key file was copied between them and restored as an orphan
+/// (L12 in docs/networking/DecisionRegister.md), which keeps the slot it arrived under. It exists
+/// so that logs, file names and error text can refer to a persona without naming its public
+/// identity, which would let two mentions be correlated. The registry (P3) writes it as its 16 bytes.
 /// </summary>
 public readonly struct PersonaSlotId : IEquatable<PersonaSlotId>
 {

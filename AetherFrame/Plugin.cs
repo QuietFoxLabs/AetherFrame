@@ -26,6 +26,11 @@ using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+#if AETHERFRAME_NETWORK_PREVIEW
+using AetherFrame.Hosting.Network;
+using AetherFrame.Services.Network.Personas;
+using AetherFrame.Windows.Network;
+#endif
 
 namespace AetherFrame;
 
@@ -86,6 +91,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // Every file-writing operation the plugin owns (Library, Templates, package import/export),
     // so unloading can let running ones finish before disposing what they use.
     private readonly OwnedOperations ownedOperations = new();
+
+#if AETHERFRAME_NETWORK_PREVIEW
+    // The persona session (NETWORK2's N2-5b; docs/networking/DecisionRegister.md, K3 and P3): the
+    // capability probe, the persona files' lock, the registry and the audit, all off the framework
+    // thread. Its operations are owned operations too. Closed first when unloading.
+    private readonly PersonaSession personaSession;
+#endif
 
     public Plugin()
     {
@@ -270,6 +282,23 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
             });
 
+#if AETHERFRAME_NETWORK_PREVIEW
+            // Starts in the background. Until the player acts it writes only its lock file (creating
+            // the persona folder) and the capability probe's scratch files, in the temp folder and
+            // deleted again. A load that fails after this closes it, and its lock is released by
+            // whichever of its own work ends last.
+            var configDirectory = PluginInterface.ConfigDirectory.FullName;
+            personaSession = PersonaSessionHost.Create(configDirectory, log, ownedOperations);
+            startup.OnFailure("personas", personaSession.Close);
+
+            // The persona window (N2-5c), reached from My Plates' header; the windows' rollback above
+            // removes it with the rest.
+            var personaWindow = new PersonaWindow(personaSession, PersonaSessionHost.KeysDirectory(configDirectory), PersonaSessionHost.RegistryPath(configDirectory));
+            WindowSystem.AddWindow(personaWindow);
+            plateLibraryWindow.OpenPersonas = () => personaWindow.IsOpen = true;
+            personaSession.Start();
+#endif
+
             // Names the exact build in dalamud.log, so a stale dev DLL is obvious.
             Log.Information($"==={AetherFrameBuildInfo.Current.Describe()} loaded ({PluginInterface.Manifest.Name})===");
 
@@ -414,6 +443,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+#if AETHERFRAME_NETWORK_PREVIEW
+        // Before anything else, the persona session takes no new work, and gives up its lock now,
+        // or as soon as its own work in flight ends: never tied to the plugin's other operations,
+        // so a reloaded AetherFrame finds the lock free as early as possible (P3).
+        personaSession.Close();
+#endif
+
         // First, nothing new can start: no drawing, menus, commands, login events or shortcuts.
         await OnFrameworkThreadAsync("UI shutdown", StopNewWork).ConfigureAwait(false);
 

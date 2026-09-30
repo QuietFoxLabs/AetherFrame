@@ -25,7 +25,7 @@ internal static class PluginShutdown
         {
             log.Warning(
                 $"AetherFrame stopped waiting after {timeout.TotalSeconds:0.#}s for {operations.RunningCount} file operation(s) while unloading; "
-                + "each stops before its next file step, and what it uses is kept until it ends.");
+                + "each stops before its next file step (a persona operation, in a preview build, runs to its end), and what it uses is kept until it ends.");
         }
 
         await disposeUnusedByOperations().ConfigureAwait(false);

@@ -140,6 +140,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
     internal HelpMenu? Help { get; set; }
 
+    /// <summary>Opens the persona window, when this build has one; the header shows a Personas button only then.</summary>
+    internal Action? OpenPersonas { get; set; }
+
     public void Dispose()
     {
     }
@@ -282,6 +285,15 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         {
             ImGui.SameLine();
             help.DrawButton("LibraryHelp", TutorialTarget.LibraryHelp);
+        }
+
+        if (OpenPersonas is { } openPersonas)
+        {
+            ImGui.SameLine();
+            if (AetherControls.SecondaryButton("Personas", tooltip: "The identities you share Plates under. None is tied to a character."))
+            {
+                openPersonas();
+            }
         }
 
         // Never the character's name or World (see MyPlatesCharacterText): only whether one is
