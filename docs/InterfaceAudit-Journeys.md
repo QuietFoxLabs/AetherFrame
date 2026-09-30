@@ -1,6 +1,6 @@
 # Interface audit: the journeys, step by step
 
-This is the companion of [InterfaceAudit.md](InterfaceAudit.md): the path behind every count in its section 7.2 table, today and after the second pass's twelve tasks (UI-1 to UI-12; section 7.6 says where each goes in the queue). Everything here is from code at `beca12a` (the plugin source is the same as at `714cf5c`). Nothing was run or seen in game. Cites are `file:line`, relative to `AetherFrame/`.
+This is the companion of [InterfaceAudit.md](InterfaceAudit.md): the path behind every count in its section 7.2 table, today and after the second pass's twelve tasks (UI-1 to UI-12; section 7.6 says where each goes in the queue). Everything here is from code at `beca12a` (the plugin source differs from `714cf5c` only by a doc comment in Domain/Plates/PlateNaming.cs). Nothing was run or seen in game. Cites are `file:line`, relative to `AetherFrame/`.
 
 ## How to read it
 
@@ -30,7 +30,7 @@ Menus stay at 26. J02 loses 2 (the Name field replaces the card menu and the Ren
 
 ## J01. Learn with the tour: a new install, from the Welcome offer through the twelve chapters.
 
-Frequency (estimated): rare. Today: 4 switches, 1 menus, 1 prompts. After: 3, 1, 1.
+Frequency (estimated): rare. Today: 4 switches, 1 menu, 1 prompt. After: 3 switches, 1 menu, 1 prompt.
 Changed by: UI-4 (4 to 3 switches).
 Back and forth today: The tour moves from My Plates (chapters 2 and 3) to two editor windows swapped mid-tour (4 to 9), then back to My Plates (10 and 11), which from code can't come out from under the editor while the spotlight is up.
 
@@ -60,7 +60,7 @@ Back and forth today: The tour moves from My Plates (chapters 2 and 3) to two ed
 
 ## J02. First Plate from a Template, with an FFXIV title, a portrait and a name.
 
-Frequency (estimated): sometimes. Today: 4 switches, 4 menus, 0 prompts. After: 3, 2, 0.
+Frequency (estimated): sometimes. Today: 4 switches, 4 menus, 0 prompts. After: 3 switches, 2 menus, 0 prompts.
 Changed by: UI-2 (4 to 3 switches).
 Back and forth today: The player goes from the editor to My Plates and its card menu, only to give the Plate a name the chooser never asked for.
 
@@ -86,7 +86,7 @@ Back and forth today: The player goes from the editor to My Plates and its card 
 
 ## J03. Change the portrait image of an existing Plate, then rotate or flip it.
 
-Frequency (estimated): often. Today: 4 switches, 0 menus, 0 prompts. After: 3, 0, 0.
+Frequency (estimated): often. Today: 4 switches, 0 menus, 0 prompts. After: 3 switches, 0 menus, 0 prompts.
 Changed by: UI-4 (4 to 3 switches).
 Back and forth today: The image is replaced in the Basic window, but it can be rotated or flipped only in the separate Advanced window.
 
@@ -109,7 +109,7 @@ Back and forth today: The image is replaced in the Basic window, but it can be r
 
 ## J04. Change theme, pattern, background image and background transparency of an existing Plate.
 
-Frequency (estimated): often. Today: 4 switches, 1 menus, 0 prompts. After: 3, 1, 0.
+Frequency (estimated): often. Today: 4 switches, 1 menu, 0 prompts. After: 3 switches, 1 menu, 0 prompts.
 Changed by: UI-4 (4 to 3 switches).
 Back and forth today: Theme and Pattern are only in the Basic window and background Opacity only in the Advanced window, so one look change spans both.
 
@@ -134,7 +134,7 @@ Back and forth today: Theme and Pattern are only in the Basic window and backgro
 
 ## J05. Add, place and recolor a frame Component on an existing Basic-structured Plate.
 
-Frequency (estimated): sometimes. Today: 3 switches, 2 menus, 0 prompts. After: 2, 2, 0.
+Frequency (estimated): sometimes. Today: 3 switches, 2 menus, 0 prompts. After: 2 switches, 2 menus, 0 prompts.
 Changed by: UI-4 (3 to 2 switches).
 Back and forth today: Placement and color are only in the Advanced window, so a Basic-structured Plate is finished in the other window.
 
@@ -158,7 +158,7 @@ Back and forth today: Placement and color are only in the Advanced window, so a 
 
 ## J06. Move and recolor a Basic section caption on an existing Plate.
 
-Frequency (estimated): sometimes. Today: 3 switches, 1 menus, 0 prompts. After: 2, 1, 0.
+Frequency (estimated): sometimes. Today: 3 switches, 1 menu, 0 prompts. After: 2 switches, 1 menu, 0 prompts.
 Changed by: UI-4 (3 to 2 switches).
 Back and forth today: Basic owns the section, but moving or recoloring its caption means swapping to the Advanced window and finding the caption again by hand.
 
@@ -180,7 +180,7 @@ Back and forth today: Basic owns the section, but moving or recoloring its capti
 
 ## J07. Switch from Basic to Advanced mid-edit and back.
 
-Frequency (estimated): often. Today: 2 switches, 0 menus, 0 prompts. After: 0, 0, 0.
+Frequency (estimated): often. Today: 2 switches, 0 menus, 0 prompts. After: 0 switches, 0 menus, 0 prompts.
 Changed by: UI-4 (2 to 0 switches).
 Back and forth today: Every mode switch closes one window and opens another, and the player finds their place again in each direction.
 
@@ -199,7 +199,7 @@ Back and forth today: Every mode switch closes one window and opens another, and
 
 ## J08. Add free text, set its font and color, and add an image in the Advanced editor.
 
-Frequency (estimated): sometimes. Today: 3 switches, 2 menus, 0 prompts. After: 3, 2, 0.
+Frequency (estimated): sometimes. Today: 3 switches, 2 menus, 0 prompts. After: 3 switches, 2 menus, 0 prompts.
 Back and forth today: Nothing goes back and forth across windows beyond the file dialog: the work stays in the Advanced editor.
 
 **Today**
@@ -223,8 +223,8 @@ Back and forth today: Nothing goes back and forth across windows beyond the file
 
 ## J09. Preview the open Plate, then show it over the game in the movable Plate Viewer.
 
-Frequency (estimated): every session. Today: 2 switches, 1 menus, 0 prompts. After: 1, 1, 0.
-Changed by: UI-2 (2 to 1 switches).
+Frequency (estimated): every session. Today: 2 switches, 1 menu, 0 prompts. After: 1 switch, 1 menu, 0 prompts.
+Changed by: UI-2 (2 to 1 switch).
 Back and forth today: The player goes from the editor to My Plates and its card menu only to reach the movable view of the Plate that is already open.
 
 **Today**
@@ -243,8 +243,8 @@ Back and forth today: The player goes from the editor to My Plates and its card 
 
 ## J10. From the editor, make the open Plate Active and check it in the viewer.
 
-Frequency (estimated): sometimes. Today: 2 switches, 1 menus, 0 prompts. After: 1, 1, 0.
-Changed by: UI-2 (2 to 1 switches).
+Frequency (estimated): sometimes. Today: 2 switches, 1 menu, 0 prompts. After: 1 switch, 1 menu, 0 prompts.
+Changed by: UI-2 (2 to 1 switch).
 Back and forth today: The player goes from the editor to My Plates' card menu to set the Plate Active, then to chat and the viewer to see it.
 
 **Today**
@@ -262,8 +262,8 @@ Back and forth today: The player goes from the editor to My Plates' card menu to
 
 ## J11. No Active Plate: choose one and see it, starting from /af view.
 
-Frequency (estimated): rare. Today: 3 switches, 1 menus, 0 prompts. After: 1, 0, 0.
-Changed by: UI-7 (3 to 1 switches).
+Frequency (estimated): rare. Today: 3 switches, 1 menu, 0 prompts. After: 1 switch, 0 menus, 0 prompts.
+Changed by: UI-7 (3 to 1 switch).
 Back and forth today: The viewer closes itself on the way to My Plates, so the player types /af view again to see the Plate they chose.
 
 **Today**
@@ -280,7 +280,7 @@ Back and forth today: The viewer closes itself on the way to My Plates, so the p
 
 ## J12. Save the open Plate as a Template, then start a new Plate from it.
 
-Frequency (estimated): sometimes. Today: 2 switches, 3 menus, 0 prompts. After: 0, 4, 0.
+Frequency (estimated): sometimes. Today: 2 switches, 3 menus, 0 prompts. After: 0 switches, 4 menus, 0 prompts.
 Changed by: UI-6 (2 to 0 switches).
 Back and forth today: Save as Template and Create Plate are both only in My Plates, so the editor sends the player there and back.
 
@@ -301,7 +301,7 @@ Back and forth today: Save as Template and Create Plate are both only in My Plat
 
 ## J13. Update a Template, then delete the working Plate. No replace exists, so: make a Plate from it, edit it, save it as a Template, delete the old Template.
 
-Frequency (estimated): rare. Today: 3 switches, 5 menus, 2 prompts. After: 3, 6, 2.
+Frequency (estimated): rare. Today: 3 switches, 5 menus, 2 prompts. After: 3 switches, 6 menus, 2 prompts.
 Back and forth today: The player goes from the chooser to the editor, then to My Plates' card menu, then to the chooser again, because a Template can't be edited or replaced in place.
 
 **Today**
@@ -328,8 +328,8 @@ Back and forth today: The player goes from the chooser to the editor, then to My
 
 ## J14. Export the open Plate to a file.
 
-Frequency (estimated): sometimes. Today: 2 switches, 1 menus, 0 prompts. After: 1, 1, 0.
-Changed by: UI-3 (2 to 1 switches).
+Frequency (estimated): sometimes. Today: 2 switches, 1 menu, 0 prompts. After: 1 switch, 1 menu, 0 prompts.
+Changed by: UI-3 (2 to 1 switch).
 Back and forth today: The player goes from the editor to My Plates and its card menu for one action on the Plate that is already open.
 
 **Today**
@@ -347,7 +347,7 @@ Back and forth today: The player goes from the editor to My Plates and its card 
 
 ## J15. Import a .aetherframe file and open the new Plate in an editor.
 
-Frequency (estimated): sometimes. Today: 5 switches, 0 menus, 1 prompts. After: 4, 0, 1.
+Frequency (estimated): sometimes. Today: 5 switches, 0 menus, 1 prompt. After: 4 switches, 0 menus, 1 prompt.
 Changed by: UI-9 (5 to 4 switches).
 Back and forth today: The player goes from My Plates to the file dialog and Import Plate, back to My Plates, then to the editor: Import Plate already shows the Plate but can't open it.
 
@@ -370,7 +370,7 @@ Back and forth today: The player goes from My Plates to the file dialog and Impo
 
 ## J16. Find and reopen a Plate, starting from /af.
 
-Frequency (estimated): every session. Today: 2 switches, 0 menus, 0 prompts. After: 2, 0, 0.
+Frequency (estimated): every session. Today: 2 switches, 0 menus, 0 prompts. After: 2 switches, 0 menus, 0 prompts.
 Back and forth today: Every way back into a Plate goes through My Plates, and /af closes My Plates when it sits open behind an editor.
 
 **Today**
@@ -382,12 +382,12 @@ Back and forth today: Every way back into a Plate goes through My Plates, and /a
 **After all twelve tasks**
 
 1. [Chat to My Plates] /af: S1. /af now raises My Plates instead of closing it when it isn't the last window focused (UI-8).
-2. [My Plates] Search. The Editing pill and Continue Editing mark the Plate still loaded (UI-8). No count.
+2. [My Plates] Search. Continue Editing marks the Plate still loaded (UI-8); the Editing pill shows only while an editor is open. No count.
 3. [My Plates to editor] Double-click, or Continue Editing: S2.
 
 ## J17. Try a variation of the open Plate without losing the original.
 
-Frequency (estimated): sometimes. Today: 2 switches, 1 menus, 0 prompts. After: 0, 1, 0.
+Frequency (estimated): sometimes. Today: 2 switches, 1 menu, 0 prompts. After: 0 switches, 1 menu, 0 prompts.
 Changed by: UI-3 (2 to 0 switches).
 Back and forth today: The player goes from the editor to My Plates for Duplicate, then back to the editor on the copy, and edits already made can't come along.
 
@@ -405,7 +405,7 @@ Back and forth today: The player goes from the editor to My Plates for Duplicate
 
 ## J18. Delete the Plate that is open in the editor.
 
-Frequency (estimated): rare. Today: 1 switches, 1 menus, 1 prompts. After: 1, 1, 1.
+Frequency (estimated): rare. Today: 1 switch, 1 menu, 1 prompt. After: 1 switch, 1 menu, 1 prompt.
 Back and forth today: The open Plate can be deleted only from My Plates, which leaves the editor behind on an empty state.
 
 **Today**
@@ -424,7 +424,7 @@ Back and forth today: The open Plate can be deleted only from My Plates, which l
 
 ## J19. Get help later, from the viewer or Import Plate.
 
-Frequency (estimated): rare. Today: 1 switches, 1 menus, 0 prompts. After: 0, 2, 0.
+Frequency (estimated): rare. Today: 1 switch, 1 menu, 0 prompts. After: 0 switches, 2 menus, 0 prompts.
 Changed by: UI-7 (1 to 0 switches).
 Back and forth today: The viewer and Import Plate have no Help, so the player leaves them for My Plates to find it.
 

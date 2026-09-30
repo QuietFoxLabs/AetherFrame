@@ -84,14 +84,14 @@ The tutorial moves with the interface. Every control a proposal adds or moves ge
 
 ## 6. Not proposed
 
-- Merging the Basic and Advanced editors: they already share one session and hand a Plate over in place. `[updated 2026-09-30: the owner has since decided to merge them into one window with two modes; section 7.4, and task 8.]`
+- Merging the Basic and Advanced editors: they already share one session and hand a Plate over in place. `[updated 2026-09-30: the owner has since decided to merge them into one window with two modes; section 7.4, and interface task 8.]`
 - Bringing back My Plates' persistent action row, or making Templates a permanent tab: both were removed or avoided on purpose. Proposals 3 and 4 are the smaller alternatives.
 - Changing the design system or the look of the windows: this audit is about paths, not appearance.
 - Removing the right-click menus: the proposals add visible paths beside them.
 
 ## 7. A second pass: journeys, defects and more tasks (September 30, 2026)
 
-A second session audited the same code at `714cf5c` (the plugin source is unchanged at `beca12a`) while sections 1 to 6 were being written. On September 30, 2026 the owner chose, from the options Claude offered in chat, to fold it into this audit rather than keep two: "Fold mine into #43's". This section adds what the first pass does not have: journeys counted step by step, defects, the owner's decision on the editors, and tasks 7 to 16. Where the two passes differ, section 7.5 lays out both options; the queued tasks keep the first pass's choice until a task's pull request records otherwise.
+A second session audited the same code at `714cf5c` (at `beca12a` the plugin source differs only by a doc comment in Domain/Plates/PlateNaming.cs) while sections 1 to 6 were being written. On September 30, 2026 the owner chose, from the options Claude offered in chat, to fold it into this audit rather than keep two: "Fold mine into #43's". This section adds what the first pass does not have: journeys counted step by step, defects, the owner's decision on the editors, and tasks 7 to 16. Where the two passes differ, section 7.5 lays out both options; the queued tasks keep the first pass's choice until a task's pull request records otherwise.
 
 ### 7.1 How it was done
 
@@ -104,7 +104,7 @@ A second session audited the same code at `714cf5c` (the plugin source is unchan
     - Basic to Advanced counts 1 today, because it swaps windows. Clean Preview counts 0, because it is the same window.
     - The tutorial card and the Welcome offer are never window switches.
   - A **menu** is a context menu, a submenu, a combo used as the route, a color picker, the Create Plate chooser, the title picker, Help or a naming modal (Rename, Save as Template).
-  - A **prompt** is a confirmation or a question: Unsaved Changes, Delete, Replace File?, Import as New Plate, the Welcome offer, or a save-first question. A conditional prompt, one that appears only in some cases, is marked in the steps of appendix A ([InterfaceAudit-Journeys.md](InterfaceAudit-Journeys.md)) but not counted.
+  - A **prompt** is a confirmation or a question: Unsaved Changes, Delete, Replace File?, Import as New Plate, the Welcome offer, or a save-first question. A conditional prompt, one that appears only in some cases, is marked in the steps of [InterfaceAudit-Journeys.md](InterfaceAudit-Journeys.md) but not counted.
   - Counts are for the shortest common path, from code. Each journey starts with the game running, AetherFrame loaded and no AetherFrame window open, unless it says otherwise.
 
 This counts differently from section 2, where leaving and coming back is one trip. Here each window the player's work moves to counts once.
@@ -145,7 +145,7 @@ The rest are the trip in through /af and My Plates, which every journey that sta
 
 ### 7.3 Findings
 
-The findings are ranked by impact. Findings 1, 3, 4 and 10 give the evidence for section 2's two causes; the others are new.
+The findings are ranked by impact. Findings 1, 3, 4 and 10 give the evidence for section 2's two causes, finding 2 is the question section 7.4 settles, and finding 13's Preview and View wording is also in section 3. The rest are new.
 
 1. **Plate actions are missing from the editors (high).** Rename, Set Active, viewing a chosen Plate, Duplicate, Save as Template, Export and Delete are only in the card menu (PlateLibraryWindow.Actions.cs:103-182). /af view shows only the Active Plate. The editor never shows whether the Plate is Active (EditorActionBar.cs:82-201). The tutorial teaches the detour (UI/Tutorial/TutorialScript.cs:70, 176-178).
 2. **Basic and Advanced are two windows, and each lacks controls the other has (high).**
@@ -155,14 +155,14 @@ The findings are ranked by impact. Findings 1, 3, 4 and 10 give the evidence for
    - Advanced's presets add a pattern, although they are labelled "Background colors only", and Advanced can't remove it (Domain/Profiles/ProfileThemePresets.cs:85; Windows/BackgroundStylePanel.cs:150-152, 499).
    - Opacity is kept out of Basic on purpose, by a choice recorded in the code (BackgroundStylePanel.cs:107-111).
 3. **My Plates and the editor overlap, and My Plates barely tracks the open Plate (high).** No card marks the Plate that is open (PlateLibraryWindow.cs:433-441). Only a footer line does, while that card is selected and no other message fills the footer, and the line stays after the editor closes (Actions.cs:66-84). /af can close My Plates while the editor covers it (Plugin.cs:483).
-4. **Actions that use the saved version don't ask first (medium).** Duplicate, Export and Save as Template read the saved Plate (Services/Plates/PlateLibraryService.cs:822-824; Services/Packages/PlatePackageService.cs:76; Services/Templates/TemplateLibraryService.cs:402). Of the card menu's actions on the open Plate, only Delete mentions its unsaved edits (Actions.cs:532-537). Nothing lets the player fork unsaved edits into a new Plate (J17).
+4. **Actions that use the saved version don't ask first (medium).** Duplicate, Export and Save as Template read the saved Plate (Services/Plates/PlateLibraryService.cs:822-824; Services/Packages/PlatePackageService.cs:76; Services/Templates/TemplateLibraryService.cs:402). Only Save as Template's prompt says it uses the last saved state, and only Delete's prompt checks for unsaved edits (Templates.cs:832; Actions.cs:532-537). Nothing lets the player fork unsaved edits into a new Plate (J17).
 5. **The Plate Viewer can't act on what it shows (medium).** Its menu holds only size presets, Reset Size and Center on Screen (ProfileViewWindow.cs:302-342). In the No Active Plate state it closes itself on the way to My Plates, although it re-resolves the Active Plate every frame (ProfileViewWindow.cs:229-234; UI/Rendering/PlateViewerTarget.cs:44-48). A card's Preview doesn't raise a viewer that is already open (ProfileViewWindow.cs:103-118).
 6. **Create Plate asks too little, and asks too late (medium).**
    - The chooser has no name field (Templates.cs:729-774).
    - The Plate is saved before the Unsaved Changes question, so Cancel leaves a stray Plate behind (Templates.cs:422-438).
    - From code, Use Template in a row's right-click menu leaves the modal open over the new editor (Templates.cs:597-608, 632-636). This needs an in-game check.
-   - With an editor already open, the tour passes over "Choose a Template" (UI/Tutorial/TutorialSession.cs:366-368).
-7. **Escape on a popup probably closes the window behind it too (medium; needs an in-game check).** In the decompiled Dalamud, a popup counts as focus on its owner window. Escape closes a focused window whose RespectCloseHotkey is on. For an editor with unsaved edits, the close guard turns that into the Save, Discard or Cancel question (UI/Editor/CloseGuard.cs:66-79). Of the windows that hold popups, only Clean Preview and a running import turn that setting off (CleanPreviewPresenter.cs:116; PackageImportWindow.cs:95, 103). The tutorial's overlay and shades keep it off, but they hold no popups (Windows/Tutorial/TutorialOverlayWindow.cs:53; Windows/Tutorial/TutorialShadeWindow.cs:43).
+   - With an editor already open, the tour passes over "Choose a Template" (UI/Tutorial/TutorialSession.cs:367-369).
+7. **Escape on a popup probably closes the window behind it too (medium; needs an in-game check).** In the decompiled Dalamud, a popup counts as focus on its owner window. Escape closes a focused window whose RespectCloseHotkey is on. For an editor with unsaved edits, the close guard turns that into the Save, Discard or Cancel question (UI/Editor/CloseGuard.cs:66-79). Only Clean Preview and a running import turn that setting off (CleanPreviewPresenter.cs:116; PackageImportWindow.cs:95, 103). The tutorial's overlay and shades keep it off, but they hold no popups (Windows/Tutorial/TutorialOverlayWindow.cs:53; Windows/Tutorial/TutorialShadeWindow.cs:43).
 8. **Basic's Preview may leave an invisible area that catches clicks (medium; needs an in-game check).** Dalamud re-applies Basic's `Window.Size` after PreDraw, so it overrides Clean Preview's size. That size is also not clamped to the screen (BasicProfileEditorWindow.cs:127-128; Windows/EditorWidgets.cs:43-51).
 9. **Late in the tour, the spotlight probably points at My Plates while it is under the editor (medium; needs an in-game check).** While a step shows, My Plates, the editors, the Plate Viewer and Import Plate can't be raised (Windows/Theme/AetherStyle.cs:316-326). Chapters 10 and 11 require only that My Plates is open (Plugin.cs:533; TutorialScript.cs:181-199). No step shows the player how to view a Plate or set it Active. The tour only lists them among the card menu's actions (TutorialScript.cs:50, 177). If the player declines the Welcome offer, My Plates doesn't open, and the offer never names /af. Only Help, inside My Plates and the editors, and Dalamud's command help name it (Windows/Tutorial/FirstRunPromptWindow.cs:80-111; UI/Tutorial/OnboardingCoordinator.cs:107-125; Windows/Tutorial/HelpMenu.cs:203-206).
 10. **Templates are managed in two places that work differently (medium).** Chooser rows use a right-click menu, as Plate cards do (Templates.cs:590-609; Actions.cs:103-182). Manage Templates' cards look like Plate cards but have no right-click menu. They use a button bar instead (Templates.cs:179-233, 330-391). Manage Templates' cards show only a color or an icon. No thumbnail generator exists (Plugin.cs:163, 171), and unlike Plate cards, they don't fall back to drawing the Plate (Templates.cs:238-296; PlateLibraryWindow.cs:487-518).
@@ -186,7 +186,7 @@ Section 6 did not propose merging the editors. The second pass recommended it, a
 
 > One AetherFrame Editor with Basic and Advanced as modes. Switching keeps the window's place, zoom and the element being edited. Largest cut in back-and-forth, one large PR, and tutorial chapters 4 to 9 get rechecked in game.
 
-It is recorded in ROADMAP.md, section 5, as the owner's own decision, and it is task 8. Basic mode still feels like FFXIV and Advanced still removes the restrictions; both keep editing one saved Plate through the shared renderer.
+It is recorded in ROADMAP.md, section 5, as the owner's own decision, and it is interface task 8. Basic mode still feels like FFXIV and Advanced still removes the restrictions; both keep editing one saved Plate through the shared renderer.
 
 ### 7.5 Where the two passes differ
 
@@ -199,6 +199,7 @@ Each difference is chosen, and recorded, in the pull request of the task named. 
 | Seeing the open Plate over the game | Not in the Plate menu. | A View item that raises the viewer with the live copy (removes J09's switch). | 1 |
 | Set Active with unsaved changes | Sets the saved Plate Active. | Save and Set Active, which activates only after a successful save. | 1 |
 | Template management | Made findable: a line, a "..." button, or a clearer link to Manage Templates. Templates stay out of My Plates' top level. | Manage Templates retired; the chooser's rows already rename, duplicate and delete. | 4 or 10 |
+| The word for showing a Plate over the game | Preview, the card menu's word; the tutorial's "View" becomes "Preview". | View, with Preview kept for Clean Preview inside the editor, so one word never names two features. | 1 |
 | A character's first Plate | Active automatically. The chooser says so beforehand (Windows/PlateLibraryWindow.Templates.cs:733), and My Plates' footer after (Templates.cs:431-434). | A checkbox in the chooser, checked by default, so the player can also say no, since ROADMAP.md, section 5, says activation is explicit. | 10 |
 
 ### 7.6 The second pass's tasks
@@ -215,12 +216,12 @@ The second pass's direction is "the Plate in hand": wherever a Plate is (in the 
   - Save as Template;
   - Export;
   - an extension slot;
-  - Switch to (editor only);
+  - Switch to (editor only; proposal 2's Open another Plate...);
   - New Plate;
   - Delete.
 
   Plate names are drawn as text, never used as labels or IDs.
-- **Editor bar:** My Plates; Basic | Advanced, switched in place; the Plate's name, which opens the Plate menu; a gold Active pill; then today's controls.
+- **Editor bar:** My Plates; Basic | Advanced, switched in place; the Plate's name, which opens the Plate menu and stays drawn at every width (as proposal 1 requires); a gold Active pill; then today's controls.
 - **My Plates:** an Editing pill on the open Plate's card, a Continue Editing button, and the chooser. The chooser stays a modal and gains a name field. Manage Templates folds into the chooser.
 - **Viewer:** the Plate menu above its size items. In the viewer, its first item is Edit, and it adds Show in My Plates. The No Active Plate state lets the player choose a Plate in place.
 - **Import Plate:** Choose File, then Open in Editor.
@@ -274,7 +275,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
   - One close guard, one preview presenter, one shortcut owner and one file dialog manager (Plugin.cs:159-160).
 - *Improves:* J01 and J03 to J06 by 1 each, and J07 2 to 0: 7 switches.
 - *Risk:* medium, with no change to data. One session already holds the document and its history (EditorSurfaceCoordinator.cs:42-49). The editor's saved window placement resets once.
-- *Tutorial:* the dim list names one editor (Plugin.cs:231-232). The open actions set the mode (Plugin.cs:550-555). Re-run manual acceptance C.11 to C.20.
+- *Tutorial:* the dim list names one editor (Plugin.cs:231-232). The open actions set the mode (Plugin.cs:550-555). Re-run steps 11 to 25 and 28 to 30 of [ManualAcceptance-UI-Onboarding.md](ManualAcceptance-UI-Onboarding.md).
 - *Acceptance:* tests that:
   - a mode switch commits pending edits and keeps the history;
   - selections map to the right category;
@@ -311,7 +312,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
   - Blank Canvas's one-time Basic suggestion shows before the Plate is created.
   - A character's first Plate: automatic activation as today, or a checkbox "Make it <character>'s Active Plate", checked by default (PlateLibraryService.cs:757-762). Section 7.5 lays out both.
   - Manage Templates: made findable (proposal 4) or retired into the chooser, whose rows already rename, duplicate and delete Templates (Templates.cs:630-662). Section 7.5 lays out both.
-- *Improves:* with proposal 2's New Plate, J12 2 to 0: 2 switches. J13 stays at 3. Cancel no longer leaves a stray Plate.
+- *Improves:* 0 counted: J12's 2 switches go with task 2's New Plate. J13 stays at 3. Cancelling the Unsaved Changes question after Use Template no longer leaves a stray Plate.
 - *Risk:* low to medium. The activation flag changes a service default.
 - *Tutorial:* first.template (:69-72) advances on a TemplateUsed latch. Use Template sets the latch, and opening the chooser clears it, so Cancel keeps the player on the step. Text at :187 drops Manage Templates, along with its unused targets and condition.
 - *Decisions to record:* the two choices of section 7.5 this task makes, first Plate activation and Manage Templates.
@@ -342,7 +343,6 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
   - The editor's My Plates button scrolls to the open Plate's card, and new cards scroll into view.
   - /af closes My Plates only if it was the last AetherFrame window focused. Otherwise it raises it.
   - A collapsed window expands when summoned.
-  - Switch to in the Plate menu.
 - *Improves:* 0 counted. It removes J16's second /af and the search for the open card.
 - *Risk:* none to data.
 - *Tutorial:* text at :44 and :53.
@@ -383,7 +383,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
   - The remaining prompts use AetherControls.
   - Cards take the arrow keys, Enter and the Menu key, through a selection model that doesn't depend on Dalamud.
   - Search gets a clear button.
-  - The README, screenshots and [ManualAcceptance-UI-Onboarding.md](../ManualAcceptance-UI-Onboarding.md) are refreshed.
+  - The README, screenshots and [ManualAcceptance-UI-Onboarding.md](ManualAcceptance-UI-Onboarding.md) are refreshed.
 - *Improves:* 0 counted.
 - *Risk:* low.
 - *Tutorial:* text at :55-56.
@@ -401,7 +401,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
 
 ### 7.7 Sharing, in more detail
 
-This adds to section 5. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through task 16's hooks. No tutorial step anchors to them, and every local feature works without an account or a network. The persona interface stays OPEN (ROADMAP.md, section 5), so this is a proposal for N2-5, N2-9 and N2-10 to weigh.
+This adds to section 5. Section 5's Share... and Unpublish in the Plate and card menus open the This Plate page below. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through task 16's hooks. No tutorial step anchors to them, and every local feature works without an account or a network. The persona interface stays OPEN (ROADMAP.md, section 5), so this is a proposal for N2-5, N2-9 and N2-10 to weigh.
 
 | Planned screen | Home in the target structure |
 |---|---|
@@ -411,7 +411,7 @@ This adds to section 5. The sharing screens compile only in preview builds (Aeth
 | Update and unpublish | The same page, which shows the consent content again each time. Unpublish is also in My Shares, the P1 index, which includes Plates that no longer exist. The Delete prompt says that deleting a Plate doesn't unpublish it. The wording waits on D1. |
 | N2-10 viewer | Open Code in My Plates' header, kept apart from Import. The Plate floats in the viewer through ShowDocument, read-only and never saved (Windows/ProfileViewWindow.cs:114-118). A strip holds Refresh, notes, "no longer shared" and the outdated-client message. There is no author line. Stage 2's "save a copy" reuses Save a Copy, which never activates. |
 
-These rules hold throughout ([DecisionRegister.md](../networking/DecisionRegister.md)):
+These rules hold throughout ([DecisionRegister.md](networking/DecisionRegister.md)):
 - Remote text is never an ImGui label, window title or ID, and is drawn only by calls that don't format it (N7).
 - A Shared pill reads the publication index, never the Plate (P1).
 - Refresh is a button (R2).
