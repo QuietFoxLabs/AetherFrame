@@ -169,6 +169,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     /// <summary>Opens the sharing window, when this build has one; the header shows a Sharing button only then.</summary>
     internal Action? OpenSharing { get; set; }
 
+    /// <summary>Whether a Plate is the logged-in character's Active Plate and that character shares it (C3), when this build shares; its card is marked Shared.</summary>
+    internal Func<Guid, bool>? IsShared { get; set; }
+
     /// <summary>Checks what sharing a Plate would send, when this build can; a Plate's menu shows the item only then.</summary>
     internal Action<Guid>? CheckSharing
     {
@@ -474,6 +477,10 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         if (isActive)
         {
             DrawActiveBadge(drawList, thumbnailMin, thumbnailMax);
+            if (IsShared?.Invoke(plate.PlateId) == true)
+            {
+                DrawBadge(drawList, thumbnailMin, thumbnailMax, "Shared", AetherPalette.Info, AetherPalette.TextOnGold, row: 1);
+            }
         }
 
         if (plate.HasUnsupportedElements)
@@ -627,16 +634,21 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         }
     }
 
-    private static void DrawActiveBadge(ImDrawListPtr drawList, Vector2 thumbnailMin, Vector2 thumbnailMax)
+    private static void DrawActiveBadge(ImDrawListPtr drawList, Vector2 thumbnailMin, Vector2 thumbnailMax) =>
+        DrawBadge(drawList, thumbnailMin, thumbnailMax, "Active", AetherPalette.Gold, AetherPalette.TextOnGold, row: 0);
+
+    /// <summary>A badge in the thumbnail's top right corner, <paramref name="row"/> badges down.</summary>
+    private static void DrawBadge(ImDrawListPtr drawList, Vector2 thumbnailMin, Vector2 thumbnailMax, string label, Vector4 background, Vector4 foreground, int row)
     {
-        const string label = "Active";
         var textSize = ImGui.CalcTextSize(label);
         var padding = EditorWidgets.Scaled(new Vector2(6f, 2f));
         var inset = EditorWidgets.Scaled(4f);
-        var badgeMax = new Vector2(thumbnailMax.X - inset, thumbnailMin.Y + inset + textSize.Y + (padding.Y * 2f));
-        var badgeMin = new Vector2(badgeMax.X - textSize.X - (padding.X * 2f), thumbnailMin.Y + inset);
+        var height = textSize.Y + (padding.Y * 2f);
+        var top = thumbnailMin.Y + inset + (row * (height + inset));
+        var badgeMax = new Vector2(thumbnailMax.X - inset, top + height);
+        var badgeMin = new Vector2(badgeMax.X - textSize.X - (padding.X * 2f), top);
 
-        drawList.AddRectFilled(badgeMin, badgeMax, ImGui.GetColorU32(AetherPalette.Gold), 4f);
-        drawList.AddText(badgeMin + padding, ImGui.GetColorU32(AetherPalette.TextOnGold), label);
+        drawList.AddRectFilled(badgeMin, badgeMax, ImGui.GetColorU32(background), 4f);
+        drawList.AddText(badgeMin + padding, ImGui.GetColorU32(foreground), label);
     }
 }

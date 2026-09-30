@@ -167,11 +167,39 @@ internal sealed class CharacterSharing
 
     internal CharacterSharingView View => view;
 
-    /// <summary>Reads the sharing file, when it hasn't been read or couldn't be; false when the session couldn't start it.</summary>
-    internal bool TryLoad() => Run("sharing load", _ =>
+    /// <summary>
+    /// Reads the sharing file, when it hasn't been read or couldn't be; false when the session
+    /// couldn't start it. Once it is read, what the share check signed and kept on this PC under a
+    /// persona that is no character's key is dropped: it is never sent (C3).
+    /// </summary>
+    internal bool TryLoad() => Run("sharing load", manager =>
     {
         var characters = file.Read();
         Publish(view.With(characters: characters, loaded: true, unreadable: false));
+
+        var keys = new HashSet<PersonaSlotId>();
+        foreach (var character in characters)
+        {
+            keys.Add(character.Slot);
+            if (character.ReplacingKey)
+            {
+                keys.Add(character.NewSlot);
+            }
+        }
+
+        var dropped = 0;
+        foreach (var persona in manager.Personas)
+        {
+            if (!keys.Contains(persona.Slot) && publications.ReadIndex(persona.Slot) is not null && PublicationSend.Clear(publications, persona.Slot))
+            {
+                dropped++;
+            }
+        }
+
+        if (dropped > 0)
+        {
+            log($"Sharing: the share check's signings were dropped for {dropped} persona(s).");
+        }
     }, loading: true);
 
     /// <summary>
@@ -257,10 +285,10 @@ internal sealed class CharacterSharing
         {
             // The server checks this too; a binding to another character is undone, not kept. A new
             // key had taken this character's binding over, so the opt-out deleted that too.
-            Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.OptOut, SharingWire.Empty());
-            if (entry.ReplacingKey)
+            var undone = Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.OptOut, SharingWire.Empty());
+            if (entry.ReplacingKey && entry.NewKey is { } newKey && undone?.Status == HttpStatusCode.NoContent)
             {
-                Save(Replaced(entry.Unbound(SharingStage.Off)), contentId);
+                Save(Replaced(new SharingCharacter(contentId, entry.NewSlot, newKey, SharingStage.Off)), contentId);
             }
 
             Notify(contentId, SharingNoticeKind.CheckFailed);
