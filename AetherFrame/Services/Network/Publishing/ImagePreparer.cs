@@ -208,9 +208,10 @@ internal static class ImagePreparer
     /// <summary>
     /// The per-session known-answer check (D5's N2-6 note, (3)). A small PNG with every kind of
     /// alpha, prepared, must decode back to exactly the pixels preparation computed, with nothing
-    /// but IHDR, IDAT and IEND; an opaque image encoded as JPEG must hold exactly the allowed
-    /// segments. Either failing turns publishing off for the session, as K3's probe does for keys:
-    /// the texture pipeline isn't the one preparation was measured against.
+    /// but IHDR, IDAT and IEND left; an opaque colour encoded as JPEG must hold exactly the allowed
+    /// segments and decode back to that colour, channel for channel, within JPEG's loss. Either
+    /// failing turns publishing off for the session, as K3's probe does for keys: the texture
+    /// pipeline isn't the one preparation was written for. Its caller treats an exception the same.
     /// </summary>
     internal static async Task<bool> SelfTestAsync(IImageCodec codec, CancellationToken cancellation)
     {
@@ -238,15 +239,39 @@ internal static class ImagePreparer
             return false;
         }
 
+        // One colour whose channels are far apart, so a swap or a conversion shows past JPEG's loss.
         var opaque = new byte[8 * 8 * 4];
         for (var index = 0; index < opaque.Length; index += 4)
         {
-            (opaque[index], opaque[index + 1], opaque[index + 2], opaque[index + 3]) = ((byte)(index * 3), (byte)(255 - index), 128, 255);
+            (opaque[index], opaque[index + 1], opaque[index + 2], opaque[index + 3]) = (KnownJpegColour.R, KnownJpegColour.G, KnownJpegColour.B, 255);
         }
 
         var jpeg = await EncodeAsync(opaque, 8, 8, ImageFormat.Jpeg, codec, cancellation).ConfigureAwait(false);
-        return jpeg.Copy is { Reference.Format: ImageFormat.Jpeg };
+        if (jpeg.Copy is not { Reference.Format: ImageFormat.Jpeg } jpegCopy
+            || await codec.DecodeAsync(jpegCopy.Bytes, cancellation).ConfigureAwait(false) is not { } jpegBack
+            || !TryCrop(jpegBack, PixelWindow.Whole(8, 8), out var jpegPixels, out var jpegOpaque) || !jpegOpaque)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < jpegPixels.Length; index += 4)
+        {
+            if (Math.Abs(jpegPixels[index] - KnownJpegColour.R) > JpegTolerance
+                || Math.Abs(jpegPixels[index + 1] - KnownJpegColour.G) > JpegTolerance
+                || Math.Abs(jpegPixels[index + 2] - KnownJpegColour.B) > JpegTolerance)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
+
+    /// <summary>The known JPEG's one colour.</summary>
+    internal static readonly (byte R, byte G, byte B) KnownJpegColour = (210, 120, 40);
+
+    /// <summary>How far a channel of the known JPEG may come back from its colour: a flat colour at quality 0.92 loses a few levels at most.</summary>
+    internal const int JpegTolerance = 8;
 
     /// <summary>
     /// Encodes, checks and declares one copy: what the encoder wrote must hold exactly the allowed

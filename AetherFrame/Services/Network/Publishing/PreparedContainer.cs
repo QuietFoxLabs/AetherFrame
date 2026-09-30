@@ -9,75 +9,88 @@ namespace AetherFrame.Services.Network.Publishing;
 /// The exact inventory a prepared copy may hold, checked on what the encoder actually wrote (decision
 /// D5's N2-6 note, (3)), before the copy is hashed or declared:
 /// <list type="bullet">
-/// <item>a PNG is its signature, IHDR, one or more IDAT, and IEND, with nothing after it;</item>
-/// <item>a JPEG is start of image, APP0 (JFIF) first, then only DQT, SOF0, DHT, DRI and scans (SOS
-/// and their data), and end of image last. The one APP1 (EXIF) block Dalamud's encoder adds to every
-/// JPEG is removed, whole.</item>
+/// <item>a PNG is its signature, IHDR, one or more IDAT, and IEND, with nothing after it. The
+/// constant colour and resolution chunks an encoder may add before the image data (pHYs, sRGB,
+/// gAMA and cHRM, each at most once) are removed, whole;</item>
+/// <item>a JPEG is start of image, JFIF's APP0 first (its identifier, version, units and density,
+/// with no thumbnail), then only DQT, SOF0, DHT, DRI and scans (SOS and their data), and end of
+/// image last. The one APP1 (EXIF) block Dalamud's encoder adds to every JPEG is removed,
+/// whole.</item>
 /// </list>
-/// Anything else refuses the copy: text, colour profiles, gamma, physical size, times, other
-/// metadata, comments, other frame types, fill bytes, bytes after the end. Free of Dalamud.
+/// Anything else refuses the copy: text, colour profiles, times, other metadata, comments, other
+/// frame types, fill bytes, bytes after the end. Removing only ever drops whole chunks or segments,
+/// so nothing of them can remain. Free of Dalamud.
 /// </summary>
 internal static class PreparedContainer
 {
     private static ReadOnlySpan<byte> PngSignature => [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-    /// <summary>The copy as it may be shared (a JPEG without its APP1 block), or null when it holds anything else.</summary>
+    // A JFIF APP0 segment with no thumbnail: its length (16) counts the length itself, "JFIF" and
+    // its zero, the version, the units, the two densities, and a 0 by 0 thumbnail.
+    private const int JfifLength = 16;
+
+    /// <summary>The copy as it may be shared (without the chunks or the segment removed), or null when it holds anything else.</summary>
     internal static byte[]? Clean(byte[] encoded, ImageFormat format)
     {
         ArgumentNullException.ThrowIfNull(encoded);
         return format switch
         {
-            ImageFormat.Png => IsBarePng(encoded) ? encoded : null,
+            ImageFormat.Png => BarePng(encoded),
             ImageFormat.Jpeg => BareJpeg(encoded),
             _ => null,
         };
     }
 
-    private static bool IsBarePng(ReadOnlySpan<byte> bytes)
+    private static byte[]? BarePng(byte[] bytes)
     {
-        if (!bytes.StartsWith(PngSignature))
+        if (!bytes.AsSpan().StartsWith(PngSignature))
         {
-            return false;
+            return null;
         }
 
+        var kept = new List<(int Start, int Length)> { (0, PngSignature.Length) };
+        var removed = new HashSet<string>(StringComparer.Ordinal);
         var offset = PngSignature.Length;
         var header = false;
         var data = false;
         while (bytes.Length - offset >= 12)
         {
-            var length = BinaryPrimitives.ReadUInt32BigEndian(bytes[offset..]);
+            var length = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset));
             if (length > (uint)(bytes.Length - offset - 12))
             {
-                return false;
+                return null;
             }
 
-            var type = bytes.Slice(offset + 4, 4);
-            if (!header)
+            var chunk = 12 + (int)length;
+            var type = System.Text.Encoding.ASCII.GetString(bytes, offset + 4, 4);
+            switch (type)
             {
-                if (!type.SequenceEqual("IHDR"u8))
-                {
-                    return false;
-                }
+                case "IHDR" when !header:
+                    header = true;
+                    kept.Add((offset, chunk));
+                    break;
 
-                header = true;
-            }
-            else if (type.SequenceEqual("IDAT"u8))
-            {
-                data = true;
-            }
-            else if (type.SequenceEqual("IEND"u8))
-            {
-                return data && length == 0 && offset + 12 == bytes.Length;
-            }
-            else
-            {
-                return false;
+                case "pHYs" or "sRGB" or "gAMA" or "cHRM" when header && !data && removed.Add(type):
+                    // A constant the encoder writes: removed, whole.
+                    break;
+
+                case "IDAT" when header:
+                    data = true;
+                    kept.Add((offset, chunk));
+                    break;
+
+                case "IEND" when data && length == 0 && offset + chunk == bytes.Length:
+                    kept.Add((offset, chunk));
+                    return Join(bytes, kept);
+
+                default:
+                    return null;
             }
 
-            offset += 12 + (int)length;
+            offset += chunk;
         }
 
-        return false;
+        return null;
     }
 
     private static byte[]? BareJpeg(byte[] bytes)
@@ -126,8 +139,8 @@ internal static class PreparedContainer
             var segment = 2 + length;
             if (first)
             {
-                // JFIF's APP0 comes first, as the encoder writes it.
-                if (code != 0xE0 || !body.StartsWith("JFIF\0"u8))
+                // JFIF's APP0 comes first, as the encoder writes it, with no thumbnail.
+                if (code != 0xE0 || length != JfifLength || !body.StartsWith("JFIF\0"u8) || body[12] != 0 || body[13] != 0)
                 {
                     return null;
                 }
@@ -164,10 +177,21 @@ internal static class PreparedContainer
             offset += segment;
         }
 
+        return Join(bytes, kept);
+    }
+
+    /// <summary>The kept byte ranges, in order; the same array when every byte is kept.</summary>
+    private static byte[] Join(byte[] bytes, List<(int Start, int Length)> kept)
+    {
         var total = 0;
         foreach (var (_, length) in kept)
         {
             total += length;
+        }
+
+        if (total == bytes.Length)
+        {
+            return bytes;
         }
 
         var cleaned = new byte[total];

@@ -110,7 +110,18 @@ public sealed class ImagePreparationTests
     {
         var png = Png(2, 2, new byte[16]);
         Assert.Same(png, PreparedContainer.Clean(png, ImageFormat.Png));
-        foreach (var extra in new[] { "tEXt", "sRGB", "gAMA", "pHYs", "iCCP", "eXIf", "tIME", "cICP" })
+
+        // The constant colour and resolution chunks an encoder may add go, whole, once each and only
+        // before the image data; any other chunk refuses the copy.
+        foreach (var constant in new[] { "pHYs", "sRGB", "gAMA", "cHRM" })
+        {
+            Assert.Equal(png, PreparedContainer.Clean(PngWith(Chunk(constant, new byte[4])), ImageFormat.Png));
+            Assert.Null(PreparedContainer.Clean(PngFrom(Chunk("IHDR", Header(2, 2)), Chunk(constant, [1]), Chunk(constant, [1]), Chunk("IDAT", Deflate(2, 2, new byte[16])), Chunk("IEND", [])), ImageFormat.Png));
+            Assert.Null(PreparedContainer.Clean(PngFrom(Chunk("IHDR", Header(2, 2)), Chunk("IDAT", Deflate(2, 2, new byte[16])), Chunk(constant, [1]), Chunk("IEND", [])), ImageFormat.Png));
+        }
+
+        Assert.Equal(png, PreparedContainer.Clean(PngFrom(Chunk("IHDR", Header(2, 2)), Chunk("pHYs", new byte[9]), Chunk("sRGB", [0]), Chunk("gAMA", new byte[4]), Chunk("cHRM", new byte[32]), Chunk("IDAT", Deflate(2, 2, new byte[16])), Chunk("IEND", [])), ImageFormat.Png));
+        foreach (var extra in new[] { "tEXt", "zTXt", "iTXt", "iCCP", "eXIf", "tIME", "cICP", "bKGD", "sBIT", "PLTE" })
         {
             Assert.Null(PreparedContainer.Clean(PngWith(Chunk(extra, new byte[4])), ImageFormat.Png));
         }
@@ -144,7 +155,9 @@ public sealed class ImagePreparationTests
             JpegFrom(App0(), Segment(0xFE, "made by"u8.ToArray()), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
             JpegFrom(App0(), Dqt(), Segment(0xC2, Sof0(8, 8)[4..]), Dht(), Sos(), Entropy(), Eoi()),
             JpegFrom(Exif(), App0(), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
-            JpegFrom(Segment(0xE0, [.. "JFXX"u8, 0]), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
+            JpegFrom(Segment(0xE0, [.. "JFXX"u8, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
+            JpegFrom(Segment(0xE0, [.. "JFIF"u8, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 9, 9, 9]), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
+            JpegFrom(Segment(0xE0, [.. "JFIF"u8, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0]), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
             JpegFrom(App0(), [0xFF, .. Dqt()], Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
             [.. bare, 0x00],
             bare[..^1],
@@ -236,7 +249,7 @@ public sealed class ImagePreparationTests
         srgb.Decodes(file, new DecodedImage(4, 2, 16, 29, new byte[32]));
         Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, srgb));
         Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, new FakeCodec { Encoder = (_, _, _, _) => null }));
-        Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, new FakeCodec { Encoder = (rgba, width, height, _) => PngWith(Chunk("sRGB", [0]), width, height, rgba) }));
+        Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, new FakeCodec { Encoder = (rgba, width, height, _) => PngWith(Chunk("tEXt", KeyedText()), width, height, rgba) }));
         Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, new FakeCodec { Encoder = (rgba, width, height, _) => Png(width + 1, height, [.. rgba, .. new byte[height * 4]]) }));
     }
 
@@ -271,10 +284,11 @@ public sealed class ImagePreparationTests
         Assert.Equal(pixels, DecodePng(ImagePreparer.KnownPng())!.Pixels);
         Assert.Contains(Enumerable.Range(0, width * height), index => pixels[(index * 4) + 3] == 0 && pixels[index * 4] != 0);
 
-        // A decoder that premultiplies, an encoder that adds a chunk or a segment, one that fails:
-        // publishing is off for the session.
+        // A decoder that premultiplies, a JPEG path that swaps channels, an encoder that adds a
+        // chunk or a segment, one that fails: publishing is off for the session.
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Premultiplies = true }, CancellationToken.None));
-        Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (rgba, w, h, format) => format == ImageFormat.Png ? PngWith(Chunk("gAMA", new byte[4]), w, h, rgba) : Jpeg(w, h) }, CancellationToken.None));
+        Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { SwapsJpegChannels = true }, CancellationToken.None));
+        Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (rgba, w, h, format) => format == ImageFormat.Png ? PngWith(Chunk("tEXt", KeyedText()), w, h, rgba) : Jpeg(w, h) }, CancellationToken.None));
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (rgba, w, h, format) => format == ImageFormat.Png ? Png(w, h, rgba) : JpegFrom(App0(), Segment(0xFE, [1]), Dqt(), Sof0(h, w), Dht(), Sos(), Entropy(), Eoi()) }, CancellationToken.None));
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (_, _, _, _) => null }, CancellationToken.None));
     }
@@ -282,6 +296,9 @@ public sealed class ImagePreparationTests
     private static readonly Guid Photo = Guid.NewGuid();
 
     private static int Premultiplied(int channel, int alpha) => ((2 * channel * alpha) + 255) / 510;
+
+    /// <summary>A tEXt chunk's data: the keyword "k", its zero separator, and the text "v".</summary>
+    private static byte[] KeyedText() => [(byte)'k', 0, (byte)'v'];
 
     /// <summary>Straight RGBA pixels, row by row, from a function of their position.</summary>
     private static byte[] Pixels(int width, int height, Func<int, int, (byte R, byte G, byte B, byte A)> pixel)
@@ -527,6 +544,7 @@ public sealed class ImagePreparationTests
     private sealed class FakeCodec : IImageCodec
     {
         private readonly Dictionary<string, DecodedImage> decodes = new();
+        private readonly Dictionary<string, (int Width, int Height, byte[] Rgba)> jpegs = new();
 
         internal List<(byte[] Rgba, int Width, int Height, ImageFormat Format)> Encoded { get; } = new();
 
@@ -535,11 +553,20 @@ public sealed class ImagePreparationTests
         /// <summary>Whether it hands back premultiplied colour, as a pipeline measured otherwise might.</summary>
         internal bool Premultiplies { get; init; }
 
+        /// <summary>Whether its JPEG path swaps red and blue, as a pipeline measured otherwise might.</summary>
+        internal bool SwapsJpegChannels { get; init; }
+
         internal void Decodes(byte[] file, DecodedImage image) => decodes[Convert.ToHexString(file)] = image;
 
         public Task<DecodedImage?> DecodeAsync(ReadOnlyMemory<byte> file, CancellationToken cancellation)
         {
-            if (!decodes.TryGetValue(Convert.ToHexString(file.Span), out var image))
+            var key = Convert.ToHexString(file.Span);
+            if (jpegs.TryGetValue(key, out var jpeg))
+            {
+                return Task.FromResult<DecodedImage?>(new DecodedImage(jpeg.Width, jpeg.Height, jpeg.Width * 4, ImagePreparer.Rgba, jpeg.Rgba));
+            }
+
+            if (!decodes.TryGetValue(key, out var image))
             {
                 image = DecodePng(file.Span);
             }
@@ -563,8 +590,25 @@ public sealed class ImagePreparationTests
 
         public Task<byte[]?> EncodeAsync(ReadOnlyMemory<byte> rgba, int width, int height, ImageFormat format, CancellationToken cancellation)
         {
-            Encoded.Add((rgba.ToArray(), width, height, format));
-            return Task.FromResult(Encoder(rgba.ToArray(), width, height, format));
+            var pixels = rgba.ToArray();
+            Encoded.Add((pixels, width, height, format));
+            var output = Encoder(pixels, width, height, format);
+            if (output is not null && format == ImageFormat.Jpeg && PreparedContainer.Clean(output, format) is { } cleaned)
+            {
+                // What the copy decodes back to: its pixels, as a lossless stand-in for JPEG's.
+                var back = pixels.ToArray();
+                if (SwapsJpegChannels)
+                {
+                    for (var index = 0; index < back.Length; index += 4)
+                    {
+                        (back[index], back[index + 2]) = (back[index + 2], back[index]);
+                    }
+                }
+
+                jpegs[Convert.ToHexString(cleaned)] = (width, height, back);
+            }
+
+            return Task.FromResult(output);
         }
     }
 }
