@@ -1058,10 +1058,12 @@ Batch C turns the owner's V1 to V5 into decisions that N2-7 to N2-10 can build. 
 - **A character is its Lodestone character id:** a number the Lodestone gives each character and keeps across renames and World transfers. The server also stores the name and Home World the Lodestone last showed. Players find the character by those.
 - **A name is matched in one canonical form:** Unicode NFC, then invariant lower case, with runs of spaces folded to one. **A World** is its name, matched without regard to case. The Lodestone shows World names, and they are the same in every client language.
 - **One key, one character** (V4). The plugin makes a key when the player opts a character in. It is a persona under the hood: the existing key store, protector, registry and outbox hold it, and its slot is named by nothing about the character. The server refuses to bind a second character to a key, so it holds no link between a player's characters. The Personas window leaves My Plates (N2-9).
-- **A name and World belong to one binding at a time.** (Canonical name, World) is unique among bindings. A newer check that reads the same name and World displaces the older binding, and deletes everything the older one published (C4).
+- **A name and World belong to one binding at a time.** (Canonical name, World) is unique among bindings. A newer check that reads the same name and World displaces the older binding: the older one is hidden, not deleted, and is found again once its own re-read updates its name and World.
 - **Moving a character to a new key.** A later check of the same Lodestone id by another key moves the binding to the new key, and deletes everything the old key published for it. That is also the recovery when a key is lost (a new PC, a reinstalled Windows). The old key's plugin learns it at its next request, when the server says the character is no longer bound to it, and it tells the player that another AetherFrame took the character over.
 - **Keeping names current:**
-  - The server re-reads each binding's Lodestone page at least once a day, within C2's fetch budget, and updates the name and World players search by. A page that no longer exists (404) removes the binding, as opting out does.
+  - The server re-reads each binding's Lodestone page at least once a day, within C2's fetch budget, and updates the name and World players search by.
+  - The binding is removed, as opting out removes it, only when the Lodestone's own "not found" page shows on two re-reads a day apart.
+  - Any other failure leaves the binding alone: an outage, maintenance or a changed layout. One bad day can't wipe every binding.
   - The plugin also asks for a re-read at login when the logged-in character's name or World differs from its binding's.
   - A renamed or transferred character is therefore found by its old name for at most about a day. After a re-read, the old name answers "not found".
 
@@ -1142,7 +1144,7 @@ Keys cost nothing, so every limit on checks is also per address and per Lodeston
 | What | Per key | Per address | Other |
 | --- | --- | --- | --- |
 | Lookups and searches | 120 an hour, 600 a day | 300 an hour | A "not found" counts the same as a find. |
-| Code requests and checks (C2) | 10 an hour | 10 an hour | 10 a day per Lodestone id. |
+| Code requests and checks (C2) | 10 an hour | 10 an hour | 10 a day per Lodestone id and address range, so no one else can use up a character's checks. |
 | Publishing | | | 60 an hour per character. Only the newest pending snapshot is sent anyway (N2). |
 | Reports | 20 a day | | |
 
@@ -1176,7 +1178,7 @@ I2's limits on removing the allowlist stand.
   - opting out (C4);
   - a lookup, a search and a report (C5).
 
-  Each action has its own label, and the specification's section 14 is extended with vectors. A publish still uses the existing submission proof, and returns no share code.
+  Each action has its own label, and the specification's section 14 is extended with vectors. The vectors show that a submission proof never verifies as an action proof, and that no action's proof verifies as another's. A publish still uses the existing submission proof, and returns no share code.
 - **K4:** the acknowledgement no longer warns that a lost key means never unpublishing, since a new Lodestone check recovers the character (C1). It says instead that the keys stay on this PC, and that another PC takes the character over by checking it again.
 - **D2** (the backup) isn't needed for stage 1, since a Lodestone check recovers a character. The D2 details stay open for later.
 - **R1 and R4:** retired by R5.
@@ -1204,7 +1206,13 @@ It also made five notes:
 - more fields never logged;
 - more consent text.
 
-All of these are now above. Its recheck is recorded below.
+All of these are now above.
+
+**Its recheck** (September 30, 2026, at `9b7114b`) **concurred with C1 to C9.** It found the three fixes and five notes applied as asked, and the owner's approval recorded as the owner's. It added three notes for N2-7, now above:
+- remove a binding only after the Lodestone's own "not found" page shows on two re-reads a day apart;
+- hide a displaced binding instead of deleting it;
+- count checks per Lodestone id and address range;
+- vectors that keep the proof kinds apart.
 
 ## Gates
 
