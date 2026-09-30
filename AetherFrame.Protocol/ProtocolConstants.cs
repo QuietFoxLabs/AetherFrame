@@ -25,6 +25,9 @@ public static class ProtocolConstants
     /// <summary>The first four bytes of every signed document: ASCII "AFPD" (AetherFrame Protocol Document).</summary>
     public static ReadOnlySpan<byte> DocumentMagic => "AFPD"u8;
 
+    /// <summary>The first four bytes of every request proof: ASCII "AFRQ" (AetherFrame Request).</summary>
+    public static ReadOnlySpan<byte> RequestProofMagic => "AFRQ"u8;
+
     /// <summary>
     /// The domain separation tag that starts every signing input, so a signature over a document can
     /// never be a valid signature over anything else AetherFrame signs (docs/networking/ProtocolSpecification-v1.md,
@@ -32,6 +35,14 @@ public static class ProtocolConstants
     /// suffix (decision N3) keeps a draft signature from ever verifying under the final version's tag.
     /// </summary>
     public static ReadOnlySpan<byte> SignatureDomainTag => "AetherFrame.Protocol.SignedDocument.v1-draft"u8;
+
+    /// <summary>
+    /// The domain separation tag that starts the signing input of every request proof
+    /// (docs/networking/ProtocolSpecification-v1.md, sections 5.1 and 14): its own signing context,
+    /// so a proof's signature never verifies as a document's, or the reverse. Written as a one-byte
+    /// length followed by these ASCII bytes, with the draft suffix of decision N3.
+    /// </summary>
+    public static ReadOnlySpan<byte> RequestProofDomainTag => "AetherFrame.Protocol.RequestProof.v1-draft"u8;
 
     /// <summary>
     /// The domain separation tag of persona identity derivation (docs/networking/ProtocolSpecification-v1.md,
@@ -53,6 +64,9 @@ public static class ProtocolConstants
 
     /// <summary>The length of a SHA-256 digest.</summary>
     public const int DigestLength = 32;
+
+    /// <summary>The length of a request challenge a server issues (docs/networking/ProtocolSpecification-v1.md, section 14.2).</summary>
+    public const int ChallengeLength = 32;
 
     /// <summary>
     /// UTF-8 as the protocol uses it: no byte order mark, and invalid input (an unpaired surrogate on

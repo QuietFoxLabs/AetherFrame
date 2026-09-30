@@ -6,6 +6,7 @@ using System.Text.Json;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
+using AetherFrame.Protocol.Requests;
 using AetherFrame.Protocol.Signing;
 using Xunit;
 
@@ -53,6 +54,9 @@ public class TestVectorTests
         Assert.Equal(0x8001, fixture.ProtocolVersion);
         Assert.Equal("AetherFrame.Protocol.SignedDocument.v1-draft", fixture.SignatureDomainTag);
         Assert.Equal("AetherFrame.Protocol.PersonaId.v1", fixture.PersonaIdDomainTag);
+        Assert.Equal("AetherFrame.Protocol.RequestProof.v1-draft", fixture.RequestProofDomainTag);
+        Assert.Equal(RequestProofVectorBuilder.Valid().Select(p => p.Name), fixture.RequestProofs.Select(p => p.Name));
+        Assert.True(fixture.RejectedProofs.Count >= 35);
         Assert.Equal(["A", "B"], fixture.Personas.Select(p => p.Name));
         Assert.Equal(VectorBuilder.Models().Select(m => m.Name), fixture.Documents.Select(d => d.Name));
         Assert.True(fixture.Rejected.Count >= 40);
@@ -270,6 +274,82 @@ public class TestVectorTests
     }
 
     [Fact]
+    public void RequestProofs_VerifyWithTheLibraryAndTheReferenceImplementation()
+    {
+        var fixture = VectorFixture.Load();
+        foreach (var vector in fixture.RequestProofs)
+        {
+            var key = PersonaPublicKey.FromBytes(Hex.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PublicKey));
+            var document = Hex.Parse(fixture.Documents.Single(d => d.Name == vector.Document).Document!);
+            var deployment = DeploymentName.Parse(vector.Deployment);
+            var challenge = RequestChallenge.Parse(vector.Challenge);
+            var subject = SHA256.HashData(document);
+            Assert.Equal(vector.SubjectDigest, Hex.Of(subject));
+
+            // The reference builds the signing input and the proof from the specification's tables;
+            // the library must produce the same bytes, and the vector must hold them.
+            var referenceInput = ReferenceProtocol.ProofSigningInput(1, key.Bytes, deployment.Bytes, challenge.Bytes, subject);
+            var input = SigningInput.CreateRequestProof(RequestProofKind.DocumentSubmission, key, deployment, challenge, subject);
+            Assert.Equal(referenceInput, input.Bytes.ToArray());
+            Assert.Equal(vector.SigningInput, Hex.Of(referenceInput));
+            Assert.Equal(vector.Digest, Hex.Of(SHA256.HashData(referenceInput)));
+            Assert.True(ReferenceP256.Verify(key.Bytes, SHA256.HashData(referenceInput), Hex.Parse(vector.Signature)), vector.Name + " (reference)");
+            Assert.True(SignatureVerifier.Verify(input, ProtocolSignature.FromBytes(Hex.Parse(vector.Signature))), vector.Name + " (library)");
+            Assert.Equal(vector.Proof, Hex.Of(ReferenceProtocol.Proof(1, key.Bytes, deployment.Bytes, challenge.Bytes, subject, Hex.Parse(vector.Signature))));
+
+            var submission = RequestProofCodec.VerifySubmission(Hex.Parse(vector.Proof), document, deployment);
+            Assert.Equal(key.Id, submission.Proof.Persona);
+            Assert.Equal(key.Id, submission.Document.Persona);
+            Assert.Equal(challenge, submission.Challenge);
+        }
+    }
+
+    [Fact]
+    public void RejectedProofs_AreRefusedWithTheirError()
+    {
+        var fixture = VectorFixture.Load();
+        foreach (var vector in fixture.RejectedProofs)
+        {
+            var expected = Enum.Parse<ProtocolError>(vector.Error);
+            var document = Hex.Parse(fixture.Documents.Single(d => d.Name == vector.Document).Document!);
+            var actual = ProtocolAssert.Rejects(() => RequestProofCodec.VerifySubmission(Hex.Parse(vector.Proof), document, DeploymentName.Parse(vector.Deployment))).Error;
+            Assert.True(expected == actual, $"{vector.Name}: expected {expected}, got {actual}");
+        }
+    }
+
+    [Fact]
+    public void RejectedProofs_DeterministicOnesFollowFromTheBaseProof()
+    {
+        var fixture = VectorFixture.Load();
+        using var a = TestPersonas.CreateA();
+        using var b = TestPersonas.CreateB();
+        byte[] DocumentNamed(string name) => Hex.Parse(fixture.Documents.Single(d => d.Name == name).Document!);
+        var rebuilt = RequestProofVectorBuilder.BuildRejected(Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed, a, b);
+        Assert.Equal(rebuilt.Select(r => r.Name), fixture.RejectedProofs.Select(r => r.Name));
+        foreach (var (expected, actual) in rebuilt.Zip(fixture.RejectedProofs))
+        {
+            Assert.Equal(expected.Error, actual.Error);
+            Assert.Equal(expected.Document, actual.Document);
+            Assert.Equal(expected.Deployment, actual.Deployment);
+            Assert.Equal(expected.Deterministic, actual.Deterministic);
+            if (expected.Deterministic)
+            {
+                Assert.True(expected.Proof == actual.Proof, expected.Name);
+            }
+        }
+    }
+
+    [Fact]
+    public void KeptSignatures_AreOnlyForUnchangedConstructions()
+    {
+        var fresh = new string('a', 200) + new string('b', 128);
+        Assert.Equal(fresh, VectorBuilder.KeepSignature(null, fresh));
+        Assert.Equal(new string('a', 200) + new string('c', 128), VectorBuilder.KeepSignature(new string('a', 200) + new string('c', 128), fresh));
+        Assert.Equal(fresh, VectorBuilder.KeepSignature("d" + new string('a', 199) + new string('c', 128), fresh));
+        Assert.Equal(fresh, VectorBuilder.KeepSignature(new string('a', 201) + new string('c', 128), fresh));
+    }
+
+    [Fact]
     public void Regenerate_WhenAskedTo()
     {
         if (Environment.GetEnvironmentVariable("AETHERFRAME_PROTOCOL_REGENERATE_VECTORS") is not { Length: > 0 })
@@ -280,7 +360,8 @@ public class TestVectorTests
         var fixtures = VectorPaths.SourceFixtures();
         Directory.CreateDirectory(fixtures);
         var path = Path.Combine(fixtures, "vectors-v1.json");
-        VectorBuilder.Build().Save(path);
+        var committed = File.Exists(path) ? JsonSerializer.Deserialize<VectorFixture>(File.ReadAllBytes(path), VectorFixture.Options) : null;
+        VectorBuilder.Build(committed).Save(path);
 
         // What was written must read back as a fixture this build accepts, so a regeneration run is
         // never green on the strength of having written a file.
@@ -288,5 +369,6 @@ public class TestVectorTests
         Assert.Equal(ProtocolConstants.ProtocolVersion, written.ProtocolVersion);
         Assert.All(written.Documents.Where(d => d.Document is not null), d => SignedDocumentCodec.Verify(Hex.Parse(d.Document!)));
         Assert.All(written.Rejected, r => ProtocolAssert.Rejects(() => SignedDocumentCodec.Verify(Hex.Parse(r.Document))));
+        Assert.All(written.RequestProofs, p => RequestProofCodec.VerifySubmission(Hex.Parse(p.Proof), Hex.Parse(written.Documents.Single(d => d.Name == p.Document).Document!), DeploymentName.Parse(p.Deployment)));
     }
 }

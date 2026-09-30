@@ -80,8 +80,11 @@ struct AetherFrame.Protocol.Identity.RevisionId
 static class AetherFrame.Protocol.ProtocolConstants
     ReadOnlySpan<Byte> DocumentMagic { get; }
     ReadOnlySpan<Byte> PersonaIdDomainTag { get; }
+    ReadOnlySpan<Byte> RequestProofDomainTag { get; }
+    ReadOnlySpan<Byte> RequestProofMagic { get; }
     ReadOnlySpan<Byte> SignatureDomainTag { get; }
     const Byte PersonaKeyFormatUncompressedP256
+    const Int32 ChallengeLength
     const Int32 DigestLength
     const Int32 OpaqueIdLength
     const Int32 PublicKeyLength
@@ -98,6 +101,7 @@ enum AetherFrame.Protocol.ProtocolError
     const ProtocolError InvalidValue
     const ProtocolError LimitExceeded
     const ProtocolError NotCanonical
+    const ProtocolError ProofMismatch
     const ProtocolError SignatureMismatch
     const ProtocolError TrailingBytes
     const ProtocolError Truncated
@@ -107,6 +111,8 @@ sealed class AetherFrame.Protocol.ProtocolException
     ProtocolError Error { get; }
     new(ProtocolError error, String message)
 static class AetherFrame.Protocol.ProtocolLimits
+    const Int32 MaxDeploymentLabelBytes
+    const Int32 MaxDeploymentNameBytes
     const Int32 MaxDocumentBytes
     const Int32 MaxImageDimension
     const Int32 MaxImagesPerProfile
@@ -121,9 +127,11 @@ static class AetherFrame.Protocol.ProtocolLimits
     const Int32 MaxNameBytes
     const Int32 MaxNameScalars
     const Int32 MaxPayloadBytes
+    const Int32 MaxRequestProofBytes
     const Int32 MaxTextBytes
     const Int32 MaxTextScalars
     const Int32 MinLayoutCanvasExtent
+    const Int32 RequestProofOverheadBytes
     const Int32 SignedDocumentOverheadBytes
     const Int64 MaxImageBytes
     const Int64 MaxImagePixels
@@ -373,6 +381,47 @@ struct AetherFrame.Protocol.Remote.RemoteProfileKey
     ProfileId ProfileId { get; }
     String ToString()
     new(PersonaId persona, ProfileId profileId)
+sealed class AetherFrame.Protocol.Requests.DeploymentName
+    Boolean Equals(DeploymentName other)
+    Boolean Equals(Object obj)
+    Boolean IsReservedForTesting { get; }
+    Boolean TryParse(String text, ref DeploymentName name)
+    DeploymentName Parse(String text)
+    Int32 GetHashCode()
+    ReadOnlySpan<Byte> Bytes { get; }
+    String ToString()
+    String Value { get; }
+sealed class AetherFrame.Protocol.Requests.RequestChallenge
+    Boolean Equals(Object obj)
+    Boolean Equals(RequestChallenge other)
+    Boolean TryParse(String text, ref RequestChallenge challenge)
+    Byte[] ToArray()
+    Int32 GetHashCode()
+    ReadOnlySpan<Byte> Bytes { get; }
+    RequestChallenge FromBytes(ReadOnlySpan<Byte> wire)
+    RequestChallenge NewRandom()
+    RequestChallenge Parse(String text)
+    String ToString()
+    const String Prefix
+static class AetherFrame.Protocol.Requests.RequestProofCodec
+    Byte[] Sign(ReadOnlySpan<Byte> document, DeploymentName deployment, RequestChallenge challenge, IPersonaSigner signer)
+    VerifiedRequestProof Verify(ReadOnlySpan<Byte> proof)
+    VerifiedSubmission VerifySubmission(ReadOnlySpan<Byte> proof, ReadOnlySpan<Byte> document, DeploymentName deployment)
+enum AetherFrame.Protocol.Requests.RequestProofKind
+    Byte value__
+    const RequestProofKind DocumentSubmission
+sealed class AetherFrame.Protocol.Requests.VerifiedRequestProof
+    DeploymentName Deployment { get; }
+    PersonaId Persona { get; }
+    PersonaPublicKey PublicKey { get; }
+    ReadOnlySpan<Byte> SubjectDigest { get; }
+    RequestChallenge Challenge { get; }
+    RequestProofKind Kind { get; }
+sealed class AetherFrame.Protocol.Requests.VerifiedSubmission
+    ReadOnlySpan<Byte> DocumentBytes { get; }
+    RequestChallenge Challenge { get; }
+    VerifiedDocument Document { get; }
+    VerifiedRequestProof Proof { get; }
 sealed class AetherFrame.Protocol.Signing.EcdsaPersonaSigner
     EcdsaPersonaSigner CreateEphemeral()
     PersonaPublicKey PublicKey { get; }
@@ -388,9 +437,15 @@ sealed class AetherFrame.Protocol.Signing.ProtocolSignature
     ReadOnlySpan<Byte> Bytes { get; }
 static class AetherFrame.Protocol.Signing.SignatureVerifier
     Boolean Verify(SigningInput input, ProtocolSignature signature)
+enum AetherFrame.Protocol.Signing.SigningContext
+    Int32 value__
+    const SigningContext RequestProof
+    const SigningContext SignedDocument
 sealed class AetherFrame.Protocol.Signing.SigningInput
     Byte[] ComputeDigest()
-    DocumentType DocumentType { get; }
+    Nullable<DocumentType> DocumentType { get; }
     PersonaPublicKey PublicKey { get; }
     ReadOnlySpan<Byte> Bytes { get; }
+    SigningContext Context { get; }
     SigningInput Create(DocumentType documentType, PersonaPublicKey publicKey, ReadOnlySpan<Byte> payload)
+    SigningInput CreateRequestProof(RequestProofKind kind, PersonaPublicKey publicKey, DeploymentName deployment, RequestChallenge challenge, ReadOnlySpan<Byte> subjectDigest)

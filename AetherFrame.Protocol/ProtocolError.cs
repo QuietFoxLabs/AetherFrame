@@ -45,4 +45,10 @@ public enum ProtocolError
 
     /// <summary>The input is well formed but is not the one canonical encoding of its content, for example a set that is not sorted.</summary>
     NotCanonical,
+
+    /// <summary>
+    /// A request proof verifies but does not authorize the request it came with: it names another
+    /// deployment, binds another document, or is signed by a key other than the document's.
+    /// </summary>
+    ProofMismatch,
 }
