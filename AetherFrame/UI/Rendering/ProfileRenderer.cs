@@ -170,7 +170,7 @@ internal static class ProfileRenderer
 
     private static void DrawImageElement(ImDrawListPtr drawList, ImageProfileElement imageElement, Vector2 canvasOrigin, float scale, ProfileRenderResources resources)
     {
-        var opacity = Math.Clamp(imageElement.Opacity, 0f, 1f);
+        var opacity = PaintVisibility.ImageOpacity(imageElement);
         var wrap = resources.Images.GetWrapOrNull(imageElement.AssetId);
 
         if (wrap is null)
@@ -188,7 +188,8 @@ internal static class ProfileRenderer
             return;
         }
 
-        if (opacity <= 0f)
+        // Whether an image draws at all is PaintVisibility's rule, which a shared snapshot follows too.
+        if (!PaintVisibility.ImageDraws(imageElement))
         {
             return;
         }

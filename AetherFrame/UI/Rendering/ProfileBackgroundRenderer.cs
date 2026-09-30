@@ -22,13 +22,9 @@ internal static class ProfileBackgroundRenderer
 
     internal static void Draw(ImDrawListPtr drawList, ProfileBackground? background, Vector2 canvasOrigin, Vector2 canvasScreenSize, float scale, ProfileRenderResources resources)
     {
-        if (background is null || background.Mode == ProfileBackgroundMode.None)
-        {
-            return;
-        }
-
-        var opacity = Math.Clamp(background.Opacity, 0f, 1f);
-        if (opacity <= 0f)
+        // Whether the background draws at all is PaintVisibility's rule, which a shared snapshot follows too.
+        var opacity = PaintVisibility.BackgroundOpacity(background);
+        if (background is null || opacity <= 0f)
         {
             return;
         }
