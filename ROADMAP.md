@@ -8,15 +8,17 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 09:07 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 09:17 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
-  - a verdict on test build `01a14a5`, which gates the 0.1.7 release. The dev plugin folder holds preview build `7b35a31` now, so `01a14a5` goes back into it first ("Going back" in the preview's inbox post);
-  - the checks for preview build `7b35a31`, installed on September 30 at the owner's request, in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25);
+  - a verdict on test build `01a14a5`, which gates the 0.1.7 release. The game runs it now: Dalamud's Dev Plugin Locations point at its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`;
+  - a one-time switch of those locations to `E:\AetherFrame Test Build\AetherFrame.dll`, so every new build reaches the game by itself ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54); [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), item 2);
+  - the checks for preview build `7b35a31`, put in `E:\AetherFrame Test Build\` on September 30 at the owner's request, in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25). It loads only after the switch.
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
 - **In progress:**
   - N2-6b's second part, image preparation ([#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), in review);
-  - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53)).
+  - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53));
+  - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session).
 - **Next, for the two-player test:**
   1. N2-6c: the publication index, the outbox and the commit;
   2. N2-7: the server;
@@ -24,7 +26,7 @@ Verified September 30, 2026, at 09:07 UTC. **For the live status, see [issue #52
   4. N2-9: the sharing flow in the plugin;
   5. N2-10: the viewer;
   6. N2-11: the test kit and the two-player checklist.
-- **Next, for the interface:** section 8's tasks 7 to 16, which the interface audit's second pass ([#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), merged) queued. They start with one editor window, with Basic and Advanced as modes (the owner's decision, section 5).
+- **Next, for the interface:** section 8's task 1, a Plate menu in the editors, then tasks 2 to 6, then the second pass's tasks 7 to 16 ([#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), merged). Those include one editor window with Basic and Advanced as modes (task 8, the owner's decision, section 5).
 
 | NETWORK2 increment | State |
 | --- | --- |
@@ -43,8 +45,8 @@ Verified September 30, 2026, at 09:07 UTC. **For the live status, see [issue #52
 | Build | State |
 | --- | --- |
 | v0.1.6 | released to the testing channel |
-| Test build `01a14a5` (player) | waiting for the owner's verdict; staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`, not in the dev plugin folder now |
-| Preview build `7b35a31` | in the dev plugin folder since September 30; its checks are in the Owner inbox |
+| Test build `01a14a5` (player) | waiting for the owner's verdict; the game runs it from its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\` |
+| Preview build `7b35a31` | in `E:\AetherFrame Test Build\` since September 30; it loads only after the switch in Dev Plugin Locations ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54)) |
 | `master` | `8fb65ab` (after [#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51)), CI green on both platforms |
 
 ## 1. Goal and scope
@@ -65,13 +67,13 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
-| Item | Verified state (September 30, 2026, 09:07 UTC) |
+| Item | Verified state (September 30, 2026, 09:17 UTC) |
 | --- | --- |
 | Default branch | `master` at `8fb65ab`, after [#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51) (docs only) merged at 08:54 UTC. CI passed on both platforms at 08:57 UTC. Its code is `7b35a31`'s, after [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), which was checked locally while preview build `7b35a31` was built: 0 build warnings, with every suite passing (3224 plugin, 407 protocol, 482 persona, 468 release tooling). |
 | Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |
 | Custom repository | `plugin-repository` exists at `e85692416ec20151fbda9b76788c4e2ef83db763`. Its [manifest](https://github.com/QuietFoxLabs/AetherFrame/blob/e85692416ec20151fbda9b76788c4e2ef83db763/pluginmaster.json) serves v0.1.6 with `IsTestingExclusive: true`. |
-| Test builds | Player `01a14a5` (#21 and #33) is staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\` and waits for the owner's in-game verdict, which gates 0.1.7. It isn't in the dev plugin folder now. Preview `7b35a31` (every merged networking increment; it sends nothing) is in the dev plugin folder, installed September 30 at the owner's request; before it, the folder held no `AetherFrame.dll`. |
-| Open pull requests | [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), N2-6b's second part (draft, in review), and [#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), this status block. |
+| Test builds | Player `01a14a5` (#21 and #33) waits for the owner's in-game verdict, which gates 0.1.7. The game runs it: Dalamud's only Dev Plugin Location is its staged copy, `E:\AetherFrame Test Builds\2026-09-29 01a14a5\AetherFrame.dll` (checked in `dalamudConfig.json`, read only). Preview `7b35a31` (every merged networking increment; it sends nothing) was put in `E:\AetherFrame Test Build\` on September 30 at the owner's request. It hasn't loaded: earlier posts took that folder for the game's location, which it becomes only after the owner's one-time switch ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54)). |
+| Open pull requests | [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), N2-6b's second part (draft, in review); [#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), this status block; [#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), test builds that update in game by themselves (draft, a second Claude session). |
 | Checkouts | The control checkout `E:\AetherFrameWork` is clean on `master`, with one worktree per task under `.claude\worktrees\`. `E:\Plugin development` is off limits ([CLAUDE.md](CLAUDE.md)). |
 
 CI results belong to the recorded commit, not automatically to later commits. Check live CI, and [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), for anything newer.
@@ -189,7 +191,7 @@ Current verified build context is .NET 10, Dalamud SDK/API 15, and an x64 plugin
 | The owner permitted narrowing the off-limits rule for `E:\Plugin development` (September 29, 2026, in the owner's words: "ok i permit you to fix that rule", then choosing, from the options Claude offered, to exempt Claude's own clean worktrees). Scope, APPROVED (Claude, under the owner's delegation of September 29, 2026) and worded by Claude, September 29, 2026: a session whose working directory was, when it started, one of Claude's worktrees under `E:\Plugin development\AetherFrame\.claude\worktrees\` may keep working there if `git status` showed no uncommitted or untracked changes before the session's own edits, on its own `claude/*` branch, with state inspection, fetch, merge of `origin/master`, build, test, staging of its own files by path (never `git add -A` or `git add .`), commit and an explicit-refspec push only; never stash, reset, clean, switch, checkout or worktree commands, never the primary checkout root or another worktree; every new task starts in `E:\AetherFrameWork`. After a merge of `origin/master`, that worktree's own `.claude/settings.json` deny rules apply to the session, which fails safe. The deny rules for sessions in `E:\AetherFrameWork` are unchanged. | Sessions that predate the handoff can finish or continue their own clean work without touching the dirty primary checkout, the stashes or other worktrees, which the rule exists to protect; staging by path keeps any pre-existing file out of a commit. |
 | The owner decided that Basic and Advanced become one editor window with two modes (September 30, 2026). Claude put the choice to the owner in chat, after two sessions' interface audits disagreed; the owner chose "Merge into one window", whose stated terms were: "One AetherFrame Editor with Basic and Advanced as modes. Switching keeps the window's place, zoom and the element being edited. Largest cut in back-and-forth, one large PR, and tutorial chapters 4 to 9 get rechecked in game." In the same exchange the owner chose to fold the second audit into the first ("Fold mine into #43's"): [docs/InterfaceAudit.md](docs/InterfaceAudit.md) stays the one audit, and its section 7 holds the second pass. It changes no CONFIRMED requirement: Basic still feels like FFXIV, Advanced still removes the restrictions, and both edit one saved Plate through the shared renderer. Only the owner can change it. | The second pass counted 52 window switches across 19 common journeys; one editor window removes 7 of the 19 the tasks remove, the largest single cut. The first audit had not proposed it, because the editors already share one session. |
 | The owner asked for the roadmap on GitHub to show realtime status (September 30, 2026, in the owner's words: "please update the roadmap in the github to show realtime status"). | The owner's request, recorded as said. |
-| APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026. Scope, in answer to the request above: ROADMAP.md opens with "Status at a glance", which every pull request that changes the status updates, with the time its facts were verified. [Issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52) is the live status: its body is edited in place, never with a comment, whenever a pull request opens, changes state, gets a review verdict or merges, a build is made or installed, or what waits on the owner changes. Owner replies stay in the Owner inbox. Not settled: a GitHub Project board, which needs a token scope only the owner can grant. | ROADMAP.md changes only through reviewed pull requests, so on its own it can't show status between merges. An issue body edited in place can, and the block keeps the roadmap itself current at every merge. |
+| APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026. Scope, in answer to the request above: ROADMAP.md opens with "Status at a glance", which every pull request that changes the status updates, with the time its facts were verified. [Issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52) is the live status: its body is edited in place, never with a comment, whenever a pull request opens, changes state, gets a review verdict or merges, a build is made or installed, or what waits on the owner changes. A session that sees another session's pull request records it in the block and in the issue, and touches nothing of it. Owner replies stay in the Owner inbox. Not settled: a GitHub Project board, which needs a token scope only the owner can grant. | ROADMAP.md changes only through reviewed pull requests, so on its own it can't show status between merges. An issue body edited in place can, and the block keeps the roadmap itself current at every merge. |
 
 **The owner's delegation, September 29, 2026, in the owner's words:**
 

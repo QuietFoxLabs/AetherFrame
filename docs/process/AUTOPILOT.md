@@ -76,7 +76,7 @@ The owner asked on September 30, 2026: "please update the roadmap in the github 
   - a build is made or installed;
   - what waits on the owner changes.
 
-  The issue asks the owner to reply in the Owner inbox, which stays the only place owner input is read.
+  The issue asks the owner to reply in the Owner inbox, which stays the only place the autopilot reads owner replies.
 - **ROADMAP.md's "Status at a glance"** opens the roadmap. Every pull request that changes the status updates it, including its NETWORK2 and Builds tables, with the time its facts were verified.
 - A session that sees another session's pull request records it in the block and in #52, and touches nothing of it.
 
