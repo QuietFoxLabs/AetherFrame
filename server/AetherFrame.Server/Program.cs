@@ -53,6 +53,7 @@ builder.Services.AddSingleton<LodestoneReader>();
 builder.Services.AddSingleton<ILodestonePages, LodestoneHttpPages>();
 builder.Services.AddSingleton<Rereads>();
 builder.Services.AddHostedService<DatabaseStartup>();
+builder.Services.AddHostedService<CheckpointRetries>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Rereads>());
 builder.Services.AddHttpClient(LodestoneHttpPages.ClientName, (services, client) =>
     {

@@ -302,7 +302,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - The check reads the Lodestone page's one self-introduction element, behind the Lodestone-id allowlist, within the fetch budget, following no redirect.
   - Binding follows C1: one key, one character; a takeover by another key deletes what the old one published; the newest read of a name and World hides an older binding. A daily re-read follows renames and removes a binding only after two "not found" pages a day apart.
   - Opting out deletes at once, with `secure_delete` and a truncating checkpoint retried past readers. Limits follow C6. The log holds a route, a status and a failure's kind, and a test checks that no identifier, code, name or World reaches it.
-  - The details batch C left open are recorded as "N2-7b's server details". CI runs the server's 68 tests.
+  - The details batch C left open are recorded as "N2-7b's server details". CI runs the server's 78 tests.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**

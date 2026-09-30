@@ -25,7 +25,7 @@ Every request but `status` and `challenge` is signed. Its body is:
 2. It signs a proof of the request's kind, for the deployment it is configured with, under that challenge, binding the payload: `SignAction` for an action, `Sign` for a submission.
 3. The server takes the expected kind **from the path**, never from the request, then checks the proof as section 14.4 (a submission) or 14.5 (an action) says, then consumes the challenge (rule 10), and only then acts.
 
-A challenge the server doesn't know, has already consumed, or issued more than 300 seconds ago gets `409` with a fresh challenge as its body: the client signs again under it.
+A challenge the server doesn't know, has already consumed, or issued more than 300 seconds ago gets `409` with a fresh challenge as its body: the client signs again under it. That fresh challenge counts against the address's challenge limit like any other: past it, the answer is `429` with none.
 
 ### 2.1 Actions
 
@@ -101,10 +101,14 @@ Recorded in DecisionRegister.md as "N2-7b's server details":
 - **A check by the key already bound** refreshes the name and World and keeps the profile id. A check by another key takes the character over with a fresh one (C1, C4).
 - **A re-read that reads a name and World another binding shows** hides that other binding: the newest read wins, as C1 says for checks. Two characters can't hold one name on one World.
 - **Re-reads** are paced evenly over the day, at least 2 minutes apart, within half of the fetch budget (C2), so they never crowd out a check. A re-read the player asks for counts as a check against the player's limits and uses the whole budget.
-- **"Not found"** is the Lodestone's own page: status 404, its title, and one `error__body` with no character on it. Anything else is an outage and changes nothing (C1). While a binding's page shows "not found", the server keeps the day number it first did, and nothing else.
+- **"Not found"** is the Lodestone's own page: status 404, its title, and one `error__body` with no character on it. Anything else is an outage and changes nothing (C1). While a binding's page shows "not found", the server keeps the day number (UTC) it first did, and nothing else. It removes the binding on a "not found" two or more days later by that number: at least 24 hours after the first, and at most 48. A re-read applies only to the character it read, so a re-read in flight while the key opts out and binds another character changes nothing.
+- **A failed check** answers no sooner than 3 seconds after it started, wherever it failed, so its timing doesn't tell an id on the allowlist from one off it. "Try again later" (`503`, a full fetch budget) is answered before the code, the allowlist or the key's binding are looked at. What remains is a fetch longer than 3 seconds, which only an allowlisted id can cause: in stage 1 that tells someone holding a key and a live code that one of two ids is a tester's.
 - **Limits C6 doesn't state:**
-  - challenges: 600 an hour per address;
-  - opting out: 10 an hour per key;
+  - challenges: 600 an hour per address, counting those a `409` carries;
+  - opting out: 10 an hour per key and 30 per address;
   - images: 8 times the lookup limits, since a Plate has up to 8.
   - An address limit applies to an IPv6 address's /64, /56 and /48 at 1, 4 and 16 times the limit.
 - **An unhandled error** answers `500`, and logs only the exception's type.
+- **Forwarded headers** are believed from `AetherFrame:KnownProxies` alone (R4). The server refuses to start with `ASPNETCORE_FORWARDEDHEADERS_ENABLED` set, since that switch clears the trusted lists; N2-8 puts Caddy's container address in `KnownProxies`, or every client would share one address's limits.
+- **A deletion's checkpoint** runs after the deletion commits, whether or not the client is still there. One that readers block for 30 seconds is retried every 30 seconds until it completes (D1).
+- **The allowlist** is read from the configuration at each use. Configuration from environment variables is read once, at start, so N2-8 keeps it in a configuration file that reloads, or removing an id takes a restart.

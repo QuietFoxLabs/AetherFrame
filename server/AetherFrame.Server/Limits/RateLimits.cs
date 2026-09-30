@@ -26,6 +26,8 @@ internal static class ServerLimits
 
     public static readonly Limit OptOutsPerKey = new("opt-out/key", 10, TimeSpan.FromHours(1));
 
+    public static readonly Limit OptOutsPerAddress = new("opt-out/address", 30, TimeSpan.FromHours(1));
+
     public static readonly Limit LookupsPerKeyHour = new("lookup/key/hour", 120, TimeSpan.FromHours(1));
 
     public static readonly Limit LookupsPerKeyDay = new("lookup/key/day", 600, TimeSpan.FromDays(1));
@@ -77,11 +79,12 @@ internal static class AddressGroups
 /// <summary>
 /// Sliding-window counters, in memory only, for as long as their window (decisions S5 and C7): no
 /// address, key or id they count is written anywhere or logged. Counting is per (limit, subject);
-/// a subject is a key's identity, a Lodestone id or an address group.
+/// a subject is a key's identity, a Lodestone id or an address group. A counter is dropped once all
+/// its events have left its own limit's window.
 /// </summary>
 internal sealed class RateLimiter(TimeProvider time)
 {
-    private readonly ConcurrentDictionary<(string Limit, string Subject), Queue<DateTimeOffset>> events = new();
+    private readonly ConcurrentDictionary<(string Limit, string Subject), Counter> counters = new();
     private DateTimeOffset lastSweep;
 
     /// <summary>Counts one event against <paramref name="limit"/> for <paramref name="subject"/>, unless it is already at the limit.</summary>
@@ -89,21 +92,26 @@ internal sealed class RateLimiter(TimeProvider time)
     {
         var now = time.GetUtcNow();
         Sweep(now);
-        var queue = events.GetOrAdd((limit.Name, subject), static _ => new Queue<DateTimeOffset>());
-        lock (queue)
+        while (true)
         {
-            while (queue.Count > 0 && now - queue.Peek() >= limit.Window)
+            var counter = counters.GetOrAdd((limit.Name, subject), static (_, window) => new Counter(window), limit.Window);
+            lock (counter)
             {
-                queue.Dequeue();
-            }
+                // A counter the sweep has just dropped is replaced, so no event is counted in a lost one.
+                if (counter.Removed)
+                {
+                    continue;
+                }
 
-            if (queue.Count >= limit.Count * multiple)
-            {
-                return false;
-            }
+                counter.Trim(now);
+                if (counter.Events.Count >= limit.Count * multiple)
+                {
+                    return false;
+                }
 
-            queue.Enqueue(now);
-            return true;
+                counter.Events.Enqueue(now);
+                return true;
+            }
         }
     }
 
@@ -121,7 +129,10 @@ internal sealed class RateLimiter(TimeProvider time)
         return true;
     }
 
-    /// <summary>Drops every counter whose events have all left their window, at most once a minute.</summary>
+    /// <summary>How many counters are held: for tests of the memory bound.</summary>
+    internal int Count => counters.Count;
+
+    /// <summary>Drops every counter whose events have all left its window, at most once a minute.</summary>
     private void Sweep(DateTimeOffset now)
     {
         if (now - lastSweep < TimeSpan.FromMinutes(1))
@@ -130,14 +141,31 @@ internal sealed class RateLimiter(TimeProvider time)
         }
 
         lastSweep = now;
-        foreach (var (key, queue) in events)
+        foreach (var (key, counter) in counters)
         {
-            lock (queue)
+            lock (counter)
             {
-                if (queue.Count == 0 || now - queue.Peek() >= TimeSpan.FromDays(1))
+                counter.Trim(now);
+                if (counter.Events.Count == 0)
                 {
-                    events.TryRemove(key, out _);
+                    counter.Removed = true;
+                    counters.TryRemove(new KeyValuePair<(string, string), Counter>(key, counter));
                 }
+            }
+        }
+    }
+
+    private sealed class Counter(TimeSpan window)
+    {
+        public Queue<DateTimeOffset> Events { get; } = new();
+
+        public bool Removed { get; set; }
+
+        public void Trim(DateTimeOffset now)
+        {
+            while (Events.Count > 0 && now - Events.Peek() >= window)
+            {
+                Events.Dequeue();
             }
         }
     }

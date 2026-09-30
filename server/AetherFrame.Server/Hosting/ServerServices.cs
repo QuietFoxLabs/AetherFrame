@@ -114,24 +114,33 @@ internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, 
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var personas = await bindings.ListPersonasAsync(stoppingToken);
-            var pause = personas.Count == 0 ? TimeSpan.FromHours(1) : TimeSpan.FromTicks(Math.Max(MinimumPause.Ticks, TimeSpan.FromDays(1).Ticks / personas.Count));
-            foreach (var persona in personas)
+            // Nothing here may stop the host: every failure is logged by its type and the loop goes on.
+            try
             {
-                await Task.Delay(pause, time, stoppingToken);
-                try
+                var personas = await bindings.ListPersonasAsync(stoppingToken);
+                var pause = personas.Count == 0 ? TimeSpan.FromHours(1) : TimeSpan.FromTicks(Math.Max(MinimumPause.Ticks, TimeSpan.FromDays(1).Ticks / personas.Count));
+                foreach (var persona in personas)
                 {
-                    await RereadAsync(persona, stoppingToken);
+                    await Task.Delay(pause, time, stoppingToken);
+                    try
+                    {
+                        await RereadAsync(persona, stoppingToken);
+                    }
+                    catch (Exception e) when (e is not OperationCanceledException)
+                    {
+                        logger.LogWarning("A re-read failed with {ErrorKind}.", e.GetType().Name);
+                    }
                 }
-                catch (Exception e) when (e is not OperationCanceledException)
+
+                if (personas.Count == 0)
                 {
-                    logger.LogWarning("A re-read failed with {ErrorKind}.", e.GetType().Name);
+                    await Task.Delay(pause, time, stoppingToken);
                 }
             }
-
-            if (personas.Count == 0)
+            catch (Exception e) when (e is not OperationCanceledException)
             {
-                await Task.Delay(pause, time, stoppingToken);
+                logger.LogWarning("The re-read schedule failed with {ErrorKind}.", e.GetType().Name);
+                await Task.Delay(MinimumPause, time, stoppingToken);
             }
         }
     }
@@ -148,7 +157,7 @@ internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, 
         var read = await lodestone.ReadAsync(binding.LodestoneId, reread: true, cancellation);
         if (read.Outcome is LodestoneOutcome.Found or LodestoneOutcome.NotFound)
         {
-            await bindings.ApplyRereadAsync(persona, read.Character, cancellation);
+            await bindings.ApplyRereadAsync(persona, binding.LodestoneId, read.Character, cancellation);
         }
     }
 }

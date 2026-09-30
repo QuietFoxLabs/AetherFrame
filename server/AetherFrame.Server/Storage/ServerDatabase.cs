@@ -85,8 +85,11 @@ internal sealed class ServerDatabase
         this.logger = logger;
     }
 
-    /// <summary>How long a checkpoint is retried while readers block it.</summary>
+    /// <summary>How long a checkpoint is retried while readers block it, before it is left to <see cref="CheckpointRetries"/>.</summary>
     internal TimeSpan CheckpointPatience { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Whether a checkpoint gave up and is owed: <see cref="CheckpointRetries"/> runs it until it completes.</summary>
+    internal bool CheckpointOwed { get; private set; }
 
     /// <summary>Creates the tables and switches the file to write-ahead logging. Idempotent.</summary>
     public async Task InitializeAsync(CancellationToken cancellation)
@@ -118,8 +121,10 @@ internal sealed class ServerDatabase
 
     /// <summary>
     /// Runs <c>wal_checkpoint(TRUNCATE)</c> until its first result, "busy", is 0, backing off while
-    /// readers block it (decision D1), so deleted pages leave the write-ahead log too. Gives up after
-    /// <see cref="CheckpointPatience"/>, logging only that it did; the next deletion tries again.
+    /// readers block it (decision D1), so deleted pages leave the write-ahead log too. After
+    /// <see cref="CheckpointPatience"/> it leaves the checkpoint owed, and <see cref="CheckpointRetries"/>
+    /// keeps trying until it completes. Callers pass <see cref="CancellationToken.None"/> once their
+    /// deletion has committed, so a client that goes away can't skip it.
     /// </summary>
     public async Task<bool> CheckpointAsync(CancellationToken cancellation)
     {
@@ -134,13 +139,15 @@ internal sealed class ServerDatabase
                 await using var reader = await command.ExecuteReaderAsync(cancellation);
                 if (await reader.ReadAsync(cancellation) && reader.GetInt32(0) == 0)
                 {
+                    CheckpointOwed = false;
                     return true;
                 }
             }
 
             if (DateTime.UtcNow >= deadline)
             {
-                logger.LogWarning("A truncating checkpoint stayed blocked by readers.");
+                CheckpointOwed = true;
+                logger.LogWarning("A truncating checkpoint stayed blocked by readers; it is retried.");
                 return false;
             }
 
@@ -154,5 +161,28 @@ internal sealed class ServerDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(cancellation);
+    }
+}
+
+/// <summary>Runs an owed checkpoint (decision D1) every 30 seconds until it completes.</summary>
+internal sealed class CheckpointRetries(ServerDatabase database) : Microsoft.Extensions.Hosting.BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            if (database.CheckpointOwed)
+            {
+                try
+                {
+                    await database.CheckpointAsync(stoppingToken);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    // Still owed: the next round tries again.
+                }
+            }
+        }
     }
 }

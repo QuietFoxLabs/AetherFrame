@@ -23,7 +23,7 @@ internal enum RereadResult
     /// <summary>The first "not found" page: the binding stays until a second one a day later.</summary>
     NotFoundOnce,
 
-    /// <summary>A second "not found" page a day or more after the first: the binding and its content are gone.</summary>
+    /// <summary>A second "not found" page at least a day after the first: the binding and its content are gone.</summary>
     Removed,
 
     /// <summary>The key has no binding (any more).</summary>
@@ -169,25 +169,27 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
         await transaction.CommitAsync(cancellation);
         if (deleted)
         {
-            await database.CheckpointAsync(cancellation);
+            await database.CheckpointAsync(CancellationToken.None);
         }
 
         return new BindResult(profileId, deleted);
     }
 
     /// <summary>
-    /// Applies a re-read (decision C1). A page that was read updates the name and World, shows the
-    /// binding (hiding any other shown under the same name and World: the newest read wins), and
-    /// forgets any "not found". The Lodestone's own "not found" page removes the binding, as opting
-    /// out does, only on a second read at least a day after the first. Any other failure changes
-    /// nothing, and isn't passed here.
+    /// Applies a re-read of <paramref name="lodestoneId"/>'s page (decision C1). A page that was read
+    /// updates the name and World, shows the binding (hiding any other shown under the same name and
+    /// World: the newest read wins), and forgets any "not found". The Lodestone's own "not found" page
+    /// removes the binding, as opting out does, only on a read two or more calendar days after the
+    /// first: at least 24 hours later, and at most 48, with only a day number kept. Any other failure
+    /// changes nothing, and isn't passed here. A read of another character than the one the key's
+    /// binding holds now (the key opted out and bound again during the fetch) changes nothing.
     /// </summary>
-    public async Task<RereadResult> ApplyRereadAsync(PersonaId persona, LodestoneCharacter? character, CancellationToken cancellation)
+    public async Task<RereadResult> ApplyRereadAsync(PersonaId persona, long lodestoneId, LodestoneCharacter? character, CancellationToken cancellation)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellation);
         var binding = await FindAsync(connection, transaction, "persona = $value", persona.ToString(), cancellation);
-        if (binding is null)
+        if (binding is null || binding.LodestoneId != lodestoneId)
         {
             return RereadResult.NotBound;
         }
@@ -217,11 +219,11 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
             firstDay = await query.ExecuteScalarAsync(cancellation) is long day ? day : null;
         }
 
-        if (firstDay is { } first && Today - first >= 1)
+        if (firstDay is { } first && Today - first >= 2)
         {
             await DeleteAsync(connection, transaction, persona, cancellation);
             await transaction.CommitAsync(cancellation);
-            await database.CheckpointAsync(cancellation);
+            await database.CheckpointAsync(CancellationToken.None);
             return RereadResult.Removed;
         }
 
@@ -249,7 +251,11 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellation);
         var deleted = await DeleteAsync(connection, transaction, persona, cancellation);
         await transaction.CommitAsync(cancellation);
-        await database.CheckpointAsync(cancellation);
+        if (deleted)
+        {
+            await database.CheckpointAsync(CancellationToken.None);
+        }
+
         return deleted;
     }
 

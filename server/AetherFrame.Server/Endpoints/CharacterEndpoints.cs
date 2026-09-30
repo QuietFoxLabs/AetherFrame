@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using AetherFrame.Protocol;
 using AetherFrame.Protocol.Requests;
@@ -34,6 +35,12 @@ internal static class CharacterEndpoints
                 return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:challenge");
             }
 
+            var (body, failure) = await SignedRequests.ReadBoundedAsync(http, 0, http.RequestAborted);
+            if (body is null)
+            {
+                return SignedRequests.Fail(http, failure, "body:unread");
+            }
+
             var challenge = await challenges.IssueAsync(http.RequestAborted);
             return Results.Bytes(challenge.ToArray(), "application/octet-stream");
         });
@@ -55,9 +62,25 @@ internal static class CharacterEndpoints
                 return Results.Json(new CodeAnswer(code, (int)BindingStore.CodeLifetime.TotalSeconds), ServerJson.Options);
             }));
 
-        app.MapPost("/v1/lodestone/check", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings, Allowlist allowlist, LodestoneReader lodestone) =>
+        app.MapPost("/v1/lodestone/check", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings, Allowlist allowlist, LodestoneReader lodestone, LodestoneBudget budget, IOptions<ServerOptions> options) =>
             requests.RunActionAsync(http, RequestProofKind.LodestoneCheck, ServerLimits.LodestonePerAddress, async call =>
             {
+                var started = Stopwatch.GetTimestamp();
+
+                // Every failure below is the same "check failed" (decision C2), answered no sooner
+                // than the floor, so neither its answer nor its timing tells whether an id is on the
+                // allowlist; only the log's kind differs.
+                async Task<IResult> CheckFailedAsync(string kind)
+                {
+                    var wait = options.Value.CheckFailureFloor - Stopwatch.GetElapsedTime(started);
+                    if (wait > TimeSpan.Zero)
+                    {
+                        await Task.Delay(wait, http.RequestAborted);
+                    }
+
+                    return SignedRequests.Fail(http, StatusCodes.Status422UnprocessableEntity, kind);
+                }
+
                 var body = ActionBody.Read(call.Action.Body, CheckFields);
                 if (body is null || !LodestoneIds.TryParse(body.String("lodestoneId"), out var lodestoneId) || !LodestoneCodes.IsWellFormed(body.String("code")))
                 {
@@ -69,21 +92,26 @@ internal static class CharacterEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:lodestone");
                 }
 
-                // Every failure below is the same "check failed" (decision C2); only the log's kind differs.
+                // "Try again later" is answered before anything that differs between ids.
+                if (!budget.HasRoom(reread: false))
+                {
+                    return SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "check:busy");
+                }
+
                 var code = body.String("code");
                 if (!await bindings.HasCodeAsync(call.Persona, code, http.RequestAborted))
                 {
-                    return SignedRequests.Fail(http, StatusCodes.Status422UnprocessableEntity, "check:code");
+                    return await CheckFailedAsync("check:code");
                 }
 
                 if (!allowlist.Allows(lodestoneId))
                 {
-                    return SignedRequests.Fail(http, StatusCodes.Status422UnprocessableEntity, "check:allowlist");
+                    return await CheckFailedAsync("check:allowlist");
                 }
 
                 if (await bindings.FindByPersonaAsync(call.Persona, http.RequestAborted) is { } own && own.LodestoneId != lodestoneId)
                 {
-                    return SignedRequests.Fail(http, StatusCodes.Status422UnprocessableEntity, "check:second-character");
+                    return await CheckFailedAsync("check:second-character");
                 }
 
                 var read = await lodestone.ReadAsync(lodestoneId, reread: false, http.RequestAborted);
@@ -95,13 +123,13 @@ internal static class CharacterEndpoints
                 var character = read.Character;
                 if (character is null || !character.SelfIntroduction.Contains(code, StringComparison.Ordinal))
                 {
-                    return SignedRequests.Fail(http, StatusCodes.Status422UnprocessableEntity, "check:page");
+                    return await CheckFailedAsync("check:page");
                 }
 
                 var bound = await bindings.BindCharacterAsync(call.Persona, lodestoneId, character, http.RequestAborted);
                 if (bound is null)
                 {
-                    return SignedRequests.Fail(http, StatusCodes.Status422UnprocessableEntity, "check:second-character");
+                    return await CheckFailedAsync("check:second-character");
                 }
 
                 return Results.Json(new CheckAnswer(bound.ProfileId.ToString(), character.Name, character.World), ServerJson.Options);
@@ -132,7 +160,7 @@ internal static class CharacterEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "reread:" + read.Outcome);
                 }
 
-                var result = await bindings.ApplyRereadAsync(call.Persona, read.Character, http.RequestAborted);
+                var result = await bindings.ApplyRereadAsync(call.Persona, binding.LodestoneId, read.Character, http.RequestAborted);
                 if (result is RereadResult.Removed or RereadResult.NotBound)
                 {
                     return SignedRequests.Fail(http, StatusCodes.Status404NotFound, "reread:" + result);
@@ -145,7 +173,7 @@ internal static class CharacterEndpoints
             }));
 
         app.MapPost("/v1/opt-out", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings) =>
-            requests.RunActionAsync(http, RequestProofKind.OptOut, null, async call =>
+            requests.RunActionAsync(http, RequestProofKind.OptOut, ServerLimits.OptOutsPerAddress, async call =>
             {
                 if (ActionBody.Read(call.Action.Body, []) is null)
                 {

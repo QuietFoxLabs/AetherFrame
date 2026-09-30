@@ -7,6 +7,7 @@ using AetherFrame.Protocol;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Requests;
 using AetherFrame.Server.Hosting;
+using AetherFrame.Server.Limits;
 using AetherFrame.Server.Lodestone;
 using AetherFrame.Server.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -295,7 +296,9 @@ public class CharacterEndpointTests
         }
 
         server.Time.Advance(TimeSpan.FromHours(3));
-        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(player.Key.PublicKey.Id, null, default));
+        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(player.Key.PublicKey.Id, Aria, null, default));
+        server.Time.Advance(TimeSpan.FromDays(1));
+        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(player.Key.PublicKey.Id, Aria, null, default));
         Assert.NotNull(await store.FindByPersonaAsync(player.Key.PublicKey.Id, default));
 
         server.Time.Advance(TimeSpan.FromDays(1));
@@ -313,12 +316,151 @@ public class CharacterEndpointTests
         var store = server.Services.GetRequiredService<BindingStore>();
         var persona = player.Key.PublicKey.Id;
 
-        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(persona, null, default));
-        server.Time.Advance(TimeSpan.FromDays(1));
-        Assert.Equal(RereadResult.Updated, await store.ApplyRereadAsync(persona, new LodestoneCharacter("Aria Starfall", "Gilgamesh", ""), default));
-        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(persona, null, default));
-        server.Time.Advance(TimeSpan.FromDays(1));
-        Assert.Equal(RereadResult.Removed, await store.ApplyRereadAsync(persona, null, default));
+        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(persona, Aria, null, default));
+        server.Time.Advance(TimeSpan.FromDays(2));
+        Assert.Equal(RereadResult.Updated, await store.ApplyRereadAsync(persona, Aria, new LodestoneCharacter("Aria Starfall", "Gilgamesh", ""), default));
+        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(persona, Aria, null, default));
+        server.Time.Advance(TimeSpan.FromDays(2));
+        Assert.Equal(RereadResult.Removed, await store.ApplyRereadAsync(persona, Aria, null, default));
+    }
+
+    [Fact]
+    public async Task TwoNotFoundsAcrossMidnight_DontRemoveTheBinding()
+    {
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria);
+        var store = server.Services.GetRequiredService<BindingStore>();
+        var persona = player.Key.PublicKey.Id;
+
+        server.Time.Now = new DateTimeOffset(2026, 10, 1, 23, 59, 0, TimeSpan.Zero);
+        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(persona, Aria, null, default));
+        server.Time.Advance(TimeSpan.FromMinutes(2));
+        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(persona, Aria, null, default));
+        server.Time.Advance(TimeSpan.FromHours(23));
+        Assert.Equal(RereadResult.NotFoundOnce, await store.ApplyRereadAsync(persona, Aria, null, default));
+
+        // 24 hours and a minute after the first: gone.
+        server.Time.Advance(TimeSpan.FromMinutes(59));
+        Assert.Equal(RereadResult.Removed, await store.ApplyRereadAsync(persona, Aria, null, default));
+    }
+
+    [Fact]
+    public async Task AReread_OfAnotherCharacterThanTheBindingNowHolds_ChangesNothing()
+    {
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria, "Aria Starfall", "Gilgamesh");
+        var store = server.Services.GetRequiredService<BindingStore>();
+        Assert.Equal(RereadResult.NotBound, await store.ApplyRereadAsync(player.Key.PublicKey.Id, Bram, new LodestoneCharacter("Bram Oakes", "Balmung", ""), default));
+        Assert.Equal("Aria Starfall", (await store.FindByPersonaAsync(player.Key.PublicKey.Id, default))!.Name);
+    }
+
+    [Fact]
+    public async Task ALodestoneThatStallsMidBody_FailsTheCheckWithinTheDeadline()
+    {
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        ((LodestoneHttpPages)server.Services.GetRequiredService<ILodestonePages>()).Deadline = TimeSpan.FromMilliseconds(300);
+        var code = await player.CodeAsync();
+        server.Lodestone.Pages[Aria] = new LodestoneResponse(FakeLodestone.Stall, null);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        using var response = await player.CheckAsync(Aria, code);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(5), $"the check took {started.Elapsed}");
+
+        // The one-at-a-time gate was released: the next check fetches.
+        server.Lodestone.Pages[Aria] = LodestoneHtml.Character("Aria Starfall", "Gilgamesh", code);
+        using var next = await player.CheckAsync(Aria, code);
+        Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+    }
+
+    [Fact]
+    public async Task AFailedCheck_TakesAtLeastTheFloor_WhereverItFails()
+    {
+        using var server = new TestServer { CheckFailureFloor = TimeSpan.FromMilliseconds(400) };
+        using var player = server.NewPlayer();
+        var code = await player.CodeAsync();
+        foreach (var id in new[] { 45678901L, Aria })
+        {
+            server.Lodestone.Pages[Aria] = LodestoneHtml.Character("Aria Starfall", "Gilgamesh", "no code");
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            using var response = await player.CheckAsync(id, code);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+            Assert.True(started.Elapsed >= TimeSpan.FromMilliseconds(390), $"{id}: {started.Elapsed}");
+        }
+    }
+
+    [Fact]
+    public async Task AFullBudget_IsTheSameAnswerForEveryId()
+    {
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        var code = await player.CodeAsync();
+        var budget = server.Services.GetRequiredService<LodestoneBudget>();
+        for (var index = 0; index < LodestoneBudget.PerHour; index++)
+        {
+            Assert.True(budget.TryAcquire(reread: false));
+            budget.Release();
+        }
+
+        foreach (var id in new[] { 45678901L, Aria })
+        {
+            using var response = await player.CheckAsync(id, code);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        }
+
+        Assert.Empty(server.Lodestone.Fetched);
+    }
+
+    [Fact]
+    public async Task ARefusedChallenge_CountsAgainstTheAddressesChallenges()
+    {
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        var limiter = server.Services.GetRequiredService<RateLimiter>();
+        while (limiter.TryTakeAddress(ServerLimits.ChallengesPerAddress, null))
+        {
+        }
+
+        // Signed under a challenge the server never issued: no fresh one is minted past the limit.
+        using var response = await player.SendAsync("/v1/opt-out", RequestProofKind.OptOut, "{}", challenge: RequestChallenge.NewRandom());
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task OptingOut_IsLimitedPerAddress()
+    {
+        using var server = new TestServer();
+        for (var index = 0; index < ServerLimits.OptOutsPerAddress.Count; index++)
+        {
+            using var player = server.NewPlayer();
+            using var response = await player.SendAsync("/v1/opt-out", RequestProofKind.OptOut, "{}");
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        }
+
+        using var over = server.NewPlayer();
+        using var refused = await over.SendAsync("/v1/opt-out", RequestProofKind.OptOut, "{}");
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+    }
+
+    [Fact]
+    public async Task AChallengeRequest_HasNoBody()
+    {
+        using var server = new TestServer();
+        using var client = server.CreateClient();
+        using var response = await client.PostAsync("/v1/challenge", new System.Net.Http.ByteArrayContent([1]));
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TheLodestone_IsAskedAtItsOneAddressOnly()
+    {
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria);
+        Assert.Equal([new Uri("https://na.finalfantasyxiv.com/lodestone/character/12345678/")], server.Lodestone.Addresses);
     }
 
     [Fact]
@@ -436,6 +578,18 @@ public class CharacterEndpointTests
         Assert.Throws<InvalidOperationException>(new ServerOptions { DeploymentName = "plates.aetherframe.net", DatabasePath = "" }.Validate);
         Assert.Throws<InvalidOperationException>(new ServerOptions { DeploymentName = "plates.aetherframe.net", DatabasePath = "x.db", AllowedLodestoneIds = ["0123"] }.Validate);
         Assert.Throws<InvalidOperationException>(new ServerOptions { DeploymentName = "plates.aetherframe.net", DatabasePath = "x.db", KnownProxies = ["caddy"] }.Validate);
-        new ServerOptions { DeploymentName = "plates.aetherframe.net", DatabasePath = "x.db", AllowedLodestoneIds = ["12345678"], KnownProxies = ["172.18.0.2"] }.Validate();
+        var valid = new ServerOptions { DeploymentName = "plates.aetherframe.net", DatabasePath = "x.db", AllowedLodestoneIds = ["12345678"], KnownProxies = ["172.18.0.2"] };
+        valid.Validate();
+
+        // ASP.NET Core's forwarded-headers switch would clear the trusted proxies.
+        Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true");
+        try
+        {
+            Assert.Throws<InvalidOperationException>(valid.Validate);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", null);
+        }
     }
 }

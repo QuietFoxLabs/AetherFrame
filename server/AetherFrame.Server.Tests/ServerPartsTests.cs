@@ -162,6 +162,28 @@ public class ServerPartsTests
     }
 
     [Fact]
+    public void TheLimiter_KeepsADaysCountThroughItsSweeps_AndDropsEmptyCounters()
+    {
+        var time = new ManualTime(DateTimeOffset.UnixEpoch);
+        var limiter = new RateLimiter(time);
+        var daily = new Limit("daily", 2, TimeSpan.FromDays(1));
+        var hourly = new Limit("hourly", 1, TimeSpan.FromHours(1));
+        Assert.True(limiter.TryTake(daily, "id"));
+        Assert.True(limiter.TryTake(daily, "id"));
+        Assert.True(limiter.TryTake(hourly, "other"));
+
+        // Hours later, sweeps have run: the daily count stands, and the hourly counter is gone.
+        time.Now += TimeSpan.FromHours(20);
+        Assert.False(limiter.TryTake(daily, "id"));
+        time.Now += TimeSpan.FromMinutes(2);
+        Assert.False(limiter.TryTake(daily, "id"));
+        Assert.Equal(1, limiter.Count);
+
+        time.Now += TimeSpan.FromHours(4);
+        Assert.True(limiter.TryTake(daily, "id"));
+    }
+
+    [Fact]
     public async Task EveryPooledConnection_HasSecureDeleteOn()
     {
         using var server = new TestServer();

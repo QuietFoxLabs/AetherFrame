@@ -47,10 +47,10 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
             return Fail(http, StatusCodes.Status429TooManyRequests, "limit:" + addressLimit.Name);
         }
 
-        var body = await ReadBoundedAsync(http, MaxActionRequestBytes, http.RequestAborted);
+        var (body, bodyFailure) = await ReadBoundedAsync(http, MaxActionRequestBytes, http.RequestAborted);
         if (body is null)
         {
-            return Fail(http, StatusCodes.Status413PayloadTooLarge, "body:too-large");
+            return Fail(http, bodyFailure, "body:unread");
         }
 
         if (!TrySplit(body, out var proof, out var payload))
@@ -77,11 +77,12 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
     }
 
     /// <summary>
-    /// Reads the request body, refusing (null) any that is over <paramref name="bound"/> bytes before
+    /// Reads the request body, refusing any that is over <paramref name="bound"/> bytes before
     /// buffering more than the bound: Kestrel's own limit is set to the bound first, and the read
-    /// stops at it whatever the request's framing says.
+    /// stops at it whatever the request's framing says. A refusal is null with its status: 413 for a
+    /// body over the bound, 400 for one Kestrel can't read.
     /// </summary>
-    public static async Task<byte[]?> ReadBoundedAsync(HttpContext http, int bound, CancellationToken cancellation)
+    public static async Task<(byte[]? Body, int Failure)> ReadBoundedAsync(HttpContext http, int bound, CancellationToken cancellation)
     {
         var limit = http.Features.Get<IHttpMaxRequestBodySizeFeature>();
         if (limit is { IsReadOnly: false })
@@ -91,7 +92,7 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
 
         if (http.Request.ContentLength > bound)
         {
-            return null;
+            return (null, StatusCodes.Status413PayloadTooLarge);
         }
 
         using var buffer = new MemoryStream();
@@ -103,18 +104,18 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
             {
                 if (buffer.Length + read > bound)
                 {
-                    return null;
+                    return (null, StatusCodes.Status413PayloadTooLarge);
                 }
 
                 buffer.Write(chunk, 0, read);
             }
         }
-        catch (BadHttpRequestException e) when (e.StatusCode == StatusCodes.Status413PayloadTooLarge)
+        catch (BadHttpRequestException e)
         {
-            return null;
+            return (null, e.StatusCode == StatusCodes.Status413PayloadTooLarge ? StatusCodes.Status413PayloadTooLarge : StatusCodes.Status400BadRequest);
         }
 
-        return buffer.ToArray();
+        return (buffer.ToArray(), 0);
     }
 
     /// <summary>Splits a signed request's body into its proof and its payload (ServerApi-v1.md, section 2).</summary>
@@ -138,9 +139,18 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
         return true;
     }
 
-    /// <summary>A refused challenge: 409, with a fresh challenge to sign again under (rule 10).</summary>
+    /// <summary>
+    /// A refused challenge: 409, with a fresh challenge to sign again under (rule 10). The fresh one
+    /// counts against the address's challenge limit like any other, so refusals can't mint them
+    /// without limit; over it, the answer is 429 with none.
+    /// </summary>
     public async Task<IResult> RefuseChallengeAsync(HttpContext http)
     {
+        if (!limiter.TryTakeAddress(ServerLimits.ChallengesPerAddress, http.Connection.RemoteIpAddress))
+        {
+            return Fail(http, StatusCodes.Status429TooManyRequests, "limit:challenge");
+        }
+
         http.Items[ErrorKindItem] = "challenge";
         var fresh = await challenges.IssueAsync(http.RequestAborted);
         return new BytesWithStatus(StatusCodes.Status409Conflict, fresh.ToArray());

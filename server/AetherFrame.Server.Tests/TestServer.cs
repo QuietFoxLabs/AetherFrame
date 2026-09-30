@@ -46,6 +46,9 @@ internal sealed class TestServer : WebApplicationFactory<Program>
 
     public CapturedLog Log { get; } = new();
 
+    /// <summary>The failed check's floor: none, unless a test sets one before the server starts.</summary>
+    public TimeSpan CheckFailureFloor { get; set; } = TimeSpan.Zero;
+
     public string DatabasePath => Path.Combine(folder, "server.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -66,8 +69,10 @@ internal sealed class TestServer : WebApplicationFactory<Program>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
-            services.RemoveAll<ILodestonePages>();
-            services.AddSingleton<ILodestonePages>(Lodestone);
+
+            // The real Lodestone client, logging and all, with only its connection replaced.
+            services.AddHttpClient(LodestoneHttpPages.ClientName).ConfigurePrimaryHttpMessageHandler(() => new FakeLodestoneHandler(Lodestone));
+            services.PostConfigure<ServerOptions>(options => options.CheckFailureFloor = CheckFailureFloor);
         });
     }
 
@@ -177,17 +182,87 @@ internal sealed class ManualTime(DateTimeOffset start) : TimeProvider
     public void Advance(TimeSpan by) => Now += by;
 }
 
-/// <summary>A Lodestone that answers from a table, and counts what it was asked.</summary>
-internal sealed class FakeLodestone : ILodestonePages
+/// <summary>
+/// A Lodestone that answers from a table, and counts what it was asked. A status of 0 is a failed
+/// connection, and <see cref="Stall"/> sends the headers and then nothing.
+/// </summary>
+internal sealed class FakeLodestone
 {
+    public const int Stall = -1;
+
     public ConcurrentDictionary<long, LodestoneResponse> Pages { get; } = new();
 
     public ConcurrentQueue<long> Fetched { get; } = new();
 
-    public Task<LodestoneResponse> GetAsync(long lodestoneId, CancellationToken cancellation)
+    public ConcurrentQueue<Uri> Addresses { get; } = new();
+}
+
+/// <summary>The fake Lodestone's connection, which the real client sends its requests through.</summary>
+internal sealed class FakeLodestoneHandler(FakeLodestone lodestone) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        Fetched.Enqueue(lodestoneId);
-        return Task.FromResult(Pages.TryGetValue(lodestoneId, out var page) ? page : new LodestoneResponse(404, LodestoneHtml.NotFoundPage));
+        var address = request.RequestUri!;
+        lodestone.Addresses.Enqueue(address);
+        var id = long.Parse(address.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries)[^1], System.Globalization.CultureInfo.InvariantCulture);
+        lodestone.Fetched.Enqueue(id);
+        var page = lodestone.Pages.TryGetValue(id, out var found) ? found : new LodestoneResponse(404, LodestoneHtml.NotFoundPage);
+        if (page.Status == 0)
+        {
+            throw new HttpRequestException("connection refused");
+        }
+
+        if (page.Status == FakeLodestone.Stall)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new StallingStream()) });
+        }
+
+        var response = new HttpResponseMessage((HttpStatusCode)page.Status);
+        if (page.Html is not null)
+        {
+            response.Content = new StringContent(page.Html, Encoding.UTF8, "text/html");
+        }
+
+        if (page.Status is >= 300 and < 400)
+        {
+            response.Headers.Location = new Uri("https://example.com/elsewhere");
+        }
+
+        return Task.FromResult(response);
+    }
+
+    /// <summary>A body that never arrives.</summary>
+    private sealed class StallingStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }
 

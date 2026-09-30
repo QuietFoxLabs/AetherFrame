@@ -22,9 +22,9 @@ internal interface ILodestonePages
 /// <summary>
 /// The only way the server reaches the Lodestone (decision C2): <c>GET</c> of
 /// <c>https://na.finalfantasyxiv.com/lodestone/character/&lt;id&gt;/</c>, which serves every region's
-/// characters, with a fixed User-Agent, a 10-second timeout, no redirect followed and at most 1 MiB
-/// read. The host is fixed here, never configured or taken from a request, so the server can't be
-/// used as a proxy.
+/// characters, with a fixed User-Agent, no redirect followed, at most 1 MiB read, and one 10-second
+/// deadline over the whole fetch, the body included. The host is fixed here, never configured or
+/// taken from a request, so the server can't be used as a proxy.
 /// </summary>
 internal sealed class LodestoneHttpPages(IHttpClientFactory clients) : ILodestonePages
 {
@@ -34,24 +34,30 @@ internal sealed class LodestoneHttpPages(IHttpClientFactory clients) : ILodeston
 
     public static readonly Uri Origin = new("https://na.finalfantasyxiv.com/", UriKind.Absolute);
 
+    /// <summary>The deadline over one whole fetch: connecting, the headers and the body (decision C2).</summary>
+    internal TimeSpan Deadline { get; set; } = TimeSpan.FromSeconds(10);
+
     public async Task<LodestoneResponse> GetAsync(long lodestoneId, CancellationToken cancellation)
     {
         var address = new Uri(Origin, "lodestone/character/" + lodestoneId.ToString(CultureInfo.InvariantCulture) + "/");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        deadline.CancelAfter(Deadline);
+        var token = deadline.Token;
         try
         {
             using var client = clients.CreateClient(ClientName);
-            using var response = await client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, cancellation);
+            using var response = await client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, token);
             var status = (int)response.StatusCode;
             if (status is not (200 or 404) || response.Content.Headers.ContentLength > MaxBytes)
             {
                 return new LodestoneResponse(status, null);
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellation);
+            await using var stream = await response.Content.ReadAsStreamAsync(token);
             using var buffer = new MemoryStream();
             var chunk = new byte[16 * 1024];
             int read;
-            while ((read = await stream.ReadAsync(chunk, cancellation)) > 0)
+            while ((read = await stream.ReadAsync(chunk, token)) > 0)
             {
                 if (buffer.Length + read > MaxBytes)
                 {
@@ -63,7 +69,7 @@ internal sealed class LodestoneHttpPages(IHttpClientFactory clients) : ILodeston
 
             return new LodestoneResponse(status, System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException && !cancellation.IsCancellationRequested)
+        catch (Exception e) when (e is HttpRequestException or OperationCanceledException or IOException && !cancellation.IsCancellationRequested)
         {
             return new LodestoneResponse(0, null);
         }
@@ -136,6 +142,25 @@ internal sealed class LodestoneBudget(TimeProvider time)
         }
     }
 
+    /// <summary>Whether a fetch could start now, without taking a place: checked before anything that differs between requests.</summary>
+    public bool HasRoom(bool reread)
+    {
+        lock (gate)
+        {
+            var now = time.GetUtcNow();
+            var recentCount = 0;
+            foreach (var at in recent)
+            {
+                if (now - at < TimeSpan.FromHours(1))
+                {
+                    recentCount++;
+                }
+            }
+
+            return recentCount < (reread ? PerHour / 2 : PerHour) && inFlight < MaxQueued;
+        }
+    }
+
     public void Release()
     {
         lock (gate)
@@ -148,7 +173,7 @@ internal sealed class LodestoneBudget(TimeProvider time)
 /// <summary>Reads a character's page within the budget, and parses it. The page is discarded; nothing of it is logged.</summary>
 internal sealed class LodestoneReader(ILodestonePages pages, LodestoneBudget budget, Worlds worlds, ILogger<LodestoneReader> logger)
 {
-    private static readonly SemaphoreSlim OneAtATime = new(1, 1);
+    private readonly SemaphoreSlim oneAtATime = new(1, 1);
 
     public async Task<LodestoneRead> ReadAsync(long lodestoneId, bool reread, CancellationToken cancellation)
     {
@@ -159,7 +184,7 @@ internal sealed class LodestoneReader(ILodestonePages pages, LodestoneBudget bud
 
         try
         {
-            await OneAtATime.WaitAsync(cancellation);
+            await oneAtATime.WaitAsync(cancellation);
             LodestoneResponse response;
             try
             {
@@ -167,7 +192,7 @@ internal sealed class LodestoneReader(ILodestonePages pages, LodestoneBudget bud
             }
             finally
             {
-                OneAtATime.Release();
+                oneAtATime.Release();
             }
 
             if (response is { Status: 404, Html: { } missing } && LodestonePage.IsNotFoundPage(missing))

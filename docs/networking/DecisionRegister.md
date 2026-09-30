@@ -1228,9 +1228,12 @@ All of these are now above.
 - re-reads get half the fetch budget, so the daily schedule never blocks a player's check;
 - the newest read of a name and World wins, as C1 says for checks;
 - image limits follow the lookup limits, at up to 8 images a Plate;
-- IPv6 limits scale with the prefix, as R4 describes.
+- IPv6 limits scale with the prefix, as R4 describes;
+- a "not found" removes a binding only on a later day number two or more after the first, so the two reads are at least 24 hours apart, as C1 intends, while only a day number is kept.
 
-N2-7b's security review examines these with the code.
+**Recorded risk.** A failed check takes at least 3 seconds, and "try again later" is decided before anything that differs between ids, but a Lodestone fetch longer than 3 seconds can happen only for an id on the allowlist. In stage 1 that tells someone who holds a key and a live code, and who guesses a Lodestone id, whether it is one of the two testers': that the character uses AetherFrame, and so Dalamud. It is accepted for the two-player test; widening the allowlist needs a floor that covers the fetch, or a fetch for every id.
+
+N2-7b's security review examined these with the code (September 30, 2026). It asked for the day-number rule and the check's floor above, a limit on opting out per address, challenges from a `409` counted against the address, a deadline over the whole Lodestone fetch, re-reads applied only to the character they read, and checkpoints that a disconnect can't skip. All are applied.
 
 ## Gates
 

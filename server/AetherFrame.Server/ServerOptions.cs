@@ -54,6 +54,12 @@ public sealed class ServerOptions
     /// <summary>Whether the daily re-read runs (decision C1). Only the tests turn it off, to drive it themselves.</summary>
     public bool RereadsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// The least time a failed check takes to answer, so its timing doesn't tell an id on the
+    /// allowlist from one off it (ServerApi-v1.md, section 7). Not configurable; the tests shorten it.
+    /// </summary>
+    internal TimeSpan CheckFailureFloor { get; set; } = TimeSpan.FromSeconds(3);
+
     /// <summary>The checked deployment name.</summary>
     internal DeploymentName Deployment { get; private set; } = null!;
 
@@ -84,6 +90,13 @@ public sealed class ServerOptions
         if (KnownProxies.Any(text => !System.Net.IPAddress.TryParse(text, out _)))
         {
             throw new InvalidOperationException("AetherFrame:KnownProxies holds a value that is not an address.");
+        }
+
+        // ASP.NET Core's own switch for forwarded headers clears the trusted proxy lists, so any
+        // client could then set the address every limit counts (decision R4).
+        if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("ASPNETCORE_FORWARDEDHEADERS_ENABLED must not be set: the server trusts forwarded headers from AetherFrame:KnownProxies alone.");
         }
 
         if (!Version.TryParse(MinimumPlugin, out _))
