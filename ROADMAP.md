@@ -198,7 +198,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - NETWORK2 increment N2-3a, ProfileSnapshot schema 2: [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), merged as `e385b81`. The layout is a resolved paint list (the canvas, the background, text, image, quad, triangle, image-quad and art-quad items) in fixed-point integers, with a limit on every count, length and value; every carried image is drawn and every drawn image carried; PNG and JPEG only. The specification gains section 8.5 and Appendix A, D5's and N1's wording, and N7 as a consumer rule. N2-3 was split: the request proof is N2-3b.
 - NETWORK2 increment N2-3b, the request proof: [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), merged as `3371d08`. Every submission of a document to a server carries a proof in its own signing context, signed by the document's key, binding the server's deployment name, a single-use challenge the server issued, and the document's SHA-256. S1, D7 and L8 are APPROVED (Claude, under the owner's delegation of September 29, 2026) in the register, with a security reviewer's concurrence. The specification gains sections 5.1 and 14 and section 13's rule 10; the vectors gain valid and rejected proofs, and a regeneration now keeps every signature whose signed bytes are unchanged.
 - NETWORK2 increment N2-4, the Windows DPAPI key protector and the capability probe (NETWORK1 increment 7): [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), merged as `2d98245`. In the preview flavour only, and wired by nothing until N2-5. The protector keeps a key under CurrentUser DPAPI, bound to its envelope's header, and claims protection only for a blob carrying the Windows provider identifier. The probe turns viewing on only after a known-answer check, and persona features only after the whole key chain and that claim; its public entry point binds the claim. K2 and K3 record what N2-4 applies, with a security reviewer's concurrence. The player build declares no native call of its own.
-- The interface audit ([docs/InterfaceAudit.md](docs/InterfaceAudit.md)): this change. It maps thirteen common tasks through the windows. Five actions on a Plate (Set Active, Rename, Save as Template, Export, Duplicate) and starting a new Plate exist only in My Plates, so each means leaving the editor. Template management and My Plates' card actions exist, but only in right-click menus. Its six proposals become interface tasks, below. Proposals only: nothing a player sees changes before the audit is posted in the Owner inbox.
+- The interface audit ([docs/InterfaceAudit.md](docs/InterfaceAudit.md)): this change. It maps thirteen common tasks through the windows. Five actions on a Plate (Set Active, Rename, Save as Template, Export, Duplicate) and starting a new Plate exist only in My Plates, so each means leaving the editor. Template management and My Plates' card actions exist, but behind right-click menus or, for Templates, a quiet link inside Create Plate. Its six proposals become interface tasks, below. Proposals only: nothing a player sees changes before the audit is posted in the Owner inbox.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
@@ -237,18 +237,19 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 
 5. **Interface task 1: a Plate menu in the editors** (the audit's proposal 1, [docs/InterfaceAudit.md](docs/InterfaceAudit.md)). Prerequisite: the audit is posted in the Owner inbox. Acceptance:
    - My Plates' Plate actions (their prompts, busy, status and error handling, unsaved-changes guard and Export file dialog) move into one shared component first, with tests showing My Plates behaves exactly as before;
-   - both editors' action bar gains a Plate menu control that stays visible at the minimum window width and at 200% UI scale, with the card menu's own words: Rename..., Set Active, Save as Template..., Export... and Duplicate; Delete stays in My Plates only;
+   - both editors' action bar gains a Plate menu control that stays visible at the minimum window width and at 200% UI scale, with the card menu's own words: Rename, Set Active, Save as Template, Export and Duplicate; Delete stays in My Plates only;
    - Set Active is disabled with its reason when no character is logged in or the Plate already is Active;
-   - with unsaved changes, each action either saves first or says in the interface that it uses the last saved version; Duplicate opens the copy, and the original's unsaved changes go through today's prompt;
+   - with unsaved changes, each action other than Rename (which is safe) either saves first or says in the interface that it uses the last saved version; Duplicate opens the copy, and the original's unsaved changes go through today's prompt;
    - results and errors appear in the editor beside its save state;
-   - the tutorial gains anchors for the menu; the steps that describe the right-click path are rewritten, and `TutorialScript.Version` is bumped;
+   - the tutorial gains anchors for the menu; the steps that send players to My Plates or its card menu for these actions are rewritten (the saving step among them), the tutorial's "View" becomes the menu's "Preview", and `TutorialScript.Version` is bumped;
    - tests for the menu's wiring and its unsaved-changes behaviour, and an **In game** section for the owner.
 
 The audit's other proposals follow as interface tasks 2 to 6, in its order:
+
 2. Open another Plate... and New Plate... in the editors' Plate menu.
 3. A "..." button on the selected card in My Plates that opens the card menu.
 4. Making Template management findable in the chooser.
-5. A notice when a character has Plates but no Active Plate (only if the owner wants it).
+5. A notice when My Plates holds Plates but the logged-in character has no Active Plate (only if the owner wants it).
 6. Window placement, once the owner has checked it in game.
 
 They are interleaved with NETWORK2 wherever networking waits on the owner or on a review.
