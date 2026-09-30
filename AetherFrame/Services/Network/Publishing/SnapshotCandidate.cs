@@ -32,11 +32,13 @@ internal readonly record struct PixelWindow(int X, int Y, int Width, int Height)
 }
 
 /// <summary>
-/// A prepared copy the Plate needs: a managed image, cropped to the union of the windows of it
-/// that are drawn. <paramref name="SourceWidth"/> by <paramref name="SourceHeight"/> is the size
-/// the window was computed against (the file's header): preparation refuses a decoded image of any
-/// other size, rather than crop a window that isn't the one drawn. Every Fill window is centred in
-/// its image, so a copy cropped to their union gives each item back its own window under Fill.
+/// A window of a managed image that the Plate draws, and, once resolved, a prepared copy it needs:
+/// cropped to that window and no more. An image drawn with several windows needs a copy of each,
+/// except a window inside another, which is drawn from that one's copy (every window is centred in
+/// its image, so Fill on the larger copy gives the smaller window back).
+/// <paramref name="SourceWidth"/> by <paramref name="SourceHeight"/> is the size the window was
+/// computed against (the file's header): preparation refuses a decoded image of any other size,
+/// rather than crop a window that isn't the one drawn.
 /// </summary>
 internal readonly record struct ImageRequirement(Guid Image, PixelWindow Window, int SourceWidth, int SourceHeight);
 
@@ -89,19 +91,20 @@ internal abstract record ResolvedStep;
 /// </summary>
 internal sealed record ResolvedText(TextProfileElement Element, string Text, float FontSize, bool Wrap, bool AutoFit, bool SizeBaked) : ResolvedStep;
 
-/// <summary>An image element, and the window of its image it draws.</summary>
+/// <summary>An image element, and the prepared copy it draws from: its own window, or one holding it.</summary>
 internal sealed record ResolvedImage(ImageProfileElement Element, ImageRequirement Image) : ResolvedStep;
 
 /// <summary>
 /// One primitive of <paramref name="Component"/>'s placement: a filled quad or triangle, the
-/// component's image (<paramref name="Image"/>, the whole of it), or its bundled art
+/// component's image (<paramref name="Image"/>, the copy of the whole of it), or its bundled art
 /// (<paramref name="Art"/>, the art's id).
 /// </summary>
 internal sealed record ResolvedShape(ComponentPrimitive Primitive, ImageRequirement? Image, string? Art, PlateComponent? Component = null) : ResolvedStep;
 
 /// <summary>
 /// The background as it draws: null when it draws nothing at all; <paramref name="NoBase"/> when
-/// Image mode has no image, so only its pattern draws; and the window of its image it draws.
+/// Image mode has no image, so only its pattern draws; and the prepared copy of its image it draws
+/// from.
 /// </summary>
 internal sealed record ResolvedBackground(ProfileBackground? Background, ImageRequirement? Image, bool NoBase)
 {
@@ -114,7 +117,7 @@ internal enum LeftOutReason
     /// <summary>A text with nothing to show.</summary>
     Empty,
 
-    /// <summary>A text or image at an opacity of 0.</summary>
+    /// <summary>A text or image drawn fully transparent: at an alpha the renderer turns into 0.</summary>
     Transparent,
 
     /// <summary>Wholly outside what the Profile View shows (the canvas and every component's painted bounds).</summary>
@@ -129,8 +132,8 @@ internal readonly record struct LeftOutItem(ProfileElement? Element, PlateCompon
 
 /// <summary>
 /// A saved Plate as the local renderer visibly draws it: its canvas and background, the steps in
-/// paint order, what was left out, the image windows those steps draw (each once, in the order
-/// first drawn), and the reasons found so far that it can't be shared.
+/// paint order, what was left out, the prepared copies those steps draw from (each once, in the
+/// order first drawn), and the reasons found so far that it can't be shared.
 /// </summary>
 internal sealed class ResolvedPlate
 {
@@ -164,7 +167,7 @@ internal sealed class ResolvedPlate
 
     internal IReadOnlyList<LeftOutItem> LeftOut { get; }
 
-    /// <summary>The prepared copies needed: each drawn window of each managed image, once.</summary>
+    /// <summary>The prepared copies needed, each once: every window of a managed image that is drawn, bar those inside another.</summary>
     internal IReadOnlyList<ImageRequirement> Requirements { get; }
 
     internal IReadOnlyList<PlateSnapshotProblem> Problems { get; }
@@ -206,7 +209,11 @@ internal enum PlateSnapshotRefusal
     /// <summary>An element of a kind this build doesn't know.</summary>
     UnknownElement,
 
-    /// <summary>Something a newer AetherFrame made, which this build keeps but can't show.</summary>
+    /// <summary>
+    /// Something a newer AetherFrame made, which this build keeps but can't show as its maker saw
+    /// it: an element or component it can't read, a component of a kind or definition it doesn't
+    /// know, or a setting it doesn't recognize on something drawn.
+    /// </summary>
     MadeByNewerVersion,
 
     /// <summary>An image element's image is missing.</summary>
@@ -225,8 +232,11 @@ internal enum PlateSnapshotRefusal
     ImageUnshareable,
 }
 
-/// <summary>One reason a Plate can't be shared, and the element it is about, when there is one.</summary>
-internal readonly record struct PlateSnapshotProblem(PlateSnapshotRefusal Refusal, ProfileElement? Element);
+/// <summary>
+/// One reason a Plate can't be shared, and what it is about: an element, a component, or the
+/// background (<paramref name="Background"/>); the Plate as a whole when none of them.
+/// </summary>
+internal readonly record struct PlateSnapshotProblem(PlateSnapshotRefusal Refusal, ProfileElement? Element, PlateComponent? Component = null, bool Background = false);
 
 /// <summary>
 /// Everything a Plate's snapshot will say, resolved, prepared and checked before the consent

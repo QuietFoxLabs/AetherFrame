@@ -7,10 +7,12 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Persistence;
 using AetherFrame.Protocol;
 using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
@@ -271,15 +273,15 @@ public sealed class PlateSnapshotBuilderTests
         Assert.Equal(new LayoutPoint(1013, 2050), item.Position);
         Assert.Equal((30_000, 4025), (item.Width, item.Height));
 
-        // The renderer draws a family it lacks in Dalamud's default font.
+        // The renderer draws a family it lacks in Dalamud's default font, which has no bold or
+        // italic face, so neither is drawn, or shared.
         Assert.Equal(ProfileFontFamilies.DalamudDefault, item.Font);
         Assert.Equal(1800, item.FontSize);
         Assert.Equal(new LayoutColor(255, 128, 0, 204), item.Color);
         Assert.Equal(LayoutHorizontalAlign.Right, item.Align);
         Assert.Equal(LayoutVerticalAlign.Bottom, item.VerticalAlign);
         Assert.Equal(
-            LayoutTextFlags.Bold | LayoutTextFlags.Italic | LayoutTextFlags.Underline | LayoutTextFlags.Strikethrough
-                | LayoutTextFlags.AutoFit | LayoutTextFlags.Outline | LayoutTextFlags.Shadow,
+            LayoutTextFlags.Underline | LayoutTextFlags.Strikethrough | LayoutTextFlags.AutoFit | LayoutTextFlags.Outline | LayoutTextFlags.Shadow,
             item.Flags);
         Assert.Equal(-125, item.LetterSpacing);
         Assert.Equal(125, item.LineSpacing);
@@ -296,6 +298,24 @@ public sealed class PlateSnapshotBuilderTests
         Assert.Equal(1, item.OutlineThickness);
         Assert.Equal((-250, 400), (item.ShadowX, item.ShadowY));
         Assert.Equal(LayoutTextLayout.Legacy, item.Layout);
+    }
+
+    [Fact]
+    public void ATextsSize_Bold_AndItalic_AreSharedAsTheRendererDrawsThem()
+    {
+        foreach (var (family, faces) in new[] { (ProfileFontFamilies.AetherFrameSans, true), (ProfileFontFamilies.DalamudDefault, false), ("a-font-this-build-lacks", false) })
+        {
+            var plate = Blank();
+            plate.Elements.Add(new TextProfileElement { Text = "Styled", FontFamily = family, FontSize = 0.5f, Bold = true, Italic = true });
+
+            var item = Assert.IsType<LayoutText>(Assert.Single(Build(Resolve(plate)).Items));
+
+            // A text is drawn at no less than one canvas unit, and bold or italic only in a font
+            // with those faces.
+            Assert.Equal(100, item.FontSize);
+            Assert.Equal(faces, item.Flags.HasFlag(LayoutTextFlags.Bold));
+            Assert.Equal(faces, item.Flags.HasFlag(LayoutTextFlags.Italic));
+        }
     }
 
     [Fact]
@@ -352,9 +372,15 @@ public sealed class PlateSnapshotBuilderTests
         var away = new ImageProfileElement { AssetId = Guid.NewGuid(), Position = new Vector2(5_000f, 5_000f), Size = new Vector2(10f, 10f), ZIndex = 3 };
         var edge = new TextProfileElement { Text = "Edge", Position = new Vector2(-50f, 10f), Size = new Vector2(52f, 20f), ZIndex = 4 };
         var shadowed = new TextProfileElement { Text = "Shadow", Position = new Vector2(-60f, 10f), Size = new Vector2(55f, 20f), ShadowEnabled = true, ShadowOffsetX = 8f, ZIndex = 5 };
-        plate.Elements.AddRange([empty, clear, faded, away, edge, shadowed]);
 
-        var candidate = Candidate(Resolve(plate));
+        // ImGui turns an alpha under half a 255th into 0: 0.0019 draws nothing, 0.002 draws at 1.
+        var faint = new TextProfileElement { Text = "Faint", Color = new Vector4(1f, 1f, 1f, 0.0019f), OutlineEnabled = true, ShadowEnabled = true, ZIndex = 6 };
+        var dim = new ImageProfileElement { AssetId = Guid.NewGuid(), Opacity = 0.0019f, ZIndex = 7 };
+        var justShown = new TextProfileElement { Text = "Just", Color = new Vector4(1f, 1f, 1f, 0.002f), ZIndex = 8 };
+        plate.Elements.AddRange([empty, clear, faded, away, edge, shadowed, faint, dim, justShown]);
+
+        var resolved = Resolve(plate);
+        var candidate = Candidate(resolved);
 
         Assert.Equal(
             new[]
@@ -363,12 +389,43 @@ public sealed class PlateSnapshotBuilderTests
                 new LeftOutItem(clear, null, LeftOutReason.Transparent),
                 new LeftOutItem(faded, null, LeftOutReason.Transparent),
                 new LeftOutItem(away, null, LeftOutReason.OutsideView),
+                new LeftOutItem(faint, null, LeftOutReason.Transparent),
+                new LeftOutItem(dim, null, LeftOutReason.Transparent),
             },
             candidate.LeftOut);
 
         // A text crossing the canvas's edge, or whose shadow reaches onto it, is drawn, and shared.
-        Assert.Equal(new[] { "Edge", "Shadow" }, candidate.Items.Cast<LayoutText>().Select(t => t.Text));
+        Assert.Equal(new[] { "Edge", "Shadow", "Just" }, candidate.Items.Cast<LayoutText>().Select(t => t.Text));
+        Assert.Equal(1, candidate.Items.Cast<LayoutText>().Last().Color.A);
+        Assert.Empty(resolved.Requirements);
         Assert.Empty(candidate.Images);
+    }
+
+    [Fact]
+    public void ABackgroundOrComponentTooFaintToShow_NeedsNoImage_ThoughAMissingOneIsStillRefused()
+    {
+        // At an opacity ImGui turns into 0 the background draws nothing, pattern included, and
+        // its image isn't prepared.
+        var plate = Blank();
+        var image = Guid.NewGuid();
+        plate.Background = new ProfileBackground { Mode = ProfileBackgroundMode.Image, ImageAssetId = image, Opacity = 0.0019f, Texture = ProfileBackgroundTexture.Dots };
+        var resolved = Resolve(plate);
+        Assert.Empty(resolved.Requirements);
+        Assert.Equal(Fingerprint(LayoutBackground.None), Fingerprint(Build(resolved).Background));
+
+        // A missing image still draws its placeholder at any opacity above 0, so it is refused.
+        var measurements = new Measurements();
+        measurements.Missing.Add(image);
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null, Background: true), Assert.Single(Refusals(Resolve(plate, measurements))));
+
+        // A component that faint draws nothing, and its image isn't prepared either.
+        var framed = ComponentDocuments.WithAnchors();
+        var overlay = ImageComponent();
+        overlay.Opacity = 0.0019f;
+        framed.Components = [overlay];
+        var framedResolved = Resolve(framed);
+        Assert.DoesNotContain(framedResolved.Requirements, requirement => requirement.Image == overlay.AssetId);
+        Assert.DoesNotContain(framedResolved.Steps, step => step is ResolvedShape shape && shape.Component == overlay);
     }
 
     [Fact]
@@ -419,14 +476,16 @@ public sealed class PlateSnapshotBuilderTests
     }
 
     [Fact]
-    public void EachImage_IsPreparedOnce_CroppedToTheUnionOfTheWindowsDrawnOfIt()
+    public void AWindowInsideAnother_IsDrawnFromThatOnesCopy_EachImagePreparedOncePerCopy()
     {
         var plate = Blank();
         var photo = Guid.NewGuid();
         var whole = Guid.NewGuid();
-        plate.Elements.Add(new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fill, Size = new Vector2(100f, 100f), ZIndex = 0 });
-        plate.Elements.Add(new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fill, Size = new Vector2(200f, 100f), ZIndex = 1 });
-        plate.Elements.Add(new ImageProfileElement { AssetId = whole, DisplayMode = ProfileImageFit.Fit, Size = new Vector2(100f, 100f), ZIndex = 2 });
+        var square = new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fill, Size = new Vector2(100f, 100f), ZIndex = 0 };
+        var wide = new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fill, Size = new Vector2(200f, 100f), ZIndex = 1 };
+        var again = new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fill, Size = new Vector2(50f, 50f), Position = new Vector2(300f, 300f), ZIndex = 2 };
+        var fitted = new ImageProfileElement { AssetId = whole, DisplayMode = ProfileImageFit.Fit, Size = new Vector2(100f, 100f), ZIndex = 3 };
+        plate.Elements.AddRange([square, wide, again, fitted]);
         var measurements = new Measurements();
         measurements.Sizes[photo] = (1000, 400);
         measurements.Sizes[whole] = (300, 200);
@@ -434,25 +493,32 @@ public sealed class PlateSnapshotBuilderTests
         var resolved = Resolve(plate, measurements);
 
         // A square Fill of a 1,000 by 400 image draws its middle 400 by 400, and a 2:1 Fill its
-        // middle 800 by 400 (each widened outward to whole pixels); the copy holds their union, and
-        // a Fit draws the whole of its image.
-        var square = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, new Vector2(100f, 100f), 1000, 400);
-        var wide = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, new Vector2(200f, 100f), 1000, 400);
-        Assert.InRange(square.X, 299, 300);
-        Assert.InRange(square.Width, 400, 402);
-        Assert.InRange(wide.X, 99, 100);
-        Assert.InRange(wide.Width, 800, 802);
-        var union = new PixelWindow(Math.Min(square.X, wide.X), 0, Math.Max(square.X + square.Width, wide.X + wide.Width) - Math.Min(square.X, wide.X), 400);
-        Assert.Equal(
-            new[] { new ImageRequirement(photo, union, 1000, 400), new ImageRequirement(whole, PixelWindow.Whole(300, 200), 300, 200) },
-            resolved.Requirements);
-        Assert.All(resolved.Steps.Cast<ResolvedImage>(), step => Assert.Contains(step.Image, resolved.Requirements));
+        // middle 800 by 400 (each widened outward to whole pixels). The square window is inside
+        // the wide one, so every square draws from the wide one's copy; a Fit draws the whole of
+        // its image.
+        var squareWindow = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, square.Size, 1000, 400);
+        var wideWindow = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, wide.Size, 1000, 400);
+        Assert.InRange(squareWindow.X, 299, 300);
+        Assert.InRange(squareWindow.Width, 400, 402);
+        Assert.InRange(wideWindow.X, 99, 100);
+        Assert.InRange(wideWindow.Width, 800, 802);
+        var copy = new ImageRequirement(photo, wideWindow, 1000, 400);
+        Assert.Equal(new[] { copy, new ImageRequirement(whole, PixelWindow.Whole(300, 200), 300, 200) }, resolved.Requirements);
+        Assert.Equal(new[] { copy, copy, copy }, resolved.Steps.Cast<ResolvedImage>().Take(3).Select(step => step.Image));
 
         var snapshot = Build(resolved);
         Assert.Equal(2, snapshot.Images.Count);
         Assert.Equal(
-            snapshot.Items.Cast<LayoutImage>().Take(2).Select(i => i.AssetId).Distinct().Single(),
-            snapshot.Images.Single(i => i.Width == union.Width).AssetId);
+            snapshot.Items.Cast<LayoutImage>().Take(3).Select(i => i.AssetId).Distinct().Single(),
+            snapshot.Images.Single(i => i.Width == wideWindow.Width).AssetId);
+
+        // Fill of the wide copy at the square's shape samples the square's own window: both are
+        // centred, and span the image's whole height.
+        var original = ImageFitLayout.Compute(ProfileImageFit.Fill, square.Size, new Vector2(1000f, 400f), ImageFitLayout.FullSource, flipX: false, flipY: false);
+        var fromCopy = ImageFitLayout.Compute(ProfileImageFit.Fill, square.Size, new Vector2(wideWindow.Width, wideWindow.Height), ImageFitLayout.FullSource, flipX: false, flipY: false);
+        Assert.Equal(original.UvMin.X * 1000f, wideWindow.X + (fromCopy.UvMin.X * wideWindow.Width), 2);
+        Assert.Equal(original.UvMax.X * 1000f, wideWindow.X + (fromCopy.UvMax.X * wideWindow.Width), 2);
+        Assert.Equal((original.UvMin.Y, original.UvMax.Y), (fromCopy.UvMin.Y, fromCopy.UvMax.Y));
 
         // The background's Fill window is taken against the canvas.
         var background = Blank();
@@ -461,6 +527,61 @@ public sealed class PlateSnapshotBuilderTests
         var expected = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, new Vector2(background.CanvasWidth, background.CanvasHeight), 1000, 400);
         Assert.Equal(new ImageRequirement(photo, expected, 1000, 400), Assert.Single(Resolve(background, measurements).Requirements));
         Assert.True(canvasAspect > 0f && expected.Width < 1000);
+    }
+
+    [Fact]
+    public void WindowsAcrossEachOthersAxis_AreSeparateCopies_SoNoCornerNeitherDrawsIsShared()
+    {
+        // A 1,000 by 400 image drawn by a tall Fill (its middle 100 by 400) and a wide one (its
+        // middle 1,000 by 100): their union would hold four corners neither draws.
+        var plate = Blank();
+        var photo = Guid.NewGuid();
+        var tall = new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fill, Size = new Vector2(25f, 100f), ZIndex = 0 };
+        var band = new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fill, Size = new Vector2(1000f, 100f), ZIndex = 1 };
+        plate.Elements.AddRange([tall, band]);
+        var measurements = new Measurements();
+        measurements.Sizes[photo] = (1000, 400);
+
+        var resolved = Resolve(plate, measurements);
+
+        var tallWindow = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, tall.Size, 1000, 400);
+        var bandWindow = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, band.Size, 1000, 400);
+        Assert.Equal((0, 400), (tallWindow.Y, tallWindow.Height));
+        Assert.InRange(tallWindow.X, 449, 450);
+        Assert.InRange(tallWindow.Width, 100, 102);
+        Assert.Equal((0, 1000), (bandWindow.X, bandWindow.Width));
+        Assert.InRange(bandWindow.Y, 149, 150);
+        Assert.InRange(bandWindow.Height, 100, 102);
+        Assert.Equal(new[] { new ImageRequirement(photo, tallWindow, 1000, 400), new ImageRequirement(photo, bandWindow, 1000, 400) }, resolved.Requirements);
+        Assert.Equal(new[] { tallWindow, bandWindow }, resolved.Steps.Cast<ResolvedImage>().Select(step => step.Image.Window));
+
+        var snapshot = Build(resolved);
+        var sizes = snapshot.Images.ToDictionary(image => image.AssetId, image => (image.Width, image.Height));
+        Assert.Equal(2, sizes.Count);
+        Assert.Equal(new[] { (tallWindow.Width, 400), (1000, bandWindow.Height) }, snapshot.Items.Cast<LayoutImage>().Select(image => sizes[image.AssetId]));
+
+        // Every Fill window is centred exactly, so Fill on its copy samples what Fill on the image does.
+        foreach (var (width, height) in new[] { (1000, 400), (1001, 400), (333, 777), (4096, 17), (7, 8192) })
+        {
+            foreach (var box in new[] { new Vector2(200f, 100f), new Vector2(25f, 100f), new Vector2(1f, 3f), new Vector2(123.4f, 56.7f) })
+            {
+                var window = PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, box, width, height);
+                Assert.Equal((width, height), ((2 * window.X) + window.Width, (2 * window.Y) + window.Height));
+
+                var original = ImageFitLayout.Compute(ProfileImageFit.Fill, box, new Vector2(width, height), ImageFitLayout.FullSource, flipX: false, flipY: false);
+                var fromCopy = ImageFitLayout.Compute(ProfileImageFit.Fill, box, new Vector2(window.Width, window.Height), ImageFitLayout.FullSource, flipX: false, flipY: false);
+                Assert.InRange((original.UvMin.X * width) - (window.X + (fromCopy.UvMin.X * window.Width)), -0.01f, 0.01f);
+                Assert.InRange((original.UvMax.X * width) - (window.X + (fromCopy.UvMax.X * window.Width)), -0.01f, 0.01f);
+                Assert.InRange((original.UvMin.Y * height) - (window.Y + (fromCopy.UvMin.Y * window.Height)), -0.01f, 0.01f);
+                Assert.InRange((original.UvMax.Y * height) - (window.Y + (fromCopy.UvMax.Y * window.Height)), -0.01f, 0.01f);
+            }
+        }
+
+        // A Fit of the same image draws all of it, so its copy holds both, and all three draw from it.
+        plate.Elements.Add(new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fit, Size = new Vector2(100f, 100f), ZIndex = 2 });
+        var withWhole = Resolve(plate, measurements);
+        Assert.Equal(new ImageRequirement(photo, PixelWindow.Whole(1000, 400), 1000, 400), Assert.Single(withWhole.Requirements));
+        Assert.All(withWhole.Steps.Cast<ResolvedImage>(), step => Assert.Equal(PixelWindow.Whole(1000, 400), step.Image.Window));
     }
 
     [Fact]
@@ -568,14 +689,14 @@ public sealed class PlateSnapshotBuilderTests
 
         // A missing image: refused where the renderer draws a placeholder, left out where it draws nothing.
         Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.ImageMissing, portrait), Assert.Single(With(drawn, ImageUnavailableReason.Missing)));
-        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null), Assert.Single(With(background, ImageUnavailableReason.Missing)));
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null, Background: true), Assert.Single(With(background, ImageUnavailableReason.Missing)));
         var missingOverlay = Prepared(resolved);
         missingOverlay[component] = ImagePreparation.Unavailable(ImageUnavailableReason.Missing);
         var candidate = Candidate(resolved, missingOverlay);
         Assert.Contains(new LeftOutItem(null, overlay, LeftOutReason.ImageMissing), candidate.LeftOut);
         Assert.DoesNotContain(candidate.Items, item => item is LayoutImageQuad);
 
-        // Any other reason refuses the Plate, whichever item draws the image.
+        // Any other reason refuses the Plate, whichever item draws the image, naming that item.
         foreach (var (reason, refusal) in new[]
         {
             (ImageUnavailableReason.TooLarge, PlateSnapshotRefusal.ImageTooLarge),
@@ -584,8 +705,8 @@ public sealed class PlateSnapshotBuilderTests
         })
         {
             Assert.Equal(new PlateSnapshotProblem(refusal, portrait), Assert.Single(With(drawn, reason)));
-            Assert.Equal(new PlateSnapshotProblem(refusal, null), Assert.Single(With(background, reason)));
-            Assert.Equal(new PlateSnapshotProblem(refusal, null), Assert.Single(With(component, reason)));
+            Assert.Equal(new PlateSnapshotProblem(refusal, null, Background: true), Assert.Single(With(background, reason)));
+            Assert.Equal(new PlateSnapshotProblem(refusal, null, overlay), Assert.Single(With(component, reason)));
         }
 
         Assert.Throws<ArgumentException>(() => PlateSnapshotBuilder.Map(resolved, new Dictionary<ImageRequirement, ImagePreparation>()));
@@ -646,14 +767,34 @@ public sealed class PlateSnapshotBuilderTests
     }
 
     [Fact]
-    public void AVisibleComponentThisBuildDoesntKnow_IsRefused_AHiddenOneIsNot()
+    public void AVisibleComponentThisBuildDoesntKnow_IsRefused_NamingIt_AHiddenOneIsNot()
     {
-        var plate = Blank();
-        plate.Components = [new PlateComponent { Kind = PlateComponentKind.PlateFrame, DefinitionId = "af.component.from-a-newer-build" }];
-        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null), Assert.Single(Refusals(Resolve(plate))));
+        // As a newer build saves them, read back as a player's Plate is: an unknown kind with a
+        // definition, and a known kind with an unknown definition, both kept as they are.
+        var json = PlateDocuments.ToJson(Blank());
+        json["Components"] = new JsonArray(
+            new JsonObject { ["Kind"] = 99, ["DefinitionId"] = "af.hologram.sparkle" },
+            new JsonObject { ["Kind"] = 1, ["DefinitionId"] = "af.plate-frame.from-the-future" });
+        var plate = PlateDocuments.Materialize(json);
+        Assert.Equal(2, plate.Components!.Count);
+        Assert.Null(plate.UnrecognizedComponents);
 
-        plate.Components[0].Visible = false;
+        Assert.Equal(
+            plate.Components.Select(component => new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null, component)),
+            Refusals(Resolve(plate)));
+
+        foreach (var component in plate.Components)
+        {
+            component.Visible = false;
+        }
+
         Assert.NotNull(Candidate(Resolve(plate)));
+
+        // A Components value that isn't a list at all is kept as it is, and refused.
+        json["Components"] = new JsonObject { ["Kind"] = 1 };
+        var malformed = PlateDocuments.Materialize(json);
+        Assert.NotNull(malformed.MalformedComponentsValue);
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null), Assert.Single(Refusals(Resolve(malformed))));
     }
 
     [Fact]
@@ -661,7 +802,7 @@ public sealed class PlateSnapshotBuilderTests
     {
         var plate = Blank();
         plate.Background = new ProfileBackground { Mode = ProfileBackgroundMode.Image, ImageAssetId = Guid.Empty };
-        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null), Assert.Single(Refusals(Resolve(plate))));
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null, Background: true), Assert.Single(Refusals(Resolve(plate))));
     }
 
     [Fact]
@@ -695,6 +836,10 @@ public sealed class PlateSnapshotBuilderTests
         }
 
         Assert.Contains(Refusals(Resolve(plate)), p => p.Refusal == PlateSnapshotRefusal.TooManyImages);
+
+        // Eight, the limit, are shared.
+        plate.Elements.RemoveAt(plate.Elements.Count - 1);
+        Assert.Equal(ProtocolLimits.MaxImagesPerProfile, Candidate(Resolve(plate)).Images.Count);
 
         // Two images of 8,192 by 2,049 hold 33,570,816 pixels, 16,384 over the limit; by 2,048, exactly at it.
         foreach (var (rows, allowed) in new[] { (2049, false), (2048, true) })
@@ -795,10 +940,35 @@ public sealed class PlateSnapshotBuilderTests
         var component = Blank();
         component.UnrecognizedComponents = [JsonSerializer.SerializeToElement(new { kind = 99 })];
         Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null), Assert.Single(Refusals(Resolve(component))));
+
+        // A setting this build doesn't recognize on what is drawn: the package check's "settings
+        // from a newer version", named where it is met.
+        var settings = Blank();
+        var role = new TextProfileElement { Text = "Role", Role = (ProfileElementRole)999, ZIndex = 0 };
+        var align = new TextProfileElement { Text = "Align", Alignment = (TextAlignment)9, ZIndex = 1 };
+        var vertical = new TextProfileElement { Text = "Vertical", VerticalAlignment = (TextVerticalAlignment)9, ZIndex = 2 };
+        var layout = new TextProfileElement { Text = "Layout", LayoutVersion = TextProfileElement.CurrentLayoutVersion + 1, ZIndex = 3 };
+        var fit = new ImageProfileElement { AssetId = Guid.NewGuid(), DisplayMode = (ProfileImageFit)9, ZIndex = 4 };
+        settings.Elements.AddRange([role, align, vertical, layout, fit]);
+        Assert.Equal(
+            new ProfileElement[] { role, align, vertical, layout, fit }.Select(element => new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, element)),
+            Refusals(Resolve(settings)));
+
+        foreach (var background in new[]
+        {
+            new ProfileBackground { Mode = (ProfileBackgroundMode)9 },
+            new ProfileBackground { Mode = ProfileBackgroundMode.SolidColor, Texture = (ProfileBackgroundTexture)99 },
+            new ProfileBackground { Mode = ProfileBackgroundMode.SolidColor, ImageFit = (ProfileImageFit)9 },
+        })
+        {
+            var plate = Blank();
+            plate.Background = background;
+            Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null, Background: true), Assert.Single(Refusals(Resolve(plate))));
+        }
     }
 
     [Fact]
-    public void AValueNoFieldCanExpress_UnknownElements_AndMissingImages_AreRefused_NamingTheElement()
+    public void UnknownElements_MissingImages_AndABadName_AreAllRefused_NamingTheElement()
     {
         var plate = Blank();
         var far = new TextProfileElement { Text = "Far", Position = new Vector2(20_000_000f, 0f), Size = new Vector2(100f, 20f) };
@@ -819,16 +989,38 @@ public sealed class PlateSnapshotBuilderTests
         Assert.Equal(
             new[]
             {
-                new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null),
+                new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null, Background: true),
                 new PlateSnapshotProblem(PlateSnapshotRefusal.UnknownElement, strange),
                 new PlateSnapshotProblem(PlateSnapshotRefusal.ImageMissing, missing),
                 new PlateSnapshotProblem(PlateSnapshotRefusal.ImageMissing, missingAndClear),
                 new PlateSnapshotProblem(PlateSnapshotRefusal.Name, null),
             },
-            problems.Where(p => p.Refusal != PlateSnapshotRefusal.ValueOutOfRange));
+            problems);
 
         // The text 20,000,000 units away is outside the view, and left out rather than refused.
         Assert.DoesNotContain(problems, p => p.Element == far);
+    }
+
+    [Fact]
+    public void AValueNoFieldCanExpress_IsRefused_NamingTheElementComponentOrBackgroundHoldingIt()
+    {
+        // A letter spacing of 20,000 is past the field's 10,000; at 10,000 it is carried.
+        var plate = Blank();
+        var spaced = new TextProfileElement { Text = "Spaced", LetterSpacing = 20_000f };
+        plate.Elements.Add(spaced);
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.ValueOutOfRange, spaced), Assert.Single(Refusals(Resolve(plate))));
+        spaced.LetterSpacing = 10_000f;
+        Assert.Equal(LayoutText.MaxLetterSpacing, Assert.IsType<LayoutText>(Assert.Single(Build(Resolve(plate)).Items)).LetterSpacing);
+
+        // A component's shape past the coordinate range names the component.
+        var frame = ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameLine);
+        var far = new ResolvedShape(new ComponentPrimitive(ComponentPrimitiveKind.Triangle, new Vector2(1e9f, 0f), Vector2.One, new Vector2(0f, 1f), Vector2.Zero, Vector4.One), null, null, frame);
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.ValueOutOfRange, null, frame), Assert.Single(Refusals(Synthetic([far]))));
+
+        // A background angle no field can hold names the background.
+        var angled = Blank();
+        angled.Background = new ProfileBackground { Mode = ProfileBackgroundMode.LinearGradient, GradientAngle = float.PositiveInfinity };
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.ValueOutOfRange, null, Background: true), Assert.Single(Refusals(Resolve(angled))));
     }
 
     [Fact]
