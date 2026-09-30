@@ -17,7 +17,8 @@ internal enum TutorialCardSide
 /// <summary>
 /// Where the explanation card goes: beside the spotlight, never over it when that is at all
 /// possible, and always inside the viewport. Tries below, above, right, then left of the hole,
-/// aligned to its edge; the first side with room wins. When no side has room (a huge hole, a
+/// aligned to its edge, or right, left, below, then above for a hole taller than it is wide; the
+/// first side with room wins. When no side has room (a huge hole, a
 /// tiny screen) the card takes the side with the most room and is clamped into the viewport,
 /// overlapping the hole as little as that allows. Pure geometry; tested.
 /// </summary>
@@ -45,13 +46,16 @@ internal static class TutorialCardPlacement
             return (Centered(usable, cardSize), TutorialCardSide.Center);
         }
 
-        var candidates = new (TutorialCardSide Side, Vector2 Position)[]
-        {
-            (TutorialCardSide.Below, new Vector2(hole.Min.X, hole.Max.Y + gap)),
-            (TutorialCardSide.Above, new Vector2(hole.Min.X, hole.Min.Y - gap - cardSize.Y)),
-            (TutorialCardSide.Right, new Vector2(hole.Max.X + gap, hole.Min.Y)),
-            (TutorialCardSide.Left, new Vector2(hole.Min.X - gap - cardSize.X, hole.Min.Y)),
-        };
+        var below = (TutorialCardSide.Below, new Vector2(hole.Min.X, hole.Max.Y + gap));
+        var above = (TutorialCardSide.Above, new Vector2(hole.Min.X, hole.Min.Y - gap - cardSize.Y));
+        var right = (TutorialCardSide.Right, new Vector2(hole.Max.X + gap, hole.Min.Y));
+        var left = (TutorialCardSide.Left, new Vector2(hole.Min.X - gap - cardSize.X, hole.Min.Y));
+
+        // A tall, narrow control (the Basic Editor's section list, a side panel) reads best with
+        // the card beside it, next to where the eye already is; anything else, below or above.
+        (TutorialCardSide Side, Vector2 Position)[] candidates = hole.Height > hole.Width
+            ? [right, left, below, above]
+            : [below, above, right, left];
 
         // First choice: a side with room for the whole card, slid along the hole's edge to stay
         // inside the viewport, and still clear of the hole after sliding.
