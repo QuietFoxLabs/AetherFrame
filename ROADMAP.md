@@ -72,7 +72,7 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
-| Item | Verified state (September 30, 2026, 10:48 UTC) |
+| Item | Verified state (September 30, 2026, 11:50 UTC) |
 | --- | --- |
 | Default branch | `master` at `ae80c75`, after [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57) merged on September 30, 2026, with CI passed on both platforms at its head `3e28c51`. Checked locally at `ae80c75` for its test build: 0 build warnings, and every suite passing (3299 plugin, 468 release tooling, 407 protocol, 482 persona), the package check and the preview flavour's 12 boundary tests. |
 | Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |
