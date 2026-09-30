@@ -22,12 +22,13 @@ Verified September 30, 2026, at 11:30 UTC. **For the live status, see [issue #52
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin.
-- **Next, for the two-player test:**
-  1. N2-7: the server;
-  2. N2-8: deployment;
-  3. N2-9: the sharing flow in the plugin;
-  4. N2-10: the viewer;
-  5. N2-11: the test kit and the two-player checklist.
+- **Sharing, redefined by the owner on September 30** ([Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25), Claude's records of the owner's chat at 11:07 and 11:21 UTC):
+  - other players right-click a character in game, or search a name and World, and view that character's Active Plate as a finished picture;
+  - it is opt-in, off by default, and works both ways;
+  - a Lodestone check proves a character is yours, and personas are hidden;
+  - share codes are no longer the goal.
+
+  A re-plan of NETWORK2 around this is being written by a second Claude session. Networking work beyond N2-6 waits for it. What N2-6 made (the signed snapshot, the publication index, the outbox, and this change's view of what others would see) carries over.
 - **Next, for the interface:** section 8's task 1, a Plate menu in the editors, then tasks 2 to 6, then the second pass's tasks 7 to 16 ([#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), merged). Those include one editor window with Basic and Advanced as modes (task 8, the owner's decision, section 5).
 
 | NETWORK2 increment | State |
@@ -40,9 +41,9 @@ Verified September 30, 2026, at 11:30 UTC. **For the live status, see [issue #52
 | N2-6a: the snapshot builder | done: [#48](https://github.com/QuietFoxLabs/AetherFrame/pull/48) |
 | N2-6b: the image rule, then image preparation | done: [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50) |
 | N2-6c: the publication index, the outbox and the commit | part 1 done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55); part 2, the share check, in review (this change) |
-| N2-7: the server | planned |
-| N2-8: deployment | planned; needs the owner's domain and server |
-| N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
+| N2-7: the server | waits for the re-plan above |
+| N2-8: deployment | waits for the re-plan above; needs the owner's domain and server |
+| N2-9 to N2-11: the sharing flow, the viewer, the test kit | waits for the re-plan above |
 
 | Build | State |
 | --- | --- |

@@ -236,7 +236,7 @@ internal sealed class ShareCheck : IDisposable
         }
 
         Show(Stage(ShareCheckStage.Preparing));
-        _ = Task.Run(() => PrepareAsync(resolved, mine, cancellation.Token, registration));
+        _ = Task.Run(() => PrepareAsync(resolved, mine, cancellation, registration));
     }
 
     /// <summary>Drops the check under way, and shows nothing.</summary>
@@ -248,8 +248,9 @@ internal sealed class ShareCheck : IDisposable
 
     public void Dispose() => Drop();
 
-    private async Task PrepareAsync(ResolvedPlate resolved, int mine, CancellationToken cancellation, IDisposable registration)
+    private async Task PrepareAsync(ResolvedPlate resolved, int mine, CancellationTokenSource source, IDisposable registration)
     {
+        var cancellation = source.Token;
         try
         {
             // A false result or any exception turns preparation off for the session (D5's N2-6 note, (3)).
@@ -300,6 +301,17 @@ internal sealed class ShareCheck : IDisposable
         }
         finally
         {
+            // The linked source is released with the preparation, so no check stays registered on
+            // the plugin's Stopping token until unload. Drop tolerates one already disposed.
+            lock (gate)
+            {
+                if (ReferenceEquals(preparing, source))
+                {
+                    preparing = null;
+                }
+            }
+
+            source.Dispose();
             registration.Dispose();
         }
     }
