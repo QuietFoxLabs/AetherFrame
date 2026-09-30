@@ -1,0 +1,69 @@
+# The AetherFrame deployment (docs/networking/NETWORK2.md, N2-8; the runbook is
+# docs/networking/Runbook.md). Two services on one host:
+#   caddy  - TLS for the one hostname (decision R2), its access log off (S5);
+#   server - the AetherFrame server, behind Caddy, trusting forwarded headers from Caddy alone (R4);
+# The image worker (I2) runs apart, one container per job, from aetherframe-worker.service
+# (aetherframe-worker.sh): each run is ended from outside, which Docker's restart policy can't do.
+# The deploy workflow sets AETHERFRAME_VERSION (the commit deployed) and AETHERFRAME_DOMAIN in .env.
+
+name: aetherframe
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      AETHERFRAME_DOMAIN: ${AETHERFRAME_DOMAIN:?set AETHERFRAME_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      edge:
+        ipv4_address: 172.30.0.2
+    logging:
+      driver: journald
+
+  server:
+    image: aetherframe-server:${AETHERFRAME_VERSION:?set AETHERFRAME_VERSION in .env}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      AetherFrame__DeploymentName: ${AETHERFRAME_DOMAIN}
+      AetherFrame__DatabasePath: /data/server.db
+      AetherFrame__ImageWorkerSocket: /run/aetherframe/images.sock
+      AetherFrame__BackupFolder: /backups
+      AetherFrame__KnownProxies__0: 172.30.0.2
+      AETHERFRAME_CONFIG_FILE: /config/aetherframe.json
+    volumes:
+      - server-data:/data
+      - sockets:/run/aetherframe
+      - backups:/backups
+      - ./config:/config:ro
+    networks:
+      - edge
+    logging:
+      driver: journald
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:
+  server-data:
+  sockets:
+  backups:

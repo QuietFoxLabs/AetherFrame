@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,6 +49,10 @@ public static class WorkerRun
         socket.Shutdown(SocketShutdown.Both);
         return 0;
     }
+
+    /// <summary>Whether every network interface is loopback: the worker's container has no network.</summary>
+    public static bool HasNoNetwork(IEnumerable<System.Net.NetworkInformation.NetworkInterfaceType> interfaces) =>
+        interfaces.All(type => type == System.Net.NetworkInformation.NetworkInterfaceType.Loopback);
 
     /// <summary>
     /// Ends the process at once, with no cleanup, once <paramref name="deadline"/> has passed. It

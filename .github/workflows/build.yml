@@ -121,3 +121,67 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $env:AETHERFRAME_PLUGIN_ASSEMBLY = Join-Path $out AetherFrame.dll
         dotnet test AetherFrame.Tests/AetherFrame.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PluginAssemblyBoundaryTests"
+
+  # The deployment kit (docs/networking/NETWORK2.md, N2-8): both images build, and the three
+  # services start and answer on plain HTTP, with the worker as isolated as the compose file says.
+  deployment-kit:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+
+    - name: Build the images
+      run: |
+        docker build -f deploy/server.Dockerfile -t aetherframe-server:ci .
+        docker build -f deploy/worker.Dockerfile -t aetherframe-worker:ci .
+
+    - name: Start the deployment
+      working-directory: deploy
+      run: |
+        mkdir -p config
+        printf '{"AetherFrame":{"AllowedLodestoneIds":["12345678"]}}\n' > config/aetherframe.json
+        printf 'AETHERFRAME_VERSION=ci\nAETHERFRAME_DOMAIN=plates.example.com\n' > .env
+        docker compose -f compose.yaml -f compose.ci.yaml up -d
+        AETHERFRAME_ENV_FILE=.env AETHERFRAME_WORKER_LOG_DRIVER=json-file AETHERFRAME_WORKER_LIFE=20 nohup bash aetherframe-worker.sh > worker-loop.log 2>&1 &
+        echo $! > worker-loop.pid
+
+    - name: Check it answers, and the worker is isolated
+      working-directory: deploy
+      run: |
+        for attempt in $(seq 1 30); do
+          curl -fsS http://localhost:8088/v1/status > status.json && break
+          sleep 2
+        done
+        grep -q '"protocolVersion":32769' status.json
+        code=$(curl -sS -X POST -o challenge.bin -w '%{http_code}' http://localhost:8088/v1/challenge)
+        test "$code" = 200
+        test "$(stat -c %s challenge.bin)" = 32
+        for attempt in $(seq 1 30); do
+          worker=$(docker ps -q --filter name=aetherframe-worker | head -n 1)
+          [ -n "$worker" ] && break
+          sleep 2
+        done
+        test -n "$worker"
+        test "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$worker")" = none
+        test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$worker")" = true
+        test "$(docker inspect -f '{{.Config.User}}' "$worker")" = imageworker
+        test "$(docker exec "$worker" ls /sys/class/net)" = lo
+        # A run is ended from outside after its life: 20 s here.
+        sleep 25
+        test -z "$(docker ps -q --filter id="$worker")"
+        docker compose -f compose.yaml -f compose.ci.yaml exec -T server dotnet AetherFrame.Server.dll admin characters | grep -q '0 rows.'
+
+    - name: Show the logs
+      if: failure()
+      working-directory: deploy
+      run: |
+        docker compose -f compose.yaml -f compose.ci.yaml logs --no-color
+        cat worker-loop.log
+
+    - name: Stop it
+      if: always()
+      working-directory: deploy
+      run: |
+        kill "$(cat worker-loop.pid)" 2>/dev/null || true
+        docker ps -q --filter name=aetherframe-worker | xargs -r docker rm -f
+        docker compose -f compose.yaml -f compose.ci.yaml down -v

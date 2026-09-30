@@ -46,7 +46,7 @@ Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52
 | N2-6c: the publication index, the outbox and the commit | done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) |
 | N2-C: decision batch C, viewing by character (V1 to V5) | done: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61) |
 | N2-7: the server | in progress: N2-7a and N2-7b are done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66)); N2-7c, the image worker, is this change |
-| N2-8: deployment | planned; needs the owner's domain and server |
+| N2-8: deployment | this change; the real deploy needs the owner's domain and server |
 | N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
 
 | Build | State |
@@ -314,7 +314,13 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - Pausing is the opting-out kind with `{"mode": "pause"}`: the Plate goes, the binding stays. A key whose character was taken over gets `410`.
   - A publish is authenticated (its proof, a live challenge, a bound and allowed signer) before it takes one of two publish slots or reads its body; the protocol library gains `CheckSubmissionProof` for section 14.4's first two steps, with no signed-byte change.
   - Until the image worker (N2-7c), every image is refused. CI runs the server's 103 tests.
-- NETWORK2 increment N2-7c, the image worker: this change. `server/AetherFrame.ImageWorker` re-encodes each image with ImageSharp 3.1.12, one job per run, over a Unix socket the server owns.
+- NETWORK2 increment N2-7c, the image worker: [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67).
+- NETWORK2 increment N2-8, the deployment kit: this change.
+  - `deploy/` holds the server's and the worker's images, Caddy (automatic certificates, no access log) and `compose.yaml`. It also holds a system service that runs the image worker one container per job and ends each from outside after 60 seconds, and `host-setup.sh`. That script installs Docker, keeps logs 14 days, opens only SSH, HTTP and HTTPS, turns on security updates and creates the deploy user.
+  - **Deploy the server** deploys a commit on master after the owner's approval, with the deploy key kept in a protected environment.
+  - The server gains daily backups kept 7 days, a reloading configuration file for the allowlist, and the operator's commands. The worker refuses to run with a network.
+  - CI builds both images, starts the stack, and checks that it answers and that the worker is isolated and ended after its life.
+  - [docs/networking/Runbook.md](docs/networking/Runbook.md) is the owner's guide, from buying the domain onward. `server/AetherFrame.ImageWorker` re-encodes each image with ImageSharp 3.1.12, one job per run, over a Unix socket the server owns.
   - The server checks each answer against section 8.2.1, the declared format and size, and the exact chunks or segments the worker writes.
   - A publish's images are now re-encoded rather than refused. With no worker socket configured, the server still refuses them.
   - The details are in ServerApi-v1.md, section 8, and in the register. CI runs the server's 122 tests, one of which publishes through a real worker run.

@@ -1269,6 +1269,26 @@ All of these are now above.
 
 N2-7b's security review examined these with the code (September 30, 2026). It asked for the day-number rule and the check's floor above, a limit on opting out per address, challenges from a `409` counted against the address, a deadline over the whole Lodestone fetch, re-reads applied only to the character they read, and checkpoints that a disconnect can't skip. All are applied.
 
+### N2-8's deployment. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Scope.** How the server is deployed for the two-player test: the kit in `deploy/`, the **Deploy the server** workflow, and [Runbook.md](Runbook.md). It settles what batch B left to N2-8.
+
+- **Backups (D1's "stated retention").** The server writes a `VACUUM INTO` copy of its database once a day to a volume of its own, and deletes each copy after **7 days**. So a Plate a player deletes is gone from every copy within 7 days, and the consent text (N2-9) says so. The copies stay on the server; the runbook says how to keep one elsewhere, and to delete it within the same 7 days.
+- **Logs (S5).** Every container logs to the host's journal, which `host-setup.sh` sets to keep 14 days, deleted by time. Caddy's access log stays off. Its request-error, proxy and TLS-handshake loggers, which would record a client's address, are excluded too.
+- **The image worker (I2).** It isn't a compose service. A system service (`aetherframe-worker.sh`) starts one container per run and ends each from outside after at most 60 seconds, whatever it is doing, then starts a fresh one. This is the external limit N2-7c's record asks for; Docker's restart policy can't provide it, since its backoff grows between short runs.
+  - Each container has no network, a read-only root, 512 MB of memory with no swap, 64 processes, 256 files, no core dumps, `oom_score_adj` 1000, a 256 MB GC heap, and no capabilities. It runs as its own user in the server's group, and mounts only the socket's folder, read-only.
+  - The worker refuses to run if it finds any network interface but loopback, and CI checks the isolation on every change.
+- **The server's container.** Read-only root, no capabilities, an unprivileged user, and reachable only through Caddy. It trusts forwarded headers from Caddy's fixed address alone (R4). The allowlist is kept in a configuration file the server reloads within seconds (C8).
+- **Deploying.** A workflow the owner starts, which waits for the owner's approval in the protected `production` environment. It:
+  - checks that the commit is on master;
+  - builds both images on GitHub's runner and copies them to the server over SSH, so no registry or registry credential is involved;
+  - checks that `/v1/status` answers.
+
+  Its secrets (the deploy key and the host) live only in that environment. Claude never handles them.
+- **The operator's commands** (`admin characters`, `reports`, `resolve-report`, `remove-character`) run in the server's container, with the same deletions and checkpoints as the server's own requests (S3, C4, C5).
+
+**Rationale.** A single small host, and as few moving parts as keep each decision's promise: no registry, no orchestrator, no remote log store. Each limit I2, S5 and D1 set is enforced where it can be seen, in `compose.yaml`, `aetherframe-worker.sh` and `host-setup.sh`, and checked by CI where CI can.
+
 ## Gates
 
 | Gate | Must be decided before |

@@ -1,0 +1,90 @@
+name: Deploy the server
+
+# Deploys one reviewed commit of master to the owner's server (docs/networking/Runbook.md). Nothing
+# runs on its own: someone starts it with the commit, and the "production" environment waits for
+# the owner's approval before any step that can reach the server. Its secrets live only in that
+# environment, and Claude never handles them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "The full SHA of the commit on master to deploy"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Check the inputs
+        env:
+          COMMIT: ${{ github.event.inputs.commit }}
+          DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+        run: |
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "Give a full 40-character SHA."; exit 1; }
+          [[ "$DEPLOY_DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || { echo "DEPLOY_DOMAIN is not a hostname."; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.commit }}
+          fetch-depth: 0
+
+      - name: Check the commit is on master
+        env:
+          COMMIT: ${{ github.event.inputs.commit }}
+        run: |
+          git fetch --no-tags origin master
+          git merge-base --is-ancestor "$COMMIT" origin/master || { echo "$COMMIT is not on master."; exit 1; }
+
+      - name: Build the images
+        env:
+          COMMIT: ${{ github.event.inputs.commit }}
+        run: |
+          docker build -f deploy/server.Dockerfile -t "aetherframe-server:$COMMIT" .
+          docker build -f deploy/worker.Dockerfile -t "aetherframe-worker:$COMMIT" .
+
+      - name: Sign in to the server
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          COMMIT: ${{ github.event.inputs.commit }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+        run: |
+          target="aetherframe-deploy@$DEPLOY_HOST"
+          ssh_opts=(-i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          docker save "aetherframe-server:$COMMIT" "aetherframe-worker:$COMMIT" | gzip | ssh "${ssh_opts[@]}" "$target" 'gunzip | docker load'
+          scp "${ssh_opts[@]}" deploy/compose.yaml deploy/Caddyfile deploy/aetherframe-worker.sh "$target:/opt/aetherframe/"
+          ssh "${ssh_opts[@]}" "$target" "cd /opt/aetherframe && chmod 755 aetherframe-worker.sh && printf 'AETHERFRAME_VERSION=%s\nAETHERFRAME_DOMAIN=%s\n' '$COMMIT' '$DEPLOY_DOMAIN' > .env && docker compose up -d --remove-orphans && docker image prune -f"
+
+      - name: Check it answers
+        env:
+          DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS "https://$DEPLOY_DOMAIN/v1/status"; then exit 0; fi
+            sleep 5
+          done
+          echo "The server didn't answer /v1/status."
+          exit 1
+
+      - name: Forget the key
+        if: always()
+        run: rm -f ~/.ssh/deploy
