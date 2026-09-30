@@ -66,6 +66,12 @@ internal sealed class TutorialOverlayFrame
     /// <summary>A shade was clicked: the card asks for focus, so Escape and the arrow keys mean the tutorial.</summary>
     internal bool CardFocusRequested { get; set; }
 
+    /// <summary>
+    /// Until this ImGui time the spotlight ring flashes: Next was pressed on a step that waits for
+    /// the player to use the highlighted control, so the ring shows where to click.
+    /// </summary>
+    internal double FlashUntil { get; set; }
+
     internal bool IsActive => View is not null;
 
     /// <summary>Nothing to show this frame.</summary>

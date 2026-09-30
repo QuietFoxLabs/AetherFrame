@@ -288,7 +288,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - it signs that as the persona in use, once every image is drawn, and keeps it on this PC; nothing is sent. N2-9 shows each such signing on its own consent screen before its first send, or drops it (D5's N2-6 note). The window lists what that persona has signed from here;
   - the check reads the saved Plate through the Library, never an editor's document. It resolves on the framework thread while fonts build (about five seconds at most), and prepares images only after image preparation's known-answer check has passed that session;
   - every candidate declares its copies under asset ids of its own, and signing and listing run as persona-session operations that leave the persona window's outcomes alone.
-- The tutorial card beside tall, narrow controls: this change. For a spotlight taller than it is wide, the card tries the right, then the left, before below and above, so step 13's card sits beside the Basic Editor's section list (the owner's report of September 30).
+- The tutorial card beside tall, narrow controls: this change. For a spotlight taller than it is wide, the card tries the right, then the left, before below and above, so step 13's card sits beside the Basic Editor's section list (the owner's report of September 30). Every step that asks for a click on the highlighted control (10, 11 and 24) now holds Next, and pressing Next flashes that control (the owner's request of the same day).
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
