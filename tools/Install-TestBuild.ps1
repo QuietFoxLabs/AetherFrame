@@ -12,12 +12,16 @@
     1. reads the three plugin files from -Package, and checks the DLL is the flavour asked for
        (player, or networking preview);
     2. stages them in -StagingRoot\<yyyy-MM-dd> <build id>[ preview]\ with SHA256SUMS.txt;
-    3. backs up the plugin's data to -BackupRoot\AetherFrame-data-<yyyyMMdd-HHmmss>\;
-    4. copies AetherFrame.json and AetherFrame.deps.json, then AetherFrame.dll last, each over the
+    3. reads (never writes) Dalamud's configuration, and when the game is running and will reload
+       AetherFrame, waits -GraceSeconds first;
+    4. backs up the plugin's data to -BackupRoot\AetherFrame-data-<yyyyMMdd-HHmmss>\, under a
+       ".partial" name until the backup is complete;
+    5. copies AetherFrame.json and AetherFrame.deps.json, then AetherFrame.dll last, each over the
        old file in place, and checks each copy's hash. Deleting the DLL, or renaming a file over
        it, raises no change event, so the game would keep the old build until it restarts;
-    5. reads (never writes) Dalamud's configuration, and warns when the game would not load this
-       folder or would not reload it.
+    6. reports in InGame whether the owner gets the build: reloaded in game, at the next start,
+       or not (not listed, the folder listed instead of the DLL, another AetherFrame listed,
+       reloading off), with a warning that names the fix.
 
     It never deletes a staged build or a backup, and never touches the game or its settings.
     A failure throws, so the exit code is non-zero; warnings leave it at 0.
@@ -25,6 +29,11 @@
 .PARAMETER Package
     DalamudPackager's latest.zip, which holds exactly the three files, or a folder holding them
     (other files in it are ignored).
+
+.PARAMETER GraceSeconds
+    How long to wait before backing up and installing when the game is running and would reload
+    AetherFrame. The reload closes AetherFrame's windows and loses an editor's unsaved changes, so
+    AUTOPILOT.md warns the owner first and passes the time it promised.
 
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/Install-TestBuild.ps1 -Package AetherFrame/bin/x64/Release/AetherFrame/latest.zip -BuildId 01a14a5 -Flavour Player
@@ -41,6 +50,9 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('Player', 'Preview')]
     [string] $Flavour,
+
+    [ValidateRange(0, 540)]
+    [int] $GraceSeconds = 0,
 
     [string] $TestBuildDir = 'E:\AetherFrame Test Build',
     [string] $StagingRoot = 'E:\AetherFrame Test Builds',
@@ -144,9 +156,19 @@ function Get-OptionalProperty($Object, [string] $Name) {
 }
 
 # What Dalamud's saved configuration says about loading AetherFrame from $DllPath. Dalamud saves
-# it whenever a setting changes, so it reflects the last change made in game.
+# it whenever a setting changes, so it reflects the last change made in game. Each dev plugin
+# location is a DLL's path: Dalamud reads it as a file and skips a folder (PluginManager). At boot
+# it loads one plugin per internal name, the highest version, so a second enabled AetherFrame
+# location makes it uncertain which build runs.
 function Get-DalamudLoadState([string] $ConfigPath, [string] $DllPath) {
-    $state = [ordered]@{ Readable = $false; LoadsThisFolder = $false; AutoReload = $false; OtherLocations = @() }
+    $state = [ordered]@{
+        Readable       = $false
+        ListsDll       = $false
+        ListsFolder    = $false
+        AutoReload     = $true
+        StartOnBoot    = $true
+        OtherLocations = @()
+    }
     if (-not (Test-Path -LiteralPath $ConfigPath)) {
         return $state
     }
@@ -164,27 +186,37 @@ function Get-DalamudLoadState([string] $ConfigPath, [string] $DllPath) {
         if ([string]::IsNullOrWhiteSpace($path) -or -not (Get-OptionalProperty $location 'IsEnabled')) {
             continue
         }
-        if ((Test-SamePath $path $DllPath) -or (Test-SamePath $path (Split-Path -Parent $DllPath))) {
-            $state.LoadsThisFolder = $true
+        if (Test-SamePath $path $DllPath) {
+            $state.ListsDll = $true
         }
-        elseif ($path -match '(?i)\\AetherFrame\.dll$' -or (Test-Path -LiteralPath (Join-Path $path 'AetherFrame.dll'))) {
+        elseif (Test-SamePath $path (Split-Path -Parent $DllPath)) {
+            $state.ListsFolder = $true
+        }
+        elseif ($path -match '(?i)\\AetherFrame\.dll$') {
             $state.OtherLocations += $path
         }
     }
 
+    # A DLL with no entry here has Dalamud's defaults (DevPluginSettings): both on.
     $settings = Get-OptionalProperty $config 'DevPluginSettings'
     if ($null -ne $settings) {
         foreach ($entry in $settings.PSObject.Properties) {
             if ($entry.Name -ne '$type' -and (Test-SamePath $entry.Name $DllPath)) {
-                $state.AutoReload = [bool](Get-OptionalProperty $entry.Value 'AutomaticReloading')
+                $reload = Get-OptionalProperty $entry.Value 'AutomaticReloading'
+                $boot = Get-OptionalProperty $entry.Value 'StartOnBoot'
+                $state.AutoReload = ($null -eq $reload) -or [bool]$reload
+                $state.StartOnBoot = ($null -eq $boot) -or [bool]$boot
             }
         }
     }
     return $state
 }
 
-# Copies the plugin's data folder file by file, skipping only the preview build's lock file.
-# Any other file that can't be copied stops the install, so no build goes in without a backup.
+# Copies the plugin's data folder file by file. It skips the preview build's lock file, and a
+# temporary file ("*.tmp") that is held open, since a save still in progress (or one Dalamud
+# left open after a failed write) has its data in the real file beside it. Any other file that
+# can't be copied, and any link (which Windows PowerShell would not follow), stops the install,
+# so no build goes in without a full backup.
 function Backup-PluginData([string] $Source, [string] $Destination) {
     $skipped = @()
     $root = (Get-Item -LiteralPath $Source).FullName.TrimEnd('\')
@@ -192,6 +224,9 @@ function Backup-PluginData([string] $Source, [string] $Destination) {
     foreach ($item in Get-ChildItem -LiteralPath $root -Recurse -Force) {
         $relative = $item.FullName.Substring($root.Length + 1)
         $target = Join-Path $Destination $relative
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw "$($item.FullName) is a link, which the backup can't follow. Back that folder up by hand; nothing was installed."
+        }
         if ($item.PSIsContainer) {
             New-Item -ItemType Directory -Force -Path $target | Out-Null
             continue
@@ -204,7 +239,15 @@ function Backup-PluginData([string] $Source, [string] $Destination) {
         if (-not (Test-Path -LiteralPath $parent)) {
             New-Item -ItemType Directory -Force -Path $parent | Out-Null
         }
-        Copy-Item -LiteralPath $item.FullName -Destination $target
+        try {
+            Copy-Item -LiteralPath $item.FullName -Destination $target
+        }
+        catch {
+            if ($item.Name -notlike '*.tmp') {
+                throw "Couldn't back up $($item.FullName) ($($_.Exception.Message)). Nothing was installed; the incomplete backup keeps its .partial name."
+            }
+            $skipped += $relative
+        }
     }
     return $skipped
 }
@@ -261,26 +304,45 @@ foreach ($name in $PluginFiles) {
     }
 }
 
-# 4. Back up the plugin's data, then install.
+# A reload closes AetherFrame's windows, and an editor's unsaved changes go with them. When one is
+# about to happen, give the owner the time AUTOPILOT.md's heads-up promised before touching anything.
+$reloads = (-not $alreadyInstalled) -and $gameRunning -and $dalamud.ListsDll -and $dalamud.AutoReload
+$waited = 0
+if ($reloads -and $GraceSeconds -gt 0) {
+    Write-Host "The game is running and will reload AetherFrame: waiting $GraceSeconds seconds before installing."
+    Start-Sleep -Seconds $GraceSeconds
+    $waited = $GraceSeconds
+}
+
+# 4. Back up the plugin's data, then install. The backup is written under a ".partial" name and
+#    takes its final name only once it is complete.
 $backupDir = $null
 $skipped = @()
 if (-not $alreadyInstalled) {
     $configsDir = Join-Path $XivLauncherDir 'pluginConfigs'
     # Backups are never replaced: one that already has this second's name waits for the next.
-    $backupDir = Join-Path $BackupRoot ('AetherFrame-data-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-    while (Test-Path -LiteralPath $backupDir) {
-        Start-Sleep -Milliseconds 250
-        $backupDir = Join-Path $BackupRoot ('AetherFrame-data-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-    }
-    New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+    do {
+        $backupName = 'AetherFrame-data-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+        $backupDir = Join-Path $BackupRoot $backupName
+        $partialDir = $backupDir + '.partial'
+        $taken = (Test-Path -LiteralPath $backupDir) -or (Test-Path -LiteralPath $partialDir)
+        if ($taken) {
+            Start-Sleep -Milliseconds 250
+        }
+    } while ($taken)
+    New-Item -ItemType Directory -Force -Path $partialDir | Out-Null
     $dataDir = Join-Path $configsDir 'AetherFrame'
     if (Test-Path -LiteralPath $dataDir) {
-        $skipped = @(Backup-PluginData $dataDir (Join-Path $backupDir 'AetherFrame'))
+        $skipped = @(Backup-PluginData $dataDir (Join-Path $partialDir 'AetherFrame'))
+    }
+    else {
+        Write-Warning "There is no plugin data folder at $dataDir, so the backup holds no Plates."
     }
     $configFile = Join-Path $configsDir 'AetherFrame.json'
     if (Test-Path -LiteralPath $configFile) {
-        Copy-Item -LiteralPath $configFile -Destination $backupDir
+        Copy-Item -LiteralPath $configFile -Destination $partialDir
     }
+    Rename-Item -LiteralPath $partialDir -NewName $backupName
 
     New-Item -ItemType Directory -Force -Path $TestBuildDir | Out-Null
     foreach ($name in $PluginFiles) {
@@ -298,41 +360,55 @@ if (-not $alreadyInstalled) {
     }
 }
 
-# 5. Where the build ends up in game.
+# 5. Where the build ends up in game. Only "reloaded" and "loads at the next game start" mean the
+#    owner gets this build; every other state names what is wrong.
+$fix = "In game: /xlsettings, Experimental, Dev Plugin Locations: add and tick $installedDll (the DLL, not the folder), untick every other AetherFrame location, then Save and Close."
 if (-not $dalamud.Readable) {
     $inGame = "unknown: Dalamud's configuration couldn't be read."
 }
-elseif (-not $dalamud.LoadsThisFolder) {
-    $inGame = 'not loaded: Dalamud has no enabled dev plugin location for this folder.'
-    Write-Warning "The game won't load this build. In game: /xlsettings, Experimental, Dev Plugin Locations: add and tick $installedDll, then Save and Close."
+elseif (-not $dalamud.ListsDll) {
+    if ($dalamud.ListsFolder) {
+        $inGame = 'not loaded: Dalamud lists the folder, and it only loads a location that is the DLL itself.'
+    }
+    else {
+        $inGame = 'not loaded: no enabled dev plugin location is this DLL.'
+    }
+    Write-Warning "The game won't load this build. $fix"
+}
+elseif ($dalamud.OtherLocations.Count -gt 0) {
+    $inGame = 'conflict: another enabled dev plugin location is an AetherFrame too, so which build the game runs is uncertain.'
+    foreach ($other in $dalamud.OtherLocations) {
+        Write-Warning "Another enabled dev plugin location is AetherFrame: $other. $fix"
+    }
 }
 elseif ($alreadyInstalled) {
     $inGame = 'already installed: nothing was copied, so nothing reloads.'
 }
 elseif (-not $gameRunning) {
-    $inGame = 'loads at the next game start.'
+    if ($dalamud.StartOnBoot) {
+        $inGame = 'loads at the next game start.'
+    }
+    else {
+        $inGame = 'waiting: "load on boot" is off for this DLL, so load AetherFrame in /xlplugins, Dev Tools, after the next game start.'
+    }
 }
 elseif ($dalamud.AutoReload) {
     $inGame = 'reloaded in game: Dalamud picks up the new DLL within about a second, if AetherFrame was loaded.'
 }
 else {
-    $inGame = 'waiting: automatic reloading is off for this folder, so reload AetherFrame in /xlplugins, Dev Tools, or restart the game.'
+    $inGame = 'waiting: automatic reloading is off for this DLL, so reload AetherFrame in /xlplugins, Dev Tools, or restart the game.'
     Write-Warning "Automatic reloading is off for $installedDll."
-}
-foreach ($other in $dalamud.OtherLocations) {
-    Write-Warning "Another enabled dev plugin location holds AetherFrame: $other. Dalamud loads one AetherFrame at a time; untick that location in /xlsettings, Experimental."
 }
 
 [pscustomobject][ordered]@{
-    BuildId        = $BuildId
-    Flavour        = $Flavour
-    Staged         = $stageDir
-    Installed      = $TestBuildDir
-    DllSha256      = $hashes['AetherFrame.dll']
-    DataBackup     = $backupDir
-    NotBackedUp    = ($skipped -join ', ')
-    GameRunning    = $gameRunning
-    DalamudLoadsIt = $dalamud.LoadsThisFolder
-    AutoReload     = $dalamud.AutoReload
-    InGame         = $inGame
+    BuildId     = $BuildId
+    Flavour     = $Flavour
+    Staged      = $stageDir
+    Installed   = $TestBuildDir
+    DllSha256   = $hashes['AetherFrame.dll']
+    DataBackup  = $backupDir
+    NotBackedUp = ($skipped -join ', ')
+    GameRunning = $gameRunning
+    Waited      = $waited
+    InGame      = $inGame
 }

@@ -12,8 +12,8 @@ Claude runs AetherFrame end to end: it plans, decides OPEN items, builds, review
 | Status and queue | ROADMAP.md: section 2 for status, section 8 for the next five tasks |
 | Decisions | `docs/networking/DecisionRegister.md` for networking; ROADMAP.md section 5 for everything else |
 | Owner inbox | The open GitHub issue labelled `owner-inbox`: the only place the autopilot asks the owner for anything |
-| Test build the game loads | `E:\AetherFrame Test Build\`, the one folder that always holds the newest test build. The game loads it only while Dalamud's Dev Plugin Locations (`/xlsettings`, **Experimental**) list `E:\AetherFrame Test Build\AetherFrame.dll`, ticked, and no other AetherFrame; automatic reloading is on for it. `tools/Install-TestBuild.ps1` checks both. |
-| Staged test builds | `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>\` |
+| Test build the game loads | `E:\AetherFrame Test Build\`, the one folder that always holds the newest test build. The game loads it only while Dalamud's Dev Plugin Locations (`/xlsettings`, **Experimental**) list the DLL itself, `E:\AetherFrame Test Build\AetherFrame.dll` (Dalamud loads nothing from a folder), ticked, with no other AetherFrame ticked; automatic reloading is on for it. `tools/Install-TestBuild.ps1` checks all of this. |
+| Staged test builds | `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>[ preview]\` |
 | Plugin data backups | `E:\AetherFrame Archives\Acceptance backups\AetherFrame-data-<yyyyMMdd-HHmmss>\` |
 
 ## Markers
@@ -99,26 +99,29 @@ On September 30, 2026 the owner asked, in chat, that whenever a milestone is com
 **When:** after each merge that changes the plugin, once that session's merges are done, so a batch of merges makes one build. A merge that only changes documents, tooling, tests or the server makes none. A newer build supersedes the one before it; say so in the new post.
 
 1. **Build.** Make a detached worktree at the `master` commit and run the full CI-equivalent checks. The player package is `AetherFrame/bin/x64/Release/AetherFrame/latest.zip` and holds three files. For a preview build, see [Preview test builds](#preview-test-builds).
-2. **Install straight away, whether or not FFXIV is running,** with `tools/Install-TestBuild.ps1 -Package <latest.zip or folder> -BuildId <short sha> -Flavour <Player or Preview>` (run it with `powershell -NoProfile -ExecutionPolicy Bypass -File`). The owner confirmed on September 29, 2026 that installing while the game is open doesn't affect it. The script:
-   - refuses a package that isn't exactly the three plugin files, and a DLL of the other flavour;
+2. **Warn first when the game is running.** A reload closes AetherFrame's windows, and the plugin keeps no copy of an editor's unsaved changes when it unloads, so they are lost. If `ffxiv_dx11` is running, first send a PushNotification: `AetherFrame <sha> goes in game in 2 minutes: save any open Plate editor`. Then install with `-GraceSeconds 120`, which waits only when a reload would actually happen. Give the tool call a timeout over 2 minutes. The owner's September 29 confirmation that installing with the game open "doesn't affect it" dates from when nothing reloaded; it doesn't cover this.
+3. **Install** with `tools/Install-TestBuild.ps1 -Package <latest.zip or folder> -BuildId <short sha> -Flavour <Player or Preview> [-GraceSeconds 120]`, run with `powershell -NoProfile -ExecutionPolicy Bypass -File`. The script:
+   - refuses a zip that isn't exactly the three plugin files, a folder missing one of them, and a DLL of the other flavour;
    - stages the build in `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>[ preview]\` with `SHA256SUMS.txt`;
-   - backs up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder, skipping only the preview build's `instance.lock`, which holds no data and stays locked while the game runs;
+   - backs up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder, which keeps a `.partial` name until it is complete. The backup:
+     - skips the preview build's `instance.lock`, and any `*.tmp` file held open, and lists what it skipped in `NotBackedUp`;
+     - stops the install on any other file it can't copy, and on a link;
    - copies the two `.json` files, then the DLL last, over the old files in place, and checks each copy's hash;
-   - reads Dalamud's saved settings, never writing them, and reports in `InGame` whether the build reloaded in game, loads at the next start, or won't load. When Dalamud's Dev Plugin Locations don't list the folder, or list another AetherFrame, a warning names the owner's fix.
+   - reads Dalamud's saved settings, never writing them, and reports in `InGame`:
+     - `reloaded in game` or `loads at the next game start`: the owner gets the build;
+     - otherwise, what stops it, with a warning that names the owner's fix. Dalamud only loads a location that is the DLL's own path, never a folder; with another AetherFrame location enabled, which build runs is uncertain; and reloading or loading on boot may be off.
 
-   Never install by hand. Dalamud reloads only on a write to the DLL, so deleting the old DLL or renaming a file over it leaves the old build running until the game restarts. If the script can't replace a file, the build stays staged: say so in the post and install it on the next run. Never delete staged builds or backups.
-3. **Tell the owner straight away:**
+   Never install by hand. Dalamud reloads only on a write to the DLL, so deleting the old DLL or renaming a file over it leaves the old build running until the game restarts. If the script stops, nothing was installed, or, if it names a file it couldn't replace, the build stays staged: say so in the post and install it on the next run. Never delete staged builds or backups, `.partial` ones included.
+4. **Tell the owner straight away:**
    - **Owner inbox post:**
      - the build id, its flavour and the merged PRs it holds;
      - the script's `InGame` line;
      - numbered in-game checks taken from those PRs' **In game** sections;
      - where the data backup is;
      - how to reply.
-
-     While the owner has an editor open, the reload closes AetherFrame's windows and loses unsaved changes. The post reminds them to save when a build is due.
-   - **PushNotification:** `AetherFrame <sha> is in game: <what it adds, a few words>. <n> checks in the Owner inbox`. When `InGame` says it won't load, the notification says so and names the fix instead.
+   - **PushNotification:** `AetherFrame <sha> is in game: <what it adds, a few words>. <n> checks in the Owner inbox`. Say "in game" only when `InGame` says the owner gets the build. Otherwise the notification says what stops it and names the fix.
    - **Live status issue:** edit it in place.
-4. **One build waits for a verdict at a time:** the one in the folder.
+5. **One build waits for a verdict at a time:** the one in the folder.
 
 **Release candidates.** When a milestone is ready to ship:
 - First merge a release-prep PR: `Version.props`, CHANGELOG, and the dry-run fixture ([Releasing](../Releasing.md), steps 1 to 3).
@@ -133,7 +136,9 @@ A preview build is the networking preview flavour (`-p:AetherFrameNetworkPreview
 3. **Post** as for a test build, and add:
    - that it is a preview build, and what it adds;
    - that it sends nothing, and where it writes its persona files (the plugin's configuration directory, `Network\Personas\`);
-   - how to go back: install the player build again. The persona files stay where they are, and a later preview build finds them; removing that folder loses those personas for good (K4).
+   - how to go back: install the player build again. The persona files stay where they are, and a later preview build finds them; removing that folder loses those personas for good (K4), apart from the copies in the acceptance backups.
+
+**Persona keys in backups.** Every data backup holds copies of the persona key files. They stay protected for the owner's Windows account (K2), but the plugin can't delete them, so deleting a persona in game doesn't remove them from backups. Restore `Network\Personas\keys\` only by adding files back, never by replacing the folder. A registry restored from an older backup doesn't name newer keys, and the audit then reports them as unused; replacing the folder would lose those keys for good.
 
 ## Owner replies
 
