@@ -311,7 +311,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // known-answer check runs once a session, when the first check needs it (D5's N2-6 note).
             var imageCodec = new DalamudImageCodec(TextureProvider, TextureReadback);
             var managedImages = new ManagedImageFiles(assetStorageService);
-            var preparationCheck = new Lazy<Task<bool>>(() => ImagePreparationCheck.RunAsync(imageCodec, log));
+            var preparationCheck = new Lazy<Task<bool>>(() => ImagePreparationCheck.RunAsync(imageCodec, log, ownedOperations));
             var shareCheck = new ShareCheck(new ShareCheckSeams
             {
                 OpenSavedPlate = plateLibrary.OpenDocumentForEditing,

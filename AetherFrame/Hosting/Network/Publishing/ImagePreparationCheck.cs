@@ -1,7 +1,7 @@
 using System;
-using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Services.Diagnostics;
+using AetherFrame.Services.Lifecycle;
 using AetherFrame.Services.Network.Publishing;
 
 namespace AetherFrame.Hosting.Network.Publishing;
@@ -10,27 +10,43 @@ namespace AetherFrame.Hosting.Network.Publishing;
 /// Image preparation's known-answer check (<see cref="ImagePreparer.SelfTestAsync"/>, D5's N2-6
 /// note, (3)) against Dalamud's texture pipeline, as the plugin runs it: once a session, before any
 /// copy is prepared. A failed check, or any exception, answers false, and preparing copies stays off
-/// until AetherFrame starts again. The log names the result and an exception's kind, never its text.
+/// until AetherFrame starts again. It runs as an owned operation, which unloading cancels, so
+/// nothing of it calls Dalamud's texture services once the plugin has unloaded; a check stopped
+/// that way answers false too. The log names the result and an exception's kind, never its text.
 /// Compiled only in the networking preview flavour.
 /// </summary>
 internal static class ImagePreparationCheck
 {
-    internal static async Task<bool> RunAsync(IImageCodec codec, IAetherFrameLog log)
+    internal static async Task<bool> RunAsync(IImageCodec codec, IAetherFrameLog log, OwnedOperations operations)
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(log);
-        try
+        ArgumentNullException.ThrowIfNull(operations);
+        if (!operations.TryBegin(out var lease))
         {
-            var passed = await ImagePreparer.SelfTestAsync(codec, CancellationToken.None).ConfigureAwait(false);
-            log.Information(passed
-                ? "Sharing: image preparation's check passed."
-                : "Sharing: image preparation's check failed, so sharing is off for this session.");
-            return passed;
-        }
-        catch (Exception e)
-        {
-            log.Warning("Sharing: image preparation's check failed, so sharing is off for this session: " + PublishOutcome.Describe(e));
             return false;
+        }
+
+        using (lease)
+        {
+            try
+            {
+                var passed = await ImagePreparer.SelfTestAsync(codec, operations.Stopping).ConfigureAwait(false);
+                log.Information(passed
+                    ? "Sharing: image preparation's check passed."
+                    : "Sharing: image preparation's check failed, so sharing is off for this session.");
+                return passed;
+            }
+            catch (OperationCanceledException) when (operations.Stopping.IsCancellationRequested)
+            {
+                // Unloading: nothing more is prepared in this session anyway.
+                return false;
+            }
+            catch (Exception e)
+            {
+                log.Warning("Sharing: image preparation's check failed, so sharing is off for this session: " + PublishOutcome.Describe(e));
+                return false;
+            }
         }
     }
 }
