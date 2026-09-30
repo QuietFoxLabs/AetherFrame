@@ -29,6 +29,7 @@ using Dalamud.Plugin.Services;
 #if AETHERFRAME_NETWORK_PREVIEW
 using AetherFrame.Hosting.Network;
 using AetherFrame.Services.Network.Personas;
+using AetherFrame.Windows.Network;
 #endif
 
 namespace AetherFrame;
@@ -286,8 +287,15 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // the persona folder) and the capability probe's scratch files, in the temp folder and
             // deleted again. A load that fails after this closes it, and its lock is released by
             // whichever of its own work ends last.
-            personaSession = PersonaSessionHost.Create(PluginInterface.ConfigDirectory.FullName, log, ownedOperations);
+            var configDirectory = PluginInterface.ConfigDirectory.FullName;
+            personaSession = PersonaSessionHost.Create(configDirectory, log, ownedOperations);
             startup.OnFailure("personas", personaSession.Close);
+
+            // The persona window (N2-5c), reached from My Plates' header; the windows' rollback above
+            // removes it with the rest.
+            var personaWindow = new PersonaWindow(personaSession, PersonaSessionHost.KeysDirectory(configDirectory), PersonaSessionHost.RegistryPath(configDirectory));
+            WindowSystem.AddWindow(personaWindow);
+            plateLibraryWindow.OpenPersonas = () => personaWindow.IsOpen = true;
             personaSession.Start();
 #endif
 

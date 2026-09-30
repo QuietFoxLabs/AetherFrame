@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Personas;
 using AetherFrame.Personas.Storage;
+using AetherFrame.Protocol.Identity;
 
 namespace AetherFrame.Services.Network.Personas;
 
@@ -87,14 +88,16 @@ public sealed class PersonaSessionView
         new(State, Reason, Message, CanRetry, busy, audit ?? Audit, lastOutcome ?? LastOutcome);
 }
 
-/// <summary>What one persona operation came to, for the window. Its message names no path and no identity.</summary>
+/// <summary>What one persona operation came to, for the window. It holds no path and no exception text.</summary>
 public sealed class PersonaOperationOutcome
 {
-    private PersonaOperationOutcome(bool succeeded, PersonaError? error, PersonaAudit? audit)
+    private PersonaOperationOutcome(bool succeeded, PersonaError? error, PersonaAudit? audit, PersonaRecord? persona, PersonaPublicKey? opened)
     {
         Succeeded = succeeded;
         Error = error;
         Audit = audit;
+        Persona = persona;
+        Opened = opened;
     }
 
     /// <summary>Whether it did what it set out to do.</summary>
@@ -106,11 +109,18 @@ public sealed class PersonaOperationOutcome
     /// <summary>An audit taken by the operation, which replaces the session's.</summary>
     public PersonaAudit? Audit { get; }
 
-    /// <summary>It worked; <paramref name="audit"/> replaces the session's when it is given.</summary>
-    public static PersonaOperationOutcome Done(PersonaAudit? audit = null) => new(true, null, audit);
+    /// <summary>The persona the operation made or changed, when it did.</summary>
+    public PersonaRecord? Persona { get; }
 
-    /// <summary>It didn't: <paramref name="error"/> when the manager said why.</summary>
-    public static PersonaOperationOutcome Failed(PersonaError? error) => new(false, error, null);
+    /// <summary>For a check of a key without a persona: the public key it opened as, or null when it didn't open.</summary>
+    public PersonaPublicKey? Opened { get; }
+
+    /// <summary>It worked. <paramref name="audit"/> replaces the session's when it is given.</summary>
+    public static PersonaOperationOutcome Done(PersonaAudit? audit = null, PersonaRecord? persona = null, PersonaPublicKey? opened = null) =>
+        new(true, null, audit, persona, opened);
+
+    /// <summary>It didn't: <paramref name="error"/> when the manager said why, with an audit taken after the failure when there is one.</summary>
+    public static PersonaOperationOutcome Failed(PersonaError? error, PersonaAudit? audit = null) => new(false, error, audit, null, null);
 }
 
 /// <summary>
@@ -170,7 +180,8 @@ public sealed class PersonaSessionSeams
 /// that starts meanwhile finds it held, retries, and at worst stays off with a message to try
 /// again. Nothing is left to a finalizer. The start and every operation register with the plugin's
 /// unload tracking, so unloading waits for them within its own budget. A start stops at its next
-/// step once the session is closed: nothing is probed, created or locked after that. An operation
+/// step once the session is closed: nothing new is probed or created, and no new attempt at the
+/// lock is made; an attempt already under way when it closes is dropped at once. An operation
 /// still running when the budget ends runs to its end, since stopping it between a key's commit
 /// and the registry save would only leave an orphan; unlike the plugin's other owned operations,
 /// it doesn't stop before its next file step.
@@ -209,7 +220,12 @@ public sealed class PersonaSession
     /// <summary>The active persona, from the manager's snapshot.</summary>
     public PersonaRecord? Active => manager?.Active;
 
-    /// <summary>What the capability probe found, once it ran: viewing (N2-10) needs its verification step even when personas are off.</summary>
+    /// <summary>
+    /// What the capability probe found, once it ran: viewing (N2-10) needs its verification step even
+    /// when personas are off. A probe that threw leaves a result that views nothing; its missing
+    /// capability reads as signature verification only because nothing at all was checked, so N2-10
+    /// must not report it as a failure specific to signatures.
+    /// </summary>
     public PersonaCapabilities? Capabilities => capabilities;
 
     /// <summary>Begins the start in the background, once. False when it already began, or the plugin is unloading.</summary>
@@ -224,9 +240,11 @@ public sealed class PersonaSession
     /// <summary>
     /// Runs <paramref name="work"/> on the manager in the background, when the session is ready and
     /// nothing else runs; false otherwise, and then nothing starts. <paramref name="name"/> names the
-    /// operation in the log, so it is a fixed word such as "create", never a label.
+    /// operation in the log, so it is a fixed word such as "create", never a label. When the work
+    /// throws, the session logs its kind and, with <paramref name="auditAfterFailure"/>, audits the
+    /// key files again, so a key a failed save kept shows at once.
     /// </summary>
-    public bool TryStart(string name, Func<PersonaManager, PersonaOperationOutcome> work)
+    public bool TryStart(string name, Func<PersonaManager, PersonaOperationOutcome> work, bool auditAfterFailure = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(work);
@@ -253,7 +271,7 @@ public sealed class PersonaSession
             return false;
         }
 
-        _ = Task.Run(() => RunOperation(name, target, work, lease));
+        _ = Task.Run(() => RunOperation(name, target, work, auditAfterFailure, lease));
         return true;
     }
 
@@ -461,7 +479,7 @@ public sealed class PersonaSession
         }
     }
 
-    private void RunOperation(string name, PersonaManager target, Func<PersonaManager, PersonaOperationOutcome> work, IDisposable lease)
+    private void RunOperation(string name, PersonaManager target, Func<PersonaManager, PersonaOperationOutcome> work, bool auditAfterFailure, IDisposable lease)
     {
         PersonaOperationOutcome outcome = PersonaOperationOutcome.Failed(null);
         try
@@ -470,8 +488,8 @@ public sealed class PersonaSession
         }
         catch (Exception e)
         {
-            outcome = PersonaOperationOutcome.Failed(e is PersonaException persona ? persona.Error : null);
             Log($"Personas: {name} failed: {Describe(e)}");
+            outcome = PersonaOperationOutcome.Failed(e is PersonaException persona ? persona.Error : null, auditAfterFailure ? AuditQuietly(target) : null);
         }
         finally
         {
@@ -509,6 +527,20 @@ public sealed class PersonaSession
         {
             ReleaseQuietly(release);
             lease.Dispose();
+        }
+    }
+
+    /// <summary>An audit after a failure, or none when the audit itself fails; it never throws.</summary>
+    private PersonaAudit? AuditQuietly(PersonaManager target)
+    {
+        try
+        {
+            return target.Audit();
+        }
+        catch (Exception e)
+        {
+            Log("Personas: the audit after a failure failed: " + Describe(e));
+            return null;
         }
     }
 
