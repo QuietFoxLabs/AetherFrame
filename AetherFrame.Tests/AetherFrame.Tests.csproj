@@ -65,10 +65,15 @@
          Plate model and the protocol library's own codec (referenced below). The player DLL is
          unaffected: its boundary tests keep proving that it holds no protocol type. -->
     <Compile Include="..\AetherFrame\Services\Network\Publishing\**\*.cs" Link="Linked\Services\Network\Publishing\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The publication index and outbox (N2-6c) write their files as the persona registry does,
+         with the persona folder's written-through move, and sign through the persona library
+         (referenced below), so the commit is tested with real signatures from throwaway keys. -->
+    <Compile Include="..\AetherFrame\Services\Network\Personas\WrittenThroughMove.cs" Link="Linked\Services\Network\Personas\WrittenThroughMove.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
+    <ProjectReference Include="..\AetherFrame.Personas\AetherFrame.Personas.csproj" />
   </ItemGroup>
 
   <!-- Files written by the tagged releases' own persistence code (Fixtures/v0.1.x) and the
