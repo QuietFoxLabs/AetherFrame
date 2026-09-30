@@ -44,7 +44,7 @@ Verified September 30, 2026, at 13:23 UTC. **For the live status, see [issue #52
 | N2-6a: the snapshot builder | done: [#48](https://github.com/QuietFoxLabs/AetherFrame/pull/48) |
 | N2-6b: the image rule, then image preparation | done: [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50) |
 | N2-6c: the publication index, the outbox and the commit | done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) |
-| N2-C: decision batch C, viewing by character (V1 to V5) | next, before any sharing code beyond N2-6 |
+| N2-C: decision batch C, viewing by character (V1 to V5) | done: C1 to C9 (this change) |
 | N2-7: the server | planned |
 | N2-8: deployment | planned; needs the owner's domain and server |
 | N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
@@ -292,6 +292,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - the check reads the saved Plate through the Library, never an editor's document. It resolves on the framework thread while fonts build (about five seconds at most), and prepares images only after image preparation's known-answer check has passed that session;
   - every candidate declares its copies under asset ids of its own, and signing and listing run as persona-session operations that leave the persona window's outcomes alone.
 - Interface task 1, a Plate menu in both editors: this change ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)). The Plate's name in the editors' action bar opens it, with View (the movable Plate Viewer, unsaved changes included), Set Active, Save as New Plate, Save as Template, Export and Rename, so none of them needs a trip to My Plates; Delete stays on My Plates' cards. My Plates' Plate actions and their prompts moved first into one component the two menus share, with tests pinning the runner, the unsaved-changes question and each action's messages. Save as New Plate saves the document as it is, unsaved changes included, as a new Plate after the original, which keeps its last saved version; the editor continues on the copy, and nothing can be edited while it is written. The viewer is View in every menu, so Preview is only the editors'. When an editor is too narrow for its whole top bar, the save state and its buttons take a second row instead of being cut off, as they were at the Basic editor's minimum width. The tour points at the menu and moves to version 2. The choices among the audit's two passes are recorded in section 5.
+- NETWORK2 increment N2-C, decision batch C, viewing by character: this change. C1 to C9 in the register settle the character and its key (the Lodestone id), the Lodestone check, one consent per character with live publishing (amending D5's N2-6 note, point 6), opting out without tombstones, viewing from the right-click menu and exact name search by opted-in players only, rate limits, what the server keeps (no lookup log), the stage 1 allowlist by Lodestone id, and the earlier decisions they restate. A security reviewer concurred.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
