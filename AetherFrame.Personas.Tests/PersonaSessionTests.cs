@@ -173,24 +173,55 @@ public sealed class PersonaSessionTests
     {
         var session = await ReadySession();
         using var release = new ManualResetEventSlim(false);
-        var callingThread = Environment.CurrentManagedThreadId;
-        var ranOn = 0;
         Assert.True(session.TryStart("create", manager =>
         {
-            ranOn = Environment.CurrentManagedThreadId;
             release.Wait(Patience);
             manager.Create("Main");
             return PersonaOperationOutcome.Done(manager.Audit());
         }));
 
+        // Off the calling thread: TryStart returned while the work still waits on release, which a
+        // run on the calling thread couldn't. (An async test's thread can be the pool thread that
+        // later runs the work, so comparing thread ids would prove nothing and could fail.)
         Assert.True(session.View.Busy);
         Assert.False(session.TryStart("create", manager => PersonaOperationOutcome.Done()));
         release.Set();
         await Settled(session);
 
-        Assert.NotEqual(callingThread, ranOn);
         Assert.True(session.View.LastOutcome!.Succeeded);
         Assert.Equal("Main", Assert.Single(session.Personas).Label);
+        Assert.Equal(0, leasesOpen);
+    }
+
+    [Fact]
+    public async Task ARunThatKeepsItsOwnResult_GoesOneAtATime_AndLeavesTheLastOutcomeAsItWas()
+    {
+        var session = await ReadySession();
+
+        // An operation the persona window started, and the outcome it waits to take.
+        Assert.True(session.TryStart("create", manager => PersonaOperationOutcome.Done(persona: manager.Create("Main"))));
+        await Settled(session);
+        var outcome = session.View.LastOutcome;
+        Assert.True(outcome!.Succeeded);
+
+        // A run for another window (publishing, say): one at a time with every other operation,
+        // off the calling thread, and it never replaces that outcome, even when it throws.
+        using var release = new ManualResetEventSlim(false);
+        Assert.True(session.TryRun("publish", _ => release.Wait(Patience)));
+
+        // TryRun returned while the work still waits on release: it runs off the calling thread.
+        Assert.True(session.View.Busy);
+        Assert.False(session.TryRun("publish", _ => { }));
+        Assert.False(session.TryStart("create", _ => PersonaOperationOutcome.Done()));
+        release.Set();
+        await Settled(session);
+        Assert.Same(outcome, session.View.LastOutcome);
+
+        Assert.True(session.TryRun("publish", _ => throw new IOException("disk full at " + SecretPath)));
+        await Settled(session);
+        Assert.Same(outcome, session.View.LastOutcome);
+        Assert.Contains(log, line => line.StartsWith("Personas: publish failed: IOException 0x", StringComparison.Ordinal));
+        AssertLogIsClean();
         Assert.Equal(0, leasesOpen);
     }
 
