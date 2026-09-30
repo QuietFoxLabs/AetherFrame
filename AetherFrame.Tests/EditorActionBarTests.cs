@@ -337,6 +337,19 @@ public class EditorActionBarTests
         Assert.Equal(wideUnsaved.NameRoom, wideSaved.NameRoom);
         Assert.Equal(1000f - 250f, wideSaved.RightX);
         Assert.Equal(1000f - 300f, wideUnsaved.RightX);
+
+        // Near the threshold, where the history group is clamped short of the widest document group:
+        // it stays there in both states, rather than centring further right when "Saved" is shorter.
+        var nearSaved = EditorActionBarLayout.ArrangeRows(0f, 600f, 160f, 40f, 60f, rightWidth: 250f, widestRightWidth: 300f, spacing: 10f);
+        var nearUnsaved = EditorActionBarLayout.ArrangeRows(0f, 600f, 160f, 40f, 60f, rightWidth: 300f, widestRightWidth: 300f, spacing: 10f);
+        Assert.False(nearSaved.TwoRows);
+        Assert.False(nearUnsaved.TwoRows);
+        Assert.Equal(230f, nearSaved.CenterX);
+        Assert.Equal(230f, nearUnsaved.CenterX);
+        Assert.Equal(20f, nearSaved.NameRoom);
+        Assert.Equal(20f, nearUnsaved.NameRoom);
+        Assert.Equal(600f - 250f, nearSaved.RightX);
+        Assert.Equal(600f - 300f, nearUnsaved.RightX);
     }
 
     [Fact]
