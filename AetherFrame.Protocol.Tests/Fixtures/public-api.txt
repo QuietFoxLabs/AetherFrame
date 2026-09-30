@@ -152,6 +152,9 @@ sealed class AetherFrame.Protocol.Remote.ImageReference
     Int64 ByteLength { get; }
     ReadOnlySpan<Byte> Sha256 { get; }
     new(AssetId assetId, ReadOnlySpan<Byte> sha256, ImageFormat format, Int64 byteLength, Int32 width, Int32 height)
+static class AetherFrame.Protocol.Remote.ImageSniffer
+    SniffedImage CheckDeclared(ReadOnlySpan<Byte> bytes, ImageReference declared)
+    SniffedImage Sniff(ReadOnlySpan<Byte> bytes)
 sealed class AetherFrame.Protocol.Remote.LayoutArtQuad
     LayoutColor Tint { get; }
     LayoutItemKind Kind { get; }
@@ -381,6 +384,16 @@ struct AetherFrame.Protocol.Remote.RemoteProfileKey
     ProfileId ProfileId { get; }
     String ToString()
     new(PersonaId persona, ProfileId profileId)
+struct AetherFrame.Protocol.Remote.SniffedImage
+    Boolean Equals(Object obj)
+    Boolean Equals(SniffedImage other)
+    ImageFormat Format { get; set; }
+    Int32 GetHashCode()
+    Int32 Height { get; set; }
+    Int32 Width { get; set; }
+    String ToString()
+    Void Deconstruct(ref ImageFormat Format, ref Int32 Width, ref Int32 Height)
+    new(ImageFormat Format, Int32 Width, Int32 Height)
 sealed class AetherFrame.Protocol.Requests.DeploymentName
     Boolean Equals(DeploymentName other)
     Boolean Equals(Object obj)
