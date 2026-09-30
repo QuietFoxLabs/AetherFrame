@@ -117,6 +117,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // (N2-9a, decision R2). Its operations are persona-session operations, which unloading waits
     // for, so the connection is disposed only after every owned operation has ended.
     private readonly SharingConnection sharingConnection;
+
+    // Publishing the Active Plate when it is saved (N2-9c), driven once a frame while drawing.
+    private readonly LivePublisher livePublisher;
 #endif
 
     public Plugin()
@@ -330,7 +333,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             var imageCodec = new DalamudImageCodec(TextureProvider, TextureReadback);
             var managedImages = new ManagedImageFiles(assetStorageService);
             var preparationCheck = new Lazy<Task<bool>>(() => ImagePreparationCheck.RunAsync(imageCodec, log, ownedOperations));
-            var shareCheck = new ShareCheck(new ShareCheckSeams
+            ShareCheck NewShareCheck() => new(new ShareCheckSeams
             {
                 OpenSavedPlate = plateLibrary.OpenDocumentForEditing,
                 Prewarm = fontService.EnsurePrewarmed,
@@ -341,7 +344,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 Stopping = ownedOperations.Stopping,
                 Log = log.Information,
             });
-            shareCheckWindow = new ShareCheckWindow(shareCheck, TextureProvider);
+            shareCheckWindow = new ShareCheckWindow(NewShareCheck(), TextureProvider);
             WindowSystem.AddWindow(shareCheckWindow);
             plateLibraryWindow.CheckSharing = shareCheckWindow.Open;
             editorPlateMenu.Menu.CheckSharing = shareCheckWindow.Open;
@@ -361,6 +364,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             var sharingWindow = new SharingWindow(characterSharing, personaSession, () => characterIdentityService.CurrentCharacter);
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
+
+            // Publishing the Active Plate live (N2-9c): a save, a new Active Plate, or sharing
+            // starting or resuming builds a candidate with a share check of its own, a frame at a
+            // time, and hands it to the sharing service.
+            livePublisher = new LivePublisher(characterSharing, NewShareCheck(), () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId);
+            plateLibrary.PlateSaved += livePublisher.PlateSaved;
 #endif
 
             // Names the exact build in dalamud.log, so a stale dev DLL is obvious.
@@ -462,6 +471,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         try
         {
             tutorialOverlay.Update();
+#if AETHERFRAME_NETWORK_PREVIEW
+            livePublisher.OnFrame();
+#endif
             WindowSystem.Draw();
             editorPlateMenu.EndFrame();
         }
@@ -561,6 +573,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         packageImportWindow.Dispose();
 #if AETHERFRAME_NETWORK_PREVIEW
         shareCheckWindow.Dispose();
+        plateLibrary.PlateSaved -= livePublisher.PlateSaved;
+        livePublisher.Dispose();
 #endif
         imageTextureCache.Clear();
         thumbnailTextures.Clear();
