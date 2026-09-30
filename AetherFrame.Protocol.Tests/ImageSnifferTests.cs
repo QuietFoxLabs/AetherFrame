@@ -2,10 +2,8 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
@@ -15,10 +13,12 @@ namespace AetherFrame.Protocol.Tests;
 
 /// <summary>
 /// Section 8.2.1, the rule every consumer of a shared image applies to its bytes before decoding
-/// anything: a non-animated, non-interlaced 8-bit truecolour PNG, or a JPEG whose one frame is
-/// SOF0 to SOF2, 8-bit, with 1 or 3 components, ending at its end-of-image marker; faults in
-/// reading order; nothing decoded. The vectors in Fixtures/image-vectors-v1.json are regenerated
-/// only on purpose, with AETHERFRAME_PROTOCOL_REGENERATE_IMAGE_VECTORS=1.
+/// anything: a non-animated, non-interlaced 8-bit truecolour PNG with only IHDR, PLTE, IDAT and
+/// IEND for critical chunks, or a JPEG whose one frame is SOF0 to SOF2, 8-bit, with 1 or 3
+/// components, in at most 64 scans, holding only the markers such a JPEG needs; the first fault
+/// in reading order (section 9.1); nothing decoded. The vectors in
+/// Fixtures/image-vectors-v1.json each hold the outcome their case states, which the sniffer must
+/// give; they are regenerated only on purpose, with AETHERFRAME_PROTOCOL_REGENERATE_IMAGE_VECTORS=1.
 /// </summary>
 public class ImageSnifferTests
 {
@@ -31,7 +31,7 @@ public class ImageSnifferTests
     }
 
     [Fact]
-    public void APng_RefusesWhatTheRuleRefuses_InReadingOrder()
+    public void APng_RefusesWhatTheRuleRefuses()
     {
         Refused(ProtocolError.InvalidValue, Png(2, 2, depth: 16));
         Refused(ProtocolError.InvalidValue, Png(2, 2, colourType: 3));
@@ -46,7 +46,7 @@ public class ImageSnifferTests
         Refused(ProtocolError.LimitExceeded, Png(5000, 4001));
 
         // The chunks around the header.
-        Refused(ProtocolError.InvalidValue, PngFrom(Chunk("tEXt", Ascii("k\0v")), Ihdr(2, 2), Idat(), Chunk("IEND")));
+        Refused(ProtocolError.InvalidValue, PngFrom(Chunk("tEXt", KeyedText()), Ihdr(2, 2), Idat(), Chunk("IEND")));
         Refused(ProtocolError.InvalidValue, PngFrom(Chunk("IHDR", new byte[12]), Idat(), Chunk("IEND")));
         Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Ihdr(2, 2), Idat(), Chunk("IEND")));
         foreach (var animation in new[] { "acTL", "fcTL", "fdAT" })
@@ -54,6 +54,22 @@ public class ImageSnifferTests
             Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Chunk(animation, new byte[8]), Idat(), Chunk("IEND")));
             Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Idat(), Chunk(animation, new byte[8]), Chunk("IEND")));
         }
+
+        // Only IHDR, PLTE, IDAT and IEND among critical chunks, and no compressed ancillary chunk.
+        foreach (var type in new[] { "CgBI", "XYZW", "iCCP", "zTXt", "iTXt" })
+        {
+            Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Chunk(type, new byte[4]), Idat(), Chunk("IEND")));
+        }
+
+        // A PLTE is one, of 1 to 256 entries, before the image data.
+        Assert.Equal(new SniffedImage(ImageFormat.Png, 2, 2), ImageSniffer.Sniff(PngFrom(Ihdr(2, 2), Chunk("PLTE", new byte[768]), Idat(), Chunk("IEND"))));
+        foreach (var length in new[] { 0, 4, 771 })
+        {
+            Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Chunk("PLTE", new byte[length]), Idat(), Chunk("IEND")));
+        }
+
+        Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Chunk("PLTE", new byte[3]), Chunk("PLTE", new byte[3]), Idat(), Chunk("IEND")));
+        Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Idat(), Chunk("PLTE", new byte[3]), Chunk("IEND")));
 
         Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Idat(), Chunk("tIME", new byte[7]), Idat(), Chunk("IEND")));
         Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(2, 2), Chunk("IEND")));
@@ -64,13 +80,13 @@ public class ImageSnifferTests
         Refused(ProtocolError.Truncated, Png(2, 2)[..^1]);
         Refused(ProtocolError.Truncated, PngFrom(Ihdr(2, 2), Idat())[..^4]);
 
-        // A length beyond the bytes, and beyond what an int holds, is a chunk running past the end.
-        var huge = PngFrom(Ihdr(2, 2), Idat(), Chunk("IEND"));
-        BinaryPrimitives.WriteUInt32BigEndian(huge.AsSpan(8 + 25), 0x8000_0000);
-        Refused(ProtocolError.Truncated, huge);
+        // A length over 2^31 - 1 is over PNG's own limit; one within it that runs past the bytes is
+        // a chunk running past the end.
+        Refused(ProtocolError.LimitExceeded, WithIdatLength(0x8000_0000));
+        Refused(ProtocolError.Truncated, WithIdatLength(0x7FFF_FFFF));
 
-        // Ancillary chunks are the publisher's own check (decision D5), not this rule's.
-        Assert.Equal(ImageFormat.Png, ImageSniffer.Sniff(PngFrom(Ihdr(2, 2), Chunk("tEXt", Ascii("k\0v")), Idat(), Idat(), Chunk("IEND"))).Format);
+        // Other ancillary chunks are skipped: a copy's own inventory is its producer's stricter check.
+        Assert.Equal(ImageFormat.Png, ImageSniffer.Sniff(PngFrom(Ihdr(2, 2), Chunk("tEXt", KeyedText()), Idat(), Idat(), Chunk("IEND"))).Format);
     }
 
     [Theory]
@@ -92,12 +108,23 @@ public class ImageSnifferTests
         // Fill bytes before a marker are allowed.
         var filled = JpegFrom(App0(), [0xFF, 0xFF, .. Dqt()], Sof(0xC0, 8, 8, 1), Dht(), Sos(1), Entropy(0x01), Eoi());
         Assert.Equal(new SniffedImage(ImageFormat.Jpeg, 8, 8), ImageSniffer.Sniff(filled));
+
+        // Every allowed marker: APP1 to APP15, COM and DRI among them.
+        Assert.Equal(new SniffedImage(ImageFormat.Jpeg, 8, 8), ImageSniffer.Sniff(Annotated()));
     }
 
     [Fact]
-    public void AJpeg_RefusesWhatTheRuleRefuses_InReadingOrder()
+    public void AJpeg_HasAtMost64Scans()
     {
-        foreach (var code in new byte[] { 0xC3, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF, 0xDC, 0xDE, 0xDF, 0xF0, 0xF7, 0xFD })
+        Assert.Equal(new SniffedImage(ImageFormat.Jpeg, 8, 8), ImageSniffer.Sniff(ProgressiveWithScans(ProtocolLimits.MaxJpegScans)));
+        Refused(ProtocolError.LimitExceeded, ProgressiveWithScans(ProtocolLimits.MaxJpegScans + 1));
+    }
+
+    [Fact]
+    public void AJpeg_RefusesWhatTheRuleRefuses()
+    {
+        // Every marker outside the allowed ones, reserved codes among them.
+        foreach (var code in new byte[] { 0x02, 0x40, 0xBF, 0xC3, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF, 0xDC, 0xDE, 0xDF, 0xF0, 0xF7, 0xFD })
         {
             Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Segment(code, new byte[9]), Sof(0xC0, 8, 8, 3), Dht(), Sos(3), Entropy(0x01), Eoi()));
         }
@@ -111,6 +138,7 @@ public class ImageSnifferTests
         Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Sof(0xC0, 8, 8, 2), Dht(), Sos(2), Entropy(0x01), Eoi()));
         Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Sof(0xC0, 8, 8, 4), Dht(), Sos(4), Entropy(0x01), Eoi()));
         Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Segment(0xC0, [8, 0, 8, 0, 8, 1, 1, 0x11, 0, 0]), Dht(), Sos(1), Entropy(0x01), Eoi()));
+        Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Segment(0xC0, [8, 0, 8]), Dht(), Sos(1), Entropy(0x01), Eoi()));
         Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Sof(0xC0, 0, 8, 3), Dht(), Sos(3), Entropy(0x01), Eoi()));
         Refused(ProtocolError.LimitExceeded, JpegFrom(App0(), Sof(0xC0, 8, 8193, 3), Dht(), Sos(3), Entropy(0x01), Eoi()));
         Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Sof(0xC0, 8, 8, 3), Eoi()));
@@ -126,6 +154,35 @@ public class ImageSnifferTests
     }
 
     [Fact]
+    public void AnInputWithTwoFaults_IsRefusedForTheFirstInReadingOrder()
+    {
+        // A JPEG marker's rules come before its segment is framed.
+        Refused(ProtocolError.InvalidValue, [0xFF, 0xD8, 0xFF, 0xC3, 0x00, 0x10]);
+        Refused(ProtocolError.InvalidValue, [0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x10]);
+        Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Sof(0xC0, 8, 8, 3), [0xFF, 0xC0, 0x00, 0x20]));
+        Refused(ProtocolError.InvalidValue, JpegFrom(App0(), [0xFF, 0x02, 0x00, 0x20]));
+        Refused(ProtocolError.LimitExceeded, [.. ProgressiveWithScans(ProtocolLimits.MaxJpegScans)[..^2], 0xFF, 0xDA, 0x00, 0x20]);
+
+        // A frame's fields in the order read: precision, height, width, their product, then the components.
+        Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Sof(0xC1, 9000, 8, 3, precision: 12), Dht(), Sos(3), Entropy(0x01), Eoi()));
+        Refused(ProtocolError.LimitExceeded, JpegFrom(App0(), Sof(0xC0, 9000, 8, 4), Dht(), Sos(4), Entropy(0x01), Eoi()));
+        Refused(ProtocolError.LimitExceeded, JpegFrom(App0(), Sof(0xC0, 9000, 0, 3), Dht(), Sos(3), Entropy(0x01), Eoi()));
+        Refused(ProtocolError.InvalidValue, JpegFrom(App0(), Sof(0xC0, 0, 9000, 3), Dht(), Sos(3), Entropy(0x01), Eoi()));
+        Refused(ProtocolError.LimitExceeded, JpegFrom(App0(), Sof(0xC0, 5000, 4001, 4), Dht(), Sos(4), Entropy(0x01), Eoi()));
+        Refused(ProtocolError.LimitExceeded, JpegFrom(App0(), Segment(0xC0, [8, 0x23, 0x28, 0, 8]), Dht(), Sos(1), Entropy(0x01), Eoi()));
+
+        // A PNG chunk's length limit before its type, its type's rules before its data, and its
+        // header's fields in order: width, height, their product, then the rest.
+        Refused(ProtocolError.LimitExceeded, [.. PngFrom(Ihdr(2, 2)), .. ChunkHeader(0x8000_0000, "1234")]);
+        Refused(ProtocolError.InvalidValue, PngFrom(ChunkHeader(256, "tEXt"), new byte[10]));
+        Refused(ProtocolError.InvalidValue, [.. PngFrom(Ihdr(2, 2)), .. ChunkHeader(64, "acTL")]);
+        Refused(ProtocolError.InvalidValue, PngFrom(ChunkHeader(14, "IHDR"), new byte[13]));
+        Refused(ProtocolError.LimitExceeded, PngFrom(Ihdr(9000, 0), Idat(), Chunk("IEND")));
+        Refused(ProtocolError.InvalidValue, PngFrom(Ihdr(0, 9000), Idat(), Chunk("IEND")));
+        Refused(ProtocolError.LimitExceeded, PngFrom(Ihdr(5000, 4001, depth: 16), Idat(), Chunk("IEND")));
+    }
+
+    [Fact]
     public void Bytes_ThatAreNeitherOrTooMany_AreRefused()
     {
         Refused(ProtocolError.InvalidLength, []);
@@ -138,7 +195,7 @@ public class ImageSnifferTests
     }
 
     [Fact]
-    public void CheckDeclared_WantsTheDeclaredDigestAndLengthFirst_ThenTheDeclaredFormatAndSize()
+    public void CheckDeclared_WantsTheDeclaredLengthAndDigestFirst_ThenTheRule_ThenTheDeclaredFormatAndSize()
     {
         var png = Png(4, 3);
         Assert.Equal(new SniffedImage(ImageFormat.Png, 4, 3), ImageSniffer.CheckDeclared(png, Declare(png, ImageFormat.Png, 4, 3)));
@@ -152,6 +209,10 @@ public class ImageSnifferTests
         var broken = png[..^1];
         RefusedBy(ProtocolError.InvalidValue, () => ImageSniffer.CheckDeclared(broken, Declare(png, ImageFormat.Png, 4, 3)));
         RefusedBy(ProtocolError.Truncated, () => ImageSniffer.CheckDeclared(broken, Declare(broken, ImageFormat.Png, 4, 3)));
+
+        // And the structure before the declared format: bytes that match their digest but break
+        // the rule say so, whatever format they claim.
+        RefusedBy(ProtocolError.Truncated, () => ImageSniffer.CheckDeclared(broken, Declare(broken, ImageFormat.Jpeg, 4, 3)));
     }
 
     [Theory]
@@ -160,7 +221,7 @@ public class ImageSnifferTests
     [InlineData(3)]
     public void SeededMutations_EndInAProtocolExceptionOrAnImageWithinTheLimits_NeverAnythingElse(int seed)
     {
-        var bases = new[] { Png(3, 2), Png(64, 1, colourType: 2), Jpeg(8, 8), Jpeg(16, 16, 0xC2, 1) };
+        var bases = new[] { Png(3, 2), Png(64, 1, colourType: 2), Jpeg(8, 8), Jpeg(16, 16, 0xC2, 1), Annotated() };
         var random = new Random(seed * 1_000_003);
         for (var index = 0; index < 20_000; index++)
         {
@@ -201,57 +262,73 @@ public class ImageSnifferTests
     }
 
     [Fact]
-    public void TheVectors_AreWhatTheSnifferSays()
+    public void TheVectors_HoldWhatTheirCasesState_AndTheSnifferSaysTheSame()
     {
         var vectors = VectorCases();
+        foreach (var (name, bytes, expected) in vectors)
+        {
+            Assert.True(expected == Outcome(bytes), $"{name}: expected {expected}, the sniffer says {Outcome(bytes)}");
+        }
+
         // One newline on every platform: the fixture is compared byte for byte, on Windows and Linux alike.
         var options = new JsonSerializerOptions { WriteIndented = true, NewLine = "\n" };
-        var actual = JsonSerializer.Serialize(vectors.Select(v => new ImageVector(v.Name, Convert.ToHexString(v.Bytes).ToLowerInvariant(), Outcome(v.Bytes))).ToList(), options) + "\n";
-        var name = "image-vectors-v1.json";
+        var actual = JsonSerializer.Serialize(vectors.Select(v => new ImageVector(v.Name, Convert.ToHexString(v.Bytes).ToLowerInvariant(), v.Expected)).ToList(), options) + "\n";
+        var fixture = "image-vectors-v1.json";
         if (Environment.GetEnvironmentVariable("AETHERFRAME_PROTOCOL_REGENERATE_IMAGE_VECTORS") is { Length: > 0 })
         {
-            var source = Path.Combine(VectorPaths.SourceFixtures(), name);
+            var source = Path.Combine(VectorPaths.SourceFixtures(), fixture);
             File.WriteAllText(source, actual);
             Assert.Equal(actual, File.ReadAllText(source));
             return;
         }
 
-        Assert.Equal(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name)), actual);
-        Assert.Contains(vectors, v => Outcome(v.Bytes).StartsWith("png", StringComparison.Ordinal));
-        Assert.Contains(vectors, v => Outcome(v.Bytes).StartsWith("jpeg", StringComparison.Ordinal));
-        Assert.Contains(vectors, v => Outcome(v.Bytes) == "TrailingBytes");
+        Assert.Equal(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture)), actual);
+        Assert.Contains(vectors, v => v.Expected.StartsWith("png", StringComparison.Ordinal));
+        Assert.Contains(vectors, v => v.Expected.StartsWith("jpeg", StringComparison.Ordinal));
+        foreach (var error in new[] { ProtocolError.InvalidLength, ProtocolError.InvalidValue, ProtocolError.LimitExceeded, ProtocolError.Truncated, ProtocolError.TrailingBytes })
+        {
+            Assert.Contains(vectors, v => v.Expected == error.ToString());
+        }
     }
 
     private sealed record ImageVector(string Name, string Hex, string Expected);
 
-    private static IReadOnlyList<(string Name, byte[] Bytes)> VectorCases() =>
+    private static IReadOnlyList<(string Name, byte[] Bytes, string Expected)> VectorCases() =>
     [
-        ("png-rgba-3x2", Png(3, 2)),
-        ("png-rgb-1x1", Png(1, 1, colourType: 2)),
-        ("png-with-text-chunk", PngFrom(Ihdr(2, 2), Chunk("tEXt", Ascii("k\0v")), Idat(), Chunk("IEND"))),
-        ("png-16-bit", Png(2, 2, depth: 16)),
-        ("png-palette", Png(2, 2, colourType: 3)),
-        ("png-greyscale", Png(2, 2, colourType: 0)),
-        ("png-interlaced", Png(2, 2, interlace: 1)),
-        ("png-animated", PngFrom(Ihdr(2, 2), Chunk("acTL", new byte[8]), Idat(), Chunk("IEND"))),
-        ("png-idat-split", PngFrom(Ihdr(2, 2), Idat(), Chunk("tIME", new byte[7]), Idat(), Chunk("IEND"))),
-        ("png-after-iend", Join(Png(2, 2), [0x00])),
-        ("png-truncated", Png(2, 2)[..^1]),
-        ("png-width-8193", Png(8193, 1)),
-        ("png-over-20-mp", Png(5000, 4001)),
-        ("jpeg-baseline", Jpeg(640, 480)),
-        ("jpeg-extended", Jpeg(640, 480, 0xC1)),
-        ("jpeg-progressive-greyscale", Jpeg(16, 16, 0xC2, 1)),
-        ("jpeg-lossless", Jpeg(8, 8, 0xC3)),
-        ("jpeg-arithmetic", Jpeg(8, 8, 0xC9)),
-        ("jpeg-12-bit", JpegFrom(App0(), Sof(0xC1, 8, 8, 3, precision: 12), Dht(), Sos(3), Entropy(0x01), Eoi())),
-        ("jpeg-dnl-height", JpegFrom(App0(), Sof(0xC0, 0, 8, 3), Dht(), Sos(3), Entropy(0x01), Eoi())),
-        ("jpeg-two-components", JpegFrom(App0(), Sof(0xC0, 8, 8, 2), Dht(), Sos(2), Entropy(0x01), Eoi())),
-        ("jpeg-second-frame", JpegFrom(App0(), Sof(0xC0, 8, 8, 3), Sof(0xC0, 8, 8, 3), Dht(), Sos(3), Entropy(0x01), Eoi())),
-        ("jpeg-two-appended", Join(Jpeg(8, 8), Jpeg(8, 8))),
-        ("jpeg-no-end", JpegFrom(App0(), Sof(0xC0, 8, 8, 3), Dht(), Sos(3), Entropy(0x01))),
-        ("empty", Array.Empty<byte>()),
-        ("gif", System.Text.Encoding.ASCII.GetBytes("GIF89a")),
+        ("png-rgba-3x2", Png(3, 2), "png 3x2"),
+        ("png-rgb-1x1", Png(1, 1, colourType: 2), "png 1x1"),
+        ("png-with-text-chunk", PngFrom(Ihdr(2, 2), Chunk("tEXt", KeyedText()), Idat(), Chunk("IEND")), "png 2x2"),
+        ("png-16-bit", Png(2, 2, depth: 16), "InvalidValue"),
+        ("png-palette", Png(2, 2, colourType: 3), "InvalidValue"),
+        ("png-greyscale", Png(2, 2, colourType: 0), "InvalidValue"),
+        ("png-interlaced", Png(2, 2, interlace: 1), "InvalidValue"),
+        ("png-animated", PngFrom(Ihdr(2, 2), Chunk("acTL", new byte[8]), Idat(), Chunk("IEND")), "InvalidValue"),
+        ("png-idat-split", PngFrom(Ihdr(2, 2), Idat(), Chunk("tIME", new byte[7]), Idat(), Chunk("IEND")), "InvalidValue"),
+        ("png-after-iend", Join(Png(2, 2), [0x00]), "TrailingBytes"),
+        ("png-truncated", Png(2, 2)[..^1], "Truncated"),
+        ("png-width-8193", Png(8193, 1), "LimitExceeded"),
+        ("png-over-20-mp", Png(5000, 4001), "LimitExceeded"),
+        ("jpeg-baseline", Jpeg(640, 480), "jpeg 640x480"),
+        ("jpeg-extended", Jpeg(640, 480, 0xC1), "jpeg 640x480"),
+        ("jpeg-progressive-greyscale", Jpeg(16, 16, 0xC2, 1), "jpeg 16x16"),
+        ("jpeg-lossless", Jpeg(8, 8, 0xC3), "InvalidValue"),
+        ("jpeg-arithmetic", Jpeg(8, 8, 0xC9), "InvalidValue"),
+        ("jpeg-12-bit", JpegFrom(App0(), Sof(0xC1, 8, 8, 3, precision: 12), Dht(), Sos(3), Entropy(0x01), Eoi()), "InvalidValue"),
+        ("jpeg-dnl-height", JpegFrom(App0(), Sof(0xC0, 0, 8, 3), Dht(), Sos(3), Entropy(0x01), Eoi()), "InvalidValue"),
+        ("jpeg-two-components", JpegFrom(App0(), Sof(0xC0, 8, 8, 2), Dht(), Sos(2), Entropy(0x01), Eoi()), "InvalidValue"),
+        ("jpeg-second-frame", JpegFrom(App0(), Sof(0xC0, 8, 8, 3), Sof(0xC0, 8, 8, 3), Dht(), Sos(3), Entropy(0x01), Eoi()), "InvalidValue"),
+        ("jpeg-two-appended", Join(Jpeg(8, 8), Jpeg(8, 8)), "TrailingBytes"),
+        ("jpeg-no-end", JpegFrom(App0(), Sof(0xC0, 8, 8, 3), Dht(), Sos(3), Entropy(0x01)), "Truncated"),
+        ("empty", Array.Empty<byte>(), "InvalidLength"),
+        ("gif", System.Text.Encoding.ASCII.GetBytes("GIF89a"), "InvalidValue"),
+        ("png-with-palette", PngFrom(Ihdr(2, 2), Chunk("PLTE", new byte[6]), Idat(), Chunk("IEND")), "png 2x2"),
+        ("png-unknown-critical-chunk", PngFrom(Ihdr(2, 2), Chunk("CgBI", new byte[4]), Idat(), Chunk("IEND")), "InvalidValue"),
+        ("png-colour-profile", PngFrom(Ihdr(2, 2), Chunk("iCCP", new byte[4]), Idat(), Chunk("IEND")), "InvalidValue"),
+        ("png-chunk-length-over-2-31", WithIdatLength(0x8000_0000), "LimitExceeded"),
+        ("jpeg-allowed-markers", Annotated(), "jpeg 8x8"),
+        ("jpeg-reserved-marker", JpegFrom(App0(), Segment(0x02, new byte[4]), Sof(0xC0, 8, 8, 3), Dht(), Sos(3), Entropy(0x01), Eoi()), "InvalidValue"),
+        ("jpeg-64-scans", ProgressiveWithScans(64), "jpeg 8x8"),
+        ("jpeg-65-scans", ProgressiveWithScans(65), "LimitExceeded"),
     ];
 
     private static string Outcome(byte[] bytes)
@@ -277,6 +354,9 @@ public class ImageSnifferTests
 
     private static byte[] Ascii(string text) => System.Text.Encoding.ASCII.GetBytes(text);
 
+    /// <summary>A tEXt chunk's data: the keyword "k", its zero separator, and the text "v".</summary>
+    private static byte[] KeyedText() => [(byte)'k', 0, (byte)'v'];
+
     // PNG: the signature, then chunks. CRCs are written correctly, though the rule doesn't check them.
     private static byte[] Png(int width, int height, byte colourType = 6, byte depth = 8, byte compression = 0, byte filter = 0, byte interlace = 0) =>
         PngFrom(Ihdr(width, height, depth, colourType, compression, filter, interlace), Idat(), Chunk("IEND"));
@@ -292,15 +372,24 @@ public class ImageSnifferTests
         return Chunk("IHDR", data);
     }
 
-    private static byte[] Idat()
-    {
-        using var output = new MemoryStream();
-        using (var zlib = new ZLibStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
-        {
-            zlib.Write(new byte[9]);
-        }
+    /// <summary>An IDAT holding a fixed zlib stream (nine zero bytes, deflated), so the vectors never depend on a runtime's compressor.</summary>
+    private static byte[] Idat() => Chunk("IDAT", Convert.FromHexString("78DA636080020000090001"));
 
-        return Chunk("IDAT", output.ToArray());
+    /// <summary>A PNG of 2 by 2 whose IDAT chunk declares <paramref name="length"/> bytes.</summary>
+    private static byte[] WithIdatLength(uint length)
+    {
+        var png = PngFrom(Ihdr(2, 2), Idat(), Chunk("IEND"));
+        BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(8 + 25), length);
+        return png;
+    }
+
+    /// <summary>A chunk's length and type, with nothing after them.</summary>
+    private static byte[] ChunkHeader(uint length, string type)
+    {
+        var header = new byte[8];
+        BinaryPrimitives.WriteUInt32BigEndian(header, length);
+        Ascii(type).CopyTo(header, 4);
+        return header;
     }
 
     private static byte[] Chunk(string type, byte[]? data = null)
@@ -308,7 +397,7 @@ public class ImageSnifferTests
         data ??= [];
         var chunk = new byte[12 + data.Length];
         BinaryPrimitives.WriteUInt32BigEndian(chunk, (uint)data.Length);
-        System.Text.Encoding.ASCII.GetBytes(type).CopyTo(chunk, 4);
+        Ascii(type).CopyTo(chunk, 4);
         data.CopyTo(chunk, 8);
         BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(8 + data.Length), Crc32(chunk.AsSpan(4, 4 + data.Length)));
         return chunk;
@@ -334,6 +423,14 @@ public class ImageSnifferTests
         JpegFrom(App0(), Dqt(), Sof(frame, height, width, components), Dht(), Sos(components), Entropy(0x12, 0x34), Eoi());
 
     private static byte[] JpegFrom(params byte[][] parts) => [0xFF, 0xD8, .. parts.SelectMany(p => p)];
+
+    /// <summary>A progressive greyscale JPEG of 8 by 8 in <paramref name="count"/> scans.</summary>
+    private static byte[] ProgressiveWithScans(int count) =>
+        JpegFrom([App0(), Dqt(), Sof(0xC2, 8, 8, 1), Dht(), .. Enumerable.Range(0, count).Select(_ => Join(Sos(1), Entropy(0x01))), Eoi()]);
+
+    /// <summary>A baseline JPEG holding every kind of segment the rule allows besides the frame and scan: APP1, APP15, COM, DQT, DRI and DHT.</summary>
+    private static byte[] Annotated() =>
+        JpegFrom(App0(), Segment(0xE1, [.. Ascii("Exif"), 0, 0]), Segment(0xEF, [1]), Segment(0xFE, Ascii("comment")), Dqt(), Segment(0xDD, [0, 4]), Sof(0xC0, 8, 8, 3), Dht(), Sos(3), Entropy(0x01, 0xFF, 0xD0, 0x02), Eoi());
 
     private static byte[] Segment(byte code, byte[] body)
     {

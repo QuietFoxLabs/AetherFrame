@@ -116,6 +116,7 @@ static class AetherFrame.Protocol.ProtocolLimits
     const Int32 MaxDocumentBytes
     const Int32 MaxImageDimension
     const Int32 MaxImagesPerProfile
+    const Int32 MaxJpegScans
     const Int32 MaxLayoutAngle
     const Int32 MaxLayoutCanvasExtent
     const Int32 MaxLayoutCoordinate

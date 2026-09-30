@@ -106,6 +106,12 @@ public static class ProtocolLimits
     public const long MaxImagePixels = 20_000_000;
 
     /// <summary>
+    /// The most scans a shared JPEG may have (section 8.2.1). A decoder's work grows with its scans
+    /// times its pixels, which the pixel limit alone doesn't bound; encoders write 1 to about 10.
+    /// </summary>
+    public const int MaxJpegScans = 64;
+
+    /// <summary>
     /// The most bytes the images of one remote profile may declare in total (40 MiB): the remote
     /// profile payload limit, as far as a document can state it. What a server actually stores is
     /// its own measurement, never this declaration.

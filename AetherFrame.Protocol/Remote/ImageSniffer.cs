@@ -16,12 +16,16 @@ public readonly record struct SniffedImage(ImageFormat Format, int Width, int He
 /// the publisher to the copies it prepared, the server to what it receives and to its own
 /// re-encodes (decision I2), and the viewer to what it is served (decision I1).
 /// docs/networking/ProtocolSpecification-v1.md, section 8.2.1, is normative. It reads the
-/// container's structure only, in a walk bounded by the bytes given, and never decodes pixels:
+/// container's structure only, in a walk bounded by the bytes given, never decodes pixels, and
+/// checks each rule as soon as what it is about has been read (section 9.1):
 /// <list type="bullet">
-/// <item>a non-animated, non-interlaced 8-bit PNG, truecolour with or without alpha;</item>
+/// <item>a non-animated, non-interlaced 8-bit PNG, truecolour with or without alpha, whose only
+/// critical chunks are IHDR, PLTE, IDAT and IEND, with no compressed ancillary chunk;</item>
 /// <item>a JPEG whose one frame is baseline, extended or progressive Huffman (SOF0 to SOF2),
-/// 8-bit, with 1 or 3 components, ending at its end-of-image marker.</item>
+/// 8-bit, with 1 or 3 components, in at most 64 scans, holding only the markers such a JPEG
+/// needs, and ending at its end-of-image marker.</item>
 /// </list>
+/// A consumer decodes exactly the bytes it checked, from its own copy of them.
 /// </summary>
 public static class ImageSniffer
 {
@@ -30,9 +34,11 @@ public static class ImageSniffer
     /// <summary>Reads <paramref name="bytes"/> by section 8.2.1, refusing anything it doesn't allow.</summary>
     /// <exception cref="ProtocolException">
     /// <see cref="ProtocolError.InvalidLength"/> for no bytes, <see cref="ProtocolError.LimitExceeded"/>
-    /// for more than 8 MiB or a size over section 8.2's limits, <see cref="ProtocolError.Truncated"/>
-    /// for a structure that runs past the end, <see cref="ProtocolError.TrailingBytes"/> for bytes
-    /// after the end, and <see cref="ProtocolError.InvalidValue"/> for anything else it refuses.
+    /// for more than 8 MiB, a size over section 8.2's limits, a PNG chunk length over 2^31 - 1 or a
+    /// 65th JPEG scan, <see cref="ProtocolError.Truncated"/> for a structure that runs past the end,
+    /// <see cref="ProtocolError.TrailingBytes"/> for bytes after the end, and
+    /// <see cref="ProtocolError.InvalidValue"/> for anything else it refuses; the first fault in
+    /// reading order.
     /// </exception>
     public static SniffedImage Sniff(ReadOnlySpan<byte> bytes)
     {
@@ -61,16 +67,21 @@ public static class ImageSniffer
 
     /// <summary>
     /// Checks that <paramref name="bytes"/> are exactly the image <paramref name="declared"/>
-    /// describes, in section 13, rule 7's order: the byte length and SHA-256 first, then section
-    /// 8.2.1's rules, then the declared format, width and height.
+    /// describes, in section 13, rule 7's order: the byte length, then the SHA-256 (compared in
+    /// constant time), then section 8.2.1's rules, then the declared format, width and height.
     /// </summary>
     /// <exception cref="ProtocolException">A refusal of <see cref="Sniff"/>, or <see cref="ProtocolError.InvalidValue"/> when anything differs from the declaration.</exception>
     public static SniffedImage CheckDeclared(ReadOnlySpan<byte> bytes, ImageReference declared)
     {
         ArgumentNullException.ThrowIfNull(declared);
+        if (bytes.Length != declared.ByteLength)
+        {
+            throw new ProtocolException(ProtocolError.InvalidValue, "An image's bytes are not the image its declaration describes.");
+        }
+
         Span<byte> digest = stackalloc byte[ProtocolConstants.DigestLength];
         SHA256.HashData(bytes, digest);
-        if (bytes.Length != declared.ByteLength || !CryptographicOperations.FixedTimeEquals(digest, declared.Sha256))
+        if (!CryptographicOperations.FixedTimeEquals(digest, declared.Sha256))
         {
             throw new ProtocolException(ProtocolError.InvalidValue, "An image's bytes are not the image its declaration describes.");
         }
@@ -90,46 +101,47 @@ public static class ImageSniffer
         var first = true;
         var width = 0;
         var height = 0;
+        var palette = false;
         var sawData = false;
         var dataEnded = false;
         while (true)
         {
-            if (bytes.Length - offset < 12)
+            // The length, and its limit, before anything it announces.
+            if (bytes.Length - offset < 4)
             {
-                throw new ProtocolException(ProtocolError.Truncated, "A PNG chunk runs past the end of the image.");
+                throw PngTruncated();
             }
 
             var length = BinaryPrimitives.ReadUInt32BigEndian(bytes[offset..]);
-            var type = bytes.Slice(offset + 4, 4);
+            offset += 4;
+            if (length > int.MaxValue)
+            {
+                throw new ProtocolException(ProtocolError.LimitExceeded, "A PNG chunk's length is at most 2,147,483,647.");
+            }
+
+            // The type, and every rule it decides, before the chunk's data.
+            if (bytes.Length - offset < 4)
+            {
+                throw PngTruncated();
+            }
+
+            var type = bytes.Slice(offset, 4);
+            offset += 4;
             foreach (var letter in type)
             {
-                if (letter is not ((>= (byte)'A' and <= (byte)'Z') or (>= (byte)'a' and <= (byte)'z')))
+                if (!IsAsciiLetter(letter))
                 {
                     throw new ProtocolException(ProtocolError.InvalidValue, "A PNG chunk's type is four ASCII letters.");
                 }
             }
 
-            if (length > int.MaxValue || length > (uint)(bytes.Length - offset - 12))
-            {
-                throw new ProtocolException(ProtocolError.Truncated, "A PNG chunk runs past the end of the image.");
-            }
-
-            var data = bytes.Slice(offset + 8, (int)length);
+            var end = type.SequenceEqual("IEND"u8);
             if (first)
             {
                 if (!type.SequenceEqual("IHDR"u8) || length != 13)
                 {
                     throw new ProtocolException(ProtocolError.InvalidValue, "A PNG starts with a 13-byte IHDR chunk.");
                 }
-
-                (width, height) = CheckSize(BinaryPrimitives.ReadUInt32BigEndian(data), BinaryPrimitives.ReadUInt32BigEndian(data[4..]));
-                var (depth, colourType, compression, filter, interlace) = (data[8], data[9], data[10], data[11], data[12]);
-                if (depth != 8 || colourType is not (2 or 6) || compression != 0 || filter != 0 || interlace != 0)
-                {
-                    throw new ProtocolException(ProtocolError.InvalidValue, "A PNG is 8-bit truecolour, with or without alpha, and not interlaced.");
-                }
-
-                first = false;
             }
             else if (type.SequenceEqual("IHDR"u8))
             {
@@ -138,6 +150,19 @@ public static class ImageSniffer
             else if (type.SequenceEqual("acTL"u8) || type.SequenceEqual("fcTL"u8) || type.SequenceEqual("fdAT"u8))
             {
                 throw new ProtocolException(ProtocolError.InvalidValue, "A shared PNG is never animated.");
+            }
+            else if (type.SequenceEqual("iCCP"u8) || type.SequenceEqual("zTXt"u8) || type.SequenceEqual("iTXt"u8))
+            {
+                throw new ProtocolException(ProtocolError.InvalidValue, "A shared PNG has no iCCP, zTXt or iTXt chunk, whose compressed contents no limit here bounds.");
+            }
+            else if (type.SequenceEqual("PLTE"u8))
+            {
+                if (palette || sawData || length is 0 or > 768 || length % 3 != 0)
+                {
+                    throw new ProtocolException(ProtocolError.InvalidValue, "A PNG has at most one PLTE chunk, of 1 to 256 entries, before its image data.");
+                }
+
+                palette = true;
             }
             else if (type.SequenceEqual("IDAT"u8))
             {
@@ -148,26 +173,59 @@ public static class ImageSniffer
 
                 sawData = true;
             }
-            else if (type.SequenceEqual("IEND"u8))
+            else if (end)
             {
                 if (length != 0 || !sawData)
                 {
                     throw new ProtocolException(ProtocolError.InvalidValue, "A PNG ends with an empty IEND chunk, after its image data.");
                 }
-
-                if (offset + 12 != bytes.Length)
-                {
-                    throw new ProtocolException(ProtocolError.TrailingBytes, "Nothing follows a PNG's IEND chunk.");
-                }
-
-                return new SniffedImage(ImageFormat.Png, width, height);
+            }
+            else if (type[0] <= (byte)'Z')
+            {
+                // An upper-case first letter marks a critical chunk, which a decoder must understand.
+                throw new ProtocolException(ProtocolError.InvalidValue, "A PNG's only critical chunks are IHDR, PLTE, IDAT and IEND.");
             }
             else if (sawData)
             {
                 dataEnded = true;
             }
 
-            offset += 12 + (int)length;
+            // The data, then its fields in order, then the CRC, which this rule doesn't check.
+            if (length > (uint)(bytes.Length - offset))
+            {
+                throw PngTruncated();
+            }
+
+            var data = bytes.Slice(offset, (int)length);
+            offset += (int)length;
+            if (first)
+            {
+                width = Dimension(BinaryPrimitives.ReadUInt32BigEndian(data));
+                height = Dimension(BinaryPrimitives.ReadUInt32BigEndian(data[4..]));
+                CheckPixels(width, height);
+                if (data[8] != 8 || data[9] is not (2 or 6) || data[10] != 0 || data[11] != 0 || data[12] != 0)
+                {
+                    throw new ProtocolException(ProtocolError.InvalidValue, "A PNG is 8-bit truecolour, with or without alpha, and not interlaced.");
+                }
+
+                first = false;
+            }
+
+            if (bytes.Length - offset < 4)
+            {
+                throw PngTruncated();
+            }
+
+            offset += 4;
+            if (end)
+            {
+                if (offset != bytes.Length)
+                {
+                    throw new ProtocolException(ProtocolError.TrailingBytes, "Nothing follows a PNG's IEND chunk.");
+                }
+
+                return new SniffedImage(ImageFormat.Png, width, height);
+            }
         }
     }
 
@@ -177,15 +235,15 @@ public static class ImageSniffer
         var width = 0;
         var height = 0;
         var framed = false;
-        var scanned = false;
+        var scans = 0;
         while (true)
         {
+            // The marker's code, and every rule it decides, before its segment.
             var marker = NextMarker(bytes, ref offset);
             switch (marker)
             {
                 case 0xD9:
-                    // End of image: after a frame and a scan, and last.
-                    if (!framed || !scanned)
+                    if (!framed || scans == 0)
                     {
                         throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG ends after its frame and its image data.");
                     }
@@ -197,34 +255,13 @@ public static class ImageSniffer
 
                     return new SniffedImage(ImageFormat.Jpeg, width, height);
 
-                case 0xD8:
-                case >= 0xD0 and <= 0xD7:
-                case 0x01:
-                    throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG has one start-of-image marker, restart markers only within image data, and no TEM marker.");
-            }
-
-            var segment = Segment(bytes, ref offset);
-            switch (marker)
-            {
-                case 0xC0:
-                case 0xC1:
-                case 0xC2:
+                case >= 0xC0 and <= 0xC2:
                     if (framed)
                     {
                         throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG has one frame.");
                     }
 
-                    (width, height) = Frame(segment);
-                    framed = true;
                     break;
-
-                case 0xC3:
-                case >= 0xC5 and <= 0xCF:
-                case 0xDC:
-                case 0xDE:
-                case 0xDF:
-                case >= 0xF0 and <= 0xFD:
-                    throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG frame is baseline, extended or progressive Huffman (SOF0 to SOF2), with no DNL, DAC, hierarchical or reserved marker.");
 
                 case 0xDA:
                     if (!framed)
@@ -232,9 +269,36 @@ public static class ImageSniffer
                         throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG's image data follows its frame.");
                     }
 
-                    SkipScan(bytes, ref offset);
-                    scanned = true;
+                    if (scans == ProtocolLimits.MaxJpegScans)
+                    {
+                        throw new ProtocolException(ProtocolError.LimitExceeded, $"A JPEG has at most {ProtocolText.Number(ProtocolLimits.MaxJpegScans)} scans.");
+                    }
+
                     break;
+
+                case 0xC4:
+                case 0xDB:
+                case 0xDD:
+                case >= 0xE0 and <= 0xEF:
+                case 0xFE:
+                    break;
+
+                default:
+                    throw new ProtocolException(
+                        ProtocolError.InvalidValue,
+                        "A JPEG holds only the markers a baseline, extended or progressive Huffman JPEG needs (SOF0 to SOF2, DHT, DQT, DRI, SOS, APP0 to APP15, COM, one start and one end of image), and restart markers only within image data.");
+            }
+
+            var segment = Segment(bytes, ref offset);
+            if (marker is >= 0xC0 and <= 0xC2)
+            {
+                (width, height) = Frame(segment);
+                framed = true;
+            }
+            else if (marker == 0xDA)
+            {
+                scans++;
+                SkipScan(bytes, ref offset);
             }
         }
     }
@@ -268,7 +332,7 @@ public static class ImageSniffer
         return code;
     }
 
-    /// <summary>A marker segment's body; <paramref name="offset"/> moves past it.</summary>
+    /// <summary>A marker segment's body, after its length's rule; <paramref name="offset"/> moves past it.</summary>
     private static ReadOnlySpan<byte> Segment(ReadOnlySpan<byte> bytes, ref int offset)
     {
         if (bytes.Length - offset < 2)
@@ -292,21 +356,41 @@ public static class ImageSniffer
         return body;
     }
 
+    /// <summary>A frame header's fields, each checked as it is read.</summary>
     private static (int Width, int Height) Frame(ReadOnlySpan<byte> frame)
     {
-        if (frame.Length < 6)
+        if (FrameField(frame, 0, 1) != 8)
+        {
+            throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG frame is 8-bit.");
+        }
+
+        // A height of 0 would leave it to a DNL marker, which is refused.
+        var height = Dimension(FrameField(frame, 1, 2));
+        var width = Dimension(FrameField(frame, 3, 2));
+        CheckPixels(width, height);
+        var components = FrameField(frame, 5, 1);
+        if (components is not (1 or 3))
+        {
+            throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG frame has 1 or 3 components.");
+        }
+
+        if (frame.Length != 6 + (3 * components))
+        {
+            throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG frame header holds 3 bytes per component, and nothing more.");
+        }
+
+        return (width, height);
+    }
+
+    /// <summary>A big-endian field of a frame header, which must hold it.</summary>
+    private static uint FrameField(ReadOnlySpan<byte> frame, int at, int size)
+    {
+        if (frame.Length < at + size)
         {
             throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG frame header is too short.");
         }
 
-        var (precision, height, width, components) = (frame[0], BinaryPrimitives.ReadUInt16BigEndian(frame[1..]), BinaryPrimitives.ReadUInt16BigEndian(frame[3..]), frame[5]);
-        if (precision != 8 || components is not (1 or 3) || frame.Length != 6 + (3 * components))
-        {
-            throw new ProtocolException(ProtocolError.InvalidValue, "A JPEG frame is 8-bit, with 1 or 3 components.");
-        }
-
-        // A height of 0 would leave it to a DNL marker, which is refused.
-        return CheckSize(width, height);
+        return size == 1 ? frame[at] : BinaryPrimitives.ReadUInt16BigEndian(frame[at..]);
     }
 
     /// <summary>Moves <paramref name="offset"/> past a scan's entropy-coded data, to the marker that ends it.</summary>
@@ -346,18 +430,32 @@ public static class ImageSniffer
         throw new ProtocolException(ProtocolError.Truncated, "A JPEG ends before its end-of-image marker.");
     }
 
-    private static (int Width, int Height) CheckSize(uint width, uint height)
+    /// <summary>A width or height, checked as it is read: 0 is refused, and so is more than section 8.2 allows.</summary>
+    private static int Dimension(uint value)
     {
-        if (width == 0 || height == 0)
+        if (value == 0)
         {
             throw new ProtocolException(ProtocolError.InvalidValue, "An image is at least one pixel each way.");
         }
 
-        if (width > ProtocolLimits.MaxImageDimension || height > ProtocolLimits.MaxImageDimension || (long)width * height > ProtocolLimits.MaxImagePixels)
+        if (value > ProtocolLimits.MaxImageDimension)
         {
-            throw new ProtocolException(ProtocolError.LimitExceeded, $"An image is at most {ProtocolText.Number(ProtocolLimits.MaxImageDimension)} pixels each way, and {ProtocolText.Number(ProtocolLimits.MaxImagePixels)} in all.");
+            throw new ProtocolException(ProtocolError.LimitExceeded, $"An image is at most {ProtocolText.Number(ProtocolLimits.MaxImageDimension)} pixels each way.");
         }
 
-        return ((int)width, (int)height);
+        return (int)value;
     }
+
+    /// <summary>The pixel product, once both dimensions are read.</summary>
+    private static void CheckPixels(int width, int height)
+    {
+        if ((long)width * height > ProtocolLimits.MaxImagePixels)
+        {
+            throw new ProtocolException(ProtocolError.LimitExceeded, $"An image is at most {ProtocolText.Number(ProtocolLimits.MaxImagePixels)} pixels in all.");
+        }
+    }
+
+    private static bool IsAsciiLetter(byte value) => value is (>= (byte)'A' and <= (byte)'Z') or (>= (byte)'a' and <= (byte)'z');
+
+    private static ProtocolException PngTruncated() => new(ProtocolError.Truncated, "A PNG chunk runs past the end of the image.");
 }
