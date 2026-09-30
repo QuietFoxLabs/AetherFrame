@@ -258,7 +258,7 @@ public class SharingClientTests
         var codeAnswer = await client.ActionAsync(RequestProofKind.LodestoneCode, Json("{}"), key, default);
         var code = JsonDocument.Parse(codeAnswer.Body).RootElement.GetProperty("code").GetString()!;
         server.Lodestone.Pages[lodestoneId] = LodestoneHtml.Character(name, "Gilgamesh", "AetherFrame " + code);
-        var check = await client.ActionAsync(RequestProofKind.LodestoneCheck, Json($"{{\"lodestoneId\":\"{lodestoneId}\",\"code\":\"{code}\"}}"), key, default);
+        var check = await client.ActionAsync(RequestProofKind.LodestoneCheck, Json($"{{\"lodestoneId\":\"{lodestoneId}\",\"code\":\"{code}\",\"name\":\"{name}\",\"world\":\"Gilgamesh\"}}"), key, default);
         Assert.Equal(HttpStatusCode.OK, check.Status);
         return ProfileId.Parse(JsonDocument.Parse(check.Body).RootElement.GetProperty("profileId").GetString()!);
     }
