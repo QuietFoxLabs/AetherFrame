@@ -25,6 +25,12 @@
     <ProjectReference Include="..\AetherFrame.ImageWorker\AetherFrame.ImageWorker.csproj" />
   </ItemGroup>
 
+  <!-- The plugin's client for this server (docs/networking/NETWORK2.md, N2-9a), compiled here so
+       its tests run it against the real server in memory. It is Dalamud-free by design. -->
+  <ItemGroup>
+    <Compile Include="..\..\AetherFrame\Services\Network\Transport\SharingClient.cs" Link="Linked\Plugin\SharingClient.cs" />
+  </ItemGroup>
+
   <!-- The same test packages, at the same versions, as the other test projects. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />

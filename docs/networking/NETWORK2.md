@@ -130,6 +130,8 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 
 `[updated 2026-09-30: N2-5 is delivered in three parts, as N2-3 was in two: N2-5a (the library), N2-5b (the plugin's persona storage and session) and N2-5c (the persona window); "N2-5" elsewhere in this plan means all three.]`
 
+`[updated 2026-09-30: N2-9 is delivered in three parts: N2-9a (the transport, which applies R3's boundary), N2-9b (opting in: the character's key, the consent screen, the Lodestone code and check, pausing and turning sharing off) and N2-9c (publishing the Active Plate when it is saved or changed, and the Personas window leaving My Plates). The tutorial's chapter comes with N2-10, since it covers viewing too.]`
+
 N2-7's server runs locally in its own tests and in the plugin's integration tests, so everything up to N2-10 can be built and tested before the owner's server exists. Only the real test needs it.
 
 **Acceptance carried into the increments:** `[updated 2026-09-30: where these name share codes, R4, /tell or "opening a code", read them under V1 to V5: lookup by character or name search, and "opening a Plate". N2-5's D3 acceptance is amended by V4. Batch C restates what changes.]`

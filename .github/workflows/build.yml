@@ -106,9 +106,9 @@ jobs:
     # and persona sources compiled into AetherFrame.dll, built once, on Windows, into a separate
     # output. DalamudPackager still rewrites the player package under bin/ with the player DLL it
     # finds there, so this runs last, after the package check and the stored artifact. It keeps the
-    # flavour compiling with the plugin's own settings and holds it to the same boundaries as the
-    # player build (no networking assembly, no networking API), with the boundary tests told which
-    # flavour they are looking at. The test filter is load-bearing: the rest of the suite expects
+    # flavour compiling with the plugin's own settings and holds it to decision R3's boundary (HTTP
+    # only, through Dalamud's connect callback, from Services/Network alone), with the boundary tests
+    # told which flavour they are looking at. The test filter is load-bearing: the rest of the suite expects
     # AetherFrame.json beside the DLL, which DalamudPackager writes under bin/, not here.
     - name: Build and check the network preview flavour
       if: runner.os == 'Windows'

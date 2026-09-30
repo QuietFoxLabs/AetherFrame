@@ -8,15 +8,15 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 21:48 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
   - a verdict on test build `01a14a5`, which gates the 0.1.7 release. It is staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`; the game now runs the preview builds, so it goes back in the test folder when the owner asks;
   - the tutorial checks for preview build `a933c50` (Next held until you do what a step asks, [#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60) and [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63)), given in chat;
   - the 10 checks for preview build `febf0cb`, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)), in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5910883556). The game loaded it at 12:02 UTC. It supersedes `ae80c75`, whose 10 tutorial checks, posted by a second Claude session, still apply to it, as do the earlier preview posts' networking checks;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
-  - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
-- **In progress:** N2-8, the deployment kit (this change). N2-7, the server, is done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67)). The plugin's side (N2-9, N2-10) comes next.
+  - the server's setup for its first deploy, now that the domain (`aetherframe.dev`) and the server are bought: the DNS record for `plates.aetherframe.dev`, `host-setup.sh` run on the server, and the production environment's reviewer, secrets and variable (steps in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5918214865)). A first deploy of `ffa428a` stopped before connecting to anything, because the domain variable isn't set yet.
+- **In progress:** N2-9a, the plugin's transport to the server (this change). N2-8, the deployment kit, is done ([#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68)), and so is N2-7, the server ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67)). The rest of the plugin's side (N2-9b, N2-9c, N2-10) comes next.
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
@@ -27,11 +27,10 @@ Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52
   - decision batch C, viewing by character ([#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61), merged as `f467032`);
   - the re-plan of sharing around the owner's decisions V1 to V5 ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), merged as `b75deba`, by a second Claude session): an opted-in player right-clicks another opted-in player's character, or searches their name and World, and views their Active Plate as a finished picture. Characters are proved by a Lodestone check, personas are hidden, and share codes are retired.
 - **Next, for the two-player test:**
-  1. N2-7: the server (in progress);
-  2. N2-8: deployment;
-  3. N2-9: the sharing flow in the plugin;
-  4. N2-10: the viewer;
-  5. N2-11: the test kit and the two-player checklist.
+  1. N2-9: the sharing flow in the plugin: the transport (N2-9a, in progress), then opting in with the Lodestone check (N2-9b), then publishing the Active Plate (N2-9c);
+  2. N2-10: the viewer, with the tutorial's chapter on sharing;
+  3. N2-11: the test kit and the two-player checklist;
+  4. the first deploy, once the owner's server setup is done.
 - **Next, for the interface:** section 8's task 2, Open another Plate... and New Plate... in the Plate menu, then tasks 3 to 6, then the second pass's tasks 7 to 16 ([#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), merged). Those include one editor window with Basic and Advanced as modes (task 8, the owner's decision, section 5), which will carry the Plate menu.
 
 | NETWORK2 increment | State |
@@ -46,15 +45,16 @@ Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52
 | N2-6c: the publication index, the outbox and the commit | done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) |
 | N2-C: decision batch C, viewing by character (V1 to V5) | done: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61) |
 | N2-7: the server | done: [#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67) |
-| N2-8: deployment | this change; the real deploy needs the owner's domain and server |
-| N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
+| N2-8: deployment | done: [#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68); the first deploy waits on the owner's server setup |
+| N2-9a: the plugin's transport | this change |
+| N2-9b to N2-11: opting in, publishing, the viewer, the test kit | planned |
 
 | Build | State |
 | --- | --- |
 | v0.1.6 | released to the testing channel |
 | Test build `01a14a5` (player) | waiting for the owner's verdict; staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`, which the game no longer loads |
 | Preview build `a933c50` (`master` after [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63)) | in `E:\AetherFrame Test Build\` since September 30, 17:07 UTC, installed after a two-minute notice, with a copy in `E:\AetherFrame Test Builds\2026-09-30 a933c50 preview\`. The game loaded it at 17:07 UTC, with no restart. It supersedes preview build `febf0cb`, whose checks still apply. |
-| `master` | `b75deba` (after [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), which changed documents only), CI green on both platforms |
+| `master` | `ffa428a` (after [#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68), which changed no plugin code), CI green on both platforms |
 
 ## 1. Goal and scope
 
@@ -314,16 +314,21 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - Pausing is the opting-out kind with `{"mode": "pause"}`: the Plate goes, the binding stays. A key whose character was taken over gets `410`.
   - A publish is authenticated (its proof, a live challenge, a bound and allowed signer) before it takes one of two publish slots or reads its body; the protocol library gains `CheckSubmissionProof` for section 14.4's first two steps, with no signed-byte change.
   - Until the image worker (N2-7c), every image is refused. CI runs the server's 103 tests.
-- NETWORK2 increment N2-7c, the image worker: [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67), merged as `dc7a3e3`. `server/AetherFrame.ImageWorker` re-encodes each image with ImageSharp 3.1.12, one job per run, over a Unix socket the server owns. The server checks each answer against section 8.2.1, the declared size, and the exact bytes the worker's encoder writes. Six Labors' 2026 advisories that 3.x doesn't fix are checked one by one in the register, and none reaches the worker. Moving to 4.x needs the owner's licence key (Owner inbox).
-- NETWORK2 increment N2-8, the deployment kit: this change.
+- NETWORK2 increment N2-7c, the image worker: [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67), merged as `dc7a3e3`. `server/AetherFrame.ImageWorker` re-encodes each image with ImageSharp 3.1.12, one job per run, over a Unix socket the server owns. The server checks each answer against section 8.2.1, the declared size, and the exact bytes the worker's encoder writes. Six Labors' 2026 advisories that 3.x doesn't fix are checked one by one in the register, and none reaches the worker. Moving to 4.x needs the owner's licence key (Owner inbox). A publish's images are now re-encoded rather than refused; with no worker socket configured, the server still refuses them. CI runs the server's 122 tests, one of which publishes through a real worker run.
+- NETWORK2 increment N2-8, the deployment kit: [#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68), merged as `ffa428a`.
   - `deploy/` holds the server's and the worker's images, Caddy (automatic certificates, no access log) and `compose.yaml`. It also holds a system service that runs the image worker one container per job and ends each from outside after 60 seconds, and `host-setup.sh`. That script installs Docker, keeps logs 14 days, opens only SSH, HTTP and HTTPS, turns on security updates and creates the deploy user.
   - **Deploy the server** deploys a commit on master after the owner's approval, with the deploy key kept in a protected environment.
   - The server gains daily backups kept 7 days, a reloading configuration file for the allowlist, and the operator's commands. The worker refuses to run with a network.
   - CI builds both images, starts the stack, and checks that it answers and that the worker is isolated and ended after its life.
-  - [docs/networking/Runbook.md](docs/networking/Runbook.md) is the owner's guide, from buying the domain onward. `server/AetherFrame.ImageWorker` re-encodes each image with ImageSharp 3.1.12, one job per run, over a Unix socket the server owns.
-  - The server checks each answer against section 8.2.1, the declared format and size, and the exact chunks or segments the worker writes.
-  - A publish's images are now re-encoded rather than refused. With no worker socket configured, the server still refuses them.
-  - The details are in ServerApi-v1.md, section 8, and in the register. CI runs the server's 122 tests, one of which publishes through a real worker run.
+  - [docs/networking/Runbook.md](docs/networking/Runbook.md) is the owner's guide, from buying the domain onward.
+- NETWORK2 increment N2-9a, the plugin's transport: this change. In the preview flavour only:
+  - `Services/Network/Transport` holds the plugin's client for the server: HTTPS to the one configured deployment name, through Dalamud's dual-stack connect callback, following no redirect and keeping no cookie (R2);
+  - every signed request gets a fresh challenge and a request proof of its path's kind, and a refused challenge is retried once under the fresh one the refusal carries;
+  - every answer is read within a bound for its request, within a time limit, and anything the client can't use becomes one kind of failure whose message names no identifier;
+  - nothing constructs the client yet: N2-9b wires it;
+  - the boundary tests enforce R3's exact allowlist on the compiled DLL: its referenced assemblies and types, that no type outside `Services/Network` names a networking type anywhere (the security review showed a source scan alone can be bypassed), that the only handler is SharingHandler's, through Dalamud's connect callback, and that it is never told anything R2 rules out; no process is started and no link opened. The source scan also refuses starting a process, a networking type named in a string, a networking `global using`, and line breaks only the compiler reads. The player flavour still references no networking at all;
+  - a publish's body is streamed from the document and images, never copied whole, and each request names the plugin's version;
+  - the server's tests compile the client and run it against the real server in memory: binding, publishing with an image, viewing, reporting and pausing, and a refused challenge.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
@@ -364,7 +369,7 @@ N2-C, decision batch C, is done ([#61](https://github.com/QuietFoxLabs/AetherFra
    - **N2-7c, the image worker** (I2, [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67)): a process of its own that decodes and encodes again, one job per run, whose output the server checks with its own strict parser;
    - its own test suite runs in CI. No plugin code, and nothing deployed.
 
-4. **N2-8: the deployment kit** (containers, Caddy, the deploy workflow and the runbook). Prerequisites: N2-7 merged; G3, complete since batch B. The owner's domain and server are needed only for a real deploy (NETWORK2.md, section 4). Acceptance:
+4. **N2-8: the deployment kit** (containers, Caddy, the deploy workflow and the runbook): done ([#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68), merged as `ffa428a`). Prerequisites: N2-7 merged; G3, complete since batch B. The owner's domain and server are needed only for a real deploy (NETWORK2.md, section 4). Acceptance:
    - container images for the server and the image worker, built in CI. The worker is isolated as I2 says, with no network, a read-only root, no database, key or configuration, and its own memory and process limits, and the server checks that at startup;
    - Caddy with automatic certificates for the one fixed hostname (R2), its access log off (S5), and forwarded headers trusted from Caddy alone (R4);
    - a deploy workflow that deploys a reviewed commit only after the owner approves the run in a protected environment. Its secrets, S2's tombstone key among them, live only there, and Claude never handles them;

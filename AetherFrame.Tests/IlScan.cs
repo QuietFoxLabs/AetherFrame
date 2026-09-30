@@ -60,6 +60,44 @@ internal static class IlScan
         return found;
     }
 
+    /// <summary>Every instruction in order, with its token operand, or 0 for one without.</summary>
+    internal static List<(ILOpCode OpCode, int Token)> Instructions(BlobReader reader)
+    {
+        var found = new List<(ILOpCode OpCode, int Token)>();
+        while (reader.RemainingBytes > 0)
+        {
+            var first = reader.ReadByte();
+            var opCode = first == 0xFE ? (ILOpCode)(0xFE00 | reader.ReadByte()) : (ILOpCode)first;
+            var token = 0;
+            switch (OperandOf(opCode))
+            {
+                case Operand.One:
+                    reader.Offset += 1;
+                    break;
+                case Operand.Two:
+                    reader.Offset += 2;
+                    break;
+                case Operand.Four:
+                    reader.Offset += 4;
+                    break;
+                case Operand.Eight:
+                    reader.Offset += 8;
+                    break;
+                case Operand.Token:
+                    token = reader.ReadInt32();
+                    break;
+                case Operand.Switch:
+                    var targets = reader.ReadInt32();
+                    reader.Offset += 4 * targets;
+                    break;
+            }
+
+            found.Add((opCode, token));
+        }
+
+        return found;
+    }
+
     private static Operand OperandOf(ILOpCode opCode)
     {
         switch (opCode)
