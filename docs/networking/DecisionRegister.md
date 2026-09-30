@@ -357,7 +357,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 
 **What a viewer accepts, whoever published.** A hostile publisher can skip preparation, so the limit is enforced where images are received, not trusted from the sender:
 - schema 2's `ImageReference.format` allows only PNG (1) and JPEG (2) (N2-3);
-- the viewer (N2-10) sniffs every image's bytes before decoding anything, and refuses anything but a non-animated 8-bit PNG, or an 8-bit baseline, extended or progressive JPEG (frame types SOF0 to SOF2) with 1 or 3 components, within the specification's section 8.2 limits, whatever I2 and D6 decide.
+- the viewer (N2-10) sniffs every image's bytes before decoding anything, and refuses anything but a non-animated 8-bit PNG, or an 8-bit baseline, extended or progressive JPEG (frame types SOF0 to SOF2) with 1 or 3 components, within the specification's section 8.2 limits, whatever I2 and D6 decide. `[updated 2026-09-30: both are decided in batch B, and the viewer's sniff stays (D6's conditions for N2-10).]`
 
 **Deviation from the recommendation, on sources only.** It proposed refusing animated WebP and CMYK JPEG. As *sources* they are accepted: preparation encodes the pixels again, so neither reaches a viewer in its original form. The risk the recommendation guarded against, which formats a viewer must decode, is covered by the rule above. Refusing them as sources would only turn away images the player already uses locally.
 
@@ -366,7 +366,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - Showing the prepared copy makes the player's consent informed.
 - One rule for all animations is simpler than one per format.
 
-**Not settled:** I2. `[updated 2026-09-29: schema 2's limits are settled by N2-3a (specification, section 8.5): at most 8 images, whose pixels total at most 33,554,432. The publisher refuses a Plate over them with a message, never dropping or downscaling an image. The security-focused reviewer of N2-3a recommended a cap on the images' total pixels, which bounds what a viewer decodes, and found it sound as implemented at `a388099`, with its exact boundary tested from `3528363`.]`
+**Not settled:** I2. `[updated 2026-09-30: settled by decision batch B (I2).]` `[updated 2026-09-29: schema 2's limits are settled by N2-3a (specification, section 8.5): at most 8 images, whose pixels total at most 33,554,432. The publisher refuses a Plate over them with a message, never dropping or downscaling an image. The security-focused reviewer of N2-3a recommended a cap on the images' total pixels, which bounds what a viewer decodes, and found it sound as implemented at `a388099`, with its exact boundary tested from `3528363`.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which relied on the publisher preparing images honestly, and asked for the receive-side rule, now above. It **concurred** with the amended entry on its recheck of `779e873`, adding that the sniff runs before any decoding and allows only frame types SOF0 to SOF2, also above.
 
@@ -436,7 +436,7 @@ N2-3 writes this into the specification as a consumer obligation.
    - write and read the key file storage in a temporary directory.
 2. **The protector in use claims protection on this platform.** The DPAPI protector (N2-4) claims it only on native Windows. Under Wine, DPAPI is obfuscation only (NETWORK1_CryptoCompatibility.md, section 3), so it claims none there, and persona features stay off until K9 decides a store for that case.
 
-`[updated 2026-09-30: under D6 a viewer receives server-checked content and verifies no signature, so the probe's verification step protects nothing in viewing: TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined, it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays on native Windows, where it passes, and becomes load-bearing if D6 ever changes. (See D6.)]`
+`[updated 2026-09-30: under D6 a viewer receives server-checked content and verifies no signature, so the probe's verification step protects nothing in viewing: TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined (from source, K8), it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays; on native Windows it passes, and it becomes load-bearing if D6 ever changes. (See D6.)]`
 
 **Deciding by capability, not by name.** Which operations work is decided by the probe, never by the operating system's name. The one platform fact used is the protector's own statement about protection, which no probe can measure.
 
@@ -758,7 +758,7 @@ magic "AFSP" | version u16 = 1 | marker bytes[16] | the profile, in section 8.5'
 
 **Recorded consequences:**
 - NETWORK0.md's authenticity goal now ends at the server: what a viewer sees is attested by the server, not signed by the creator. NETWORK0.md and the specification's section 13, rule 3 say so.
-- Under D6 the capability probe's verification step protects nothing in viewing, since TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined, it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays on native Windows, where it passes, and becomes load-bearing if D6 ever changes.
+- Under D6 the capability probe's verification step protects nothing in viewing, since TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined (from source, K8), it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays; on native Windows it passes, and it becomes load-bearing if D6 ever changes.
 
 **Not settled:** the served profile's specification text and vectors (N2-7, beside section 8.5).
 
