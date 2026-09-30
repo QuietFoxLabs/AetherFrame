@@ -107,7 +107,7 @@ internal static class RejectedVectorBuilder
         // Validly signed payloads that break one schema rule each.
         foreach (var (caseName, error) in new (string, ProtocolError)[]
         {
-            ("schema 2", ProtocolError.UnsupportedVersion), ("zero profile id", ProtocolError.InvalidValue), ("zero revision id", ProtocolError.InvalidValue),
+            ("schema 3", ProtocolError.UnsupportedVersion), ("schema 2 over schema 1 fields", ProtocolError.InvalidValue), ("zero profile id", ProtocolError.InvalidValue), ("zero revision id", ProtocolError.InvalidValue),
             ("createdAt over max", ProtocolError.InvalidValue), ("name with NUL", ProtocolError.InvalidText), ("name invalid utf8", ProtocolError.InvalidText),
             ("name overlong utf8", ProtocolError.InvalidText), ("name encoded surrogate", ProtocolError.InvalidText), ("name length huge", ProtocolError.LimitExceeded),
             // The name rule, decision D4: its limits, each refused family, and the names it turned into rejected vectors.
@@ -142,6 +142,12 @@ internal static class RejectedVectorBuilder
         Add("signed-retraction-issuedAt-over-max", PayloadBuilder.Signed(DocumentType.ProfileRetraction, signer, PayloadBuilder.Retraction(issuedAt: (ulong)ProtocolLimits.MaxUnixSeconds + 1)), ProtocolError.InvalidValue, "validly signed retraction payload with issuedAt one over the maximum", deterministic: false);
         Add("signed-retraction-truncated", PayloadBuilder.Signed(DocumentType.ProfileRetraction, signer, PayloadBuilder.Retraction()[..20]), ProtocolError.Truncated, "validly signed retraction payload cut inside issuedAt", deterministic: false);
         Add("signed-retraction-trailing-byte", PayloadBuilder.Signed(DocumentType.ProfileRetraction, signer, PayloadBuilder.Retraction(trailing: [0])), ProtocolError.TrailingBytes, "validly signed retraction payload with a byte after issuedAt", deterministic: false);
+
+        // Schema 2, the layout (section 8.5): every fault case, each a validly signed payload.
+        foreach (var (caseName, error) in LayoutPayload.Faults)
+        {
+            Add("signed-layout-" + caseName.Replace(' ', '-'), PayloadBuilder.Signed(DocumentType.ProfileSnapshot, signer, LayoutPayload.Case(caseName)), error, "validly signed layout payload: " + caseName, deterministic: false);
+        }
 
         // The draft marker, decision N3: the sample snapshot signed as a frozen version 1 document
         // (version 1 and the tag without "-draft"). A draft reader refuses it by its version; with

@@ -110,11 +110,20 @@ static class AetherFrame.Protocol.ProtocolLimits
     const Int32 MaxDocumentBytes
     const Int32 MaxImageDimension
     const Int32 MaxImagesPerProfile
+    const Int32 MaxLayoutAngle
+    const Int32 MaxLayoutCanvasExtent
+    const Int32 MaxLayoutCoordinate
+    const Int32 MaxLayoutExtent
+    const Int32 MaxLayoutIdentBytes
+    const Int32 MaxLayoutItemTextScalars
+    const Int32 MaxLayoutItems
+    const Int32 MaxLayoutTextScalars
     const Int32 MaxNameBytes
     const Int32 MaxNameScalars
     const Int32 MaxPayloadBytes
     const Int32 MaxTextBytes
     const Int32 MaxTextScalars
+    const Int32 MinLayoutCanvasExtent
     const Int32 SignedDocumentOverheadBytes
     const Int64 MaxImageBytes
     const Int64 MaxImagePixels
@@ -134,6 +143,208 @@ sealed class AetherFrame.Protocol.Remote.ImageReference
     Int64 ByteLength { get; }
     ReadOnlySpan<Byte> Sha256 { get; }
     new(AssetId assetId, ReadOnlySpan<Byte> sha256, ImageFormat format, Int64 byteLength, Int32 width, Int32 height)
+sealed class AetherFrame.Protocol.Remote.LayoutArtQuad
+    LayoutColor Tint { get; }
+    LayoutItemKind Kind { get; }
+    LayoutPoint A { get; }
+    LayoutPoint B { get; }
+    LayoutPoint C { get; }
+    LayoutPoint D { get; }
+    String Art { get; }
+    new(String art, LayoutPoint a, LayoutPoint b, LayoutPoint c, LayoutPoint d, LayoutColor tint)
+sealed class AetherFrame.Protocol.Remote.LayoutBackground
+    AssetId ImageAssetId { get; }
+    Byte Opacity { get; }
+    Byte TextureIntensity { get; }
+    Int32 GradientAngle { get; }
+    Int32 TextureRotation { get; }
+    Int32 TextureScale { get; }
+    LayoutBackground None { get; }
+    LayoutBackgroundMode Mode { get; }
+    LayoutColor Primary { get; }
+    LayoutColor Secondary { get; }
+    LayoutFlips ImageFlips { get; }
+    LayoutImageFit ImageFit { get; }
+    LayoutTexture Texture { get; }
+    const Int32 MaxTextureScale
+    const Int32 MinTextureScale
+    new(LayoutBackgroundMode mode, LayoutColor primary, LayoutColor secondary, Int32 gradientAngle, Byte opacity, LayoutTexture texture, Byte textureIntensity, Int32 textureScale, Int32 textureRotation, AssetId imageAssetId, LayoutImageFit imageFit, LayoutFlips imageFlips)
+enum AetherFrame.Protocol.Remote.LayoutBackgroundMode
+    Byte value__
+    const LayoutBackgroundMode Image
+    const LayoutBackgroundMode LinearGradient
+    const LayoutBackgroundMode None
+    const LayoutBackgroundMode SolidColor
+    const LayoutBackgroundMode TexturedFill
+struct AetherFrame.Protocol.Remote.LayoutColor
+    Boolean Equals(LayoutColor other)
+    Boolean Equals(Object obj)
+    Byte A { get; set; }
+    Byte B { get; set; }
+    Byte G { get; set; }
+    Byte R { get; set; }
+    Int32 GetHashCode()
+    String ToString()
+    Void Deconstruct(ref Byte R, ref Byte G, ref Byte B, ref Byte A)
+    new(Byte R, Byte G, Byte B, Byte A)
+enum AetherFrame.Protocol.Remote.LayoutFlips
+    Byte value__
+    const LayoutFlips Horizontal
+    const LayoutFlips None
+    const LayoutFlips Vertical
+enum AetherFrame.Protocol.Remote.LayoutHorizontalAlign
+    Byte value__
+    const LayoutHorizontalAlign Center
+    const LayoutHorizontalAlign Left
+    const LayoutHorizontalAlign Right
+sealed class AetherFrame.Protocol.Remote.LayoutImage
+    AssetId AssetId { get; }
+    Byte Opacity { get; }
+    Int32 Height { get; }
+    Int32 Rotation { get; }
+    Int32 Width { get; }
+    LayoutFlips Flips { get; }
+    LayoutImageFit Fit { get; }
+    LayoutItemKind Kind { get; }
+    LayoutPoint Position { get; }
+    new(AssetId assetId, LayoutPoint position, Int32 width, Int32 height, Int32 rotation, LayoutImageFit fit, LayoutFlips flips, Byte opacity)
+enum AetherFrame.Protocol.Remote.LayoutImageFit
+    Byte value__
+    const LayoutImageFit Fill
+    const LayoutImageFit Fit
+    const LayoutImageFit Stretch
+sealed class AetherFrame.Protocol.Remote.LayoutImageQuad
+    AssetId AssetId { get; }
+    LayoutColor Tint { get; }
+    LayoutItemKind Kind { get; }
+    LayoutPoint A { get; }
+    LayoutPoint B { get; }
+    LayoutPoint C { get; }
+    LayoutPoint D { get; }
+    new(AssetId assetId, LayoutPoint a, LayoutPoint b, LayoutPoint c, LayoutPoint d, LayoutColor tint)
+abstract class AetherFrame.Protocol.Remote.LayoutItem
+    LayoutItemKind Kind { get; }
+enum AetherFrame.Protocol.Remote.LayoutItemKind
+    Byte value__
+    const LayoutItemKind ArtQuad
+    const LayoutItemKind Image
+    const LayoutItemKind ImageQuad
+    const LayoutItemKind Quad
+    const LayoutItemKind Text
+    const LayoutItemKind Triangle
+struct AetherFrame.Protocol.Remote.LayoutPoint
+    Boolean Equals(LayoutPoint other)
+    Boolean Equals(Object obj)
+    Int32 GetHashCode()
+    Int32 X { get; set; }
+    Int32 Y { get; set; }
+    String ToString()
+    Void Deconstruct(ref Int32 X, ref Int32 Y)
+    new(Int32 X, Int32 Y)
+sealed class AetherFrame.Protocol.Remote.LayoutQuad
+    LayoutColor Color { get; }
+    LayoutItemKind Kind { get; }
+    LayoutPoint A { get; }
+    LayoutPoint B { get; }
+    LayoutPoint C { get; }
+    LayoutPoint D { get; }
+    new(LayoutPoint a, LayoutPoint b, LayoutPoint c, LayoutPoint d, LayoutColor color)
+sealed class AetherFrame.Protocol.Remote.LayoutText
+    Int32 AutoFitMinimum { get; }
+    Int32 FontSize { get; }
+    Int32 Height { get; }
+    Int32 LetterSpacing { get; }
+    Int32 LineSpacing { get; }
+    Int32 OutlineThickness { get; }
+    Int32 ShadowX { get; }
+    Int32 ShadowY { get; }
+    Int32 Width { get; }
+    LayoutColor Color { get; }
+    LayoutColor OutlineColor { get; }
+    LayoutColor ShadowColor { get; }
+    LayoutHorizontalAlign Align { get; }
+    LayoutItemKind Kind { get; }
+    LayoutPoint Position { get; }
+    LayoutTextFlags Flags { get; }
+    LayoutTextLayout Layout { get; }
+    LayoutVerticalAlign VerticalAlign { get; }
+    String Font { get; }
+    String Text { get; }
+    const Int32 MaxFontSize
+    const Int32 MaxLetterSpacing
+    const Int32 MaxLineSpacing
+    const Int32 MaxOutlineThickness
+    const Int32 MaxShadowOffset
+    const Int32 MinFontSize
+    const Int32 MinLetterSpacing
+    const Int32 MinLineSpacing
+    new(LayoutPoint position, Int32 width, Int32 height, String text, String font, Int32 fontSize, LayoutColor color, LayoutHorizontalAlign align, LayoutVerticalAlign verticalAlign, LayoutTextFlags flags, Int32 letterSpacing, Int32 lineSpacing, Int32 autoFitMinimum, LayoutColor outlineColor, Int32 outlineThickness, LayoutColor shadowColor, Int32 shadowX, Int32 shadowY, LayoutTextLayout layout)
+enum AetherFrame.Protocol.Remote.LayoutTextFlags
+    Byte value__
+    const LayoutTextFlags AutoFit
+    const LayoutTextFlags Bold
+    const LayoutTextFlags Italic
+    const LayoutTextFlags None
+    const LayoutTextFlags Outline
+    const LayoutTextFlags Shadow
+    const LayoutTextFlags Strikethrough
+    const LayoutTextFlags Underline
+    const LayoutTextFlags Wrap
+enum AetherFrame.Protocol.Remote.LayoutTextLayout
+    Byte value__
+    const LayoutTextLayout Current
+    const LayoutTextLayout Legacy
+enum AetherFrame.Protocol.Remote.LayoutTexture
+    Byte value__
+    const LayoutTexture Brick
+    const LayoutTexture Checkerboard
+    const LayoutTexture Chevron
+    const LayoutTexture Crosshatch
+    const LayoutTexture DiagonalLines
+    const LayoutTexture Diamonds
+    const LayoutTexture Dots
+    const LayoutTexture FineNoise
+    const LayoutTexture Grid
+    const LayoutTexture Herringbone
+    const LayoutTexture Honeycomb
+    const LayoutTexture Linen
+    const LayoutTexture None
+    const LayoutTexture Quatrefoil
+    const LayoutTexture Ripples
+    const LayoutTexture Scales
+    const LayoutTexture Sparkle
+    const LayoutTexture Speckle
+    const LayoutTexture Stripes
+    const LayoutTexture SubtlePaper
+    const LayoutTexture Waves
+sealed class AetherFrame.Protocol.Remote.LayoutTriangle
+    LayoutColor Color { get; }
+    LayoutItemKind Kind { get; }
+    LayoutPoint A { get; }
+    LayoutPoint B { get; }
+    LayoutPoint C { get; }
+    new(LayoutPoint a, LayoutPoint b, LayoutPoint c, LayoutColor color)
+enum AetherFrame.Protocol.Remote.LayoutVerticalAlign
+    Byte value__
+    const LayoutVerticalAlign Bottom
+    const LayoutVerticalAlign Middle
+    const LayoutVerticalAlign Top
+sealed class AetherFrame.Protocol.Remote.ProfileLayoutSnapshot
+    DateTimeOffset CreatedAt { get; }
+    DocumentType DocumentType { get; }
+    IReadOnlyList<ImageReference> Images { get; }
+    IReadOnlyList<LayoutItem> Items { get; }
+    Int32 CanvasHeight { get; }
+    Int32 CanvasWidth { get; }
+    Int32 TotalTextScalars { get; }
+    Int64 CreatedAtUnixSeconds { get; }
+    Int64 TotalImageBytes { get; }
+    LayoutBackground Background { get; }
+    ProfileId ProfileId { get; }
+    RevisionId RevisionId { get; }
+    String Name { get; }
+    const UInt16 SchemaVersion
+    new(ProfileId profileId, RevisionId revisionId, Int64 createdAtUnixSeconds, String name, Int32 canvasWidth, Int32 canvasHeight, LayoutBackground background, IEnumerable<LayoutItem> items, IEnumerable<ImageReference> images)
 sealed class AetherFrame.Protocol.Remote.ProfileRetraction
     DateTimeOffset IssuedAt { get; }
     DocumentType DocumentType { get; }

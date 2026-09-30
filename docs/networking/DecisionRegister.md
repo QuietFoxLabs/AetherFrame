@@ -75,6 +75,8 @@ The owner chose "Approve both now", whose stated terms were:
 
 Only the owner can change this approval.
 
+`[updated 2026-09-29: N2-3 is delivered as two increments, N2-3a (the layout schema) and N2-3b (the request proof), within the same approved scope. Each meets the conditions on its own: its decisions recorded, clean independent and security reviews, and green CI.]`
+
 ## Decisions approved under the delegation
 
 These are Claude's decisions under the owner's delegation of September 29, 2026, not the owner's own. The owner can overrule any of them in the Owner inbox, and the reversal is recorded here.
@@ -288,7 +290,7 @@ N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the sou
 
 ### D8: no metadata-only snapshot reaches players. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
-**Option and scope.** Schema 1 of `ProfileSnapshot` (a name and image references) stays a test schema:
+**Option and scope.** Applied by N2-3a (specification, section 8.5). Schema 1 of `ProfileSnapshot` (a name and image references) stays a test schema:
 - the plugin never builds one to publish;
 - the server (N2-7) refuses to publish one;
 - the library keeps reading it, and its vectors stay, changed only as N3's marker and D4's name rule require (N2-2). Three of them hold names D4 refuses: an empty name, one with CR LF, TAB and U+FEFF, and a 32,000-scalar name; N2-2 turns them into rejected vectors and says where the general 32,000-scalar text limit stays tested (L2).

@@ -37,6 +37,33 @@ public static class ProtocolLimits
     /// <summary>The most UTF-8 bytes a Plate's remote name may occupy on the wire (decision D4).</summary>
     public const int MaxNameBytes = 256;
 
+    /// <summary>The most items a schema 2 layout lists (docs/networking/ProtocolSpecification-v1.md, section 8.5).</summary>
+    public const int MaxLayoutItems = 1024;
+
+    /// <summary>The most scalar values one text item of a layout holds.</summary>
+    public const int MaxLayoutItemTextScalars = 2000;
+
+    /// <summary>The most scalar values all the text items of one layout hold together.</summary>
+    public const int MaxLayoutTextScalars = MaxTextScalars;
+
+    /// <summary>The most bytes of a layout identifier (a font or an art id).</summary>
+    public const int MaxLayoutIdentBytes = 96;
+
+    /// <summary>The largest coordinate, in hundredths of a canvas unit; the smallest is its negation.</summary>
+    public const int MaxLayoutCoordinate = 1_000_000;
+
+    /// <summary>The largest extent (a width or a height), in hundredths of a canvas unit.</summary>
+    public const int MaxLayoutExtent = 1_000_000;
+
+    /// <summary>The smallest canvas width or height, in hundredths of a canvas unit (one unit).</summary>
+    public const int MinLayoutCanvasExtent = 100;
+
+    /// <summary>The largest canvas width or height, in hundredths of a canvas unit (8,192 units).</summary>
+    public const int MaxLayoutCanvasExtent = 819_200;
+
+    /// <summary>The largest angle, in hundredths of a degree; the smallest is its negation.</summary>
+    public const int MaxLayoutAngle = 36_000;
+
     /// <summary>The most images a remote profile references.</summary>
     public const int MaxImagesPerProfile = 8;
 

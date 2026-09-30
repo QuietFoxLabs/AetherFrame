@@ -1,6 +1,6 @@
 # NETWORK2: from local preparation to a two-player test
 
-**Status (2026-09-29): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule) is implemented in the protocol. Nothing reaches a player.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
+**Status (2026-09-29): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule) is merged, and N2-3a (the layout schema) is implemented in the protocol. Nothing reaches a player.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
 
 **Safeguards.** Safeguards 2 to 8 of [NETWORK1.md](NETWORK1.md), section 4, hold throughout NETWORK2:
 - no persistent key before G1 is complete;
@@ -104,14 +104,15 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 | N2-0 | This plan, and the roadmap | none | none |
 | N2-1 | Decision batch A: protocol, privacy and boundaries, researched and reviewed | N3, D4, D5, D8, D9a, I1, N1, N7, P1, K3, K4; the lookup model; the transport; the boundary amendment | N2-0 |
 | N2-2 | Protocol: the draft marker and the name rule (NETWORK1 increments 2a and 2b) | N3, D4; the owner's approval under safeguard 3, given in advance with conditions | N2-1 |
-| N2-3 | Protocol: ProfileSnapshot schema 2 (the layout) and the request proof context | D8, D5, D9a, I1, S1, D7, L8; the owner's approval under safeguard 3, given in advance with conditions | N2-2 |
+| N2-3a | Protocol: ProfileSnapshot schema 2, the layout as a resolved paint list (specification, section 8.5) | D8, D5, D9a, I1, N1, N7; the owner's approval under safeguard 3, given in advance with conditions | N2-2 |
+| N2-3b | Protocol: the request proof context | S1, D7, L8; the owner's approval under safeguard 3, given in advance with conditions | N2-3a |
 | N2-4 | Plugin: the Windows DPAPI protector and the capability probe (NETWORK1 increment 7) | K2 (approved), K3 | N2-2 (NETWORK1's gate for increment 7) |
 | N2-5 | Plugin: the persisted persona registry and the persona window; L12 detection; the written-through move; K4's step | G1 complete (with N3, K3 and P1 from batch A), K4, L10, L12 | N2-2 (the draft marker exists before any persistent key signs), N2-4 |
-| N2-6 | Plugin: the snapshot builder for schema 2, image preparation, the publication index and the outbox (NETWORK1 increments 4 and 8) | P1, D4, D5, D8, I1 | N2-3, N2-5 |
-| N2-7 | Server: verify, store and serve; share codes; retraction; quotas and rate limits; version checks; its own test suite in CI | Decision batch B: D1, D6, K5, N2, N6, S2, S3, S4, I2; the share-code format; server logging | N2-3 |
+| N2-6 | Plugin: the snapshot builder for schema 2, image preparation, the publication index and the outbox (NETWORK1 increments 4 and 8) | P1, D4, D5, D8, I1 | N2-3a, N2-5 |
+| N2-7 | Server: verify, store and serve; share codes; retraction; quotas and rate limits; version checks; its own test suite in CI | Decision batch B: D1, D6, K5, N2, N6, S2, S3, S4, I2; the share-code format; server logging | N2-3a, N2-3b |
 | N2-8 | Deployment kit: container, Caddy, the deploy workflow with owner approval, the runbook | G3 complete (D1, D6, D7, K4, K5, N1, N7) before the deployed server accepts documents signed by real keys; the owner's hosting (section 4) | N2-7 |
 | N2-9 | Plugin: the transport, publish and unpublish, the consent screen, share codes | The boundary amendment and the transport (batch A) | N2-5, N2-6, N2-7 |
-| N2-10 | Plugin: the viewer (open by code, check per D6, render read-only, refresh) | N7, I1, K3 (viewing), D6, I2 | N2-3, N2-7, N2-9 |
+| N2-10 | Plugin: the viewer (open by code, check per D6, render read-only, refresh) | N7, I1, K3 (viewing), D6, I2 | N2-3a, N2-7, N2-9 |
 | N2-11 | The preview test kit and the two-player checklist | The tester kit (P2's unsettled item) and the matching AUTOPILOT.md procedure; G3 complete | everything above, and the owner's server |
 
 N2-7's server runs locally in its own tests and in the plugin's integration tests, so everything up to N2-10 can be built and tested before the owner's server exists. Only the real test needs it.

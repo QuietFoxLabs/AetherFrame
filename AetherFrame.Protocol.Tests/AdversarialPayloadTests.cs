@@ -22,7 +22,8 @@ public class AdversarialPayloadTests
 
     [Theory]
     [InlineData("schema 0", ProtocolError.UnsupportedVersion)]
-    [InlineData("schema 2", ProtocolError.UnsupportedVersion)]
+    [InlineData("schema 3", ProtocolError.UnsupportedVersion)]
+    [InlineData("schema 2 over schema 1 fields", ProtocolError.InvalidValue)]
     [InlineData("zero profile id", ProtocolError.InvalidValue)]
     [InlineData("zero revision id", ProtocolError.InvalidValue)]
     [InlineData("createdAt over max", ProtocolError.InvalidValue)]
