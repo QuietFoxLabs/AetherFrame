@@ -59,7 +59,10 @@ networks:
   edge:
     ipam:
       config:
+        # Caddy's fixed address (172.30.0.2) is outside the range Docker hands out, so no other
+        # container can take it first.
         - subnet: 172.30.0.0/24
+          ip_range: 172.30.0.128/25
 
 volumes:
   caddy-data:

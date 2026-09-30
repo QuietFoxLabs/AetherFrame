@@ -57,6 +57,7 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
+          umask 077
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
@@ -72,7 +73,13 @@ jobs:
           ssh_opts=(-i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
           docker save "aetherframe-server:$COMMIT" "aetherframe-worker:$COMMIT" | gzip | ssh "${ssh_opts[@]}" "$target" 'gunzip | docker load'
           scp "${ssh_opts[@]}" deploy/compose.yaml deploy/Caddyfile deploy/aetherframe-worker.sh "$target:/opt/aetherframe/"
-          ssh "${ssh_opts[@]}" "$target" "cd /opt/aetherframe && chmod 755 aetherframe-worker.sh && printf 'AETHERFRAME_VERSION=%s\nAETHERFRAME_DOMAIN=%s\n' '$COMMIT' '$DEPLOY_DOMAIN' > .env && docker compose up -d --remove-orphans && docker image prune -f"
+          # Start the new version: Caddy is pulled and recreated so its image and Caddyfile are current,
+          # the worker service restarts with the new script, and older AetherFrame images are removed.
+          ssh "${ssh_opts[@]}" "$target" "set -e; cd /opt/aetherframe && chmod 755 aetherframe-worker.sh \
+            && printf 'AETHERFRAME_VERSION=%s\nAETHERFRAME_DOMAIN=%s\n' '$COMMIT' '$DEPLOY_DOMAIN' > .env \
+            && docker compose pull caddy && docker compose up -d --remove-orphans && docker compose up -d --force-recreate caddy \
+            && sudo /usr/bin/systemctl restart aetherframe-worker.service \
+            && (docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^aetherframe-(server|worker):' | grep -v ':$COMMIT\$' | xargs -r docker rmi >/dev/null 2>&1 || true)"
 
       - name: Check it answers
         env:

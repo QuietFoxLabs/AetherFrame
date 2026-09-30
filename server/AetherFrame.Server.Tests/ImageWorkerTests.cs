@@ -356,6 +356,35 @@ public class ImageWorkerTests
     }
 
     [Fact]
+    public async Task AfterAnIdleSpell_AJobStillMeetsALiveRun()
+    {
+        using var folder = new TempFolder();
+        using var client = NewClient(folder.Path);
+        client.MaxConnectionAge = TimeSpan.FromSeconds(1);
+        using var stop = new CancellationTokenSource();
+        await client.StartAsync(stop.Token);
+
+        // Runs that end themselves after half a second idle, as the real ones do after 15: several
+        // come and go, each leaving a connection behind that is closed or stale.
+        var workers = RunWorkersAsync(folder.Socket, stop.Token, idleTimeout: TimeSpan.FromMilliseconds(500));
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(4));
+            var png = Images.Png(40, 30);
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var processed = await client.ProcessAsync(Images.Declared(ImageFormat.Png, 40, 30, png), png, default);
+            Assert.NotNull(processed.Bytes);
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(5), $"the job took {started.Elapsed}");
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await client.StopAsync(default);
+            await workers.WaitAsync(TimeSpan.FromSeconds(10)).ContinueWith(_ => { }, TaskScheduler.Default);
+        }
+    }
+
+    [Fact]
     public async Task NoWorker_IsBusy_AndTheQueueIsBounded()
     {
         using var folder = new TempFolder();
@@ -445,13 +474,13 @@ public class ImageWorkerTests
     }
 
     /// <summary>Worker runs, one after another, as the container's restart policy would start them.</summary>
-    internal static Task RunWorkersAsync(string socket, CancellationToken stop) => Task.Run(async () =>
+    internal static Task RunWorkersAsync(string socket, CancellationToken stop, TimeSpan? idleTimeout = null) => Task.Run(async () =>
     {
         while (!stop.IsCancellationRequested)
         {
             try
             {
-                await WorkerRun.RunOnceAsync(socket, stop);
+                await WorkerRun.RunOnceAsync(socket, stop, idleTimeout: idleTimeout);
             }
             catch (OperationCanceledException)
             {

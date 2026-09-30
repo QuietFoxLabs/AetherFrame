@@ -19,12 +19,34 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+var reloaded = false;
 
 // The operator's configuration file (N2-8): the allowlist lives here, and edits to it take effect as
 // soon as it reloads, which the deployment's polling watcher makes a few seconds (decision C8).
 if (Environment.GetEnvironmentVariable("AETHERFRAME_CONFIG_FILE") is { Length: > 0 } configFile)
 {
-    builder.Configuration.AddJsonFile(configFile, optional: false, reloadOnChange: true);
+    var fileSource = new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+    {
+        Path = configFile,
+        Optional = false,
+        ReloadOnChange = true,
+        OnLoadException = failure =>
+        {
+            // At start a bad file stops the server; on a reload the last good values stay, and the
+            // log says so (the file itself is never logged).
+            if (reloaded)
+            {
+                failure.Ignore = true;
+                Console.Error.WriteLine("The configuration file can't be read; the last good one stays in effect.");
+            }
+        },
+    };
+    fileSource.ResolveFileProvider();
+
+    // Before the environment variables, so the file can't override what the deployment sets there.
+    var environment = builder.Configuration.Sources.ToList().FindIndex(source => source is Microsoft.Extensions.Configuration.EnvironmentVariables.EnvironmentVariablesConfigurationSource);
+    builder.Configuration.Sources.Insert(environment < 0 ? builder.Configuration.Sources.Count : environment, fileSource);
+    reloaded = true;
 }
 
 ServerOptions.RefuseForwardedHeadersSwitch(builder.Configuration);
@@ -35,7 +57,7 @@ if (args is ["admin", .. var command])
     var adminOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new ServerOptions();
     adminOptions.Validate();
     var adminDatabase = new ServerDatabase(Options.Create(adminOptions), Microsoft.Extensions.Logging.Abstractions.NullLogger<ServerDatabase>.Instance);
-    return await AdminCommands.RunAsync(command, adminDatabase, new BindingStore(adminDatabase, TimeProvider.System), Console.Out);
+    return await AdminCommands.RunAsync(command, adminDatabase, new BindingStore(adminDatabase, TimeProvider.System), Console.Out, adminOptions.AllowedLodestoneIds);
 }
 
 // Decision S5: nothing that logs a request's URL, address or headers. ASP.NET Core's hosting

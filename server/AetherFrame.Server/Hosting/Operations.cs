@@ -54,22 +54,38 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
         {
             var partial = today + ".partial";
             File.Delete(partial);
-            await using (var connection = await database.OpenAsync(cancellation))
+            try
             {
-                await using var command = connection.CreateCommand();
-                command.CommandText = "VACUUM INTO $path;";
-                command.Parameters.AddWithValue("$path", partial);
-                await command.ExecuteNonQueryAsync(cancellation);
-            }
+                await using (var connection = await database.OpenAsync(cancellation))
+                {
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = "VACUUM INTO $path;";
+                    command.Parameters.AddWithValue("$path", partial);
+                    await command.ExecuteNonQueryAsync(cancellation);
+                }
 
-            SqliteConnection.ClearAllPools();
-            File.Move(partial, today);
+                SqliteConnection.ClearAllPools();
+                File.Move(partial, today);
+            }
+            catch
+            {
+                // A failed copy (a full disk, say) is never left to outlive the retention.
+                File.Delete(partial);
+                throw;
+            }
         }
 
-        foreach (var file in Directory.GetFiles(folder, "server-*.db"))
+        foreach (var file in Directory.GetFiles(folder, "server-*"))
         {
-            var name = Path.GetFileNameWithoutExtension(file);
-            if (DateTime.TryParseExact(name["server-".Length..], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day)
+            var name = Path.GetFileName(file);
+            if (name.EndsWith(".partial", StringComparison.Ordinal) && !name.StartsWith(Path.GetFileName(today), StringComparison.Ordinal))
+            {
+                File.Delete(file);
+                continue;
+            }
+
+            if (name.Length >= "server-yyyyMMdd".Length
+                && DateTime.TryParseExact(name.Substring("server-".Length, 8), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day)
                 && now.UtcDateTime - day >= Retention)
             {
                 File.Delete(file);
@@ -91,13 +107,22 @@ internal static class AdminCommands
           reports                     every report: number, day, reported Lodestone id, reason
           resolve-report <number>     deletes a report the operator has dealt with
           remove-character <id>       deletes a character's binding and everything published for it (S3, C4)
+          allowlist                   the Lodestone ids the configuration allows now (C8)
         """;
 
-    public static async Task<int> RunAsync(string[] args, ServerDatabase database, BindingStore bindings, TextWriter output)
+    public static async Task<int> RunAsync(string[] args, ServerDatabase database, BindingStore bindings, TextWriter output, IReadOnlyList<string>? allowlist = null)
     {
         await database.InitializeAsync(CancellationToken.None);
         switch (args)
         {
+            case ["allowlist"]:
+                foreach (var text in allowlist ?? [])
+                {
+                    await output.WriteLineAsync(Lodestone.LodestoneIds.TryParse(text, out _) ? text : text + "  (not a Lodestone id: ignored)");
+                }
+
+                await output.WriteLineAsync((allowlist?.Count ?? 0) == 1 ? "1 id." : (allowlist?.Count ?? 0) + " ids.");
+                return 0;
             case ["characters"]:
                 await ListAsync(database, "SELECT lodestone_id, name, world, CASE hidden WHEN 0 THEN 'shown' ELSE 'hidden' END FROM bindings ORDER BY lodestone_id;", output);
                 return 0;
@@ -118,8 +143,21 @@ internal static class AdminCommands
             case ["remove-character", var text] when Lodestone.LodestoneIds.TryParse(text, out var lodestoneId):
                 {
                     var removed = await bindings.RemoveCharacterAsync(lodestoneId, CancellationToken.None);
-                    await output.WriteLineAsync(removed ? "The character and everything published for it are deleted." : "No character has that Lodestone id.");
-                    return removed ? 0 : 1;
+                    if (!removed)
+                    {
+                        await output.WriteLineAsync("No character has that Lodestone id.");
+                        return 1;
+                    }
+
+                    // The deletion is committed; the checkpoint that clears it from the write-ahead log must finish too.
+                    if (database.CheckpointOwed && !await database.CheckpointAsync(CancellationToken.None))
+                    {
+                        await output.WriteLineAsync("The character is deleted, but readers kept its pages in the write-ahead log. Run the command again, or restart the server, to clear them.");
+                        return 3;
+                    }
+
+                    await output.WriteLineAsync("The character and everything published for it are deleted.");
+                    return 0;
                 }
 
             default:

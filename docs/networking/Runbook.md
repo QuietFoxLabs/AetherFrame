@@ -13,11 +13,13 @@ The kit is in [`deploy/`](../../deploy):
 ## 1. What to buy
 
 - **A domain**, kept on automatic renewal. A lapsed domain could be registered by someone else, who could then answer players' plugins (decision R2). Any registrar works. The server will answer on one hostname under it, for example `plates.yourdomain.net`.
-- **A small Linux server** (a VPS): Ubuntu 24.04, 2 GB of memory, 1 or 2 CPUs, about 20 GB of disk, a public IPv4 address, and IPv6 if offered. A few dollars a month from any VPS provider is enough for two testers.
+- **A small Linux server** (a VPS): Ubuntu 24.04, 2 GB of memory, 1 or 2 CPUs, about 20 GB of disk, and a public IPv4 address. A few dollars a month from any VPS provider is enough for two testers.
 
 ## 2. Setting up the server
 
-1. **Point the hostname at the server.** At the registrar or DNS host, add an `A` record for the hostname with the server's IPv4 address, and an `AAAA` record with its IPv6 address if it has one.
+1. **Point the hostname at the server.** At the registrar or DNS host, add an `A` record for the hostname with the server's IPv4 address.
+   - Don't add an `AAAA` (IPv6) record for now. Docker would pass IPv6 visitors on from one internal address, so they would all share one visitor's rate limits (decision R4).
+   - IPv6 comes with a later change to the kit.
 2. **Make the deploy key**, on your own PC, in PowerShell or a terminal:
    ```
    ssh-keygen -t ed25519 -f aetherframe-deploy -N "" -C aetherframe-deploy
@@ -42,7 +44,7 @@ The kit is in [`deploy/`](../../deploy):
    - **Secrets:**
      - `DEPLOY_HOST`: the server's hostname or IP address;
      - `DEPLOY_SSH_KEY`: the whole contents of the private file `aetherframe-deploy`;
-     - `DEPLOY_KNOWN_HOSTS`: the output of `ssh-keyscan -t ed25519 <server address>`, run from your PC.
+     - `DEPLOY_KNOWN_HOSTS`: the output of `ssh-keyscan -t ed25519 <DEPLOY_HOST>`, run from your PC with exactly the value you put in `DEPLOY_HOST`. Before you save it, check that its key matches the one your provider's console shows for the server (many show it on first boot). A mismatch means you reached something else.
    - **Variables:** `DEPLOY_DOMAIN` is the hostname from step 1, for example `plates.yourdomain.net`.
 5. **Deploy.** In **Actions → Deploy the server → Run workflow**, give the full SHA of the commit on master to deploy. Claude names it in the Owner inbox. Approve the run when GitHub asks.
    - The workflow builds both images, copies them and the compose files to the server, and starts them.
@@ -67,8 +69,13 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 | List reports | `docker compose exec server dotnet AetherFrame.Server.dll admin reports` |
 | Close a report you've dealt with | `docker compose exec server dotnet AetherFrame.Server.dll admin resolve-report <number>` |
 | Remove a character and everything it published | `docker compose exec server dotnet AetherFrame.Server.dll admin remove-character <Lodestone id>` |
+| See the configured allowlist | `docker compose exec server dotnet AetherFrame.Server.dll admin allowlist` |
+| Restart the image worker | `sudo systemctl restart aetherframe-worker` (a deploy does this itself) |
 | Update to a newer commit | run **Deploy the server** again with that commit |
 | Stop everything | `docker compose down` (the data stays in its volumes) |
+
+- **The allowlist file.** After you edit it, run `admin allowlist` to see the ids the server now has. A file the server can't read is ignored on a reload: the last good list stays, and the log says so. At a restart, a file it can't read stops the server until it is fixed. An entry that isn't a Lodestone id is ignored, and `admin allowlist` marks it.
+- **While the server is stopped**, its daily backup and its clean-up don't run, so older copies aren't deleted. Stop it only briefly, or delete old copies by hand (section 4).
 
 - **Reports** are kept for 30 days, or until you close them (decision C5). To act on one, look at the reported character's Plate in game. If it has to go, remove the character, and take its id off the allowlist if needed.
 - **Removal on request** (decision S3). A tester who asks to be removed, and whom you've confirmed out of band (in person, or in game), is removed with `remove-character`. Removing deletes at once exactly what opting out deletes.
@@ -79,12 +86,19 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 ## 4. Backups and what is kept
 
 - **Backups.** The server writes a copy of its database to the `backups` volume once a day and deletes each copy after **7 days**. A Plate a player deletes, by opting out or pausing, is therefore gone from every copy within 7 days (decision D1). The consent text says so.
-  - To keep a copy off the server, download the newest file from the `backups` volume. It holds what testers published, so keep it private and delete it within the same 7 days.
-- **Restoring a backup.**
-  1. `docker compose stop server`.
-  2. Copy the backup over `server.db` in the `server-data` volume, and delete any `server.db-wal` and `server.db-shm` beside it.
-  3. `docker compose start server`.
-
+  - To keep a copy off the server, list the copies and copy one out, in `/opt/aetherframe`:
+    ```
+    docker compose exec server ls /backups
+    docker compose cp server:/backups/server-YYYYMMDD.db ./server-YYYYMMDD.db
+    ```
+    Then download it with `scp` or your provider's file tools. It holds what testers published, so keep it private, and delete it, both there and on the server, within the same 7 days.
+- **Restoring a backup**, in `/opt/aetherframe`, with the copy in that folder:
+  ```
+  docker compose stop server
+  docker compose cp ./server-YYYYMMDD.db server:/data/server.db
+  docker compose run --rm --no-deps --entrypoint rm server -f /data/server.db-wal /data/server.db-shm
+  docker compose start server
+  ```
   A restore brings back anything deleted since the backup was made. Only restore one made after the last removal, or remove again afterwards.
 - **What the server keeps** (decision C7): for each bound character, the Lodestone id, name and World, the key's identity and the profile id, the latest Plate and its images, and its revision records; and reports. It keeps no addresses, no lookup log and no copy of a Lodestone page. Logs hold only a request's route, status, time and kind of failure, for 14 days.
 
@@ -93,7 +107,7 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 - **Caddy** answers HTTPS on ports 443 and 80 and passes requests to the server. It keeps no access log, and its error logs, which could hold an address, are switched off.
 - **The server** listens only inside Docker. It trusts the client address Caddy reports and no other, and refuses to start with a name reserved for tests or ASP.NET Core's forwarded-headers switch on.
 - **The image worker** runs from the `aetherframe-worker` service, one container at a time (decision I2).
-  - Each container takes at most one image, then ends. Whatever it is doing, it is ended from outside after 60 seconds, and a fresh one starts.
+  - Each container takes at most one image, then ends; an idle one ends after 15 seconds. Whatever it is doing, it is ended from outside after 60 seconds, and a fresh one starts. The service removes any worker container left behind when it starts or stops.
   - It has no network, a read-only file system, 512 MB of memory, and 64 processes at most.
   - It runs as its own user in the server's group, so it can reach the server's socket and nothing else.
   - It refuses to run if it finds a network.

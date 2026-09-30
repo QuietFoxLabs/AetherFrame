@@ -22,11 +22,14 @@ apt-get update
 apt-get install -y docker.io docker-compose-v2 ufw unattended-upgrades
 systemctl enable --now docker
 
-# Logs are kept 14 days, deleted by time (S5): every container logs to the journal.
+# Logs are kept 14 days, deleted by time (S5): every container logs to the journal, whose files
+# rotate daily so none outlives the 14 days, and nothing is copied to syslog, which keeps its own.
 mkdir -p /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/aetherframe.conf <<'CONF'
 [Journal]
 MaxRetentionSec=14day
+MaxFileSec=1day
+ForwardToSyslog=no
 CONF
 systemctl restart systemd-journald
 
@@ -45,7 +48,8 @@ if ! id aetherframe-deploy >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash --groups docker aetherframe-deploy
 fi
 install -d -m 700 -o aetherframe-deploy -g aetherframe-deploy /home/aetherframe-deploy/.ssh
-printf '%s\n' "$deploy_key" > /home/aetherframe-deploy/.ssh/authorized_keys
+# restrict: no forwarding, no terminal allocation; commands and file copies only.
+printf 'restrict %s\n' "$deploy_key" > /home/aetherframe-deploy/.ssh/authorized_keys
 chown aetherframe-deploy:aetherframe-deploy /home/aetherframe-deploy/.ssh/authorized_keys
 chmod 600 /home/aetherframe-deploy/.ssh/authorized_keys
 
@@ -69,10 +73,12 @@ cat > /etc/systemd/system/aetherframe-worker.service <<'UNIT'
 Description=AetherFrame image worker runs, one container per job (decision I2)
 After=docker.service
 Requires=docker.service
+StartLimitIntervalSec=0
 
 [Service]
 User=aetherframe-deploy
 ExecStart=/opt/aetherframe/aetherframe-worker.sh
+ExecStopPost=/bin/sh -c 'docker ps -aq --filter name=^aetherframe-worker- | xargs -r docker rm -f'
 Restart=always
 RestartSec=5
 
@@ -80,6 +86,15 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
-systemctl enable aetherframe-worker.service
+
+# It retries every 5 seconds until the first deploy copies its script in, and then runs.
+systemctl enable --now aetherframe-worker.service
+
+# The deploy user may restart the worker service, so a deploy's new script takes effect, and nothing else.
+cat > /etc/sudoers.d/aetherframe-deploy <<'SUDO'
+aetherframe-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart aetherframe-worker.service
+SUDO
+chmod 440 /etc/sudoers.d/aetherframe-deploy
+visudo -cf /etc/sudoers.d/aetherframe-deploy
 
 echo "Done. Next: the GitHub environment and its secrets (docs/networking/Runbook.md)."

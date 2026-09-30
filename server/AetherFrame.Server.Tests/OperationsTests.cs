@@ -60,6 +60,13 @@ public class OperationsTests
             await backups.RunOnceAsync(default);
             Assert.Equal(7, Directory.GetFiles(folder).Length);
             Assert.DoesNotContain(first, Directory.GetFiles(folder));
+
+            // A stray partial copy from a failed day is deleted with the old copies.
+            var stray = Path.Combine(folder, "server-20261001.db.partial");
+            await File.WriteAllBytesAsync(stray, [1]);
+            server.Time.Advance(TimeSpan.FromDays(1));
+            await backups.RunOnceAsync(default);
+            Assert.False(File.Exists(stray));
         }
         finally
         {
@@ -113,6 +120,11 @@ public class OperationsTests
         Assert.Equal(1, (await RunAsync("remove-character", "12345678")).Code);
         Assert.Equal(2, (await RunAsync("remove-character", "0123")).Code);
         Assert.Equal(2, (await RunAsync()).Code);
+
+        using var allowlistOutput = new StringWriter();
+        Assert.Equal(0, await AdminCommands.RunAsync(["allowlist"], database, bindings, allowlistOutput, ["12345678", "0123"]));
+        Assert.Contains("12345678", allowlistOutput.ToString(), StringComparison.Ordinal);
+        Assert.Contains("0123  (not a Lodestone id: ignored)", allowlistOutput.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

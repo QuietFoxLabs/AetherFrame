@@ -11,6 +11,17 @@ env_file="${AETHERFRAME_ENV_FILE:-/opt/aetherframe/.env}"
 life="${AETHERFRAME_WORKER_LIFE:-60}"
 volume="${AETHERFRAME_SOCKET_VOLUME:-aetherframe_sockets}"
 
+# Removes every worker container, whatever state it is in, until none is left. A run belongs to
+# Docker, not to this script, so a run left by an earlier loop (a restart, a crash) is removed here.
+remove_all() {
+  while [[ -n "$(docker ps -aq --filter name='^aetherframe-worker-')" ]]; do
+    docker ps -aq --filter name='^aetherframe-worker-' | xargs -r docker rm -f >/dev/null 2>&1
+    sleep 1
+  done
+}
+
+remove_all
+
 while true; do
   version="$(sed -n 's/^AETHERFRAME_VERSION=\([0-9A-Za-z._-]*\)$/\1/p' "$env_file" 2>/dev/null | head -n 1)"
   if [[ -z "$version" ]]; then
@@ -19,10 +30,10 @@ while true; do
   fi
 
   name="aetherframe-worker-$$-$RANDOM"
-  docker run --rm --name "$name" \
+  docker run --rm --name "$name" --pull never \
     --network none --read-only --tmpfs /tmp:size=16m \
     --cap-drop ALL --security-opt no-new-privileges:true \
-    --memory 512m --memory-swap 512m --pids-limit 64 --oom-score-adj 1000 \
+    --memory 512m --memory-swap 512m --cpus 1 --pids-limit 64 --oom-score-adj 1000 \
     --ulimit nofile=256:256 --ulimit core=0:0 \
     --env AETHERFRAME_IMAGE_SOCKET=/run/aetherframe/images.sock \
     --env DOTNET_GCHeapHardLimit=0x10000000 \
@@ -31,12 +42,22 @@ while true; do
     "aetherframe-worker:$version" &
   runner=$!
 
-  ( sleep "$life"; docker kill "$name" >/dev/null 2>&1 ) &
+  # The run's life, enforced from outside: removed, and removed again until it is gone.
+  (
+    sleep "$life"
+    while docker ps -aq --filter name="^$name\$" | grep -q .; do
+      docker rm -f "$name" >/dev/null 2>&1
+      sleep 1
+    done
+  ) &
   killer=$!
 
   wait "$runner"
   kill "$killer" 2>/dev/null
   wait "$killer" 2>/dev/null
-  docker rm -f "$name" >/dev/null 2>&1
+  while docker ps -aq --filter name="^$name\$" | grep -q .; do
+    docker rm -f "$name" >/dev/null 2>&1
+    sleep 1
+  done
   sleep 0.2
 done

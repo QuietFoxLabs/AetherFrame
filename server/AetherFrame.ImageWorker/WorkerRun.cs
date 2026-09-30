@@ -23,11 +23,17 @@ public static class WorkerRun
     public static readonly TimeSpan ConnectPatience = TimeSpan.FromSeconds(60);
 
     /// <summary>
+    /// How long a connected run waits for a job before it ends, so the run the server hands a job to
+    /// is always a recent one (the server skips connections older than 20 seconds).
+    /// </summary>
+    public static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>
     /// Runs once. The exit code is 0 for an answered job, and 1 when there was none.
     /// <paramref name="jobReceived"/> runs when a job has arrived: the worker's entry point starts the
     /// watchdog there.
     /// </summary>
-    public static async Task<int> RunOnceAsync(string socketPath, CancellationToken cancellation, Action? jobReceived = null)
+    public static async Task<int> RunOnceAsync(string socketPath, CancellationToken cancellation, Action? jobReceived = null, TimeSpan? idleTimeout = null)
     {
         using var socket = await ConnectAsync(socketPath, cancellation);
         if (socket is null)
@@ -36,7 +42,20 @@ public static class WorkerRun
         }
 
         await using var stream = new NetworkStream(socket, ownsSocket: false);
-        var job = await ImageJobWire.ReadJobAsync(stream, cancellation);
+        ImageJob? job;
+        using (var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
+        {
+            idle.CancelAfter(idleTimeout ?? IdleTimeout);
+            try
+            {
+                job = await ImageJobWire.ReadJobAsync(stream, idle.Token);
+            }
+            catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+            {
+                return 1;
+            }
+        }
+
         if (job is null)
         {
             return 1;

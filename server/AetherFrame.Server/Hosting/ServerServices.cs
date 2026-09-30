@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Threading;
@@ -24,11 +25,23 @@ internal static class ServerJson
 /// The stage 1 allowlist of Lodestone ids (decision C8), read from the current configuration at
 /// every use, so removing an id takes effect as soon as the configuration reloads.
 /// </summary>
-internal sealed class Allowlist(IOptionsMonitor<ServerOptions> options)
+internal sealed class Allowlist(IOptionsMonitor<ServerOptions> options, ILogger<Allowlist> logger)
 {
     public bool Allows(long lodestoneId)
     {
-        foreach (var text in options.CurrentValue.AllowedLodestoneIds)
+        IReadOnlyList<string> ids;
+        try
+        {
+            ids = options.CurrentValue.AllowedLodestoneIds;
+        }
+        catch (Exception e) when (e is InvalidOperationException or FormatException)
+        {
+            // A configuration that can't be read as a list allows no one.
+            logger.LogWarning("The allowlist can't be read ({ErrorKind}); it allows no one until it can.", e.GetType().Name);
+            return false;
+        }
+
+        foreach (var text in ids)
         {
             if (LodestoneIds.TryParse(text, out var id) && id == lodestoneId)
             {

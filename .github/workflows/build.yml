@@ -142,7 +142,7 @@ jobs:
         printf '{"AetherFrame":{"AllowedLodestoneIds":["12345678"]}}\n' > config/aetherframe.json
         printf 'AETHERFRAME_VERSION=ci\nAETHERFRAME_DOMAIN=plates.example.com\n' > .env
         docker compose -f compose.yaml -f compose.ci.yaml up -d
-        AETHERFRAME_ENV_FILE=.env AETHERFRAME_WORKER_LOG_DRIVER=json-file AETHERFRAME_WORKER_LIFE=20 nohup bash aetherframe-worker.sh > worker-loop.log 2>&1 &
+        AETHERFRAME_ENV_FILE=.env AETHERFRAME_WORKER_LOG_DRIVER=json-file AETHERFRAME_WORKER_LIFE=8 nohup bash aetherframe-worker.sh > worker-loop.log 2>&1 &
         echo $! > worker-loop.pid
 
     - name: Check it answers, and the worker is isolated
@@ -166,10 +166,15 @@ jobs:
         test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$worker")" = true
         test "$(docker inspect -f '{{.Config.User}}' "$worker")" = imageworker
         test "$(docker exec "$worker" ls /sys/class/net)" = lo
-        # A run is ended from outside after its life: 20 s here.
-        sleep 25
+        # A run is ended from outside after its life (8 s here, before the worker's own 15-second idle
+        # timeout): still up a few seconds in, gone by its life, and a fresh run in its place.
+        sleep 2
+        test -n "$(docker ps -q --filter id="$worker")"
+        sleep 9
         test -z "$(docker ps -q --filter id="$worker")"
+        test -n "$(docker ps -q --filter name=aetherframe-worker)"
         docker compose -f compose.yaml -f compose.ci.yaml exec -T server dotnet AetherFrame.Server.dll admin characters | grep -q '0 rows.'
+        docker compose -f compose.yaml -f compose.ci.yaml exec -T server dotnet AetherFrame.Server.dll admin allowlist | grep -q '^12345678$'
 
     - name: Show the logs
       if: failure()
