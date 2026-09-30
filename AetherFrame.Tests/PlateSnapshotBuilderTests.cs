@@ -577,6 +577,10 @@ public sealed class PlateSnapshotBuilderTests
             }
         }
 
+        // A strip under a pixel still takes only the one or two pixels at the centre, never the whole image.
+        Assert.Equal(new PixelWindow(0, 4095, 8, 2), PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, new Vector2(100_000f, 0.01f), 8, 8192));
+        Assert.Equal(new PixelWindow(3, 0, 1, 7), PlateSnapshotBuilder.WindowOf(ProfileImageFit.Fill, new Vector2(0.01f, 100_000f), 7, 7));
+
         // A Fit of the same image draws all of it, so its copy holds both, and all three draw from it.
         plate.Elements.Add(new ImageProfileElement { AssetId = photo, DisplayMode = ProfileImageFit.Fit, Size = new Vector2(100f, 100f), ZIndex = 2 });
         var withWhole = Resolve(plate, measurements);

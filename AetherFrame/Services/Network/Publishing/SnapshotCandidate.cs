@@ -182,7 +182,7 @@ internal enum PlateSnapshotRefusal
     /// <summary>More items than a shared Plate can hold.</summary>
     TooManyItems,
 
-    /// <summary>More images than a shared Plate can hold.</summary>
+    /// <summary>More image copies than a shared Plate can hold: each window of an image drawn is a copy, bar one inside another.</summary>
     TooManyImages,
 
     /// <summary>More image bytes in all than a shared Plate can hold.</summary>

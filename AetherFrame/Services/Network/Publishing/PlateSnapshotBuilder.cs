@@ -242,11 +242,12 @@ internal static class PlateSnapshotBuilder
     /// <summary>
     /// The fewest whole pixels of a row <paramref name="size"/> long, centred exactly in it, that
     /// hold a centred run of <paramref name="span"/>: equal margins need a length of the row's
-    /// parity. A thousandth of a pixel of float error is forgiven.
+    /// parity, and a run under a pixel still takes one or two. A thousandth of a pixel of float
+    /// error is forgiven.
     /// </summary>
     private static (int Start, int Length) Centred(float span, int size)
     {
-        if (!float.IsFinite(span) || span <= 0f || span >= size)
+        if (!float.IsFinite(span) || span >= size)
         {
             return (0, size);
         }
