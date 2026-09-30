@@ -305,6 +305,54 @@ public class TestVectorTests
     }
 
     [Fact]
+    public void ActionProofs_VerifyWithTheLibraryAndTheReferenceImplementation()
+    {
+        var fixture = VectorFixture.Load();
+        Assert.Equal(RequestProofVectorBuilder.ValidActions().Select(a => a.Name), fixture.ActionProofs.Select(a => a.Name));
+        Assert.Equal(
+            Enum.GetValues<RequestProofKind>().Where(RequestProofCodec.IsAction).Select(k => k.ToString()),
+            fixture.ActionProofs.Select(a => a.Kind));
+        foreach (var vector in fixture.ActionProofs)
+        {
+            var kind = Enum.Parse<RequestProofKind>(vector.Kind);
+            var key = PersonaPublicKey.FromBytes(Hex.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PublicKey));
+            var body = Hex.Parse(vector.Body);
+            var deployment = DeploymentName.Parse(vector.Deployment);
+            var challenge = RequestChallenge.Parse(vector.Challenge);
+            var subject = SHA256.HashData(body);
+            Assert.Equal(vector.SubjectDigest, Hex.Of(subject));
+
+            var referenceInput = ReferenceProtocol.ProofSigningInput((byte)kind, key.Bytes, deployment.Bytes, challenge.Bytes, subject);
+            Assert.Equal(referenceInput, SigningInput.CreateRequestProof(kind, key, deployment, challenge, subject).Bytes.ToArray());
+            Assert.Equal(vector.SigningInput, Hex.Of(referenceInput));
+            Assert.Equal(vector.Digest, Hex.Of(SHA256.HashData(referenceInput)));
+            Assert.True(ReferenceP256.Verify(key.Bytes, SHA256.HashData(referenceInput), Hex.Parse(vector.Signature)), vector.Name + " (reference)");
+            Assert.Equal(vector.Proof, Hex.Of(ReferenceProtocol.Proof((byte)kind, key.Bytes, deployment.Bytes, challenge.Bytes, subject, Hex.Parse(vector.Signature))));
+
+            var action = RequestProofCodec.VerifyAction(Hex.Parse(vector.Proof), body, deployment, kind);
+            Assert.Equal(key.Id, action.Proof.Persona);
+            Assert.Equal(challenge, action.Challenge);
+            Assert.Equal(body, action.Body.ToArray());
+        }
+    }
+
+    [Fact]
+    public void RejectedActions_AreRefusedWithTheirError_AndFollowFromTheLookupVector()
+    {
+        var fixture = VectorFixture.Load();
+        foreach (var vector in fixture.RejectedActions)
+        {
+            var expected = Enum.Parse<ProtocolError>(vector.Error);
+            var checkedAs = Enum.Parse<RequestProofKind>(vector.CheckedAs);
+            var actual = ProtocolAssert.Rejects(() => RequestProofCodec.VerifyAction(Hex.Parse(vector.Proof), Hex.Parse(vector.Body), DeploymentName.Parse(vector.Deployment), checkedAs)).Error;
+            Assert.True(expected == actual, $"{vector.Name}: expected {expected}, got {actual}");
+        }
+
+        var rebuilt = RequestProofVectorBuilder.BuildRejectedActions(fixture.ActionProofs.Single(p => p.Name == "action-lookup"), Hex.Parse(fixture.RequestProofs[0].Proof));
+        Assert.Equal(rebuilt.Select(r => (r.Name, r.Proof, r.CheckedAs, r.Body, r.Deployment, r.Error)), fixture.RejectedActions.Select(r => (r.Name, r.Proof, r.CheckedAs, r.Body, r.Deployment, r.Error)));
+    }
+
+    [Fact]
     public void RejectedProofs_AreRefusedWithTheirError()
     {
         var fixture = VectorFixture.Load();

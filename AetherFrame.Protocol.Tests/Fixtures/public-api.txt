@@ -111,6 +111,7 @@ sealed class AetherFrame.Protocol.ProtocolException
     ProtocolError Error { get; }
     new(ProtocolError error, String message)
 static class AetherFrame.Protocol.ProtocolLimits
+    const Int32 MaxActionBodyBytes
     const Int32 MaxDeploymentLabelBytes
     const Int32 MaxDeploymentNameBytes
     const Int32 MaxDocumentBytes
@@ -419,11 +420,27 @@ sealed class AetherFrame.Protocol.Requests.RequestChallenge
     String ToString()
     const String Prefix
 static class AetherFrame.Protocol.Requests.RequestProofCodec
+    Boolean IsAction(RequestProofKind kind)
     Byte[] Sign(ReadOnlySpan<Byte> document, DeploymentName deployment, RequestChallenge challenge, IPersonaSigner signer)
+    Byte[] SignAction(RequestProofKind kind, ReadOnlySpan<Byte> body, DeploymentName deployment, RequestChallenge challenge, IPersonaSigner signer)
+    VerifiedAction VerifyAction(ReadOnlySpan<Byte> proof, ReadOnlySpan<Byte> body, DeploymentName deployment, RequestProofKind expected)
     VerifiedSubmission VerifySubmission(ReadOnlySpan<Byte> proof, ReadOnlySpan<Byte> document, DeploymentName deployment)
 enum AetherFrame.Protocol.Requests.RequestProofKind
     Byte value__
     const RequestProofKind DocumentSubmission
+    const RequestProofKind Image
+    const RequestProofKind LodestoneCheck
+    const RequestProofKind LodestoneCode
+    const RequestProofKind LodestoneReread
+    const RequestProofKind Lookup
+    const RequestProofKind OptOut
+    const RequestProofKind Report
+sealed class AetherFrame.Protocol.Requests.VerifiedAction
+    PersonaPublicKey PublicKey { get; }
+    ReadOnlySpan<Byte> Body { get; }
+    RequestChallenge Challenge { get; }
+    RequestProofKind Kind { get; }
+    VerifiedRequestProof Proof { get; }
 sealed class AetherFrame.Protocol.Requests.VerifiedRequestProof
     DeploymentName Deployment { get; }
     PersonaId Persona { get; }

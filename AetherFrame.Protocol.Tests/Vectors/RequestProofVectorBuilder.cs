@@ -93,7 +93,8 @@ internal static class RequestProofVectorBuilder
         Add("proof-final-version", Substitute(baseProof, 4, [0x00, 0x01]), ProtocolError.UnsupportedVersion, "version 1, the final marker: a draft reader refuses it");
         Add("proof-version-2-draft", Substitute(baseProof, 4, [0x80, 0x02]), ProtocolError.UnsupportedVersion, "version 0x8002, a draft of version 2");
         Add("proof-kind-0", Mutate(baseProof, 6, 0), ProtocolError.InvalidValue, "proof kind 0");
-        Add("proof-kind-2", Mutate(baseProof, 6, 2), ProtocolError.InvalidValue, "proof kind 2, not defined in version 1");
+        Add("proof-kind-9", Mutate(baseProof, 6, 9), ProtocolError.InvalidValue, "proof kind 9, not defined in version 1");
+        Add("proof-kind-rewritten-to-lookup", Mutate(baseProof, 6, 6), ProtocolError.SignatureMismatch, "the kind byte changed to 6, a lookup: the kind is signed, so the signature fails");
         Add("proof-kind-255", Mutate(baseProof, 6, 255), ProtocolError.InvalidValue, "proof kind 255");
 
         // The deployment name (section 14.1) and the challenge (section 14.2).
@@ -153,6 +154,79 @@ internal static class RequestProofVectorBuilder
         var brokenInput = SigningInput.CreateRequestProof(RequestProofKind.DocumentSubmission, a.PublicKey, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), brokenDigest);
         var brokenProof = RequestProofCodec.Assemble(RequestProofKind.DocumentSubmission, a.PublicKey, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), brokenDigest, a.Sign(brokenInput));
         Add("proof-of-a-document-that-does-not-verify", brokenProof, ProtocolError.SignatureMismatch, "persona A's valid proof over the rejected document signature-bit-flipped: the digest matches, and the document's own signature fails (section 14.4, step 4)", documentName: "signature-bit-flipped", documentSet: "rejected", deterministic: false);
+
+        // An action's valid proof is never a submission (section 14.4, step 1).
+        var lookup = RequestProofCodec.SignAction(RequestProofKind.Lookup, subject, DeploymentName.Parse(Deployment), RequestChallenge.FromBytes(challengeBytes), a);
+        Add("proof-of-an-action-as-a-submission", lookup, ProtocolError.ProofMismatch, "persona A's valid lookup proof submitted with a document: an action never authorizes a submission", deterministic: false);
+        return list;
+    }
+
+    public sealed record ValidAction(string Name, string Persona, RequestProofKind Kind, string Body, string Challenge);
+
+    /// <summary>
+    /// One valid request per action (section 14.5), each with an example body. The protocol binds a
+    /// body's bytes, whatever they are; the bodies here only show the kind of thing each action carries.
+    /// </summary>
+    public static IReadOnlyList<ValidAction> ValidActions() =>
+    [
+        new("action-lodestone-code", "A", RequestProofKind.LodestoneCode, "{}", "chl_" + string.Concat(Enumerable.Repeat("12", 32))),
+        new("action-lodestone-check", "A", RequestProofKind.LodestoneCheck, "{\"code\":\"AF-0123456789\",\"lodestoneId\":\"12345678\"}", "chl_" + string.Concat(Enumerable.Repeat("23", 32))),
+        new("action-lodestone-reread", "A", RequestProofKind.LodestoneReread, "{}", "chl_" + string.Concat(Enumerable.Repeat("34", 32))),
+        new("action-opt-out", "A", RequestProofKind.OptOut, "{}", "chl_" + string.Concat(Enumerable.Repeat("45", 32))),
+        new("action-lookup", "B", RequestProofKind.Lookup, "{\"name\":\"Jane Doe\",\"world\":\"Gilgamesh\"}", "chl_" + string.Concat(Enumerable.Repeat("56", 32))),
+        new("action-image", "B", RequestProofKind.Image, "{\"name\":\"Jane Doe\",\"world\":\"Gilgamesh\",\"marker\":\"00112233445566778899aabbccddeeff\",\"index\":0}", "chl_" + string.Concat(Enumerable.Repeat("67", 32))),
+        new("action-report", "B", RequestProofKind.Report, "{\"name\":\"Jane Doe\",\"world\":\"Gilgamesh\",\"reason\":\"offensive\"}", "chl_" + string.Concat(Enumerable.Repeat("78", 32))),
+    ];
+
+    public static List<ActionProofVector> BuildActions(IReadOnlyDictionary<string, EcdsaPersonaSigner> signers)
+    {
+        var list = new List<ActionProofVector>();
+        var deployment = DeploymentName.Parse(Deployment);
+        foreach (var valid in ValidActions())
+        {
+            var signer = signers[valid.Persona];
+            var body = System.Text.Encoding.UTF8.GetBytes(valid.Body);
+            var challenge = RequestChallenge.Parse(valid.Challenge);
+            var proof = RequestProofCodec.SignAction(valid.Kind, body, deployment, challenge, signer);
+            var digest = SHA256.HashData(body);
+            var input = SigningInput.CreateRequestProof(valid.Kind, signer.PublicKey, deployment, challenge, digest);
+            list.Add(new ActionProofVector
+            {
+                Name = valid.Name,
+                Persona = valid.Persona,
+                Kind = valid.Kind.ToString(),
+                Body = Hex.Of(body),
+                Deployment = Deployment,
+                Challenge = valid.Challenge,
+                SubjectDigest = Hex.Of(digest),
+                SigningInput = Hex.Of(input.Bytes),
+                Digest = Hex.Of(input.ComputeDigest()),
+                Signature = Hex.Of(proof.AsSpan(proof.Length - 64)),
+                Proof = Hex.Of(proof),
+            });
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    /// Action requests a server refuses (section 14.5), derived from the lookup vector and the first
+    /// submission vector: each is checked as the action named, with the body and deployment named.
+    /// </summary>
+    public static List<RejectedActionVector> BuildRejectedActions(ActionProofVector lookup, byte[] submissionProof)
+    {
+        var list = new List<RejectedActionVector>();
+        void Add(string name, byte[] proof, RequestProofKind checkedAs, byte[] body, ProtocolError error, string reason, string deployment = Deployment) =>
+            list.Add(new RejectedActionVector { Name = name, Proof = Hex.Of(proof), CheckedAs = checkedAs.ToString(), Body = Hex.Of(body), Deployment = deployment, Error = error.ToString(), Reason = reason });
+
+        var proof = Hex.Parse(lookup.Proof);
+        var body = Hex.Parse(lookup.Body);
+        Add("action-checked-as-another-action", proof, RequestProofKind.Report, body, ProtocolError.ProofMismatch, "a valid lookup proof checked as a report");
+        Add("action-kind-byte-rewritten", Mutate(proof, 6, (byte)RequestProofKind.Report), RequestProofKind.Report, body, ProtocolError.SignatureMismatch, "the lookup proof's kind byte rewritten to a report: the kind is signed");
+        Add("action-for-another-deployment", proof, RequestProofKind.Lookup, body, ProtocolError.ProofMismatch, "a valid lookup proof checked by staging.example.com", deployment: "staging.example.com");
+        Add("action-with-another-body", proof, RequestProofKind.Lookup, System.Text.Encoding.UTF8.GetBytes("{\"name\":\"John Doe\",\"world\":\"Gilgamesh\"}"), ProtocolError.ProofMismatch, "a valid lookup proof sent with another character's name");
+        Add("action-body-over-the-limit", proof, RequestProofKind.Lookup, new byte[ProtocolLimits.MaxActionBodyBytes + 1], ProtocolError.LimitExceeded, "a body of 4,097 bytes, one over the limit");
+        Add("submission-checked-as-an-action", submissionProof, RequestProofKind.Lookup, body, ProtocolError.ProofMismatch, "a valid document submission proof checked as a lookup: a submission never authorizes an action");
         return list;
     }
 }

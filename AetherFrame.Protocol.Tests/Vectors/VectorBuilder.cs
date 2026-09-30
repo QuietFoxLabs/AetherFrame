@@ -95,6 +95,18 @@ internal static class VectorBuilder
             vector.Proof = KeepSignature(committed?.RejectedProofs.SingleOrDefault(r => r.Name == vector.Name)?.Proof, vector.Proof);
         }
 
+        fixture.ActionProofs = RequestProofVectorBuilder.BuildActions(signers);
+        foreach (var vector in fixture.ActionProofs)
+        {
+            if (committed?.ActionProofs.SingleOrDefault(p => p.Name == vector.Name) is { } kept && kept.SigningInput == vector.SigningInput
+                && ReferenceP256.Verify(Hex.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PublicKey), Hex.Parse(vector.Digest), Hex.Parse(kept.Signature)))
+            {
+                vector.Signature = kept.Signature;
+                vector.Proof = kept.Proof;
+            }
+        }
+
+        fixture.RejectedActions = RequestProofVectorBuilder.BuildRejectedActions(fixture.ActionProofs.Single(p => p.Name == "action-lookup"), Hex.Parse(fixture.RequestProofs[0].Proof));
         return fixture;
     }
 

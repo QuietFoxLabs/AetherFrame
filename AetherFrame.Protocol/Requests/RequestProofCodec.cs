@@ -101,9 +101,9 @@ public static class RequestProofCodec
             throw new ProtocolException(ProtocolError.UnsupportedVersion, $"Protocol version {SignedDocumentCodec.DescribeVersion(version)} is not supported; this build reads only {SignedDocumentCodec.DescribeVersion(ProtocolConstants.ProtocolVersion)}.");
         }
 
-        // The kind decides the layout after it; version 1 knows one kind, whose layout follows.
+        // The kind decides the layout after it; every kind version 1 knows shares the one below.
         var kind = (RequestProofKind)reader.ReadU8("proofKind");
-        if (kind != RequestProofKind.DocumentSubmission)
+        if (!IsKnown(kind))
         {
             throw new ProtocolException(ProtocolError.InvalidValue, $"Request proof kind {ProtocolText.Number((byte)kind)} is not known.");
         }
@@ -142,6 +142,11 @@ public static class RequestProofCodec
         ArgumentNullException.ThrowIfNull(deployment);
 
         var verifiedProof = Verify(proof);
+        if (verifiedProof.Kind != RequestProofKind.DocumentSubmission)
+        {
+            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof authorizes an action, not a document submission.");
+        }
+
         if (!verifiedProof.Deployment.Equals(deployment))
         {
             throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof was made for another deployment.");
@@ -161,6 +166,112 @@ public static class RequestProofCodec
         }
 
         return new VerifiedSubmission(verifiedDocument, verifiedProof, documentBytes);
+    }
+
+    /// <summary>Whether <paramref name="kind"/> is an action (section 14.5): every known kind but a document submission.</summary>
+    public static bool IsAction(RequestProofKind kind) => IsKnown(kind) && kind != RequestProofKind.DocumentSubmission;
+
+    /// <summary>
+    /// Makes the proof for one action request (section 14.5): <paramref name="kind"/> with exactly
+    /// <paramref name="body"/>, to <paramref name="deployment"/>, under <paramref name="challenge"/>.
+    /// The finished proof is checked with the body before it is returned, so a signer that
+    /// misreports its key or signs other bytes produces no proof.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not an action.</exception>
+    /// <exception cref="ProtocolException">
+    /// <see cref="ProtocolError.LimitExceeded"/> for a body over <see cref="ProtocolLimits.MaxActionBodyBytes"/>;
+    /// <see cref="ProtocolError.SignatureMismatch"/>, <see cref="ProtocolError.InvalidKey"/> or
+    /// <see cref="ProtocolError.InvalidSignature"/> when the signer's output is not a valid proof. The
+    /// signer's own exceptions pass through unchanged.
+    /// </exception>
+    public static byte[] SignAction(RequestProofKind kind, ReadOnlySpan<byte> body, DeploymentName deployment, RequestChallenge challenge, IPersonaSigner signer)
+    {
+        if (!IsAction(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not an action; a document submission is signed with Sign.");
+        }
+
+        ArgumentNullException.ThrowIfNull(deployment);
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(signer);
+
+        var publicKey = signer.PublicKey;
+        if (publicKey is null)
+        {
+            throw new ProtocolException(ProtocolError.InvalidKey, "The signer reports no public key.");
+        }
+
+        var bodyBytes = CopyBody(body);
+        var digest = SHA256.HashData(bodyBytes);
+        var input = SigningInput.CreateRequestProof(kind, publicKey, deployment, challenge, digest);
+        var signature = signer.Sign(input);
+        if (signature is null)
+        {
+            throw new ProtocolException(ProtocolError.InvalidSignature, "The signer returned no signature.");
+        }
+
+        var bytes = Assemble(kind, publicKey, deployment, challenge, digest, signature);
+        try
+        {
+            VerifyAction(bytes, bodyBytes, deployment, kind);
+        }
+        catch (ProtocolException e)
+        {
+            throw new ProtocolException(e.Error, $"The signer's output is not a valid request proof, so none was produced: {e.Message}");
+        }
+
+        return bytes;
+    }
+
+    /// <summary>
+    /// Checks an action request as a server receives it (section 14.5): the proof on its own, then
+    /// that it authorizes the action the server expects at this endpoint, that it was made for
+    /// <paramref name="deployment"/>, and that it binds exactly <paramref name="body"/>. What this
+    /// cannot check is the challenge: the server must consume <see cref="VerifiedAction.Challenge"/>
+    /// before it acts (section 13, rule 10).
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="expected"/> is not an action.</exception>
+    /// <exception cref="ProtocolException">The first rule the request breaks, in the order of section 14.5.</exception>
+    public static VerifiedAction VerifyAction(ReadOnlySpan<byte> proof, ReadOnlySpan<byte> body, DeploymentName deployment, RequestProofKind expected)
+    {
+        if (!IsAction(expected))
+        {
+            throw new ArgumentOutOfRangeException(nameof(expected), expected, "Not an action; a document submission is checked with VerifySubmission.");
+        }
+
+        ArgumentNullException.ThrowIfNull(deployment);
+
+        var verifiedProof = Verify(proof);
+        if (verifiedProof.Kind != expected)
+        {
+            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof authorizes another kind of request.");
+        }
+
+        if (!verifiedProof.Deployment.Equals(deployment))
+        {
+            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof was made for another deployment.");
+        }
+
+        var bodyBytes = CopyBody(body);
+        if (!CryptographicOperations.FixedTimeEquals(SHA256.HashData(bodyBytes), verifiedProof.SubjectDigest))
+        {
+            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof binds another body.");
+        }
+
+        return new VerifiedAction(verifiedProof, bodyBytes);
+    }
+
+    private static bool IsKnown(RequestProofKind kind) => kind is >= RequestProofKind.DocumentSubmission and <= RequestProofKind.Report;
+
+    /// <summary>A private copy of an action's body, taken only once its size is within the limit.</summary>
+    private static byte[] CopyBody(ReadOnlySpan<byte> body)
+    {
+        if (body.Length > ProtocolLimits.MaxActionBodyBytes)
+        {
+            throw new ProtocolException(ProtocolError.LimitExceeded, $"The action's body is {ProtocolText.Number(body.Length)} bytes; the limit is {ProtocolText.Number(ProtocolLimits.MaxActionBodyBytes)}.");
+        }
+
+        return body.ToArray();
     }
 
     /// <summary>Lays out a proof. Internal so tests can build proofs whose parts disagree.</summary>

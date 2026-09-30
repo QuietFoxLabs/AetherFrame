@@ -512,21 +512,21 @@ The protocol verifies bytes; this section says what a server that accepts versio
 
 ## 14. Request proof
 
-A request proof authorizes one submission of one signed document to one deployment of a server (decisions S1 and D7, [DecisionRegister.md](DecisionRegister.md)). A document on its own verifies anywhere, for anyone who holds a copy. A server accepts one only with a fresh proof from the document's own key, made for that server under a challenge the server issued (section 13, rule 10). So only a document's signer can submit it, only to the deployment they chose, and only once per challenge.
+A request proof authorizes one submission of one signed document to one deployment of a server (decisions S1 and D7, [DecisionRegister.md](DecisionRegister.md)), or one action with one exact body (section 14.5; decision C9, which the owner approved in advance). A document on its own verifies anywhere, for anyone who holds a copy. A server accepts one only with a fresh proof from the document's own key, made for that server under a challenge the server issued (section 13, rule 10). So only a document's signer can submit it, only to the deployment they chose, and only once per challenge.
 
 | Offset | Size | Field | Value |
 |---|---|---|---|
 | 0 | 4 | magic | ASCII `AFRQ` (`41 46 52 51`) |
 | 4 | 2 | protocolVersion | `u16` = `0x8001` while the protocol is a draft (section 10); `1` after the freeze |
-| 6 | 1 | proofKind | `u8`: 1 = document submission. Closed: any other value is `InvalidValue` |
+| 6 | 1 | proofKind | `u8`: 1 = document submission; 2 to 8 = the actions of section 14.5. Closed: any other value is `InvalidValue` |
 | 7 | 65 | personaPublicKey | section 3 |
 | 72 | 1 | deploymentLength | `u8`, 1 to 253 |
 | 73 | n | deployment | the deployment name, section 14.1 |
 | 73 + n | 32 | challenge | section 14.2 |
-| 105 + n | 32 | subjectDigest | for kind 1, SHA-256 of the complete signed document submitted, signature included |
+| 105 + n | 32 | subjectDigest | for kind 1, SHA-256 of the complete signed document submitted, signature included; for an action, SHA-256 of the request's body |
 | 137 + n | 64 | signature | section 6 |
 
-A proof is 201 + n bytes, at most **454**, and ends immediately after its signature. The kind decides the layout after it: this table is kind 1's, and a later kind may define its own.
+A proof is 201 + n bytes, at most **454**, and ends immediately after its signature. The kind decides the layout after it: every kind of version 1 has this table's, and a later kind may define its own. The kind is signed, so a proof made for one kind never verifies as another.
 
 The signing input (section 5.1):
 
@@ -572,7 +572,7 @@ A reader performs these steps in this order and stops at the first failure with 
 1. If the input is longer than 454 bytes: `LimitExceeded`.
 2. Read the magic; if fewer than 4 bytes remain: `Truncated`; if they are not `AFRQ`: `InvalidFraming`. A signed document (`AFPD`) is never read as a proof, nor a proof as a document.
 3. Read `protocolVersion`, as section 7.2, step 3: `UnsupportedVersion`.
-4. Read `proofKind`; anything but 1: `InvalidValue`.
+4. Read `proofKind`; anything but 1 to 8: `InvalidValue`.
 5. Read the 65 key bytes (not yet validated).
 6. Read `deploymentLength` and check it (section 14.1), then read the name and check it: `InvalidLength`, `LimitExceeded`, `Truncated` or `InvalidValue`.
 7. Read the challenge and check it (section 14.2), the subject digest and the 64 signature bytes; then, if any input remains: `TrailingBytes`. At each read, too little input is `Truncated`.
@@ -585,7 +585,7 @@ A proof that passes these steps authorizes nothing yet: it must also match the s
 ### 14.4 Checking a submission
 
 A server that receives a document with its proof checks, in this order, and stops at the first failure:
-1. The proof, as section 14.3.
+1. The proof, as section 14.3. Its kind is 1: otherwise `ProofMismatch`.
 2. The proof's deployment name equals the server's own: otherwise `ProofMismatch`.
 3. The document is at most 1,048,576 bytes (section 7.2, step 1): otherwise `LimitExceeded`. Its SHA-256 equals the proof's `subjectDigest`: otherwise `ProofMismatch`.
 4. The document, as section 7.2.
@@ -594,6 +594,28 @@ A server that receives a document with its proof checks, in this order, and stop
 Only then does the server consume the challenge (section 13, rule 10), and only after that does it act on the document. It stores the exact bytes it hashed and verified in steps 3 and 4 (rule 3), never the request's buffer read a second time.
 
 What a server does with a submission is decided by the proof's kind and the document, and by nothing else in the request. No header, query or other field may change what is stored, which profile it is applied to, or any setting. A parameter that should change the outcome needs a proof kind that signs it.
+
+### 14.5 Action requests
+
+An action request is a proof with one of these kinds, sent with a body of at most 4,096 bytes that the proof's `subjectDigest` binds (decisions C1 to C9):
+
+| Kind | Action |
+|---|---|
+| 2 | asking for a Lodestone check code |
+| 3 | checking a Lodestone code, which binds a character to the signer |
+| 4 | asking the server to read the signer's character's Lodestone page again |
+| 5 | turning sharing off for the signer's character |
+| 6 | looking a character's Plate up by name and World |
+| 7 | fetching one image of a looked-up Plate |
+| 8 | reporting a Plate to the operator |
+
+The protocol binds the body's bytes, whatever they are: the server defines what each action's body holds. A server that receives an action request at the endpoint for action K checks, in this order, and stops at the first failure:
+1. The proof, as section 14.3.
+2. Its kind is K: otherwise `ProofMismatch`. So a submission's proof is never an action, and no action's proof is another action.
+3. Its deployment name equals the server's own: otherwise `ProofMismatch`.
+4. The body is at most 4,096 bytes: otherwise `LimitExceeded`. Its SHA-256 equals the proof's `subjectDigest`: otherwise `ProofMismatch`.
+
+Only then does the server consume the challenge (section 13, rule 10), and only after that does it parse the body and act, on the exact bytes it hashed. As for a submission, nothing outside the body and the proof may change what the server does. The vectors hold one valid request per action, with an example body, and requests refused at each step.
 
 ## Appendix A. Background patterns
 
