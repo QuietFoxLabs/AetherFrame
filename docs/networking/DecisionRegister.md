@@ -35,6 +35,8 @@ Approved by the owner, in these words:
 > Personas are never automatically bound to characters, Content IDs, accounts or other game identifiers.
 > Switching personas must not alter saved local Plates or trigger publishing.
 
+`[updated 2026-09-30: amended by the owner, V4 below. An opted-in character is bound to a key of its own by the player's opt-in, and players no longer see or switch personas. The text above is left as first approved; V4 is the owner's later decision.]`
+
 **Wording the approved text does not quote.** The owner's instruction to the persona foundation (#23) also said that distinct personas remain independent unless the user deliberately associates them. `AetherFrame.Personas` enforces it: no operation associates two personas. The approved text above is left exactly as approved. Adding the clause changes the owner's own approval, so only the owner can do it.
 
 **What the approval does not settle:**
@@ -42,6 +44,45 @@ Approved by the owner, in these words:
 - which platforms can create them (K3);
 - whether they carry a display name (D9a);
 - any user interface.
+
+### V1 to V5: viewing Plates by character. APPROVED by the owner (September 30, 2026)
+
+On September 30, 2026 the owner redefined what sharing is for. These are the owner's own decisions, not delegated ones. Only the owner can change them.
+
+**V1: what sharing means.** In the owner's words, in chat:
+
+> when i've been talking about sharing in the past, it was not so much about making a plate and sharing that plate settings/layout with people but more when people want to look at the plate i have created, they can right click and view my plate, a very similar scenario to how adventure plates work in the base ffxiv game, a player makes an adventure plate and saves it, other people do not have access to the adventure plate configuration but they get to see what the other player has made, almost like a piece of art. what is implemented is good but i want to focus now more on how i've explained it.
+
+> additionally, this would be something that players have to opt into. i do not want this enabled by default. ... i do not want to put users of the plugin at risk in any way shape or form. my thought now is that a user opts into the networking side of it, so they can create their plates and others can view what they've made and vice versa, they would also be opting into being able to see other's plates. when i say plates, im refering to aetherframe made plates.
+
+So:
+- sharing is **viewing**: another player sees a Plate as a finished picture and never receives its settings, layout or files;
+- it is **opt-in and off by default**;
+- it is **both ways**: opting in publishes your Plates and lets you view others'. A player who hasn't opted in sends nothing and can look nothing up.
+
+The remaining four came from Claude's questions in chat. The owner picked one option each. Each is quoted as the owner saw it.
+
+**V2: what is shown.** The owner chose "Active Plate, live": "That character's Active Plate. Saving it updates what others see, like the game's Adventure Plate. Turning sharing off removes it from the server."
+
+**V3: proving a character is yours.** The owner chose "Lodestone check": "Once per character: paste a short code into your Lodestone profile, the server checks it, then you can delete it. Nobody can attach a Plate to a character they don't own."
+
+**V4: personas.** The owner chose "Hide them": "Opting a character in creates its key behind the scenes, and players never see a Personas window. This changes D3, which only you can do." This amends D3 (below): an opted-in character is bound to a key of its own, by the player's opt-in, and personas are no longer something players see or switch.
+
+**V5: finding a Plate.** The owner chose "Right-click and name search": "Also a search box by character name and World. Easier to use, but anyone opted in can look anyone up by name." The recommended option, right-click only, was declined. Both ways are open only to opted-in players.
+
+**What V1 to V5 replace.**
+- R1 (share codes) and R4 (their format) are **superseded** as the way a viewer finds a Plate. No share-code code is built. Their reasoning about bearer codes stays on record.
+- Stage 2's "target lookup with an opt-in character binding" becomes the first test (NETWORK2.md, section 2).
+
+**What V1 to V5 don't settle.** Decision batch C settles these under the delegation, each researched and reviewed by a security-focused reviewer:
+- the character's key form, and renames and World transfers;
+- the Lodestone check's exact flow;
+- when publishing happens, and what opting out deletes;
+- which game menus offer "View Plate", and the search's limits;
+- what the server learns, keeps and logs about lookups and searches;
+- rate limits against scraping who has opted in;
+- reporting and hiding a Plate, and the operator's takedown;
+- whether K4 and the D2 backup still matter now that a Lodestone check can hand a character to a new key.
 
 ### D2: recovery from key loss. APPROVED IN PRINCIPLE (September 28, 2026)
 
@@ -518,6 +559,8 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: for stage 1 on the owner's server, an informed acknowledgement per persona is proportionate, because key loss never touches local Plates, only retraction, and the owner can remove content on the server. It asked for the concrete ways a key is lost in the text, now above.
 
 ### R1: how a viewer finds a Plate in the first test. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+`[updated 2026-09-30: SUPERSEDED by the owner's V1 and V5: a viewer finds a Plate by right-clicking its owner's character in game or searching their name and World, and only between opted-in players. No share codes are built. The reasoning below stays on record.]`
 
 **Option and scope.** **Share codes.**
 - The server issues one random code per published profile (persona, profile id) and returns it only to the publisher.
