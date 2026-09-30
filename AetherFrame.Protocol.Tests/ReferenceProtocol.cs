@@ -87,6 +87,51 @@ internal static class ReferenceProtocol
         return buffer;
     }
 
+    /// <summary>
+    /// Section 14: u8(42) ‖ "AetherFrame.Protocol.RequestProof.v1-draft" ‖ u16(0x8001) ‖ u8(kind)
+    /// ‖ key[65] ‖ u8(len(deployment)) ‖ deployment ‖ challenge[32] ‖ subjectDigest[32].
+    /// </summary>
+    public static byte[] ProofSigningInput(byte kind, ReadOnlySpan<byte> publicKey65, ReadOnlySpan<byte> deployment, ReadOnlySpan<byte> challenge32, ReadOnlySpan<byte> subjectDigest32)
+    {
+        var tag = System.Text.Encoding.ASCII.GetBytes("AetherFrame.Protocol.RequestProof.v1-draft");
+        var body = ProofBody(kind, publicKey65, deployment, challenge32, subjectDigest32);
+        var buffer = new byte[1 + tag.Length + body.Length];
+        buffer[0] = (byte)tag.Length;
+        tag.CopyTo(buffer, 1);
+        body.CopyTo(buffer, 1 + tag.Length);
+        return buffer;
+    }
+
+    /// <summary>Section 14: "AFRQ" ‖ the signed fields ‖ signature[64].</summary>
+    public static byte[] Proof(byte kind, ReadOnlySpan<byte> publicKey65, ReadOnlySpan<byte> deployment, ReadOnlySpan<byte> challenge32, ReadOnlySpan<byte> subjectDigest32, ReadOnlySpan<byte> signature64)
+    {
+        var body = ProofBody(kind, publicKey65, deployment, challenge32, subjectDigest32);
+        var buffer = new byte[4 + body.Length + 64];
+        "AFRQ"u8.CopyTo(buffer);
+        body.CopyTo(buffer, 4);
+        signature64.CopyTo(buffer.AsSpan(4 + body.Length));
+        return buffer;
+    }
+
+    /// <summary>The fields of section 14's table from offset 4 up to the signature.</summary>
+    private static byte[] ProofBody(byte kind, ReadOnlySpan<byte> publicKey65, ReadOnlySpan<byte> deployment, ReadOnlySpan<byte> challenge32, ReadOnlySpan<byte> subjectDigest32)
+    {
+        var buffer = new byte[2 + 1 + 65 + 1 + deployment.Length + 32 + 32];
+        var offset = 0;
+        BinaryPrimitives.WriteUInt16BigEndian(buffer.AsSpan(offset), 0x8001);
+        offset += 2;
+        buffer[offset++] = kind;
+        publicKey65.CopyTo(buffer.AsSpan(offset));
+        offset += 65;
+        buffer[offset++] = (byte)deployment.Length;
+        deployment.CopyTo(buffer.AsSpan(offset));
+        offset += deployment.Length;
+        challenge32.CopyTo(buffer.AsSpan(offset));
+        offset += 32;
+        subjectDigest32.CopyTo(buffer.AsSpan(offset));
+        return buffer;
+    }
+
     /// <summary>A protocol version and its signature domain tag.</summary>
     internal sealed class Marker
     {

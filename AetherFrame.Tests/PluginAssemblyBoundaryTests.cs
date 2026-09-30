@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using Xunit;
 
@@ -130,8 +131,129 @@ public class PluginAssemblyBoundaryTests
         }
     }
 
+    [Fact]
+    public void ThePlugin_LoadsNoNativeLibraryItself_AndDeclaresNoComImport()
+    {
+        // The other ways into native code that a P/Invoke declaration doesn't show: loading a
+        // library and calling through a function pointer or a delegate made from one, or a COM
+        // import. Neither flavour uses any of them.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var metadata = pe.GetMetadataReader();
+        var found = new List<string>();
+        foreach (var handle in metadata.TypeReferences)
+        {
+            var reference = metadata.GetTypeReference(handle);
+            if (metadata.GetString(reference.Namespace) == "System.Runtime.InteropServices" && metadata.GetString(reference.Name) == "NativeLibrary")
+            {
+                found.Add("System.Runtime.InteropServices.NativeLibrary");
+            }
+        }
+
+        foreach (var handle in metadata.MemberReferences)
+        {
+            var member = metadata.GetMemberReference(handle);
+            var name = metadata.GetString(member.Name);
+            if (name is not ("GetDelegateForFunctionPointer" or "GetFunctionPointerForDelegate") || member.Parent.Kind != HandleKind.TypeReference)
+            {
+                continue;
+            }
+
+            var parent = metadata.GetTypeReference((TypeReferenceHandle)member.Parent);
+            if (metadata.GetString(parent.Namespace) == "System.Runtime.InteropServices" && metadata.GetString(parent.Name) == "Marshal")
+            {
+                found.Add("Marshal." + name);
+            }
+        }
+
+        foreach (var handle in metadata.TypeDefinitions)
+        {
+            var type = metadata.GetTypeDefinition(handle);
+            if ((type.Attributes & System.Reflection.TypeAttributes.Import) != 0)
+            {
+                found.Add("COM import " + metadata.GetString(type.Namespace) + "." + metadata.GetString(type.Name));
+            }
+        }
+
+        // Every calli instruction names a stand-alone method signature; an unmanaged calling
+        // convention there is a call through a native function pointer (delegate* unmanaged).
+        for (var row = 1; row <= metadata.GetTableRowCount(TableIndex.StandAloneSig); row++)
+        {
+            var signature = metadata.GetStandaloneSignature(MetadataTokens.StandaloneSignatureHandle(row));
+            if (signature.GetKind() != StandaloneSignatureKind.Method)
+            {
+                continue;
+            }
+
+            var header = metadata.GetBlobReader(signature.Signature).ReadSignatureHeader();
+            if (header.CallingConvention is not (SignatureCallingConvention.Default or SignatureCallingConvention.VarArgs))
+            {
+                found.Add("an unmanaged calli signature (" + header.CallingConvention + ")");
+            }
+        }
+
+        Assert.True(found.Count == 0, "The plugin reaches native code itself through: " + string.Join(", ", found));
+    }
+
     private static bool Within(string ns, string[] roots) =>
         roots.Any(root => ns == root || ns.StartsWith(root + ".", StringComparison.Ordinal));
+
+    [Fact]
+    public void DeclaredNativeCalls_AreDpapisAlone_AndOnlyInThePreviewFlavour()
+    {
+        // The player build declares no P/Invoke of its own (it reaches native code only through
+        // Dalamud and ImGui, like every plugin). The preview flavour declares exactly the three DPAPI
+        // needs (docs/networking/DecisionRegister.md, K2), all in the DPAPI protector. This reads the
+        // P/Invoke declarations, which LibraryImport's generated stubs also make.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var metadata = pe.GetMetadataReader();
+        var imports = new List<string>();
+        foreach (var handle in metadata.MethodDefinitions)
+        {
+            var method = metadata.GetMethodDefinition(handle);
+            var import = method.GetImport();
+            if (import.Module.IsNil)
+            {
+                continue;
+            }
+
+            var type = metadata.GetTypeDefinition(method.GetDeclaringType());
+            while (type.GetDeclaringType() is { IsNil: false } outer)
+            {
+                type = metadata.GetTypeDefinition(outer);
+            }
+
+            var owner = metadata.GetString(type.Namespace) + "." + metadata.GetString(type.Name);
+            imports.Add(owner + ": " + metadata.GetString(metadata.GetModuleReference(import.Module).Name) + "!" + metadata.GetString(import.Name));
+        }
+
+        imports.Sort(StringComparer.Ordinal);
+        if (PreviewFlavour)
+        {
+            Assert.Equal(
+                [
+                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptProtectData",
+                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptUnprotectData",
+                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: kernel32.dll!LocalFree",
+                ],
+                imports);
+        }
+        else
+        {
+            Assert.True(imports.Count == 0, "The player build calls: " + string.Join(", ", imports));
+        }
+    }
 
     [Fact]
     public void ThePluginConfiguration_HasNoPersonaMembers()

@@ -7,7 +7,7 @@ namespace AetherFrame.Protocol;
 /// </summary>
 public enum ProtocolError
 {
-    /// <summary>The input does not start with the document magic, or its framing is otherwise not a signed document.</summary>
+    /// <summary>The input does not start with the magic of what is read (a signed document's or a request proof's), or its framing is otherwise not one.</summary>
     InvalidFraming,
 
     /// <summary>The document or payload declares a protocol or schema version this build does not read.</summary>
@@ -19,7 +19,7 @@ public enum ProtocolError
     /// <summary>The input ended before a value it declares was complete.</summary>
     Truncated,
 
-    /// <summary>The input continues after the last value of the document.</summary>
+    /// <summary>The input continues after the last value of the document, payload or request proof.</summary>
     TrailingBytes,
 
     /// <summary>A length, count, size or total is over its limit (<see cref="ProtocolLimits"/>).</summary>
@@ -34,7 +34,7 @@ public enum ProtocolError
     /// <summary>The signature bytes are not a canonical P-256 signature (r or s out of range, or s not in the low half).</summary>
     InvalidSignature,
 
-    /// <summary>The signature is well formed but does not verify over the document with its key.</summary>
+    /// <summary>The signature is well formed but does not verify over the document or request proof with its key.</summary>
     SignatureMismatch,
 
     /// <summary>A text field is not valid UTF-8 or contains U+0000, or a name contains a code point the name rule refuses (specification, section 8.1.1). A text field over its length limit is <see cref="LimitExceeded"/>.</summary>
@@ -45,4 +45,10 @@ public enum ProtocolError
 
     /// <summary>The input is well formed but is not the one canonical encoding of its content, for example a set that is not sorted.</summary>
     NotCanonical,
+
+    /// <summary>
+    /// A request proof verifies but does not authorize the request it came with: it names another
+    /// deployment, binds another document, or is signed by a key other than the document's.
+    /// </summary>
+    ProofMismatch,
 }

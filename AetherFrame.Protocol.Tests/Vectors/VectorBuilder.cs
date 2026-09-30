@@ -29,7 +29,13 @@ internal static class VectorBuilder
         new("profile-retraction", "B", new ProfileRetraction(Samples.ProfileB, Samples.IssuedAt), null),
     ];
 
-    public static VectorFixture Build()
+    /// <summary>
+    /// Builds every vector. With <paramref name="committed"/>, the fixture already in the source
+    /// tree, a vector whose signed bytes have not changed keeps its committed signature: ECDSA is
+    /// randomized, so signing unchanged content again would rewrite every vector, and a
+    /// regeneration's diff would hide the vectors that did change.
+    /// </summary>
+    public static VectorFixture Build(VectorFixture? committed = null)
     {
         using var a = TestPersonas.CreateA();
         using var b = TestPersonas.CreateB();
@@ -50,7 +56,7 @@ internal static class VectorBuilder
 
         foreach (var model in Models())
         {
-            fixture.Documents.Add(Document(model, signers[model.Persona]));
+            fixture.Documents.Add(Document(model, signers[model.Persona], committed?.Documents.SingleOrDefault(d => d.Name == model.Name)));
         }
 
         fixture.Profiles = Samples.ProfileOwners.Select(p => new ProfileOwnerVector { ProfileId = p.Key, Owner = p.Value }).OrderBy(p => p.ProfileId, StringComparer.Ordinal).ToList();
@@ -58,8 +64,56 @@ internal static class VectorBuilder
         var baseDocument = Hex.Parse(fixture.Documents[0].Document!);
         var retractionDocument = Hex.Parse(fixture.Documents.Single(d => d.Name == "profile-retraction").Document!);
         fixture.Rejected = RejectedVectorBuilder.Build(baseDocument, retractionDocument, a, b.PublicKey);
+        foreach (var vector in fixture.Rejected.Where(r => !r.Deterministic))
+        {
+            vector.Document = KeepSignature(committed?.Rejected.SingleOrDefault(r => r.Name == vector.Name)?.Document, vector.Document);
+        }
+
         fixture.ServerObligations = ServerObligations(b);
+        foreach (var vector in fixture.ServerObligations)
+        {
+            vector.Document = KeepSignature(committed?.ServerObligations.SingleOrDefault(o => o.Name == vector.Name)?.Document, vector.Document);
+        }
+
+        byte[] DocumentNamed(string name) => Hex.Parse(fixture.Documents.Single(d => d.Name == name).Document!);
+        fixture.RequestProofDomainTag = System.Text.Encoding.ASCII.GetString(ProtocolConstants.RequestProofDomainTag);
+        fixture.RequestProofs = RequestProofVectorBuilder.BuildValid(DocumentNamed, signers);
+        foreach (var vector in fixture.RequestProofs)
+        {
+            if (committed?.RequestProofs.SingleOrDefault(p => p.Name == vector.Name) is { } kept && kept.SigningInput == vector.SigningInput
+                && ReferenceP256.Verify(Hex.Parse(fixture.Personas.Single(p => p.Name == vector.Persona).PublicKey), Hex.Parse(vector.Digest), Hex.Parse(kept.Signature)))
+            {
+                vector.Signature = kept.Signature;
+                vector.Proof = kept.Proof;
+            }
+        }
+
+        byte[] RejectedNamed(string name) => Hex.Parse(fixture.Rejected.Single(r => r.Name == name).Document);
+        fixture.RejectedProofs = RequestProofVectorBuilder.BuildRejected(Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed, RejectedNamed, a, b);
+        foreach (var vector in fixture.RejectedProofs.Where(r => !r.Deterministic))
+        {
+            vector.Proof = KeepSignature(committed?.RejectedProofs.SingleOrDefault(r => r.Name == vector.Name)?.Proof, vector.Proof);
+        }
+
         return fixture;
+    }
+
+    /// <summary>
+    /// The committed hex when it differs from the fresh one only in its last 64 bytes: the same
+    /// construction, signed at another time. Used only for vectors that end in a fresh signature
+    /// (the non-deterministic rejected vectors and the server obligations); a deterministic vector
+    /// follows from its base exactly and is always rebuilt. The vector tests check every kept vector
+    /// as they check a fresh one.
+    /// </summary>
+    public static string KeepSignature(string? committed, string fresh)
+    {
+        const int signatureHex = 128;
+        if (committed is null || committed.Length != fresh.Length || fresh.Length < signatureHex)
+        {
+            return fresh;
+        }
+
+        return string.CompareOrdinal(committed, 0, fresh, 0, fresh.Length - signatureHex) == 0 ? committed : fresh;
     }
 
     /// <summary>
@@ -98,11 +152,13 @@ internal static class VectorBuilder
         PersonaId = key.Id.ToString(),
     };
 
-    private static DocumentVector Document(ModelVector model, EcdsaPersonaSigner signer)
+    private static DocumentVector Document(ModelVector model, EcdsaPersonaSigner signer, DocumentVector? committed)
     {
         var payload = model.Model.EncodePayload();
         var input = SigningInput.Create(model.Model.DocumentType, signer.PublicKey, payload);
-        var signature = signer.Sign(input);
+        var signature = committed is not null && committed.Digest == Hex.Of(input.ComputeDigest()) && SignatureVerifier.Verify(input, ProtocolSignature.FromBytes(Hex.Parse(committed.Signature)))
+            ? ProtocolSignature.FromBytes(Hex.Parse(committed.Signature))
+            : signer.Sign(input);
         var document = SignedDocumentCodec.Assemble(model.Model.DocumentType, signer.PublicKey, payload, signature);
         var full = model.Construction is null;
         return new DocumentVector

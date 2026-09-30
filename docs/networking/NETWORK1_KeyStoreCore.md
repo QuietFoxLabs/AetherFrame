@@ -1,8 +1,8 @@
 # NETWORK1 increment 5: the key store core
 
 **Status (2026-09-29): implemented behind seams; no key exists outside tests.**
-- `AetherFrame.Personas` gains a `Storage` namespace: the store core, the at-rest envelope, and two seams (a protector, a blob storage) that the plugin fills. No implementation of either seam ships: the only protector is the test fake, which protects nothing and says so.
-- The plugin gains its first file under `Services/Network`: a directory-of-files storage, compiled only in the networking preview flavour (D9b, P2) and tested from the persona suite. Nothing wires it. **No persona key is written anywhere outside tests.** Gate G1 still holds: K3 (enablement), K9 (Wine), N3, N5, L6, P1 and the D2 details remain unresolved, and the Windows protector (increment 7) does not exist.
+- `AetherFrame.Personas` gains a `Storage` namespace: the store core, the at-rest envelope, and two seams (a protector, a blob storage) that the plugin fills. No implementation of either seam ships: the only protector is the test fake, which protects nothing and says so. `[updated 2026-09-29: NETWORK2's N2-4 adds the Windows DPAPI protector, compiled only in the preview flavour; nothing wires it yet.]`
+- The plugin gains its first file under `Services/Network`: a directory-of-files storage, compiled only in the networking preview flavour (D9b, P2) and tested from the persona suite. Nothing wires it. **No persona key is written anywhere outside tests.** Gate G1 still holds: K3 (enablement), K9 (Wine), N3, N5, L6, P1 and the D2 details remain unresolved, and the Windows protector (increment 7) does not exist. `[updated 2026-09-29: it does now, as NETWORK2's N2-4, and K3 is decided; nothing wires either before N2-5.]`
 - Decisions this increment applies, under the owner's delegation: **K1, K2, K6, K7** ([DecisionRegister.md](DecisionRegister.md), "Decisions approved under the delegation"). It also settles L4 for this store.
 
 ## 1. What this increment is
@@ -90,6 +90,6 @@ Its non-blocking notes are recorded where they apply: the write-through move and
 
 ## 8. What comes next
 
-- Increment 7: the Windows DPAPI protector (K2's target) and the capability probe (K3), each with its own review; until then no protector exists outside tests.
+- Increment 7: the Windows DPAPI protector (K2's target) and the capability probe (K3), each with its own review; until then no protector exists outside tests. `[updated 2026-09-29: implemented by NETWORK2's N2-4, in the preview flavour only; nothing wires it before N2-5.]`
 - The persisted persona registry (records, labels and the active slot; the manager takes none at construction) before increment 9's wiring. With it: detecting and reporting key files that no record names (L12), and the write-through move (section 5).
 - Increment 6: the backup codec, which needs the D2 details and K5.
