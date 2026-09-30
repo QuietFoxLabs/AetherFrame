@@ -8,21 +8,21 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 11:43 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 11:52 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
-  - a verdict on test build `01a14a5`, which gates the 0.1.7 release. The game runs it now: Dalamud's Dev Plugin Locations point at its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`;
-  - a one-time switch of those locations to `E:\AetherFrame Test Build\AetherFrame.dll`, so every new build reaches the game by itself ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54); [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), item 2);
-  - the checks for preview build `302af2f`, installed in `E:\AetherFrame Test Build\` on September 30 by `tools/Install-TestBuild.ps1`, in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25). It loads only after the switch;
-  - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5).
+  - a verdict on test build `01a14a5`, which gates the 0.1.7 release. It stays staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`, which the game no longer loads (below);
+  - the checks for preview build `ae80c75`, the tutorial card's fixes, posted by a second Claude session in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25). The game loaded it at 11:48 UTC. The earlier preview posts' networking checks still apply to it;
+  - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
 - **In progress:**
-  - N2-6c's second part, the share check (this change). Its merge completes N2-6, and brings the first preview build with it (section 5);
-  - the tutorial card's fixes ([#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), by a second Claude session);
+  - N2-6c's second part, the share check (this change). Its merge completes N2-6, and the preview build after it brings the share check to the game (section 5);
   - the re-plan of sharing below ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), draft, by a second Claude session).
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
-  - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin.
+  - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
+  - the tutorial card's fixes from the owner's first run through it ([#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), merged, by a second Claude session);
+  - the owner's one-time switch of Dalamud's Dev Plugin Locations to `E:\AetherFrame Test Build\AetherFrame.dll` (seen in `dalamudConfig.json` at 11:51 UTC, read only). Each new test build now reaches the game by itself: Dalamud's log shows preview `302af2f` loaded at 09:45 UTC and preview `ae80c75` at 11:48 UTC, with no restart.
 - **Sharing, redefined by the owner on September 30** ([Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25), Claude's records of the owner's chat at 11:07 and 11:21 UTC):
   - other players right-click a character in game, or search a name and World, and view that character's Active Plate as a finished picture;
   - it is opt-in, off by default, and works both ways;
@@ -49,9 +49,9 @@ Verified September 30, 2026, at 11:43 UTC. **For the live status, see [issue #52
 | Build | State |
 | --- | --- |
 | v0.1.6 | released to the testing channel |
-| Test build `01a14a5` (player) | waiting for the owner's verdict; the game runs it from its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\` |
-| Preview build `302af2f` (`master` after [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50)) | in `E:\AetherFrame Test Build\` since September 30, 09:31 UTC, with a copy in `E:\AetherFrame Test Builds\2026-09-30 302af2f preview\`; it loads only after the switch in Dev Plugin Locations. It supersedes preview build `7b35a31`, which never loaded. |
-| `master` | `e86190a` (after [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55)), CI green on both platforms |
+| Test build `01a14a5` (player) | waiting for the owner's verdict; staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`, which the game no longer loads |
+| Preview build `ae80c75` (`master` after [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57)) | in `E:\AetherFrame Test Build\` since September 30, 11:46 UTC, installed by a second Claude session, with a copy in `E:\AetherFrame Test Builds\2026-09-30 ae80c75 preview\`. The game loaded it at 11:48 UTC, with no restart. It supersedes preview build `302af2f`, which the game loaded at 09:45 UTC. |
+| `master` | `ae80c75` (after [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57)), CI green on both platforms |
 
 ## 1. Goal and scope
 
@@ -71,13 +71,13 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
-| Item | Verified state (September 30, 2026, 11:43 UTC) |
+| Item | Verified state (September 30, 2026, 11:52 UTC) |
 | --- | --- |
-| Default branch | `master` at `e86190a`, after [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55) merged at 10:53 UTC; CI passed on both platforms by 10:56 UTC. Its tree is #55's tested head `fa051d7`'s, checked locally before the merge: 0 build warnings, with every suite passing (3293 plugin, 407 protocol, 482 persona, 468 release tooling). |
+| Default branch | `master` at `ae80c75`, after [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57) merged at 11:44 UTC; CI passed on both platforms by 11:51 UTC. Its tree is #57's tested head `3e28c51`'s, which #57 records as checked locally: 0 build warnings, with every suite passing (3299 plugin, 407 protocol, 482 persona, 468 release tooling). |
 | Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |
 | Custom repository | `plugin-repository` exists at `e85692416ec20151fbda9b76788c4e2ef83db763`. Its [manifest](https://github.com/QuietFoxLabs/AetherFrame/blob/e85692416ec20151fbda9b76788c4e2ef83db763/pluginmaster.json) serves v0.1.6 with `IsTestingExclusive: true`. |
-| Test builds | Player `01a14a5` (#21 and #33) waits for the owner's in-game verdict, which gates 0.1.7. The game runs it: Dalamud's only Dev Plugin Location is its staged copy, `E:\AetherFrame Test Builds\2026-09-29 01a14a5\AetherFrame.dll` (checked in `dalamudConfig.json`, read only). Preview `302af2f` (`master` after #50: every merged networking increment through N2-6b; it sends nothing) was installed in `E:\AetherFrame Test Build\` at 09:31 UTC by `tools/Install-TestBuild.ps1`, superseding preview `7b35a31`, which never loaded. The game loads that folder only after the owner's one-time switch ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54)). |
-| Open pull requests | This change, N2-6c's second part (N2-6c's first part, [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), is merged); [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), the tutorial card's fixes; and [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), the re-plan of sharing (draft). #57 and #58 are a second Claude session's. All three edit ROADMAP.md, and #58 also the register and NETWORK2.md, so each merges in the ones merged before it. |
+| Test builds | Player `01a14a5` (#21 and #33) waits for the owner's in-game verdict, which gates 0.1.7; it stays staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`. Dalamud's only Dev Plugin Location is now `E:\AetherFrame Test Build\AetherFrame.dll` (checked in `dalamudConfig.json` at 11:51 UTC, read only): the owner made the one-time switch ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54)), so each new test build reaches the game by itself. Preview `ae80c75` (`master` after #57: every merged networking increment through N2-6c's first part, and the tutorial card's fixes; it sends nothing) was installed there at 11:46 UTC by a second Claude session, superseding preview `302af2f`. Dalamud's log shows the game loaded `302af2f` at 09:45 UTC and `ae80c75` at 11:48 UTC. |
+| Open pull requests | This change, N2-6c's second part (its first part, [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), is merged), and [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), the re-plan of sharing (draft), a second Claude session's. That session's [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), the tutorial card's fixes, merged at 11:44 UTC, and this change merged it in. This change and #58 both edit ROADMAP.md, the register and NETWORK2.md, so whichever merges second merges the other in first. |
 | Checkouts | The control checkout `E:\AetherFrameWork` is clean on `master`, with one worktree per task under `.claude\worktrees\`. `E:\Plugin development` is off limits ([CLAUDE.md](CLAUDE.md)). |
 
 CI results belong to the recorded commit, not automatically to later commits. Check live CI, and [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), for anything newer.
@@ -280,6 +280,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - the commit signs a candidate once only, as the persona the consent screen named and only while it is active (L10). It refuses without K4's acknowledgement, checks the images and builds the index before signing, disposes the signer before touching any file, and checks the signed bytes field for field against what was shown. The outbox entry is written first, the index naming it is the commit point, and the entry it supersedes goes last;
   - at load the index decides: what it names is checked in full, and what fails reads as not stored, never as pending;
   - a canary test finds nothing of a Plate but its local id in the index, and nothing of it at all in the outbox, beyond what is shared.
+- The tutorial card after the owner's first run through it: [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), merged as `ae80c75`, by a second Claude session. The close button no longer covers long chapter names, the footer is two rows so Skip tour and Back no longer overlap, Back is hidden on the first step, Next can't skip creating the first Plate (it says what to do instead), and the window a step explains is brought in front of AetherFrame's other windows with the dim and the card in front of it, so the Create Plate chooser no longer fades the card. The design guide asks every change a player sees to update the tutorial in the same pull request (the owner's request of September 30); a chapter on networking waits for the sharing re-plan.
 - NETWORK2 increment N2-6c, its second part, the share check: this change. In the preview flavour only:
   - a Plate's menu in My Plates gains "Check what would be shared (preview)". Its window shows, from a private copy of the Plate's saved state, the name, texts and images sharing would send: every text in full, flagging what came from the character, each prepared image, and what is left out and why. Or it shows why the Plate can't be shared;
   - it signs that as the persona in use, once every image is drawn, and keeps it on this PC; nothing is sent. N2-9 shows each such signing on its own consent screen before its first send, or drops it (D5's N2-6 note). The window lists what that persona has signed from here;

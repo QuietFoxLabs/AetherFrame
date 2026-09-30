@@ -12,7 +12,11 @@ namespace AetherFrame.UI.Tutorial;
 /// <param name="Bounds">The widget's rectangle.</param>
 /// <param name="Clip">The clip rectangle in effect when it was drawn.</param>
 /// <param name="Frame">The frame it was drawn on.</param>
-internal readonly record struct TutorialAnchor(TutorialTarget Target, ScreenRect Bounds, ScreenRect Clip, int Frame)
+/// <param name="OwnerWindowId">
+/// The ImGui id of the top-level window it was drawn in (a popup is its own top-level window), so
+/// the tutorial can bring that window in front of the others; 0 when unknown.
+/// </param>
+internal readonly record struct TutorialAnchor(TutorialTarget Target, ScreenRect Bounds, ScreenRect Clip, int Frame, uint OwnerWindowId = 0)
 {
     /// <summary>The part of the widget that is actually visible (its bounds within its clip).</summary>
     internal ScreenRect VisibleBounds => Bounds.Intersect(Clip);
@@ -52,14 +56,14 @@ internal sealed class TutorialAnchorRegistry
     /// strip, say) keeps the larger visible one, so the spotlight lands on the control that shows.
     /// A rectangle with a non-finite coordinate is ignored.
     /// </remarks>
-    internal void Record(TutorialTarget target, ScreenRect bounds, ScreenRect clip, int frame)
+    internal void Record(TutorialTarget target, ScreenRect bounds, ScreenRect clip, int frame, uint ownerWindowId = 0)
     {
         if (target == TutorialTarget.None || !bounds.IsFinite || !clip.IsFinite)
         {
             return;
         }
 
-        var anchor = new TutorialAnchor(target, bounds, clip, frame);
+        var anchor = new TutorialAnchor(target, bounds, clip, frame, ownerWindowId);
         if (anchors.TryGetValue(target, out var existing) && existing.Frame == frame && existing.VisibleBounds.Area > anchor.VisibleBounds.Area)
         {
             return;

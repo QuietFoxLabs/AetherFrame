@@ -31,6 +31,20 @@ public class TutorialGeometryTests
     }
 
     [Fact]
+    public void Registry_RemembersTheWindowAnAnchorWasDrawnIn()
+    {
+        var registry = new TutorialAnchorRegistry();
+        var rect = new ScreenRect(new Vector2(10f, 10f), new Vector2(110f, 40f));
+        registry.Record(TutorialTarget.LibraryTemplateChooser, rect, rect, frame: 7, ownerWindowId: 0xC0FFEEu);
+        registry.Record(TutorialTarget.LibraryCreatePlate, new Vector2(10f, 10f), new Vector2(110f, 40f), frame: 7);
+
+        Assert.True(registry.TryGet(TutorialTarget.LibraryTemplateChooser, 7, out var chooser));
+        Assert.Equal(0xC0FFEEu, chooser.OwnerWindowId);
+        Assert.True(registry.TryGet(TutorialTarget.LibraryCreatePlate, 7, out var create));
+        Assert.Equal(0u, create.OwnerWindowId);
+    }
+
+    [Fact]
     public void Registry_IgnoresAnAnchorFromTheFuture_AndNonFiniteRectangles()
     {
         var registry = new TutorialAnchorRegistry();
