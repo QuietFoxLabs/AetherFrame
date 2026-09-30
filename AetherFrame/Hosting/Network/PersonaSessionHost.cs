@@ -28,10 +28,19 @@ internal static class PersonaSessionHost
     /// <summary>The key files' directory inside it.</summary>
     internal const string KeysFolder = "keys";
 
+    /// <summary>The persona files' directory under <paramref name="configDirectory"/>.</summary>
+    internal static string PersonasDirectory(string configDirectory) => Path.Combine(configDirectory, PersonasFolder);
+
+    /// <summary>The key files' directory, which the persona window names (L12).</summary>
+    internal static string KeysDirectory(string configDirectory) => Path.Combine(PersonasDirectory(configDirectory), KeysFolder);
+
+    /// <summary>The registry's file, which the persona window names when it can't be read (P3).</summary>
+    internal static string RegistryPath(string configDirectory) => Path.Combine(PersonasDirectory(configDirectory), PersonaRegistryFileStorage.RegistryName);
+
     internal static PersonaSession Create(string configDirectory, IAetherFrameLog log, OwnedOperations operations)
     {
-        var personas = Path.Combine(configDirectory, PersonasFolder);
-        var keys = Path.Combine(personas, KeysFolder);
+        var personas = PersonasDirectory(configDirectory);
+        var keys = KeysDirectory(configDirectory);
         var protector = new DpapiPersonaKeyProtector();
         return new PersonaSession(new PersonaSessionSeams
         {

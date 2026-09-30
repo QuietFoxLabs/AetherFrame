@@ -38,6 +38,7 @@
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaInstanceLock.cs" Link="Linked\PersonaInstanceLock.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\NoBackupCodec.cs" Link="Linked\NoBackupCodec.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaSession.cs" Link="Linked\PersonaSession.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaWindowModel.cs" Link="Linked\PersonaWindowModel.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\DpapiPersonaKeyProtector.cs" Link="Linked\DpapiPersonaKeyProtector.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaCapabilityProbe.cs" Link="Linked\PersonaCapabilityProbe.cs" />
   </ItemGroup>

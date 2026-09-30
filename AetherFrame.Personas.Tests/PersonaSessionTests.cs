@@ -213,6 +213,44 @@ public sealed class PersonaSessionTests
     }
 
     [Fact]
+    public async Task AFailure_AuditsTheKeyFilesAgain_OnlyWhenAsked_SoAKeptKeyShowsAtOnce()
+    {
+        var session = await ReadySession();
+        var before = session.View.Audit;
+        registry.FailNextReplace = new IOException("disk full at " + SecretPath);
+        Assert.True(session.TryStart("create", manager =>
+        {
+            manager.Create("Main");
+            return PersonaOperationOutcome.Done();
+        }));
+        await Settled(session);
+
+        // Not asked: the view keeps the audit it had.
+        Assert.Null(session.View.LastOutcome!.Audit);
+        Assert.Same(before, session.View.Audit);
+
+        registry.FailNextReplace = new IOException("disk full at " + SecretPath);
+        Assert.True(session.TryStart(
+            "create",
+            manager =>
+            {
+                manager.Create("Alt");
+                return PersonaOperationOutcome.Done();
+            },
+            auditAfterFailure: true));
+        await Settled(session);
+
+        // Asked: the keys both failed saves kept show as keys without a persona, in the outcome and the view.
+        var failed = session.View.LastOutcome!;
+        Assert.False(failed.Succeeded);
+        Assert.Equal(PersonaError.RegistryWriteFailed, failed.Error);
+        Assert.Equal(2, failed.Audit!.Orphans.Count);
+        Assert.Same(failed.Audit, session.View.Audit);
+        Assert.Empty(session.Personas);
+        AssertLogIsClean();
+    }
+
+    [Fact]
     public async Task NothingStarts_WhenUnloadingHasBegun_OrBeforeTheSessionIsReady()
     {
         shuttingDown = true;
