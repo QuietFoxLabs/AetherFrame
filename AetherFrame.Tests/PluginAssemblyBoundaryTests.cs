@@ -208,6 +208,102 @@ public class PluginAssemblyBoundaryTests
     }
 
     [Fact]
+    public void ThePlugin_BuildsItsHttpStackOnlyInSharingHandler()
+    {
+        // R2 and R3, on the compiled DLL: the one handler is SharingHandler's, made through
+        // Dalamud's connect callback; no handler or client with the defaults (which follow
+        // redirects, keep cookies and connect on their own) is made anywhere; and nothing turns
+        // redirects or cookies back on.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = new List<string>();
+        foreach (var use in NetworkTypeUse.MemberUses(pe))
+        {
+            var where = use.Type + ": " + use.Parent + "." + use.Name;
+            if (use.OpCode == ILOpCode.Newobj && use.Name == ".ctor")
+            {
+                if (use.Parent == "System.Net.Http.SocketsHttpHandler" && use.Type != "AetherFrame.Services.Network.Transport.SharingHandler")
+                {
+                    offending.Add(where + " (a handler outside SharingHandler)");
+                }
+
+                if (use.Parent == "System.Net.Http.HttpClientHandler" || (use.Parent == "System.Net.Http.HttpClient" && use.Parameters == 0))
+                {
+                    offending.Add(where + " (a handler with the defaults)");
+                }
+            }
+
+            if (use.Name is "set_AllowAutoRedirect" or "set_UseCookies" && use.Parent.StartsWith("System.Net.Http.", StringComparison.Ordinal) && use.Previous != ILOpCode.Ldc_i4_0)
+            {
+                offending.Add(where + " (set to anything but false)");
+            }
+        }
+
+        Assert.True(offending.Count == 0, "R2: " + string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void ThePlugin_StartsNoProcessAndOpensNoLink()
+    {
+        // A link opened in a browser, or a program started with one, leaves as surely as a request.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = NetworkTypeUse.ReferencesByType(pe)
+            .SelectMany(type => type.Value.Where(name => name is "System.Diagnostics.Process" or "System.Diagnostics.ProcessStartInfo").Select(name => type.Key + " names " + name))
+            .Concat(NetworkTypeUse.MemberUses(pe).Where(use => use.Name == "OpenLink" && use.Parent.StartsWith("Dalamud.", StringComparison.Ordinal)).Select(use => use.Type + " calls " + use.Parent + ".OpenLink"))
+            .ToList();
+        Assert.True(offending.Count == 0, string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void TheNetworkNamespace_IsDeclaredOnlyInTheNetworkFolder()
+    {
+        // The compiled check above exempts AetherFrame.Services.Network by namespace, and R3 is
+        // about the folder: so no file outside Services/Network may declare that namespace, in any
+        // flavour, and every file inside it declares it.
+        var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
+        var offending = new List<string>();
+        foreach (var (file, relative) in PluginSources())
+        {
+            var inside = relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase);
+            var declared = false;
+            foreach (var line in File.ReadLines(file))
+            {
+                var trimmed = line.TrimStart();
+                if (!trimmed.StartsWith("namespace ", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                declared = true;
+                var name = trimmed["namespace ".Length..].TrimEnd(';', ' ', '{');
+                var network = name == "AetherFrame.Services.Network" || name.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal);
+                if (network != inside)
+                {
+                    offending.Add(relative);
+                }
+            }
+
+            if (inside && !declared)
+            {
+                offending.Add(relative + " (no namespace)");
+            }
+        }
+
+        Assert.True(offending.Count == 0, "R3: the network namespace belongs to Services/Network alone: " + string.Join(", ", offending));
+    }
+
+    [Fact]
     public void TheSharingHandler_FollowsNoRedirectAndKeepsNoCookie()
     {
         // R2: SharingHandler's constructor sets AllowAutoRedirect and UseCookies to false, read
@@ -245,6 +341,21 @@ public class PluginAssemblyBoundaryTests
 
         Assert.Contains("set_AllowAutoRedirect", setToFalse);
         Assert.Contains("set_UseCookies", setToFalse);
+
+        // And it connects through Dalamud's dual-stack callback, never on its own.
+        var connect = false;
+        for (var index = 1; index < instructions.Count; index++)
+        {
+            var (opCode, token) = instructions[index];
+            if (opCode == ILOpCode.Ldftn && MetadataTokens.Handle(token).Kind == HandleKind.MemberReference)
+            {
+                var member = metadata.GetMemberReference((MemberReferenceHandle)MetadataTokens.Handle(token));
+                connect |= metadata.GetString(member.Name) == "ConnectCallback" && member.Parent.Kind == HandleKind.TypeReference
+                    && metadata.GetString(metadata.GetTypeReference((TypeReferenceHandle)member.Parent).Name) == "HappyEyeballsCallback";
+            }
+        }
+
+        Assert.True(connect, "SharingHandler connects through HappyEyeballsCallback.ConnectCallback.");
     }
 
     [Fact]
