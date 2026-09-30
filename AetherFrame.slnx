@@ -7,6 +7,8 @@
   <Project Path="AetherFrame.Protocol.Tests/AetherFrame.Protocol.Tests.csproj" />
   <Project Path="AetherFrame.Personas/AetherFrame.Personas.csproj" />
   <Project Path="AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj" />
+  <Project Path="server/AetherFrame.Server/AetherFrame.Server.csproj" />
+  <Project Path="server/AetherFrame.Server.Tests/AetherFrame.Server.Tests.csproj" />
   <Project Path="tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj" />
   <Project Path="tools/AetherFrame.ReleaseTools.Tests/AetherFrame.ReleaseTools.Tests.csproj" />
 </Solution>

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The AetherFrame server (docs/networking/NETWORK2.md, increment N2-7): it verifies signed requests
+    and documents with AetherFrame.Protocol, binds characters by a Lodestone check, stores the latest
+    Plate of each opted-in character, and serves it to other opted-in players (decision batches B and
+    C, docs/networking/DecisionRegister.md; its interface is docs/networking/ServerApi-v1.md).
+
+    It never runs in the plugin, and nothing here is built into AetherFrame.dll.
+  -->
+
+  <Import Project="..\..\Version.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AetherFrame.Server</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AetherFrame.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.8.2" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>

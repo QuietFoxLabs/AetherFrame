@@ -65,6 +65,11 @@ jobs:
     - name: Test the persona foundation
       run: dotnet test AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj --configuration Release --no-build
 
+    # The server (docs/networking/NETWORK2.md, N2-7), on ASP.NET Core's test host with a temporary
+    # database, a manual clock and a fake Lodestone: nothing connects to anything.
+    - name: Test the server
+      run: dotnet test server/AetherFrame.Server.Tests/AetherFrame.Server.Tests.csproj --configuration Release --no-build
+
     # Every rule a release must pass, applied to every build (docs/CustomRepository.md): the DLL is
     # x64, built from this commit, at the Version.props version and the configured Dalamud API level,
     # and the package holds exactly the three plugin files.
