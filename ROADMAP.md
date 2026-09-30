@@ -344,7 +344,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - a Plate this character hasn't shared before is shown first, in the Sharing window, with a button to view it as drawn; nothing is sent unless the player agrees;
   - a Plate that can't be shared says why, and the version shared before stays up; a refused revision is dropped with its reason in words, a busy server's is kept to send again, and one signed more than a day ago is dropped unsent;
   - Pause and Resume in the Sharing window; turning sharing off, or a takeover, forgets what the key published;
-  - My Plates marks the shared Active Plate **Shared**; the Personas window is gone, and the share check signs nothing (V4, C3), its old signings dropped;
+  - My Plates marks **Shared** the Plate the server shows, and **Not shared yet** an Active Plate that isn't it; the Personas window is gone, and the share check signs nothing (V4, C3), its old signings dropped;
   - a re-read at login when the character was renamed (C1);
   - the decisions are recorded as "N2-9c's live publishing".
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.

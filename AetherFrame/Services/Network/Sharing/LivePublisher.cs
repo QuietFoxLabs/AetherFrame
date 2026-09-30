@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using AetherFrame.Domain.Profiles;
+using AetherFrame.Protocol.Identity;
 using AetherFrame.Services.Network.Publishing;
 using AetherFrame.Services.Plates;
 
@@ -14,14 +16,17 @@ internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<Pl
 
 /// <summary>
 /// Publishes the logged-in character's Active Plate live (NETWORK2's N2-9c; decision C3): when the
-/// character shares, and its Active Plate is saved, becomes another Plate, or sharing starts or
-/// resumes, the saved Plate is built into a candidate by a share check of its own (a private copy
-/// of the saved JSON, resolved as the renderer draws it, its images prepared), and handed to
-/// <see cref="CharacterSharing.TryPublish"/>, which shows a Plate never shared before first and
-/// sends the rest. Nothing is published on arriving at a character, only on a change after it. At
-/// login it asks for C1's re-read when the game shows another name or World than the binding's.
-/// It runs on the framework thread, a frame at a time; saves may be reported from any thread.
-/// Compiled only in the networking preview flavour.
+/// character shares, and its Active Plate is saved, becomes another Plate, or sharing starts,
+/// resumes or moves to a new key, the saved Plate is built into a candidate by a share check of its
+/// own (a private copy of the saved JSON, resolved as the renderer draws it, its images prepared),
+/// and handed to <see cref="CharacterSharing.TryPublish"/>, which shows a Plate never shared before
+/// first and sends the rest. Nothing is published on arriving at a character, only on a change
+/// after it, and only once the Library and the sharing file are both read, so a value becoming
+/// known is never taken for a change. A first showing whose candidate goes out of date (another
+/// build, another character, sharing stopping) is withdrawn. At login it asks for C1's re-read when
+/// the game shows another name or World than the binding's. It runs on the framework thread, a
+/// frame at a time; saves may be reported from any thread. Compiled only in the networking preview
+/// flavour.
 /// </summary>
 internal sealed class LivePublisher : IDisposable
 {
@@ -29,21 +34,25 @@ internal sealed class LivePublisher : IDisposable
     private readonly ShareCheck check;
     private readonly Func<CharacterContext?> currentCharacter;
     private readonly Func<ulong, Guid?> activePlateOf;
+    private readonly Func<bool> libraryLoaded;
     private readonly ConcurrentQueue<Guid> saved = new();
     private ulong watchedCharacter;
     private Guid? watchedActive;
-    private SharingStage? watchedStage;
+    private bool watchedShared;
+    private PersonaId? watchedKey;
+    private ProfileId? watchedBinding;
     private bool rereadDue;
     private (ulong ContentId, Guid PlateId)? building;
-    private SnapshotCandidate? ready;
+    private (SnapshotCandidate Candidate, ProfileDocument? Source)? ready;
     private volatile LiveView view = LiveView.Idle;
 
-    internal LivePublisher(CharacterSharing sharing, ShareCheck check, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf)
+    internal LivePublisher(CharacterSharing sharing, ShareCheck check, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf, Func<bool> libraryLoaded)
     {
         this.sharing = sharing ?? throw new ArgumentNullException(nameof(sharing));
         this.check = check ?? throw new ArgumentNullException(nameof(check));
         this.currentCharacter = currentCharacter ?? throw new ArgumentNullException(nameof(currentCharacter));
         this.activePlateOf = activePlateOf ?? throw new ArgumentNullException(nameof(activePlateOf));
+        this.libraryLoaded = libraryLoaded ?? throw new ArgumentNullException(nameof(libraryLoaded));
     }
 
     /// <summary>Where publishing the Active Plate stands.</summary>
@@ -60,29 +69,29 @@ internal sealed class LivePublisher : IDisposable
         if (!sharingView.Loaded)
         {
             sharing.TryLoad();
-            saved.Clear();
-            return;
         }
 
-        if (currentCharacter() is not { } character)
+        // Until the Library and the sharing file are both read, nothing is known: arriving waits,
+        // so a value becoming known is never taken for a change.
+        if (!sharingView.Loaded || sharingView.Unreadable || !libraryLoaded() || currentCharacter() is not { } character)
         {
-            watchedCharacter = 0;
-            Drop();
-            saved.Clear();
+            Leave();
             return;
         }
 
         var entry = sharingView.Find(character.ContentId);
         var active = activePlateOf(character.ContentId);
+        var shared = entry is { Stage: SharingStage.Shared, ReplacingKey: false };
         if (character.ContentId != watchedCharacter)
         {
             // A login, or another character: nothing is published for arriving.
+            Leave();
             watchedCharacter = character.ContentId;
             watchedActive = active;
-            watchedStage = entry?.Stage;
+            watchedShared = shared;
+            watchedKey = entry?.Key;
+            watchedBinding = entry?.ProfileId;
             rereadDue = entry is { IsBound: true };
-            Drop();
-            saved.Clear();
             return;
         }
 
@@ -91,9 +100,12 @@ internal sealed class LivePublisher : IDisposable
             rereadDue = entry is { IsBound: true } && !CharacterSharing.SameCharacter(entry, name, world) && !sharing.TryReread(character.ContentId, name, world);
         }
 
-        var shared = entry is { Stage: SharingStage.Shared };
-        var changed = shared && watchedStage != SharingStage.Shared;
-        watchedStage = entry?.Stage;
+        // Sharing starting, resuming, or moving to a new key or binding is a change; so is a new
+        // Active Plate, and a save of the Active Plate.
+        var changed = shared && (!watchedShared || !Equals(entry!.Key, watchedKey) || entry.ProfileId != watchedBinding);
+        watchedShared = shared;
+        watchedKey = entry?.Key;
+        watchedBinding = entry?.ProfileId;
         if (active != watchedActive)
         {
             watchedActive = active;
@@ -105,22 +117,31 @@ internal sealed class LivePublisher : IDisposable
             changed |= shared && plate == active;
         }
 
-        if (!shared)
+        if (!shared || active is null)
         {
-            Drop();
+            Drop(character.ContentId);
             return;
         }
 
-        if (changed && active is { } activePlate)
+        if (changed)
         {
-            building = (character.ContentId, activePlate);
+            // A first showing still on screen is of an older candidate: it goes, and the new
+            // candidate is shown instead when it needs to be.
+            sharing.ClearConsent(character.ContentId);
+            building = (character.ContentId, active.Value);
             ready = null;
             view = new LiveView(character.ContentId, true, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None);
-            check.Begin(activePlate);
+            check.Begin(active.Value);
         }
 
         if (building is not { } target)
         {
+            return;
+        }
+
+        if (target.PlateId != active)
+        {
+            Drop(character.ContentId);
             return;
         }
 
@@ -135,7 +156,7 @@ internal sealed class LivePublisher : IDisposable
             switch (built.Stage)
             {
                 case ShareCheckStage.Ready when built.Candidate is { } candidate:
-                    ready = candidate;
+                    ready = (candidate, built.Source);
                     break;
                 case ShareCheckStage.Refused:
                     view = new LiveView(target.ContentId, false, built.Problems, ShareCheckFailure.None);
@@ -151,7 +172,7 @@ internal sealed class LivePublisher : IDisposable
         }
 
         // A busy service is asked again next frame; the candidate waits.
-        if (ready is { } waiting && sharing.TryPublish(target.ContentId, waiting, approved: false))
+        if (ready is { } waiting && sharing.TryPublish(target.ContentId, waiting.Candidate, approved: false, active, waiting.Source))
         {
             view = LiveView.Idle;
             Finish();
@@ -160,14 +181,27 @@ internal sealed class LivePublisher : IDisposable
 
     public void Dispose() => check.Dispose();
 
-    /// <summary>Drops a candidate in the making: sharing stopped, or the character changed.</summary>
-    private void Drop()
+    /// <summary>No character is watched: what was being built for the last one, and its first showing, go.</summary>
+    private void Leave()
+    {
+        if (watchedCharacter != 0)
+        {
+            Drop(watchedCharacter);
+        }
+
+        watchedCharacter = 0;
+        saved.Clear();
+    }
+
+    /// <summary>Drops a candidate in the making, and a first showing waiting, for the character: sharing stopped, the Active Plate changed, or the character did.</summary>
+    private void Drop(ulong contentId)
     {
         if (building is not null)
         {
             Finish();
         }
 
+        sharing.ClearConsent(contentId);
         view = LiveView.Idle;
     }
 

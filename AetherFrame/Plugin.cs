@@ -320,8 +320,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 #if AETHERFRAME_NETWORK_PREVIEW
             // Starts in the background. Until the player acts it writes only its lock file (creating
             // the persona folder) and the capability probe's scratch files, in the temp folder and
-            // deleted again. A load that fails after this closes it, and its lock is released by
-            // whichever of its own work ends last.
+            // deleted again; and, once the sharing file is read (N2-9c), it deletes outbox files no
+            // index names and the share check's old signings. It sends nothing. A load that fails
+            // after this closes it, and its lock is released by whichever of its own work ends last.
             var configDirectory = PluginInterface.ConfigDirectory.FullName;
             personaSession = PersonaSessionHost.Create(configDirectory, log, ownedOperations);
             startup.OnFailure("personas", personaSession.Close);
@@ -366,13 +367,17 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // Publishing the Active Plate live (N2-9c): a save, a new Active Plate, or sharing
             // starting or resuming builds a candidate with a share check of its own, a frame at a
             // time, and hands it to the sharing service.
-            livePublisher = new LivePublisher(characterSharing, NewShareCheck(), () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId);
+            livePublisher = new LivePublisher(characterSharing, NewShareCheck(), () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, () => plateLibrary.IsLoaded);
             plateLibrary.PlateSaved += livePublisher.PlateSaved;
-            sharingWindow = new SharingWindow(characterSharing, livePublisher, TextureProvider, personaSession, () => characterIdentityService.CurrentCharacter, profileViewWindow.ShowPlate, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
+            sharingWindow = new SharingWindow(characterSharing, livePublisher, TextureProvider, personaSession, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, profileViewWindow.ShowDocument, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
+            // Shared: the Plate the server shows for the logged-in character (C3's marker). Not
+            // shared yet: its Active Plate while the character shares, when that isn't it.
             plateLibraryWindow.IsShared = plateId => characterIdentityService.CurrentCharacter is { } shown
-                && characterSharing.View.Find(shown.ContentId) is { Stage: SharingStage.Shared }
+                && characterSharing.View.Find(shown.ContentId) is { Stage: SharingStage.Shared, PublishedPlate: { } published } && published == plateId;
+            plateLibraryWindow.IsNotSharedYet = plateId => characterIdentityService.CurrentCharacter is { } shown
+                && characterSharing.View.Find(shown.ContentId) is { Stage: SharingStage.Shared } entry && entry.PublishedPlate != plateId
                 && plateLibrary.GetActivePlateId(shown.ContentId) == plateId;
 #endif
 

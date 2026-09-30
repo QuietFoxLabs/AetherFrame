@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using AetherFrame.Domain.Profiles;
 using AetherFrame.Services.Network.Personas;
 using AetherFrame.Services.Network.Sharing;
 using AetherFrame.Services.Plates;
@@ -32,7 +33,8 @@ internal sealed class SharingWindow : Window, IDisposable
     private readonly CandidateView candidateView;
     private readonly PersonaSession session;
     private readonly Func<CharacterContext?> currentCharacter;
-    private readonly Action<Guid> viewPlate;
+    private readonly Action<ProfileDocument> viewDocument;
+    private readonly Func<ulong, Guid?> activePlateOf;
     private readonly string sharingFile;
     private readonly string applicationData;
     private readonly string userProfile;
@@ -46,7 +48,7 @@ internal sealed class SharingWindow : Window, IDisposable
     private ulong confirmingOff;
     private bool confirmingAll;
 
-    internal SharingWindow(CharacterSharing sharing, LivePublisher live, ITextureProvider textures, PersonaSession session, Func<CharacterContext?> currentCharacter, Action<Guid> viewPlate, string sharingFile)
+    internal SharingWindow(CharacterSharing sharing, LivePublisher live, ITextureProvider textures, PersonaSession session, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf, Action<ProfileDocument> viewDocument, string sharingFile)
         : base("Sharing##AetherFrameSharing", ImGuiWindowFlags.NoCollapse)
     {
         this.sharing = sharing;
@@ -54,7 +56,8 @@ internal sealed class SharingWindow : Window, IDisposable
         candidateView = new CandidateView(textures);
         this.session = session;
         this.currentCharacter = currentCharacter;
-        this.viewPlate = viewPlate;
+        this.viewDocument = viewDocument;
+        this.activePlateOf = activePlateOf;
         this.sharingFile = sharingFile;
         applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -409,6 +412,15 @@ internal sealed class SharingWindow : Window, IDisposable
             }
         }
 
+        if (view.Busy && sharing.Uploading)
+        {
+            AetherControls.StatusLine(AetherTone.Info, SharingText.Sending);
+            if (AetherControls.SecondaryButton("Stop sending"))
+            {
+                sharing.StopSending();
+            }
+        }
+
         if (view.Notice is { Kind: SharingNoticeKind.PublishWaiting } waiting && waiting.ContentId == entry.ContentId)
         {
             using (ImRaii.Disabled(view.Busy))
@@ -426,13 +438,15 @@ internal sealed class SharingWindow : Window, IDisposable
             return;
         }
 
-        // C3's first showing: exactly what will be signed and sent, and nothing until the player agrees.
+        // C3's first showing: exactly what will be signed and sent, and nothing until the player
+        // agrees. Only a candidate for the Active Plate now can be shared from here.
+        var active = activePlateOf(entry.ContentId);
         AetherControls.Divider();
         AetherControls.SectionHeader(SharingText.FirstShowingTitle);
         Wrapped(SharingText.FirstShowing);
-        if (AetherControls.SecondaryButton("View it as drawn"))
+        if (consent.Source is { } source && AetherControls.SecondaryButton("View it as drawn"))
         {
-            viewPlate(consent.Candidate.PlateId);
+            viewDocument(source);
         }
 
         var images = candidateView.Draw(consent.Candidate);
@@ -441,18 +455,22 @@ internal sealed class SharingWindow : Window, IDisposable
             AetherControls.Muted(SharingText.FirstShowingImages);
         }
 
-        using (ImRaii.Disabled(view.Busy || images != CandidateImages.Shown))
+        var current = consent.Candidate.PlateId == active;
+        using (ImRaii.Disabled(view.Busy || images != CandidateImages.Shown || !current))
         {
-            if (AetherControls.PrimaryButton("Share this Plate") && images == CandidateImages.Shown)
+            if (AetherControls.PrimaryButton("Share this Plate") && images == CandidateImages.Shown && current)
             {
-                sharing.TryPublish(entry.ContentId, consent.Candidate, approved: true);
+                sharing.TryPublish(entry.ContentId, consent.Candidate, approved: true, active);
             }
         }
 
         ImGui.SameLine();
-        if (AetherControls.SecondaryButton("Not now"))
+        using (ImRaii.Disabled(view.Busy))
         {
-            sharing.DeclineConsent();
+            if (AetherControls.SecondaryButton("Not now"))
+            {
+                sharing.DeclineConsent(entry.ContentId);
+            }
         }
 
         AetherControls.Divider();

@@ -169,8 +169,11 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     /// <summary>Opens the sharing window, when this build has one; the header shows a Sharing button only then.</summary>
     internal Action? OpenSharing { get; set; }
 
-    /// <summary>Whether a Plate is the logged-in character's Active Plate and that character shares it (C3), when this build shares; its card is marked Shared.</summary>
+    /// <summary>Whether a Plate is the one the server shows for the logged-in character (C3), when this build shares; its card is marked Shared.</summary>
     internal Func<Guid, bool>? IsShared { get; set; }
+
+    /// <summary>Whether a Plate is the sharing character's Active Plate but not the one the server shows yet; its card is marked Not shared yet.</summary>
+    internal Func<Guid, bool>? IsNotSharedYet { get; set; }
 
     /// <summary>Checks what sharing a Plate would send, when this build can; a Plate's menu shows the item only then.</summary>
     internal Action<Guid>? CheckSharing
@@ -477,10 +480,17 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         if (isActive)
         {
             DrawActiveBadge(drawList, thumbnailMin, thumbnailMax);
-            if (IsShared?.Invoke(plate.PlateId) == true)
-            {
-                DrawBadge(drawList, thumbnailMin, thumbnailMax, "Shared", AetherPalette.Info, AetherPalette.TextOnGold, row: 1);
-            }
+        }
+
+        // The badge row under Active, or the top row on a Plate that isn't Active.
+        var sharingRow = isActive ? 1 : 0;
+        if (IsShared?.Invoke(plate.PlateId) == true)
+        {
+            DrawBadge(drawList, thumbnailMin, thumbnailMax, "Shared", AetherPalette.Info, AetherPalette.TextOnGold, sharingRow);
+        }
+        else if (IsNotSharedYet?.Invoke(plate.PlateId) == true)
+        {
+            DrawBadge(drawList, thumbnailMin, thumbnailMax, "Not shared yet", AetherPalette.SurfaceActive, AetherPalette.TextPrimary, sharingRow);
         }
 
         if (plate.HasUnsupportedElements)

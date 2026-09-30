@@ -28,7 +28,7 @@ internal enum SendResult
     /// <summary>Another AetherFrame's check took the character over (C1).</summary>
     TakenOver,
 
-    /// <summary>No answer, a busy server or a rate limit: it waits for the next try.</summary>
+    /// <summary>No answer, a busy or failing server, a rate limit, or a send the player stopped: it waits for the next try.</summary>
     TryLater,
 
     /// <summary>The character's key can't sign now.</summary>
@@ -41,8 +41,8 @@ internal enum SendResult
     NotSaved,
 }
 
-/// <summary>What sending came to, and the server's reason code for a refusal.</summary>
-internal sealed record SendOutcome(SendResult Result, string? Reason = null);
+/// <summary>What sending came to: the server's reason code for a refusal, and, once sent, the Plate that is now public.</summary>
+internal sealed record SendOutcome(SendResult Result, string? Reason = null, Guid Plate = default);
 
 /// <summary>
 /// Sends a character's waiting revision (NETWORK2's N2-9c; decisions C3, C4 and N2): the one entry
@@ -114,6 +114,11 @@ internal static class PublicationSend
         {
             return new SendOutcome(SendResult.TryLater);
         }
+        catch (OperationCanceledException)
+        {
+            // The player stopped the send, or the plugin is unloading: the revision waits.
+            return new SendOutcome(SendResult.TryLater);
+        }
         catch (LeasedSignerException)
         {
             return new SendOutcome(SendResult.KeyUnavailable);
@@ -123,16 +128,21 @@ internal static class PublicationSend
         {
             case HttpStatusCode.NoContent:
                 var published = waiting with { State = PublicationState.Published, LastPublishedAt = utcNow().ToUnixTimeSeconds(), PendingEntry = OutboxEntryName.None };
-                return Save(files, slot, index.With(published), waiting.PendingEntry) ? new SendOutcome(SendResult.Sent) : new SendOutcome(SendResult.NotSaved);
+                return Save(files, slot, index.With(published), waiting.PendingEntry) ? new SendOutcome(SendResult.Sent, Plate: waiting.PlateId) : new SendOutcome(SendResult.NotSaved, Plate: waiting.PlateId);
             case HttpStatusCode.Gone:
                 return new SendOutcome(SendResult.TakenOver);
-            case HttpStatusCode.ServiceUnavailable:
-            case HttpStatusCode.TooManyRequests:
-            case HttpStatusCode.Conflict:
-                return new SendOutcome(SendResult.TryLater);
-            default:
+            case HttpStatusCode.UnprocessableEntity:
+            case HttpStatusCode.BadRequest:
+            case HttpStatusCode.Forbidden:
+            case HttpStatusCode.NotFound:
+            case HttpStatusCode.RequestEntityTooLarge:
+                // A refusal of this revision: it would be refused again, so it is dropped.
                 var reason = response.Status == HttpStatusCode.UnprocessableEntity ? ReasonOf(response.Body) : null;
                 return Drop(files, slot, index, waiting) ? new SendOutcome(SendResult.Refused, reason) : new SendOutcome(SendResult.Unreadable);
+            default:
+                // Busy, limited, restarting (a 5xx from the proxy while the server restarts), a
+                // request that timed out, or an answer this build doesn't know: it waits.
+                return new SendOutcome(SendResult.TryLater);
         }
     }
 

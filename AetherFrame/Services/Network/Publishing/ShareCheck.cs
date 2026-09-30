@@ -58,8 +58,9 @@ internal sealed class ShareCheckView
 {
     internal static readonly ShareCheckView Idle = new(ShareCheckStage.Idle, Guid.Empty, string.Empty, null, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None);
 
-    internal ShareCheckView(ShareCheckStage stage, Guid plateId, string plateName, SnapshotCandidate? candidate, IReadOnlyList<PlateSnapshotProblem> problems, ShareCheckFailure failure)
+    internal ShareCheckView(ShareCheckStage stage, Guid plateId, string plateName, SnapshotCandidate? candidate, IReadOnlyList<PlateSnapshotProblem> problems, ShareCheckFailure failure, ProfileDocument? source = null)
     {
+        Source = source;
         Stage = stage;
         PlateId = plateId;
         PlateName = plateName;
@@ -84,6 +85,12 @@ internal sealed class ShareCheckView
 
     /// <summary>Why the check couldn't finish, for <see cref="ShareCheckStage.Failed"/>.</summary>
     internal ShareCheckFailure Failure { get; }
+
+    /// <summary>
+    /// The private copy of the saved Plate the check read, and a candidate was built from: what a
+    /// viewer draws to show the Plate exactly as it will be shared (C3). Never an editor's document.
+    /// </summary>
+    internal ProfileDocument? Source { get; }
 }
 
 /// <summary>Everything a <see cref="ShareCheck"/> needs from outside it, so the plugin suite drives it with fakes and the plugin with the Library, the renderer and Dalamud's texture pipeline.</summary>
@@ -176,7 +183,7 @@ internal sealed class ShareCheck : IDisposable
         plate = copy;
         measurements = new CachedSizes(seams.Measurements);
         framesLeft = seams.ResolveFrames;
-        Show(new ShareCheckView(ShareCheckStage.Resolving, plateId, copy.Name, null, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None));
+        Show(new ShareCheckView(ShareCheckStage.Resolving, plateId, copy.Name, null, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None, copy));
     }
 
     /// <summary>Resolves the Plate when it waits to be, once a frame: framework thread only.</summary>
@@ -326,7 +333,7 @@ internal sealed class ShareCheck : IDisposable
     private ShareCheckView Stage(ShareCheckStage stage, SnapshotCandidate? candidate = null, IReadOnlyList<PlateSnapshotProblem>? problems = null, ShareCheckFailure failure = ShareCheckFailure.None)
     {
         var current = view;
-        return new ShareCheckView(stage, current.PlateId, current.PlateName, candidate, problems ?? Array.Empty<PlateSnapshotProblem>(), failure);
+        return new ShareCheckView(stage, current.PlateId, current.PlateName, candidate, problems ?? Array.Empty<PlateSnapshotProblem>(), failure, current.Source);
     }
 
     private void Show(ShareCheckView next)

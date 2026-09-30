@@ -78,6 +78,8 @@ internal static class SharingText
 
     internal const string FirstShowingImages = "Every image has to be shown here before the Plate can be shared.";
 
+    internal const string Sending = "Sending your Active Plate...";
+
     internal const string TurnOffConfirm =
         "Turn off sharing for this character? The server deletes its Plate, its images and its check at once. To share again, you'll need a new Lodestone check.";
 
@@ -156,11 +158,13 @@ internal static class SharingText
         SharingNoticeKind.PublishNotStored => "Your Plate couldn't be prepared for sharing on this PC, so nothing was sent. Please try again.",
         SharingNoticeKind.Paused => "Sharing is paused: the server deleted this character's Plate, and keeps its check. Resume to share again.",
         SharingNoticeKind.Resumed => "Sharing is on again. Your Active Plate is being shared.",
+        SharingNoticeKind.Declined => "Nothing was sent. The Plate you shared before, if any, stays up until you share another or pause sharing.",
+        SharingNoticeKind.PublishUnrecorded => "Your Active Plate is shared, but this PC couldn't record it. It may be sent once more, which changes nothing.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
     /// <summary>Whether a notice reports a problem, rather than progress.</summary>
     internal static bool IsProblem(SharingNoticeKind kind) =>
         kind is not (SharingNoticeKind.CodeReady or SharingNoticeKind.CheckPassed or SharingNoticeKind.TurnedOff or SharingNoticeKind.TurnedOffAll or SharingNoticeKind.NewKeyDropped or SharingNoticeKind.Renamed
-            or SharingNoticeKind.Published or SharingNoticeKind.Paused or SharingNoticeKind.Resumed);
+            or SharingNoticeKind.Published or SharingNoticeKind.Paused or SharingNoticeKind.Resumed or SharingNoticeKind.Declined);
 }

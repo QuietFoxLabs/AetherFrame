@@ -55,6 +55,10 @@ internal sealed class CandidateView : IDisposable
             thumbnails = new Thumbnails(textures, candidate);
         }
 
+        // Taken before anything is drawn: an image that finishes loading during this frame counts
+        // from the next one, once it is on screen.
+        var shown = thumbnails.Shown;
+
         AetherControls.SectionHeader("Its name, shared");
         Wrapped(candidate.Name);
 
@@ -118,7 +122,6 @@ internal sealed class CandidateView : IDisposable
             }
         }
 
-        var shown = thumbnails?.Shown ?? CandidateImages.Loading;
         if (shown == CandidateImages.Failed)
         {
             AetherControls.StatusLine(AetherTone.Warning, "An image couldn't be shown here, so this can't be shared. Save the Plate again to try again.");

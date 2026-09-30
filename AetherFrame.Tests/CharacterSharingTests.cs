@@ -413,15 +413,17 @@ public partial class CharacterSharingTests
     public void APlateNeverSharedBefore_WaitsToBeShown_AndNothingIsSent()
     {
         using var harness = new SharingHarness();
-        harness.Bound();
+        var entry = harness.Bound();
         var candidate = PublicationCandidates.Simple();
 
-        Assert.True(harness.Sharing.TryPublish(Aria, candidate, approved: false));
-        Assert.Equal(new PendingConsent(Aria, candidate), harness.Sharing.View.Consent);
+        Assert.True(harness.Publish(candidate));
+        Assert.Equal(new PendingConsent(Aria, candidate, null, entry.Slot, entry.Key, Profile), harness.Sharing.View.Consent);
         Assert.Empty(harness.Server.Publishes);
 
-        harness.Sharing.DeclineConsent();
+        harness.Sharing.DeclineConsent(Aria);
         Assert.Null(harness.Sharing.View.Consent);
+        Assert.Equal(SharingNoticeKind.Declined, harness.Sharing.View.Notice!.Kind);
+        Assert.Empty(harness.Server.Publishes);
     }
 
     [Fact]
@@ -431,8 +433,8 @@ public partial class CharacterSharingTests
         var entry = harness.Bound();
         var candidate = PublicationCandidates.Simple();
 
-        harness.Sharing.TryPublish(Aria, candidate, approved: false);
-        Assert.True(harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true));
+        harness.Publish(candidate);
+        Assert.True(harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true, candidate.PlateId));
 
         var published = Assert.Single(harness.Server.Publishes);
         Assert.Equal((entry.Key, Profile, 1), (published.Signer, published.Snapshot.ProfileId, published.Images));
@@ -450,20 +452,20 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         var plate = Guid.NewGuid();
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate), approved: true);
+        harness.Share(PublicationCandidates.Simple(plate));
 
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Edited"), approved: false);
+        harness.Publish(PublicationCandidates.Simple(plate, "Edited"));
         Assert.Null(harness.Sharing.View.Consent);
         Assert.Equal(2, harness.Server.Publishes.Count);
         Assert.NotEqual(harness.Server.Publishes[0].Snapshot.RevisionId, harness.Server.Publishes[1].Snapshot.RevisionId);
         Assert.All(harness.Server.Publishes, publish => Assert.Equal(Profile, publish.Snapshot.ProfileId));
 
         var other = PublicationCandidates.Simple();
-        harness.Sharing.TryPublish(Aria, other, approved: false);
+        harness.Publish(other);
         Assert.Equal(other, harness.Sharing.View.Consent!.Candidate);
         Assert.Equal(2, harness.Server.Publishes.Count);
 
-        harness.Sharing.TryPublish(Aria, other, approved: true);
+        harness.Share(other);
         Assert.Equal(other.PlateId, Assert.Single(harness.Index(entry).Entries).PlateId);
     }
 
@@ -473,7 +475,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.UnprocessableEntity, "image-refused");
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(), approved: true);
+        harness.Share(PublicationCandidates.Simple());
 
         Assert.Equal(new SharingNotice(Aria, SharingNoticeKind.PublishRefused, "image-refused"), harness.Sharing.View.Notice);
         Assert.Empty(harness.Index(entry).Entries);
@@ -486,7 +488,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(), approved: true);
+        harness.Share(PublicationCandidates.Simple());
         Assert.Equal(SharingNoticeKind.PublishWaiting, harness.Sharing.View.Notice!.Kind);
         var waiting = Assert.Single(harness.Index(entry).Entries);
         Assert.Equal(PublicationState.Pending, waiting.State);
@@ -497,7 +499,7 @@ public partial class CharacterSharingTests
         Assert.Equal(waiting.LatestRevision, harness.Server.Publishes.Last().Snapshot.RevisionId);
 
         harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(waiting.PlateId, "Later"), approved: false);
+        harness.Publish(PublicationCandidates.Simple(waiting.PlateId, "Later"));
         harness.Now = harness.Now.AddDays(2);
         harness.Sharing.TrySendWaiting(Aria);
         Assert.Equal(SharingNoticeKind.PublishStale, harness.Sharing.View.Notice!.Kind);
@@ -511,9 +513,9 @@ public partial class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         var entry = harness.Bound();
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(), approved: true);
+        harness.Share(PublicationCandidates.Simple());
         harness.Server.PublishAnswer = () => (HttpStatusCode.Gone, null);
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(Assert.Single(harness.Index(entry).Entries).PlateId), approved: false);
+        harness.Publish(PublicationCandidates.Simple(Assert.Single(harness.Index(entry).Entries).PlateId));
 
         Assert.Equal(SharingStage.TakenOver, harness.Sharing.View.Find(Aria)!.Stage);
         Assert.Equal(SharingNoticeKind.TakenOver, harness.Sharing.View.Notice!.Kind);
@@ -527,17 +529,17 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         var plate = Guid.NewGuid();
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate), approved: true);
+        harness.Share(PublicationCandidates.Simple(plate));
 
         Assert.True(harness.Sharing.TryPause(Aria));
         Assert.Equal(("/v1/opt-out", "{\"mode\":\"pause\"}"), (harness.Server.Actions.Last().Path, harness.Server.Actions.Last().Body));
         Assert.Equal(SharingStage.Paused, harness.Sharing.View.Find(Aria)!.Stage);
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "While paused"), approved: true);
+        harness.Share(PublicationCandidates.Simple(plate, "While paused"));
         Assert.Single(harness.Server.Publishes);
 
         Assert.True(harness.Sharing.TryResume(Aria));
         Assert.Equal(SharingStage.Shared, harness.Sharing.View.Find(Aria)!.Stage);
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Back"), approved: false);
+        harness.Publish(PublicationCandidates.Simple(plate, "Back"));
         Assert.Equal(2, harness.Server.Publishes.Count);
         Assert.Equal(entry.ProfileId, harness.Server.Publishes.Last().Snapshot.ProfileId);
     }
@@ -548,7 +550,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(), approved: true);
+        harness.Share(PublicationCandidates.Simple());
         Assert.NotEmpty(harness.Publications.ListOutbox(entry.Slot).Entries);
 
         harness.Sharing.TryTurnOff(Aria);
@@ -622,6 +624,20 @@ public partial class CharacterSharingTests
             return entry;
         }
 
+        /// <summary>Hands a candidate for the Active Plate to the service, as the live publisher does.</summary>
+        internal bool Publish(SnapshotCandidate candidate, ulong contentId = Aria) =>
+            Sharing.TryPublish(contentId, candidate, approved: false, candidate.PlateId);
+
+        /// <summary>Shares a candidate as a player would: handed over, then approved where it is shown first.</summary>
+        internal void Share(SnapshotCandidate candidate, ulong contentId = Aria)
+        {
+            Publish(candidate, contentId);
+            if (Sharing.View.Consent is { } shown && ReferenceEquals(shown.Candidate, candidate))
+            {
+                Sharing.TryPublish(contentId, candidate, approved: true, candidate.PlateId);
+            }
+        }
+
         /// <summary>The character's publication index, as saved.</summary>
         internal PublicationIndex Index(SharingCharacter entry) =>
             Publications.ReadIndex(entry.Slot) is { } bytes ? PublicationIndexCodec.Decode(bytes, entry.Slot) : PublicationIndex.Empty;
@@ -673,6 +689,9 @@ public partial class CharacterSharingTests
         internal string MinimumPlugin { get; set; } = "0.1.6";
 
         internal int Protocol { get; set; } = 32769;
+
+        /// <summary>The profile id the next check binds a character under.</summary>
+        internal ProfileId NextProfile { get; set; } = Profile;
 
         internal bool Unreachable { get; set; }
 
@@ -730,22 +749,22 @@ public partial class CharacterSharingTests
             return Answer(status, answer);
         }
 
-        private static (HttpStatusCode, string?) Default(string path, string body) => path switch
+        private (HttpStatusCode, string?) Default(string path, string body) => path switch
         {
             "/v1/lodestone/code" => (HttpStatusCode.OK, $"{{\"code\":\"{Code}\",\"expiresInSeconds\":3600}}"),
-            "/v1/lodestone/check" => (HttpStatusCode.OK, CheckAnswer(body)),
+            "/v1/lodestone/check" => (HttpStatusCode.OK, CheckAnswer(body, profile: NextProfile)),
             "/v1/lodestone/reread" => (HttpStatusCode.OK, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}"),
             "/v1/opt-out" => (HttpStatusCode.NoContent, null),
             _ => (HttpStatusCode.NotFound, null),
         };
 
         /// <summary>A check's answer: the binding's profile id, and the name and World the check claimed.</summary>
-        internal static string CheckAnswer(string body, string? name = null)
+        internal static string CheckAnswer(string body, string? name = null, ProfileId? profile = null)
         {
             using var claimed = System.Text.Json.JsonDocument.Parse(body);
             return System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
             {
-                ["profileId"] = Profile.ToString(),
+                ["profileId"] = (profile ?? Profile).ToString(),
                 ["name"] = name ?? claimed.RootElement.GetProperty("name").GetString()!,
                 ["world"] = claimed.RootElement.GetProperty("world").GetString()!,
             });

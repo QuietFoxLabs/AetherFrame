@@ -41,7 +41,7 @@ public partial class CharacterSharingTests
         Assert.Equal(plate.ProfileId, consent.Candidate.PlateId);
         Assert.Empty(harness.Server.Publishes);
 
-        harness.Sharing.TryPublish(Aria, consent.Candidate, approved: true);
+        harness.Sharing.TryPublish(Aria, consent.Candidate, approved: true, live.Active);
         Assert.Single(harness.Server.Publishes);
 
         live.Publisher.PlateSaved(plate.ProfileId);
@@ -78,7 +78,7 @@ public partial class CharacterSharingTests
         live.Frames(2);
         live.Publisher.PlateSaved(plate.ProfileId);
         await live.Until(() => harness.Sharing.View.Consent is not null);
-        harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true);
+        harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true, live.Active);
 
         harness.Sharing.TryPause(Aria);
         live.Publisher.PlateSaved(plate.ProfileId);
@@ -101,7 +101,7 @@ public partial class CharacterSharingTests
         live.Frames(2);
         live.Publisher.PlateSaved(first.ProfileId);
         await live.Until(() => harness.Sharing.View.Consent is not null);
-        harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true);
+        harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true, live.Active);
 
         var second = live.Save(text: "Another Plate");
         live.Active = second.ProfileId;
@@ -139,18 +139,24 @@ public partial class CharacterSharingTests
                 BeginOperation = () => new Nothing(),
                 Log = harness.Log.Add,
             });
-            Publisher = new LivePublisher(harness.Sharing, check, () => new CharacterContext(Aria, Name, "Gilgamesh"), contentId => contentId == Aria ? Active : null);
+            Publisher = new LivePublisher(harness.Sharing, check, () => LoggedIn is { } contentId ? new CharacterContext(contentId, Name, "Gilgamesh") : null, contentId => contentId == Aria ? Active : null, () => LibraryLoaded);
         }
 
         internal LivePublisher Publisher { get; }
 
         internal Guid? Active { get; set; }
 
+        /// <summary>The character logged in, by Content ID; none for null.</summary>
+        internal ulong? LoggedIn { get; set; } = Aria;
+
+        /// <summary>Whether the Library has loaded, which the publisher waits for before arriving.</summary>
+        internal bool LibraryLoaded { get; set; } = true;
+
         internal string Name { get; init; } = "Aria Starfall";
 
-        internal ProfileDocument Save(string text = "Shared words")
+        internal ProfileDocument Save(string text = "Shared words", Guid? id = null)
         {
-            var plate = PlateFactory.Create(PlateStartingLayout.Blank, Guid.NewGuid(), "Shared", PublicationCandidates.Now);
+            var plate = PlateFactory.Create(PlateStartingLayout.Blank, id ?? Guid.NewGuid(), "Shared", PublicationCandidates.Now);
             plate.Elements.Add(new TextProfileElement { Text = text, Position = new Vector2(20f, 20f), Size = new Vector2(300f, 60f), ZIndex = 0 });
             plate.Elements.Add(new ImageProfileElement { AssetId = Guid.NewGuid(), Position = new Vector2(40f, 120f), Size = new Vector2(64f, 32f), ZIndex = 1 });
             saved[plate.ProfileId] = plate;
