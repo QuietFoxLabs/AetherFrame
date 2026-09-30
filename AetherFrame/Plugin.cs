@@ -321,11 +321,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             personaSession = PersonaSessionHost.Create(configDirectory, log, ownedOperations);
             startup.OnFailure("personas", personaSession.Close);
 
-            // The persona window (N2-5c), reached from My Plates' header; the windows' rollback above
-            // removes it with the rest.
-            var personaWindow = new PersonaWindow(personaSession, PersonaSessionHost.KeysDirectory(configDirectory), PersonaSessionHost.RegistryPath(configDirectory));
-            WindowSystem.AddWindow(personaWindow);
-            plateLibraryWindow.OpenPersonas = () => personaWindow.IsOpen = true;
+            // Personas are hidden (V4): a character's key is made by the Sharing window, and no
+            // window lists or switches them any more (N2-9c).
             personaSession.Start();
 
             // The share check (N2-6c), reached from a Plate's menu in My Plates. Image preparation's
@@ -344,8 +341,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 Stopping = ownedOperations.Stopping,
                 Log = log.Information,
             });
-            var publisher = new SharePublisher(personaSession.TryRun, new PublicationFiles(PersonaSessionHost.PersonasDirectory(configDirectory)), () => DateTimeOffset.UtcNow, log.Information);
-            shareCheckWindow = new ShareCheckWindow(shareCheck, publisher, personaSession, TextureProvider, id => plateLibrary.FindPlate(id)?.DisplayName);
+            shareCheckWindow = new ShareCheckWindow(shareCheck, TextureProvider);
             WindowSystem.AddWindow(shareCheckWindow);
             plateLibraryWindow.CheckSharing = shareCheckWindow.Open;
             editorPlateMenu.Menu.CheckSharing = shareCheckWindow.Open;
@@ -356,6 +352,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             var characterSharing = new CharacterSharing(
                 personaSession.TryRun,
                 new SharingStateFile(PersonaSessionHost.PersonasDirectory(configDirectory)),
+                new PublicationFiles(PersonaSessionHost.PersonasDirectory(configDirectory)),
                 sharingConnection.Client,
                 AetherFrameBuildInfo.Current.ProductVersion,
                 () => DateTimeOffset.UtcNow,
