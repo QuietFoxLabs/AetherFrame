@@ -147,32 +147,36 @@ public class ServedProfileTests
     [Fact]
     public void Read_WithTwoFaults_RefusesForTheEarlierInReadingOrder()
     {
-        static ProtocolError Refusal(Action<ReferenceServed.ServedSpec> change)
+        static ProtocolException Refusal(Action<ReferenceServed.ServedSpec> change)
         {
             var spec = new ReferenceServed.ServedSpec();
             change(spec);
-            return Assert.Throws<ProtocolException>(() => ServedProfile.Read(ReferenceServed.Write(spec))).Error;
+            return Assert.Throws<ProtocolException>(() => ServedProfile.Read(ReferenceServed.Write(spec)));
         }
 
         // An index is checked as soon as it is read, before the counts and the end that follow it.
-        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.BackgroundImage = 8; s.ItemCount = 2049; }));
-        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.BackgroundImage = 8; s.Trailing = [0]; }));
+        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.BackgroundImage = 8; s.ItemCount = 2049; }).Error);
+        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.BackgroundImage = 8; s.Trailing = [0]; }).Error);
 
         // The version before the marker, and the marker before the name.
-        Assert.Equal(ProtocolError.UnsupportedVersion, Refusal(s => { s.Version = 2; s.Marker = new byte[16]; }));
-        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.Marker = new byte[16]; s.Name = ""; }));
+        Assert.Equal(ProtocolError.UnsupportedVersion, Refusal(s => { s.Version = 2; s.Marker = new byte[16]; }).Error);
+        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.Marker = new byte[16]; s.Name = ""; }).Error);
 
         // Trailing bytes before the rules over the whole body, and those rules in their order.
-        Assert.Equal(ProtocolError.TrailingBytes, Refusal(s => { s.Items = RichItemsNaming(2); s.Trailing = [0]; }));
+        Assert.Equal(ProtocolError.TrailingBytes, Refusal(s => { s.Items = RichItemsNaming(2); s.Trailing = [0]; }).Error);
         Assert.Equal(ProtocolError.LimitExceeded, Refusal(s =>
         {
             s.Items = [.. RichItemsNaming(2), .. Enumerable.Repeat<Action<ReferenceLayout.Bytes>>(w => ReferenceServed.Text(w, new string('a', 2048)), 16)];
-        }));
-        Assert.Equal(ProtocolError.LimitExceeded, Refusal(s =>
+        }).Error);
+
+        // Both limits are LimitExceeded, so the message tells which rule came first: the pixels.
+        var pixelsFirst = Refusal(s =>
         {
             s.Items = [.. ReferenceServed.RichItems(imageIndex: 1, quadIndex: 2), .. Enumerable.Repeat<Action<ReferenceLayout.Bytes>>(w => ReferenceServed.Text(w, new string('a', 2048)), 16)];
             s.Images = [(1, 8192, 2048), (2, 8192, 2048), (1, 8192, 2048)];
-        }));
+        });
+        Assert.Equal(ProtocolError.LimitExceeded, pixelsFirst.Error);
+        Assert.Contains("pixels", pixelsFirst.Message, StringComparison.Ordinal);
 
         static List<Action<ReferenceLayout.Bytes>> RichItemsNaming(byte index) => ReferenceServed.RichItems(imageIndex: index, quadIndex: 1);
     }
