@@ -63,6 +63,16 @@ internal sealed record AetherFrameBuildInfo(string Version, string? Revision)
         false;
 #endif
 
+    /// <summary>The version as a number, without a pre-release suffix: 0.0.0 when it can't be read.</summary>
+    internal Version ProductVersion
+    {
+        get
+        {
+            var core = Version.Split('-', 2)[0];
+            return System.Version.TryParse(core, out var parsed) ? parsed : new Version(0, 0, 0);
+        }
+    }
+
     /// <summary>"AetherFrame 0.1.0".</summary>
     internal string DisplayName => $"AetherFrame {Version}";
 
