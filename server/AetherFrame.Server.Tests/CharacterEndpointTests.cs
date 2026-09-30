@@ -222,8 +222,40 @@ public class CharacterEndpointTests
         await player.BindAsync(Aria);
         var code = await player.CodeAsync();
         server.Lodestone.Pages[Bram] = LodestoneHtml.Character("Bram Oakes", "Gilgamesh", code);
-        using var response = await player.CheckAsync(Bram, code);
+        using var response = await player.CheckAsync(Bram, code, "Bram Oakes");
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ACheckOfAnotherCharactersPage_BindsNothing_AndTakesNothingOver()
+    {
+        // A player logged in as Bram who pastes Aria's page (with the code on Aria's profile) binds
+        // nothing, and Aria's binding under another key stays where it is (N2-9b).
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        var ariaProfile = (await aria.BindAsync(Aria)).GetProperty("profileId").GetString();
+        using var player = server.NewPlayer();
+        var code = await player.CodeAsync();
+        server.Lodestone.Pages[Aria] = LodestoneHtml.Character("Aria Starfall", "Gilgamesh", code);
+
+        using (var response = await player.CheckAsync(Aria, code, "Bram Oakes"))
+        {
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        }
+
+        using (var response = await player.CheckAsync(Aria, code, "Aria Starfall", "Cactuar"))
+        {
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        }
+
+        Assert.Equal(1, await server.CountAsync("SELECT COUNT(*) FROM bindings"));
+        using var reread = await aria.SendAsync("/v1/lodestone/reread", RequestProofKind.LodestoneReread, "{}");
+        Assert.Equal(HttpStatusCode.OK, reread.StatusCode);
+
+        // Claimed as the page shows it, in the name's canonical form and the World in any case, it binds.
+        using var matching = await player.CheckAsync(Aria, code, "aria  STARFALL", "gilgamesh");
+        Assert.Equal(HttpStatusCode.OK, matching.StatusCode);
+        Assert.NotEqual(ariaProfile, (await matching.Content.ReadFromJsonElementAsync()).GetProperty("profileId").GetString());
     }
 
     [Fact]

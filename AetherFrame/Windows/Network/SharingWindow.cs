@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using AetherFrame.Services.Network.Personas;
 using AetherFrame.Services.Network.Sharing;
@@ -16,8 +17,9 @@ namespace AetherFrame.Windows.Network;
 /// the consent to turn sharing on, the Lodestone code and check, and turning sharing off. It reads
 /// the service's view each frame, which never waits, and hands every change to the service, which
 /// runs it off the framework thread. A name, a World or a code is only ever drawn unformatted,
-/// never inside an ImGui label, a tooltip or a format string. Compiled only in the networking
-/// preview flavour.
+/// never inside an ImGui label, a tooltip or a format string. The consent's tick is cleared
+/// whenever the consent isn't on screen, so it is always given afresh. Compiled only in the
+/// networking preview flavour.
 /// </summary>
 internal sealed class SharingWindow : Window
 {
@@ -26,21 +28,28 @@ internal sealed class SharingWindow : Window
     private readonly CharacterSharing sharing;
     private readonly PersonaSession session;
     private readonly Func<CharacterContext?> currentCharacter;
+    private readonly string sharingFile;
+    private readonly string applicationData;
+    private readonly string userProfile;
     private readonly AetherWindowChrome chrome = new();
-    private ulong agreedFor;
+    private readonly HashSet<ulong> rereadAsked = new();
     private bool agreed;
+    private bool consentShown;
+    private ulong shownCharacter;
     private string address = "";
     private bool addressInvalid;
     private ulong confirmingOff;
     private bool confirmingAll;
-    private ulong rereadAskedFor;
 
-    internal SharingWindow(CharacterSharing sharing, PersonaSession session, Func<CharacterContext?> currentCharacter)
+    internal SharingWindow(CharacterSharing sharing, PersonaSession session, Func<CharacterContext?> currentCharacter, string sharingFile)
         : base("Sharing##AetherFrameSharing", ImGuiWindowFlags.NoCollapse)
     {
         this.sharing = sharing;
         this.session = session;
         this.currentCharacter = currentCharacter;
+        this.sharingFile = sharingFile;
+        applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(480f, 360f),
@@ -57,7 +66,36 @@ internal sealed class SharingWindow : Window
 
     public override void PostDraw() => chrome.PopStyle();
 
+    public override void OnClose()
+    {
+        agreed = false;
+        confirmingOff = 0;
+        confirmingAll = false;
+    }
+
     public override void Draw()
+    {
+        consentShown = false;
+        DrawContent();
+
+        // The tick means "I agree to what is on screen now": it never outlives the screen.
+        if (!consentShown)
+        {
+            agreed = false;
+        }
+    }
+
+    private static void Wrapped(string text, Vector4? color = null)
+    {
+        using (ImRaii.PushColor(ImGuiCol.Text, color ?? Vector4.Zero, color is not null))
+        {
+            ImGui.PushTextWrapPos(0f);
+            ImGui.TextUnformatted(text);
+            ImGui.PopTextWrapPos();
+        }
+    }
+
+    private void DrawContent()
     {
         Wrapped(SharingText.Intro, AetherPalette.TextMuted);
         AetherControls.Divider();
@@ -86,6 +124,7 @@ internal sealed class SharingWindow : Window
         if (view.Unreadable)
         {
             AetherControls.Callout(AetherTone.Danger, SharingText.Unreadable);
+            Wrapped(PersonaWindowModel.DisplayPath(System.IO.Path.GetDirectoryName(sharingFile) ?? sharingFile, applicationData, userProfile), AetherPalette.TextMuted);
             if (!view.Busy && AetherControls.SecondaryButton("Try again"))
             {
                 sharing.TryLoad();
@@ -95,6 +134,14 @@ internal sealed class SharingWindow : Window
         }
 
         var character = currentCharacter();
+        if ((character?.ContentId ?? 0) != shownCharacter)
+        {
+            shownCharacter = character?.ContentId ?? 0;
+            address = "";
+            addressInvalid = false;
+            confirmingOff = 0;
+        }
+
         if (view.Notice is { } notice && (notice.ContentId == 0 || notice.ContentId == character?.ContentId))
         {
             AetherControls.Callout(SharingText.IsProblem(notice.Kind) ? AetherTone.Warning : AetherTone.Success, SharingText.Notice(notice.Kind));
@@ -116,7 +163,7 @@ internal sealed class SharingWindow : Window
             var keyLost = view.Notice is { Kind: SharingNoticeKind.KeyUnavailable } lost && lost.ContentId == current.ContentId;
             switch (keyLost ? null : entry)
             {
-                case { Stage: SharingStage.Checking } checking:
+                case { Checking: true } checking:
                     DrawCheck(view, checking, current);
                     break;
                 case { IsBound: true } bound:
@@ -124,7 +171,7 @@ internal sealed class SharingWindow : Window
                     break;
                 default:
                     // A key that can't be opened is replaced by a new one: a new check moves the
-                    // character to it (C1).
+                    // character to it (C1), and until then its binding stays as it is.
                     DrawConsent(view, current, newKey: keyLost);
                     break;
             }
@@ -133,25 +180,10 @@ internal sealed class SharingWindow : Window
         DrawTurnOffAll(view);
     }
 
-    private static void Wrapped(string text, Vector4? color = null)
-    {
-        using (ImRaii.PushColor(ImGuiCol.Text, color ?? Vector4.Zero, color is not null))
-        {
-            ImGui.PushTextWrapPos(0f);
-            ImGui.TextUnformatted(text);
-            ImGui.PopTextWrapPos();
-        }
-    }
-
     private void DrawConsent(CharacterSharingView view, CharacterContext character, bool newKey)
     {
-        if (agreedFor != character.ContentId)
-        {
-            agreedFor = character.ContentId;
-            agreed = false;
-        }
-
-        AetherControls.SectionHeader(SharingText.ConsentTitle);
+        consentShown = true;
+        AetherControls.SectionHeader(newKey ? SharingText.NewKeyTitle : SharingText.ConsentTitle);
         foreach (var statement in SharingText.Consent)
         {
             ImGui.Bullet();
@@ -163,8 +195,9 @@ internal sealed class SharingWindow : Window
         ImGui.Checkbox(SharingText.Agree, ref agreed);
         using (ImRaii.Disabled(!agreed || view.Busy))
         {
-            if (AetherControls.PrimaryButton(SharingText.TurnOn) && agreed)
+            if (AetherControls.PrimaryButton(newKey ? SharingText.NewKeyTitle : SharingText.TurnOn) && agreed)
             {
+                agreed = false;
                 address = "";
                 addressInvalid = false;
                 sharing.TryStart(character.ContentId, newKey);
@@ -175,7 +208,12 @@ internal sealed class SharingWindow : Window
     private void DrawCheck(CharacterSharingView view, SharingCharacter entry, CharacterContext character)
     {
         AetherControls.SectionHeader("Prove this character is yours");
-        if (view.Code is not { } code || code.ContentId != character.ContentId)
+        if (entry.ReplacingKey)
+        {
+            AetherControls.Callout(AetherTone.Info, SharingText.NewKeyBound);
+        }
+
+        if (view.Code is not { } code || code.ContentId != character.ContentId || code.Slot != entry.CheckingSlot)
         {
             AetherControls.Muted(SharingText.NoCodeYet);
             using (ImRaii.Disabled(view.Busy))
@@ -203,6 +241,7 @@ internal sealed class SharingWindow : Window
         }
 
         Wrapped(SharingText.CodeWarning, AetherPalette.Warning);
+        AetherControls.Muted(SharingText.CodeLeft(code.Expires - DateTimeOffset.UtcNow));
         ImGui.Spacing();
         Wrapped(SharingText.CodeStepPaste);
         ImGui.Spacing();
@@ -218,13 +257,19 @@ internal sealed class SharingWindow : Window
             Wrapped(SharingText.AddressInvalid, AetherPalette.Warning);
         }
 
-        using (ImRaii.Disabled(view.Busy || address.Trim().Length == 0))
+        var named = character.Name is { Length: > 0 } && character.HomeWorld is { Length: > 0 };
+        if (!named)
         {
-            if (AetherControls.PrimaryButton("Check"))
+            Wrapped(SharingText.NoNameYet, AetherPalette.Warning);
+        }
+
+        using (ImRaii.Disabled(view.Busy || address.Trim().Length == 0 || !named))
+        {
+            if (AetherControls.PrimaryButton("Check") && character.Name is { } name && character.HomeWorld is { } world)
             {
                 if (LodestoneAddress.TryReadId(address, out var lodestoneId))
                 {
-                    sharing.TryCheck(entry.ContentId, lodestoneId);
+                    sharing.TryCheck(entry.ContentId, lodestoneId, name, world);
                 }
                 else
                 {
@@ -253,7 +298,7 @@ internal sealed class SharingWindow : Window
         {
             if (AetherControls.GhostButton("Cancel"))
             {
-                sharing.TryTurnOff(entry.ContentId);
+                sharing.TryCancelCheck(entry.ContentId);
             }
         }
     }
@@ -261,12 +306,12 @@ internal sealed class SharingWindow : Window
     private void DrawShared(CharacterSharingView view, SharingCharacter entry, CharacterContext character)
     {
         // C1: the binding follows a rename or a World transfer once the server reads the page
-        // again, which it is asked to do once per session when the game shows another name or World.
-        if (!view.Busy && rereadAskedFor != entry.ContentId && character.Name is { } name && character.HomeWorld is { } world
-            && !CharacterSharing.SameCharacter(entry, name, world))
+        // again, which it is asked to do at most once a session for each character, when the game
+        // shows another name or World.
+        if (!view.Busy && character.Name is { } name && character.HomeWorld is { } world && !CharacterSharing.SameCharacter(entry, name, world)
+            && rereadAsked.Add(entry.ContentId) && !sharing.TryReread(entry.ContentId, name, world))
         {
-            rereadAskedFor = entry.ContentId;
-            sharing.TryReread(entry.ContentId, name, world);
+            rereadAsked.Remove(entry.ContentId);
         }
 
         AetherControls.SectionHeader("Sharing is on");
@@ -311,16 +356,13 @@ internal sealed class SharingWindow : Window
 
     private void DrawTurnOffAll(CharacterSharingView view)
     {
-        var others = 0;
+        var any = false;
         foreach (var character in view.Characters)
         {
-            if (character.IsBound || character.Stage == SharingStage.Checking)
-            {
-                others++;
-            }
+            any |= character.IsBound || character.Stage == SharingStage.Checking;
         }
 
-        if (others == 0)
+        if (!any)
         {
             return;
         }

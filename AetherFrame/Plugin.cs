@@ -361,7 +361,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 () => DateTimeOffset.UtcNow,
                 ownedOperations.Stopping,
                 log.Information);
-            var sharingWindow = new SharingWindow(characterSharing, personaSession, () => characterIdentityService.CurrentCharacter);
+            var sharingWindow = new SharingWindow(characterSharing, personaSession, () => characterIdentityService.CurrentCharacter, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
 

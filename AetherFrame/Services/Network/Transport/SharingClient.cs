@@ -303,12 +303,20 @@ internal sealed class SharingClient : IDisposable
                 throw new ArgumentException("A snapshot carries at most eight images.", nameof(images));
             }
 
+            long total = 0;
             foreach (var image in images)
             {
                 if (image is null || image.Length is 0 or > MaxImageBytes)
                 {
                     throw new ArgumentException("Each image is 1 byte to its limit.", nameof(images));
                 }
+
+                total += image.Length;
+            }
+
+            if (total > ProtocolLimits.MaxProfileImageBytes)
+            {
+                throw new ArgumentException("A snapshot's images are 40 MiB at most, together.", nameof(images));
             }
         }
     }

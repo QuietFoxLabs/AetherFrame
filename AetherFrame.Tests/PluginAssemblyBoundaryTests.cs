@@ -5,6 +5,9 @@ using System.Linq;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
 
 namespace AetherFrame.Tests;
@@ -33,6 +36,7 @@ public class PluginAssemblyBoundaryTests
         "System.Net.Quic",
         "AetherFrame.Protocol",
         "AetherFrame.Personas",
+        "Microsoft.Extensions.Http",
     ];
 
     /// <summary>The namespaces the networking code lives in, whichever assembly compiles it.</summary>
@@ -208,6 +212,223 @@ public class PluginAssemblyBoundaryTests
     }
 
     [Fact]
+    public void ThePlugin_BuildsItsHttpStackOnlyInSharingHandler()
+    {
+        // R2 and R3, on the compiled DLL: the one handler is SharingHandler's, made through
+        // Dalamud's connect callback; no handler or client with the defaults (which follow
+        // redirects, keep cookies and connect on their own) is made anywhere; and nothing turns
+        // redirects or cookies back on.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = new List<string>();
+        foreach (var use in NetworkTypeUse.MemberUses(pe))
+        {
+            // Any use of a constructor counts, a subclass's base() call as much as a new: the two
+            // unsealed types would otherwise be made with their defaults through a class of our own.
+            var where = use.Type + ": " + use.Parent + "." + use.Name;
+            if (use.Name == ".ctor")
+            {
+                if (use.Parent == "System.Net.Http.SocketsHttpHandler" && use.Type != "AetherFrame.Services.Network.Transport.SharingHandler")
+                {
+                    offending.Add(where + " (a handler outside SharingHandler)");
+                }
+
+                if (use.Parent == "System.Net.Http.HttpClientHandler" || (use.Parent == "System.Net.Http.HttpClient" && use.Parameters == 0))
+                {
+                    offending.Add(where + " (a handler with the defaults)");
+                }
+            }
+
+            if (use.Name is "set_AllowAutoRedirect" or "set_UseCookies" && use.Parent.StartsWith("System.Net.Http.", StringComparison.Ordinal) && use.Previous != ILOpCode.Ldc_i4_0)
+            {
+                offending.Add(where + " (set to anything but false)");
+            }
+        }
+
+        Assert.True(offending.Count == 0, "R2: " + string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void ThePlugin_MakesNoHttpObjectOutOfSight()
+    {
+        // R2: a client or handler with the defaults can also be made without naming a constructor:
+        // by reflection, or by a generic new(). So nothing references HttpClientHandler (R2's
+        // handler is SocketsHttpHandler), nothing in the network namespace references Activator
+        // (elsewhere a generic new() compiles to it, and no HTTP type reaches that code), and no
+        // HTTP object is a generic type argument anywhere: no Lazy, Task or list of one either.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        string[] httpObjects = ["System.Net.Http.HttpClient", "System.Net.Http.HttpMessageInvoker", "System.Net.Http.HttpClientHandler", "System.Net.Http.SocketsHttpHandler"];
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = new List<string>();
+        foreach (var (type, references) in NetworkTypeUse.ReferencesByType(pe))
+        {
+            foreach (var name in references)
+            {
+                var argument = name.StartsWith(NetworkTypeUse.TypeArgumentPrefix, StringComparison.Ordinal) ? name[NetworkTypeUse.TypeArgumentPrefix.Length..] : null;
+                var network = type.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal);
+                if (name == "System.Net.Http.HttpClientHandler" || (network && name == "System.Activator") || (argument is not null && httpObjects.Any(http => argument.StartsWith(http, StringComparison.Ordinal))))
+                {
+                    offending.Add(type + " names " + name);
+                }
+            }
+        }
+
+        Assert.True(offending.Count == 0, "R2: " + string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void EveryTypeInTheNetworkNamespace_ComesFromTheNetworkFolder()
+    {
+        // The other half of the namespace rule, read from the DLL: every type it defines in
+        // AetherFrame.Services.Network is one the C# parser found declared in a file under
+        // Services/Network. That covers sources linked in from elsewhere, csproj items, code under
+        // a condition the parse didn't take, and source generators.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (file, relative) in PluginSources())
+        {
+            if (!relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var text = File.ReadAllText(file);
+            foreach (var symbols in new[] { Array.Empty<string>(), ["AETHERFRAME_NETWORK_PREVIEW"] })
+            {
+                var tree = CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview, preprocessorSymbols: symbols));
+                foreach (var declaration in tree.GetRoot().DescendantNodes().Where(node => node is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax))
+                {
+                    if (declaration.Parent is BaseTypeDeclarationSyntax)
+                    {
+                        continue;
+                    }
+
+                    var ns = string.Join(".", declaration.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse().Select(namespaceDeclaration => NameOf(namespaceDeclaration.Name)));
+                    var (identifier, arity) = declaration switch
+                    {
+                        TypeDeclarationSyntax type => (type.Identifier.ValueText, type.TypeParameterList?.Parameters.Count ?? 0),
+                        DelegateDeclarationSyntax callback => (callback.Identifier.ValueText, callback.TypeParameterList?.Parameters.Count ?? 0),
+                        BaseTypeDeclarationSyntax other => (other.Identifier.ValueText, 0),
+                        _ => ("", 0),
+                    };
+                    declared.Add(ns + "." + identifier + (arity > 0 ? "`" + arity.ToString(System.Globalization.CultureInfo.InvariantCulture) : ""));
+                }
+            }
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var strays = NetworkTypeUse.ReferencesByType(pe).Keys
+            .Where(type => type.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal) && !declared.Contains(type))
+            .ToList();
+        Assert.True(strays.Count == 0, "R3: types in the network namespace that no file under Services/Network declares: " + string.Join(", ", strays));
+    }
+
+    [Fact]
+    public void PluginSources_ConditionOnlyOnThePreviewSymbol()
+    {
+        // The source checks parse each file as the player and the preview flavour: code under any
+        // other symbol (DEBUG, RELEASE, TRACE, NET...) would be compiled unparsed.
+        var offending = new List<string>();
+        foreach (var (file, relative) in PluginSources())
+        {
+            var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(file), new CSharpParseOptions(LanguageVersion.Preview));
+            foreach (var trivia in tree.GetRoot().DescendantTrivia(descendIntoTrivia: true))
+            {
+                var condition = trivia.GetStructure() switch
+                {
+                    IfDirectiveTriviaSyntax ifDirective => ifDirective.Condition,
+                    ElifDirectiveTriviaSyntax elifDirective => elifDirective.Condition,
+                    _ => null,
+                };
+                if (condition is not null && condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(name => name.Identifier.ValueText != "AETHERFRAME_NETWORK_PREVIEW"))
+                {
+                    offending.Add(relative);
+                }
+            }
+        }
+
+        Assert.True(offending.Count == 0, "Plugin sources condition on a symbol other than AETHERFRAME_NETWORK_PREVIEW: " + string.Join(", ", offending.Distinct()));
+    }
+
+    [Fact]
+    public void ThePlugin_StartsNoProcessAndOpensNoLink()
+    {
+        // A link opened in a browser, or a program started with one, leaves as surely as a request.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = NetworkTypeUse.ReferencesByType(pe)
+            .SelectMany(type => type.Value.Where(name => name is "System.Diagnostics.Process" or "System.Diagnostics.ProcessStartInfo").Select(name => type.Key + " names " + name))
+            .Concat(NetworkTypeUse.MemberUses(pe).Where(use => use.Name == "OpenLink" && use.Parent.StartsWith("Dalamud.", StringComparison.Ordinal)).Select(use => use.Type + " calls " + use.Parent + ".OpenLink"))
+            .ToList();
+        Assert.True(offending.Count == 0, string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void TheNetworkNamespace_IsDeclaredOnlyInTheNetworkFolder()
+    {
+        // The compiled check above exempts AetherFrame.Services.Network by namespace, and R3 is
+        // about the folder. So every type a plugin source declares, read as the compiler reads it
+        // (nested namespaces, whitespace, comments, escapes and verbatim names included), in the
+        // player flavour and in the preview flavour, is in that namespace exactly when its file is
+        // under Services/Network.
+        var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
+        var offending = new List<string>();
+        var types = 0;
+        foreach (var (file, relative) in PluginSources().Concat(LinkedSources()))
+        {
+            var inside = relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase);
+            var text = File.ReadAllText(file);
+            foreach (var symbols in new[] { Array.Empty<string>(), ["AETHERFRAME_NETWORK_PREVIEW"] })
+            {
+                var tree = CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview, preprocessorSymbols: symbols));
+                foreach (var declaration in tree.GetRoot().DescendantNodes().Where(node => node is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax))
+                {
+                    types++;
+                    var ns = string.Join(".", declaration.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse().Select(namespaceDeclaration => NameOf(namespaceDeclaration.Name)));
+                    var network = ns == "AetherFrame.Services.Network" || ns.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal);
+                    if (network != inside)
+                    {
+                        offending.Add(relative + " (" + (ns.Length == 0 ? "no namespace" : ns) + ")");
+                    }
+                }
+            }
+        }
+
+        Assert.True(types > 0, "no type was read");
+        Assert.True(offending.Count == 0, "R3: the network namespace belongs to Services/Network alone: " + string.Join(", ", offending.Distinct()));
+    }
+
+    /// <summary>A namespace's name as the compiler binds it: escapes undone, <c>@</c> dropped.</summary>
+    private static string NameOf(NameSyntax name) => name switch
+    {
+        QualifiedNameSyntax qualified => NameOf(qualified.Left) + "." + NameOf(qualified.Right),
+        AliasQualifiedNameSyntax aliased => NameOf(aliased.Name),
+        SimpleNameSyntax simple => simple.Identifier.ValueText,
+        _ => name.ToString(),
+    };
+
+    [Fact]
     public void TheSharingHandler_FollowsNoRedirectAndKeepsNoCookie()
     {
         // R2: SharingHandler's constructor sets AllowAutoRedirect and UseCookies to false, read
@@ -245,6 +466,21 @@ public class PluginAssemblyBoundaryTests
 
         Assert.Contains("set_AllowAutoRedirect", setToFalse);
         Assert.Contains("set_UseCookies", setToFalse);
+
+        // And it connects through Dalamud's dual-stack callback, never on its own.
+        var connect = false;
+        for (var index = 1; index < instructions.Count; index++)
+        {
+            var (opCode, token) = instructions[index];
+            if (opCode == ILOpCode.Ldftn && MetadataTokens.Handle(token).Kind == HandleKind.MemberReference)
+            {
+                var member = metadata.GetMemberReference((MemberReferenceHandle)MetadataTokens.Handle(token));
+                connect |= metadata.GetString(member.Name) == "ConnectCallback" && member.Parent.Kind == HandleKind.TypeReference
+                    && metadata.GetString(metadata.GetTypeReference((TypeReferenceHandle)member.Parent).Name) == "HappyEyeballsCallback";
+            }
+        }
+
+        Assert.True(connect, "SharingHandler connects through HappyEyeballsCallback.ConnectCallback.");
     }
 
     [Fact]
@@ -619,6 +855,31 @@ public class PluginAssemblyBoundaryTests
         }
 
         Assert.True(offending.Count == 0, "P3: the plugin makes its PersonaManager with PersonaManager.Load, never without its registry. Constructed in: " + string.Join(", ", offending));
+    }
+
+    /// <summary>
+    /// The sources the preview flavour links in from the protocol and persona libraries, with their
+    /// paths relative to the repository: they never declare the plugin's network namespace.
+    /// </summary>
+    private static IEnumerable<(string File, string Relative)> LinkedSources()
+    {
+        var root = RepositoryPaths.Root().FullName;
+        foreach (var library in new[] { "AetherFrame.Protocol", "AetherFrame.Personas" })
+        {
+            var folder = Path.Combine(root, library);
+            Assert.True(Directory.Exists(folder), folder);
+            foreach (var file in Directory.EnumerateFiles(folder, "*.cs", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(root, file);
+                var inside = Path.GetRelativePath(folder, file).Split(Path.DirectorySeparatorChar, 2)[0];
+                if (inside is "obj" or "bin")
+                {
+                    continue;
+                }
+
+                yield return (file, relative);
+            }
+        }
     }
 
     /// <summary>Every C# source of the plugin project, with its path relative to the project folder.</summary>

@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using AetherFrame.Personas;
+using AetherFrame.Protocol;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Requests;
 using AetherFrame.Protocol.Signing;
@@ -19,6 +20,9 @@ internal enum SharingNoticeKind
     CheckPassed,
     CheckFailed,
     TurnedOff,
+    TurnedOffAll,
+    TurnOffIncomplete,
+    NewKeyDropped,
     TakenOver,
     NoLongerBound,
     Renamed,
@@ -48,8 +52,8 @@ internal sealed record SharingNotice(ulong ContentId, SharingNoticeKind Kind, st
 /// <summary>A candidate waiting for the player to see it before it is first sent (C3's first showing).</summary>
 internal sealed record PendingConsent(ulong ContentId, SnapshotCandidate Candidate);
 
-/// <summary>A code the server issued for a character's Lodestone check, kept in memory only.</summary>
-internal sealed record IssuedCode(ulong ContentId, string Code, DateTimeOffset Expires);
+/// <summary>A code the server issued for a character's Lodestone check, for the key in <see cref="Slot"/>, kept in memory only.</summary>
+internal sealed record IssuedCode(ulong ContentId, PersonaSlotId Slot, string Code, DateTimeOffset Expires);
 
 /// <summary>What the window reads each frame: one immutable value, replaced whole.</summary>
 internal sealed class CharacterSharingView
@@ -70,7 +74,7 @@ internal sealed class CharacterSharingView
     /// <summary>Whether the sharing file was read.</summary>
     internal bool Loaded { get; }
 
-    /// <summary>Whether it couldn't be: sharing then stays off, and nothing is written over it.</summary>
+    /// <summary>Whether it couldn't be: nothing more is sent from here, and nothing is written over it.</summary>
     internal bool Unreadable { get; }
 
     /// <summary>Whether an operation was handed to the persona session and hasn't ended.</summary>
@@ -78,7 +82,7 @@ internal sealed class CharacterSharingView
 
     internal IReadOnlyList<SharingCharacter> Characters { get; }
 
-    /// <summary>The latest code issued, for the character it names.</summary>
+    /// <summary>The latest code issued, for the character and key it names.</summary>
     internal IssuedCode? Code { get; }
 
     internal SharingNotice? Notice { get; }
@@ -111,18 +115,23 @@ internal sealed class CharacterSharingView
 /// operation (the session's <c>TryRun</c>): one at a time, under the persona files' lock, off the
 /// framework thread, and waited for by unloading. Requests go through <see cref="SharingClient"/>,
 /// each signed by the character's key through a lease opened for that one signature and released
-/// at once, never held across a request.
+/// at once, never held across a request (L10). The key is selected only for the operation: the
+/// selection it found is put back when the operation ends.
 /// <para>
 /// The sharing file is saved before a request that depends on it is sent, so a key the server may
-/// bind is always recorded first. The log gets operation names and outcome kinds only: never a
-/// Content ID, a Lodestone id, a code, a name, a World or a key. Compiled only in the networking
-/// preview flavour.
+/// bind is always recorded first. A key that can't sign sends nothing at all. Opting out is never
+/// held back by the server's version check. The log gets operation names and outcome kinds only:
+/// never a Content ID, a Lodestone id, a code, a name, a World or a key. Compiled only in the
+/// networking preview flavour.
 /// </para>
 /// </summary>
 internal sealed class CharacterSharing
 {
     /// <summary>The label every character's key gets in the persona registry: nothing about the character (C1).</summary>
     internal const string KeyLabel = "Character key";
+
+    /// <summary>The server API version this build speaks (ServerApi-v1.md).</summary>
+    private const int Api = 1;
 
     private readonly Func<string, Action<PersonaManager>, bool> tryRun;
     private readonly SharingStateFile file;
@@ -158,7 +167,7 @@ internal sealed class CharacterSharing
 
     internal CharacterSharingView View => view;
 
-    /// <summary>Reads the sharing file, once it hasn't been; false when the session couldn't start it.</summary>
+    /// <summary>Reads the sharing file, when it hasn't been read or couldn't be; false when the session couldn't start it.</summary>
     internal bool TryLoad() => Run("sharing load", _ =>
     {
         var characters = file.Read();
@@ -167,8 +176,9 @@ internal sealed class CharacterSharing
 
     /// <summary>
     /// Turns sharing on for the character, after the player agreed (C3's consent, with K4's
-    /// acknowledgement): its key, made now unless it has one (or <paramref name="newKey"/> asks for a
-    /// fresh one, when its key can't be opened), then a Lodestone code.
+    /// acknowledgement): its key, made now unless it has one, then a Lodestone code. With
+    /// <paramref name="newKey"/>, when its key can't be opened, a new key is made; a character the
+    /// server binds keeps that binding recorded until a check with the new key passes (C1).
     /// </summary>
     internal bool TryStart(ulong contentId, bool newKey) => Run("sharing start", manager =>
     {
@@ -184,34 +194,40 @@ internal sealed class CharacterSharing
             persona = held;
         }
 
-        persona ??= manager.Create(KeyLabel);
+        persona ??= FreshKey(manager);
         persona = manager.Acknowledge(persona.Slot);
-        var entry = new SharingCharacter(contentId, persona.Slot, persona.PublicKey.Id, SharingStage.Checking);
-        if (Save(Replaced(entry), contentId) && Key(manager, entry) is { } key)
+        var entry = existing is { IsBound: true }
+            ? existing with { NewSlot = persona.Slot, NewKey = persona.PublicKey.Id }
+            : new SharingCharacter(contentId, persona.Slot, persona.PublicKey.Id, SharingStage.Checking);
+        if (Save(Replaced(entry), contentId))
         {
-            RequestCode(manager, entry, key);
+            RequestCode(manager, entry);
         }
     });
 
     /// <summary>Asks for a new code for a character whose check hasn't passed yet.</summary>
     internal bool TryNewCode(ulong contentId) => Run("sharing code", manager =>
     {
-        if (view.Find(contentId) is { Stage: SharingStage.Checking } entry && Key(manager, entry) is { } key)
+        if (view.Find(contentId) is { Checking: true } entry)
         {
-            RequestCode(manager, entry, key);
+            RequestCode(manager, entry);
         }
     });
 
-    /// <summary>Sends the Lodestone check: the id the player's address named, and the code issued for this character.</summary>
-    internal bool TryCheck(ulong contentId, string lodestoneId) => Run("sharing check", manager =>
+    /// <summary>
+    /// Sends the Lodestone check: the id the player's address named, the code issued for this
+    /// character's key, and the <paramref name="name"/> and <paramref name="world"/> the game shows
+    /// for the character logged in, which the server requires the page to show.
+    /// </summary>
+    internal bool TryCheck(ulong contentId, string lodestoneId, string name, string world) => Run("sharing check", manager =>
     {
-        if (view.Find(contentId) is not { Stage: SharingStage.Checking } entry || view.Code is not { } issued || issued.ContentId != contentId
-            || !LodestoneAddress.IsId(lodestoneId) || Key(manager, entry) is not { } key)
+        if (view.Find(contentId) is not { Checking: true } entry || view.Code is not { } issued || issued.ContentId != contentId || issued.Slot != entry.CheckingSlot
+            || !LodestoneAddress.IsId(lodestoneId) || !SharingStateCodec.IsText(name) || !SharingStateCodec.IsText(world))
         {
             return;
         }
 
-        var response = Send(manager, entry, key, RequestProofKind.LodestoneCheck, SharingWire.Check(lodestoneId, issued.Code));
+        var response = Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.LodestoneCheck, SharingWire.Check(lodestoneId, issued.Code, name, world));
         if (response is null)
         {
             return;
@@ -234,10 +250,43 @@ internal sealed class CharacterSharing
             return;
         }
 
-        var bound = entry with { Stage = SharingStage.Shared, LodestoneId = lodestoneId, ProfileId = answer.ProfileId, Name = answer.Name, World = answer.World };
+        var bound = new SharingCharacter(contentId, entry.CheckingSlot, entry.CheckingKey, SharingStage.Shared, lodestoneId, answer.ProfileId, answer.Name, answer.World);
+        if (!SameCharacter(bound, name, world))
+        {
+            // The server checks this too; a binding to another character is undone, not kept.
+            Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.OptOut, SharingWire.Empty());
+            Notify(contentId, SharingNoticeKind.CheckFailed);
+            return;
+        }
+
         if (Save(Replaced(bound), contentId))
         {
             Publish(view.With(clearCode: true, notice: new SharingNotice(contentId, SharingNoticeKind.CheckPassed)));
+        }
+    });
+
+    /// <summary>
+    /// Stops a check under way: a new key that was replacing one that can't be opened is dropped
+    /// here, and the binding stays as it was; a character not bound yet is turned off, in case the
+    /// server bound it and its answer was lost.
+    /// </summary>
+    internal bool TryCancelCheck(ulong contentId) => Run("sharing cancel", manager =>
+    {
+        if (view.Find(contentId) is not { Checking: true } entry)
+        {
+            return;
+        }
+
+        if (!entry.ReplacingKey)
+        {
+            TurnOff(manager, entry, notify: true);
+            return;
+        }
+
+        var code = view.Code is { } issued && issued.ContentId == contentId;
+        if (Save(Replaced(entry with { NewSlot = default, NewKey = null }), contentId))
+        {
+            Publish(view.With(clearCode: code, notice: new SharingNotice(contentId, SharingNoticeKind.NewKeyDropped)));
         }
     });
 
@@ -249,20 +298,27 @@ internal sealed class CharacterSharing
     {
         if (view.Find(contentId) is { } entry)
         {
-            TurnOff(manager, entry);
+            TurnOff(manager, entry, notify: true);
         }
     });
 
-    /// <summary>Turns sharing off for every character that has it on, or has a check under way.</summary>
+    /// <summary>
+    /// Turns sharing off for every character that has it on, or has a check under way, going on
+    /// past any that fails, then says whether all of them were turned off.
+    /// </summary>
     internal bool TryTurnOffAll() => Run("sharing off all", manager =>
     {
+        var failed = 0;
         foreach (var entry in view.Characters)
         {
-            if ((entry.IsBound || entry.Stage == SharingStage.Checking) && !TurnOff(manager, entry))
+            if ((entry.IsBound || entry.Stage == SharingStage.Checking) && !TurnOff(manager, entry, notify: false))
             {
-                return;
+                failed++;
             }
         }
+
+        log($"Sharing: turning every character off left {failed} still on.");
+        Notify(0, failed == 0 ? SharingNoticeKind.TurnedOffAll : SharingNoticeKind.TurnOffIncomplete);
     });
 
     /// <summary>
@@ -289,7 +345,7 @@ internal sealed class CharacterSharing
                 return;
             }
 
-            if (!StatusAllows(contentId) || Key(manager, entry) is not { } key)
+            if (SigningKey(manager, entry) is not { } key || !StatusAllows(contentId))
             {
                 return;
             }
@@ -310,13 +366,13 @@ internal sealed class CharacterSharing
     /// <summary>Sends the character's waiting revision again, after the server couldn't take it.</summary>
     internal bool TrySendWaiting(ulong contentId) => Run("sharing send", manager =>
     {
-        if (view.Find(contentId) is { Stage: SharingStage.Shared, ProfileId: { } binding } entry && StatusAllows(contentId) && Key(manager, entry) is { } key)
+        if (view.Find(contentId) is { Stage: SharingStage.Shared, ProfileId: { } binding } entry && SigningKey(manager, entry) is { } key && StatusAllows(contentId))
         {
             SendWaiting(manager, entry, key, binding);
         }
     });
 
-    /// <summary>Forgets a Plate waiting to be shown, when the player chose not to share it.</summary>
+    /// <summary>Forgets a Plate waiting to be shown, when the player chose not to share it: nothing of it is sent.</summary>
     internal void DeclineConsent()
     {
         lock (gate)
@@ -331,12 +387,12 @@ internal sealed class CharacterSharing
     /// </summary>
     internal bool TryPause(ulong contentId) => Run("sharing pause", manager =>
     {
-        if (view.Find(contentId) is not { Stage: SharingStage.Shared } entry || Key(manager, entry) is not { } key)
+        if (view.Find(contentId) is not { Stage: SharingStage.Shared } entry)
         {
             return;
         }
 
-        var response = Send(manager, entry, key, RequestProofKind.OptOut, SharingWire.Pause());
+        var response = Send(manager, entry, entry.Slot, entry.Key, RequestProofKind.OptOut, SharingWire.Pause());
         if (response is null)
         {
             return;
@@ -366,16 +422,17 @@ internal sealed class CharacterSharing
 
     /// <summary>
     /// Asks the server to read the character's Lodestone page again, when the game's name or World
-    /// differs from the binding's (C1). Nothing is sent otherwise.
+    /// differs from the binding's (C1). Nothing is sent otherwise. When the server no longer finds
+    /// the character bound to this key, the key opts out too, so nothing it held stays behind.
     /// </summary>
     internal bool TryReread(ulong contentId, string name, string world) => Run("sharing reread", manager =>
     {
-        if (view.Find(contentId) is not { IsBound: true } entry || SameCharacter(entry, name, world) || Key(manager, entry) is not { } key)
+        if (view.Find(contentId) is not { IsBound: true } entry || SameCharacter(entry, name, world))
         {
             return;
         }
 
-        var response = Send(manager, entry, key, RequestProofKind.LodestoneReread, SharingWire.Empty());
+        var response = Send(manager, entry, entry.Slot, entry.Key, RequestProofKind.LodestoneReread, SharingWire.Empty());
         if (response is null)
         {
             return;
@@ -399,9 +456,16 @@ internal sealed class CharacterSharing
 
                 break;
             case HttpStatusCode.NotFound:
-                if (Save(Replaced(entry.Unbound(SharingStage.Off)), contentId))
+                // The server also answers 404 for a character taken off the test's allowlist, whose
+                // binding it keeps: opting out removes that too, before sharing is recorded as off.
+                var optOut = Send(manager, entry, entry.Slot, entry.Key, RequestProofKind.OptOut, SharingWire.Empty());
+                if (optOut?.Status == HttpStatusCode.NoContent && Save(Replaced(entry.Unbound(SharingStage.Off)), contentId))
                 {
                     Notify(contentId, SharingNoticeKind.NoLongerBound);
+                }
+                else if (optOut is { } answered && answered.Status != HttpStatusCode.NoContent)
+                {
+                    Notify(contentId, Failure(answered.Status));
                 }
 
                 break;
@@ -409,21 +473,12 @@ internal sealed class CharacterSharing
                 Notify(contentId, Failure(response.Status));
                 break;
         }
-    });
+    }, keepNotice: true);
 
     /// <summary>Whether the game's <paramref name="name"/> and <paramref name="world"/> are the binding's, compared as the server compares them (C1).</summary>
     internal static bool SameCharacter(SharingCharacter entry, string name, string world) =>
         string.Equals(Canonical(entry.Name), Canonical(name), StringComparison.Ordinal)
         && string.Equals(entry.World, world, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Forgets the latest notice.</summary>
-    internal void DismissNotice()
-    {
-        lock (gate)
-        {
-            view = view.With(clearNotice: true);
-        }
-    }
 
     private static string Canonical(string? name)
     {
@@ -438,6 +493,62 @@ internal sealed class CharacterSharing
         HttpStatusCode.Gone => SharingNoticeKind.TakenOver,
         _ => SharingNoticeKind.Refused,
     };
+
+    /// <summary>Whether the key in <paramref name="slot"/> with <paramref name="key"/> signs now: selected, then a lease opened and released at once.</summary>
+    private static bool KeyOpens(PersonaManager manager, PersonaSlotId slot, PersonaPublicKey key)
+    {
+        if (manager.Active?.Slot != slot)
+        {
+            manager.Select(slot);
+        }
+
+        if (manager.TryOpenSigner(slot, key, out var lease) != PersonaSignerAvailability.Available || lease is null)
+        {
+            return false;
+        }
+
+        lease.Dispose();
+        return true;
+    }
+
+    /// <summary>
+    /// A key for a character: a "Character key" persona no character names, when one signs (left by
+    /// a start whose save failed, say), or else a new one. A key that can't be opened is never reused.
+    /// </summary>
+    private PersonaRecord FreshKey(PersonaManager manager)
+    {
+        var named = new HashSet<PersonaSlotId>();
+        foreach (var character in view.Characters)
+        {
+            named.Add(character.Slot);
+            if (character.ReplacingKey)
+            {
+                named.Add(character.NewSlot);
+            }
+        }
+
+        foreach (var persona in manager.Personas)
+        {
+            if (string.Equals(persona.Label, KeyLabel, StringComparison.Ordinal) && !named.Contains(persona.Slot) && KeyOpens(manager, persona.Slot, persona.PublicKey))
+            {
+                return persona;
+            }
+        }
+
+        return manager.Create(KeyLabel);
+    }
+
+    /// <summary>The character's key, selected and able to sign, or null with a notice.</summary>
+    private PersonaPublicKey? SigningKey(PersonaManager manager, SharingCharacter entry)
+    {
+        if (manager.TryGet(entry.Slot, out var persona) && persona!.PublicKey.Id.Equals(entry.Key) && KeyOpens(manager, entry.Slot, persona.PublicKey))
+        {
+            return persona.PublicKey;
+        }
+
+        Notify(entry.ContentId, SharingNoticeKind.KeyUnavailable);
+        return null;
+    }
 
     /// <summary>The Plate this character's key last signed under its binding, from its publication index; empty when none or unreadable.</summary>
     private Guid LastSigned(PersonaSlotId slot, ProfileId binding)
@@ -508,47 +619,9 @@ internal sealed class CharacterSharing
         }
     }
 
-    /// <summary>Reads the server's status once a session; false, with a notice, when it can't be read or needs a newer AetherFrame.</summary>
-    private bool StatusAllows(ulong contentId)
+    private void RequestCode(PersonaManager manager, SharingCharacter entry)
     {
-        if (statusChecked)
-        {
-            return true;
-        }
-
-        try
-        {
-            var status = client.StatusAsync(stopping).GetAwaiter().GetResult();
-            if (status.Status != HttpStatusCode.OK)
-            {
-                Notify(contentId, Failure(status.Status));
-                return false;
-            }
-
-            if (SharingWire.ReadMinimumPlugin(status.Body) > pluginVersion)
-            {
-                Notify(contentId, SharingNoticeKind.UpdateNeeded);
-                return false;
-            }
-        }
-        catch (SharingException)
-        {
-            Notify(contentId, SharingNoticeKind.Unreachable);
-            return false;
-        }
-        catch (InvalidDataException)
-        {
-            Notify(contentId, SharingNoticeKind.Refused);
-            return false;
-        }
-
-        statusChecked = true;
-        return true;
-    }
-
-    private void RequestCode(PersonaManager manager, SharingCharacter entry, PersonaPublicKey key)
-    {
-        var response = Send(manager, entry, key, RequestProofKind.LodestoneCode, SharingWire.Empty());
+        var response = Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.LodestoneCode, SharingWire.Empty());
         if (response is null)
         {
             return;
@@ -562,8 +635,9 @@ internal sealed class CharacterSharing
 
         try
         {
-            var code = SharingWire.ReadCode(response.Body);
-            Publish(view.With(code: new IssuedCode(entry.ContentId, code, utcNow().AddHours(1)), notice: new SharingNotice(entry.ContentId, SharingNoticeKind.CodeReady)));
+            var (code, seconds) = SharingWire.ReadCode(response.Body);
+            var issued = new IssuedCode(entry.ContentId, entry.CheckingSlot, code, utcNow().AddSeconds(seconds));
+            Publish(view.With(code: issued, notice: new SharingNotice(entry.ContentId, SharingNoticeKind.CodeReady)));
         }
         catch (InvalidDataException)
         {
@@ -571,15 +645,10 @@ internal sealed class CharacterSharing
         }
     }
 
-    /// <summary>Sends the opt-out request and, once the server confirms, records sharing as off. False when it stopped.</summary>
-    private bool TurnOff(PersonaManager manager, SharingCharacter entry)
+    /// <summary>Sends the opt-out request with the character's key and, once the server confirms, records sharing as off. False when it stopped.</summary>
+    private bool TurnOff(PersonaManager manager, SharingCharacter entry, bool notify)
     {
-        if (Key(manager, entry) is not { } key)
-        {
-            return false;
-        }
-
-        var response = Send(manager, entry, key, RequestProofKind.OptOut, SharingWire.Empty());
+        var response = Send(manager, entry, entry.Slot, entry.Key, RequestProofKind.OptOut, SharingWire.Empty());
         if (response is null)
         {
             return false;
@@ -598,45 +667,33 @@ internal sealed class CharacterSharing
         }
 
         var code = view.Code is { } issued && issued.ContentId == entry.ContentId;
-        Publish(view.With(clearCode: code, clearConsent: true, notice: new SharingNotice(entry.ContentId, SharingNoticeKind.TurnedOff)));
+        Publish(notify ? view.With(clearCode: code, clearConsent: true, notice: new SharingNotice(entry.ContentId, SharingNoticeKind.TurnedOff)) : view.With(clearCode: code, clearConsent: true));
         return true;
     }
 
     /// <summary>
-    /// The character's key, selected so it can sign (L10), or null with a notice when it can't be:
-    /// the registry no longer holds it, or holds another key under its slot.
+    /// Sends one signed action with the key in <paramref name="slot"/>. A key that isn't the
+    /// registry's, or can't sign now, sends nothing at all. Before anything but an opt-out, the
+    /// server's version is checked once a session. Null, with a notice, when it got no answer it
+    /// can use; a <c>410</c> records the takeover (C1) before it is returned as null.
     /// </summary>
-    private PersonaPublicKey? Key(PersonaManager manager, SharingCharacter entry)
+    private SharingResponse? Send(PersonaManager manager, SharingCharacter entry, PersonaSlotId slot, PersonaId keyId, RequestProofKind kind, byte[] body)
     {
-        if (!manager.TryGet(entry.Slot, out var persona) || !persona!.PublicKey.Id.Equals(entry.Key))
+        if (!manager.TryGet(slot, out var persona) || !persona!.PublicKey.Id.Equals(keyId) || !KeyOpens(manager, slot, persona.PublicKey))
         {
+            log($"Sharing: {SharingClient.PathOf(kind)} wasn't sent: the key can't sign.");
             Notify(entry.ContentId, SharingNoticeKind.KeyUnavailable);
             return null;
         }
 
-        if (manager.Active?.Slot != entry.Slot)
-        {
-            manager.Select(entry.Slot);
-        }
-
-        return persona.PublicKey;
-    }
-
-    /// <summary>
-    /// Checks the server's version once a session, then sends one signed action. Null, with a notice,
-    /// when it got no answer it can use, when this AetherFrame is too old, or when the key can't sign;
-    /// a <c>410</c> records the takeover (C1) before it is returned.
-    /// </summary>
-    private SharingResponse? Send(PersonaManager manager, SharingCharacter entry, PersonaPublicKey key, RequestProofKind kind, byte[] body)
-    {
-        if (!StatusAllows(entry.ContentId))
+        if (kind != RequestProofKind.OptOut && !StatusAllows(entry.ContentId))
         {
             return null;
         }
 
         try
         {
-            var signer = new LeasedSigner(manager, entry.Slot, key);
+            var signer = new LeasedSigner(manager, slot, persona.PublicKey);
             var response = client.ActionAsync(kind, body, signer, stopping).GetAwaiter().GetResult();
             log($"Sharing: {SharingClient.PathOf(kind)} answered {(int)response.Status}.");
             if (response.Status == HttpStatusCode.Gone)
@@ -653,17 +710,51 @@ internal sealed class CharacterSharing
             Notify(entry.ContentId, SharingNoticeKind.Unreachable);
             return null;
         }
-        catch (InvalidDataException)
-        {
-            Notify(entry.ContentId, SharingNoticeKind.Refused);
-            return null;
-        }
         catch (LeasedSignerException exception)
         {
             log($"Sharing: the character's key couldn't sign ({exception.Availability}).");
             Notify(entry.ContentId, SharingNoticeKind.KeyUnavailable);
             return null;
         }
+    }
+
+    /// <summary>Reads the server's status once a session; false, with a notice, when it can't be read or this AetherFrame is too old for it.</summary>
+    private bool StatusAllows(ulong contentId)
+    {
+        if (statusChecked)
+        {
+            return true;
+        }
+
+        try
+        {
+            var status = client.StatusAsync(stopping).GetAwaiter().GetResult();
+            if (status.Status != HttpStatusCode.OK)
+            {
+                Notify(contentId, Failure(status.Status));
+                return false;
+            }
+
+            var (protocol, api, minimum) = SharingWire.ReadStatus(status.Body);
+            if (protocol != ProtocolConstants.ProtocolVersion || api != Api || minimum > pluginVersion)
+            {
+                Notify(contentId, SharingNoticeKind.UpdateNeeded);
+                return false;
+            }
+        }
+        catch (SharingException)
+        {
+            Notify(contentId, SharingNoticeKind.Unreachable);
+            return false;
+        }
+        catch (InvalidDataException)
+        {
+            Notify(contentId, SharingNoticeKind.Refused);
+            return false;
+        }
+
+        statusChecked = true;
+        return true;
     }
 
     /// <summary>The file's characters with <paramref name="entry"/> in place of its character's, or added.</summary>
@@ -722,10 +813,11 @@ internal sealed class CharacterSharing
 
     /// <summary>
     /// Hands <paramref name="work"/> to the persona session, when nothing of this service runs and
-    /// the file was read (or this is the read). An exception the work didn't expect becomes a
-    /// notice, and the log gets its type only.
+    /// the file was read (or this is the read). The persona selected before the work is selected
+    /// again after it. An exception the work didn't expect becomes a notice, and the log gets its
+    /// type only.
     /// </summary>
-    private bool Run(string name, Action<PersonaManager> work, bool loading = false)
+    private bool Run(string name, Action<PersonaManager> work, bool loading = false, bool keepNotice = false)
     {
         lock (gate)
         {
@@ -734,7 +826,7 @@ internal sealed class CharacterSharing
                 return false;
             }
 
-            view = view.With(busy: true, clearNotice: true);
+            view = keepNotice ? view.With(busy: true) : view.With(busy: true, clearNotice: true);
         }
 
         bool started;
@@ -742,6 +834,7 @@ internal sealed class CharacterSharing
         {
             started = tryRun(name, manager =>
             {
+                var selected = manager.Active?.Slot;
                 try
                 {
                     work(manager);
@@ -760,6 +853,7 @@ internal sealed class CharacterSharing
                 }
                 finally
                 {
+                    Reselect(manager, selected);
                     Publish(view.With(busy: false));
                 }
             });
@@ -775,6 +869,31 @@ internal sealed class CharacterSharing
         }
 
         return started;
+    }
+
+    /// <summary>Puts back the selection an operation found: the persona it named, or none.</summary>
+    private void Reselect(PersonaManager manager, PersonaSlotId? selected)
+    {
+        try
+        {
+            if (manager.Active?.Slot == selected)
+            {
+                return;
+            }
+
+            if (selected is { } slot && manager.TryGet(slot, out _))
+            {
+                manager.Select(slot);
+            }
+            else
+            {
+                manager.Deselect();
+            }
+        }
+        catch (PersonaException exception)
+        {
+            log($"Sharing: the persona selection couldn't be put back ({exception.Error}).");
+        }
     }
 }
 

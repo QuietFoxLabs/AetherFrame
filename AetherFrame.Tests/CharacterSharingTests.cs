@@ -45,7 +45,7 @@ public class CharacterSharingTests
         Assert.True(persona.Acknowledged);
         Assert.Equal(entry.Key, persona.PublicKey.Id);
 
-        Assert.Equal(new IssuedCode(Aria, Code, harness.Now.AddHours(1)), harness.Sharing.View.Code);
+        Assert.Equal(new IssuedCode(Aria, entry.Slot, Code, harness.Now.AddHours(1)), harness.Sharing.View.Code);
         Assert.Equal(SharingNoticeKind.CodeReady, harness.Sharing.View.Notice!.Kind);
         Assert.Equal([entry], harness.File.Read());
 
@@ -59,7 +59,7 @@ public class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
-        Assert.True(harness.Sharing.TryCheck(Aria, "12345678"));
+        Assert.True(harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh"));
 
         var entry = harness.Sharing.View.Find(Aria)!;
         Assert.Equal((SharingStage.Shared, "12345678", (ProfileId?)Profile, "Aria Starfall", "Gilgamesh"), (entry.Stage, entry.LodestoneId, entry.ProfileId, entry.Name, entry.World));
@@ -68,7 +68,7 @@ public class CharacterSharingTests
         Assert.Equal([entry], new SharingStateFile(harness.Root).Read());
 
         var check = harness.Server.Actions.Last();
-        Assert.Equal(("/v1/lodestone/check", entry.Key, "{\"lodestoneId\":\"12345678\",\"code\":\"" + Code + "\"}"), (check.Path, check.Signer, check.Body));
+        Assert.Equal(("/v1/lodestone/check", entry.Key, "{\"lodestoneId\":\"12345678\",\"code\":\"" + Code + "\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}"), (check.Path, check.Signer, check.Body));
         Assert.Equal(1, harness.Server.StatusRequests);
     }
 
@@ -78,14 +78,14 @@ public class CharacterSharingTests
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
         harness.Server.Answers["/v1/lodestone/check"] = _ => (HttpStatusCode.UnprocessableEntity, null);
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
 
         Assert.Equal(SharingStage.Checking, harness.Sharing.View.Find(Aria)!.Stage);
         Assert.Equal(SharingNoticeKind.CheckFailed, harness.Sharing.View.Notice!.Kind);
         Assert.Equal(Code, harness.Sharing.View.Code!.Code);
 
         harness.Server.Answers.Remove("/v1/lodestone/check");
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
         Assert.Equal(SharingStage.Shared, harness.Sharing.View.Find(Aria)!.Stage);
     }
 
@@ -94,7 +94,7 @@ public class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
         var slot = harness.Sharing.View.Find(Aria)!.Slot;
 
         Assert.True(harness.Sharing.TryTurnOff(Aria));
@@ -114,9 +114,9 @@ public class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
         harness.Sharing.TryStart(Bram, newKey: false);
-        harness.Sharing.TryCheck(Bram, "23456789");
+        harness.Sharing.TryCheck(Bram, "23456789", "Bram Oakes", "Gilgamesh");
         var aria = harness.Sharing.View.Find(Aria)!;
         var bram = harness.Sharing.View.Find(Bram)!;
         Assert.NotEqual(aria.Slot, bram.Slot);
@@ -161,7 +161,7 @@ public class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
         var before = harness.Server.Actions.Count;
 
         harness.Sharing.TryReread(Aria, "aria  STARFALL", "gilgamesh");
@@ -179,9 +179,9 @@ public class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
         harness.Sharing.TryStart(Bram, newKey: false);
-        harness.Sharing.TryCheck(Bram, "23456789");
+        harness.Sharing.TryCheck(Bram, "23456789", "Bram Oakes", "Gilgamesh");
 
         harness.Server.Answers["/v1/lodestone/reread"] = _ => (HttpStatusCode.NotFound, null);
         harness.Sharing.TryReread(Aria, "Aria Moonfall", "Gilgamesh");
@@ -205,9 +205,10 @@ public class CharacterSharingTests
         harness.Blobs.Forget(lost.Slot);
         var sent = harness.Server.Actions.Count;
 
+        var challenges = harness.Server.Challenges;
         harness.Sharing.TryNewCode(Aria);
         Assert.Equal(new SharingNotice(Aria, SharingNoticeKind.KeyUnavailable), harness.Sharing.View.Notice);
-        Assert.Equal(sent, harness.Server.Actions.Count);
+        Assert.Equal((sent, challenges), (harness.Server.Actions.Count, harness.Server.Challenges));
 
         harness.Sharing.TryStart(Aria, newKey: true);
         var fresh = harness.Sharing.View.Find(Aria)!;
@@ -249,9 +250,9 @@ public class CharacterSharingTests
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
         harness.Server.Answers["/v1/lodestone/check"] = _ => (HttpStatusCode.UnprocessableEntity, null);
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
         harness.Server.Answers.Remove("/v1/lodestone/check");
-        harness.Sharing.TryCheck(Aria, "12345678");
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
         harness.Server.Unreachable = true;
         harness.Sharing.TryTurnOff(Aria);
         harness.Server.Unreachable = false;
@@ -264,6 +265,128 @@ public class CharacterSharingTests
         {
             Assert.DoesNotContain(secret, log, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public void TurningEverythingOff_GoesOnPastACharacterThatFails_AndSaysSo()
+    {
+        using var harness = new SharingHarness();
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        harness.Sharing.TryStart(Bram, newKey: false);
+        harness.Sharing.TryCheck(Bram, "23456789", "Bram Oakes", "Gilgamesh");
+        harness.Blobs.Forget(harness.Sharing.View.Find(Aria)!.Slot);
+
+        harness.Sharing.TryTurnOffAll();
+        Assert.Equal(SharingStage.Shared, harness.Sharing.View.Find(Aria)!.Stage);
+        Assert.Equal(SharingStage.Off, harness.Sharing.View.Find(Bram)!.Stage);
+        Assert.Equal(new SharingNotice(0, SharingNoticeKind.TurnOffIncomplete), harness.Sharing.View.Notice);
+    }
+
+    [Fact]
+    public void AnOutdatedAetherFrame_CanStillTurnSharingOff()
+    {
+        using var harness = new SharingHarness();
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        harness.Server.MinimumPlugin = "9.9.9";
+        harness.Restart();
+        var statuses = harness.Server.StatusRequests;
+
+        harness.Sharing.TryTurnOff(Aria);
+        Assert.Equal(SharingStage.Off, harness.Sharing.View.Find(Aria)!.Stage);
+        Assert.Equal("/v1/opt-out", harness.Server.Actions.Last().Path);
+        Assert.Equal(statuses, harness.Server.StatusRequests);
+    }
+
+    [Fact]
+    public void AServerOfAnotherProtocolOrAMalformedVersion_SendsNothingSigned()
+    {
+        foreach (var (minimum, notice) in new[] { ("0.1.6.0", SharingNoticeKind.Refused), (" 0.1.6", SharingNoticeKind.Refused), ("0.1.8", SharingNoticeKind.UpdateNeeded) })
+        {
+            using var harness = new SharingHarness();
+            harness.Server.MinimumPlugin = minimum;
+            harness.Sharing.TryStart(Aria, newKey: false);
+            Assert.Equal(notice, harness.Sharing.View.Notice!.Kind);
+            Assert.Empty(harness.Server.Actions);
+        }
+
+        using var other = new SharingHarness();
+        other.Server.Protocol = 1;
+        other.Sharing.TryStart(Aria, newKey: false);
+        Assert.Equal(SharingNoticeKind.UpdateNeeded, other.Sharing.View.Notice!.Kind);
+        Assert.Empty(other.Server.Actions);
+    }
+
+    [Fact]
+    public void ARereadTheServerAnswersNotFound_OptsOutBeforeSharingIsRecordedOff()
+    {
+        using var harness = new SharingHarness();
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        harness.Server.Answers["/v1/lodestone/reread"] = _ => (HttpStatusCode.NotFound, null);
+
+        harness.Sharing.TryReread(Aria, "Aria Moonfall", "Gilgamesh");
+        Assert.Equal(["/v1/lodestone/reread", "/v1/opt-out"], harness.Server.Actions.Skip(harness.Server.Actions.Count - 2).Select(action => action.Path));
+        Assert.Equal(SharingStage.Off, harness.Sharing.View.Find(Aria)!.Stage);
+        Assert.Equal(SharingNoticeKind.NoLongerBound, harness.Sharing.View.Notice!.Kind);
+    }
+
+    [Fact]
+    public void ACheckAnsweredForAnotherCharacter_IsUndone_AndNothingIsRecorded()
+    {
+        using var harness = new SharingHarness();
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Server.Answers["/v1/lodestone/check"] = body => (HttpStatusCode.OK, FakeSharingServer.CheckAnswer(body, "Bram Oakes"));
+
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        Assert.Equal("/v1/opt-out", harness.Server.Actions.Last().Path);
+        Assert.Equal(SharingStage.Checking, harness.Sharing.View.Find(Aria)!.Stage);
+        Assert.Equal(SharingNoticeKind.CheckFailed, harness.Sharing.View.Notice!.Kind);
+    }
+
+    [Fact]
+    public void ANewKeyForABoundCharacter_KeepsTheBindingUntilItsCheckPasses()
+    {
+        using var harness = new SharingHarness();
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        var bound = harness.Sharing.View.Find(Aria)!;
+        harness.Blobs.Forget(bound.Slot);
+
+        harness.Sharing.TryStart(Aria, newKey: true);
+        var replacing = harness.Sharing.View.Find(Aria)!;
+        Assert.Equal((bound.Slot, bound.LodestoneId, bound.ProfileId, SharingStage.Shared), (replacing.Slot, replacing.LodestoneId, replacing.ProfileId, replacing.Stage));
+        Assert.True(replacing.ReplacingKey);
+        Assert.Equal(replacing.NewSlot, harness.Sharing.View.Code!.Slot);
+        Assert.Equal(replacing.NewKey, harness.Server.Actions.Last().Signer);
+
+        harness.Sharing.TryCancelCheck(Aria);
+        Assert.Equal(bound, harness.Sharing.View.Find(Aria));
+        Assert.Equal(SharingNoticeKind.NewKeyDropped, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal([bound], harness.File.Read());
+
+        harness.Sharing.TryStart(Aria, newKey: true);
+        var newKey = harness.Sharing.View.Find(Aria)!.NewKey;
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        var moved = harness.Sharing.View.Find(Aria)!;
+        Assert.Equal((newKey, SharingStage.Shared, false), (moved.Key, moved.Stage, moved.ReplacingKey));
+    }
+
+    [Fact]
+    public void TheSelectionAPersonaHad_IsPutBack()
+    {
+        using var harness = new SharingHarness();
+        var mine = harness.Personas.Create("Mine");
+        harness.Personas.Select(mine.Slot);
+
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        Assert.Equal(mine.Slot, harness.Personas.Active!.Slot);
+
+        harness.Personas.Deselect();
+        harness.Sharing.TryTurnOff(Aria);
+        Assert.Null(harness.Personas.Active);
     }
 
     [Fact]
@@ -418,6 +541,7 @@ public class CharacterSharingTests
     {
         internal SharingHarness(bool load = true)
         {
+            Log = new List<string>();
             Root = Path.Combine(Path.GetTempPath(), "aetherframe-sharing-" + Guid.NewGuid().ToString("N"));
             Blobs = new MemoryKeyBlobs();
             Personas = PersonaManager.Load(new ProtectedPersonaKeyStore(Blobs, new MaskingProtector()), new NoBackups(), new MemoryRegistry());
@@ -451,17 +575,28 @@ public class CharacterSharingTests
 
         internal SharingClient Client { get; }
 
-        internal CharacterSharing Sharing { get; }
+        internal CharacterSharing Sharing { get; private set; }
 
-        internal List<string> Log { get; } = new();
+        /// <summary>A new session over the same files, keys and server, as after a reload: nothing is remembered but what was saved.</summary>
+        internal void Restart()
+        {
+            Sharing = new CharacterSharing((_, work) =>
+            {
+                work(Personas);
+                return true;
+            }, File, Publications, Client, new Version(0, 1, 7), () => Now, CancellationToken.None, Log.Add);
+            Assert.True(Sharing.TryLoad());
+        }
+
+        internal List<string> Log { get; }
 
         internal DateTimeOffset Now { get; set; } = DateTimeOffset.FromUnixTimeSeconds(1_790_000_000);
 
-        /// <summary>Opts Aria in and checks her, as a player would.</summary>
+        /// <summary>Opts a character in and checks it, as a player would.</summary>
         internal SharingCharacter Bound(ulong contentId = Aria)
         {
             Sharing.TryStart(contentId, newKey: false);
-            Sharing.TryCheck(contentId, "12345678");
+            Sharing.TryCheck(contentId, "12345678", "Aria Starfall", "Gilgamesh");
             var entry = Sharing.View.Find(contentId)!;
             Assert.Equal(SharingStage.Shared, entry.Stage);
             return entry;
@@ -517,6 +652,8 @@ public class CharacterSharingTests
 
         internal string MinimumPlugin { get; set; } = "0.1.6";
 
+        internal int Protocol { get; set; } = 32769;
+
         internal bool Unreachable { get; set; }
 
         internal int StatusRequests { get; private set; }
@@ -536,7 +673,7 @@ public class CharacterSharingTests
             if (path == "/v1/status")
             {
                 StatusRequests++;
-                return Answer(HttpStatusCode.OK, $"{{\"protocolVersion\":32769,\"api\":1,\"minimumPlugin\":\"{MinimumPlugin}\"}}");
+                return Answer(HttpStatusCode.OK, $"{{\"protocolVersion\":{Protocol},\"api\":1,\"minimumPlugin\":\"{MinimumPlugin}\"}}");
             }
 
             if (path == "/v1/challenge")
@@ -569,18 +706,30 @@ public class CharacterSharingTests
 
             var text = Encoding.UTF8.GetString(body);
             Actions.Add(new SeenAction(path, verified.PublicKey.Id, text));
-            var (status, answer) = Answers.TryGetValue(path, out var scripted) ? scripted(text) : Default(path);
+            var (status, answer) = Answers.TryGetValue(path, out var scripted) ? scripted(text) : Default(path, text);
             return Answer(status, answer);
         }
 
-        private static (HttpStatusCode, string?) Default(string path) => path switch
+        private static (HttpStatusCode, string?) Default(string path, string body) => path switch
         {
             "/v1/lodestone/code" => (HttpStatusCode.OK, $"{{\"code\":\"{Code}\",\"expiresInSeconds\":3600}}"),
-            "/v1/lodestone/check" => (HttpStatusCode.OK, $"{{\"profileId\":\"{Profile}\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}}"),
+            "/v1/lodestone/check" => (HttpStatusCode.OK, CheckAnswer(body)),
             "/v1/lodestone/reread" => (HttpStatusCode.OK, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}"),
             "/v1/opt-out" => (HttpStatusCode.NoContent, null),
             _ => (HttpStatusCode.NotFound, null),
         };
+
+        /// <summary>A check's answer: the binding's profile id, and the name and World the check claimed.</summary>
+        internal static string CheckAnswer(string body, string? name = null)
+        {
+            using var claimed = System.Text.Json.JsonDocument.Parse(body);
+            return System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["profileId"] = Profile.ToString(),
+                ["name"] = name ?? claimed.RootElement.GetProperty("name").GetString()!,
+                ["world"] = claimed.RootElement.GetProperty("world").GetString()!,
+            });
+        }
 
         private static HttpResponseMessage Answer(HttpStatusCode status, string? body) =>
             new(status) { Content = new ByteArrayContent(body is null ? [] : Encoding.UTF8.GetBytes(body)) };
