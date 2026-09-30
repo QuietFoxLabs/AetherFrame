@@ -46,6 +46,15 @@ internal sealed class VectorFixture
     /// <summary>Valid documents that verify but oblige a server to do something in particular (docs/networking/ProtocolSpecification-v1.md, "Server obligations").</summary>
     public List<ServerObligationVector> ServerObligations { get; set; } = [];
 
+    /// <summary>The domain tag of request proofs (docs/networking/ProtocolSpecification-v1.md, section 14).</summary>
+    public string RequestProofDomainTag { get; set; } = "";
+
+    /// <summary>Valid request proofs, each for one of <see cref="Documents"/> at one deployment under one challenge.</summary>
+    public List<RequestProofVector> RequestProofs { get; set; } = [];
+
+    /// <summary>Request proofs a server refuses when it checks them with the document and deployment named.</summary>
+    public List<RejectedProofVector> RejectedProofs { get; set; } = [];
+
     public static VectorFixture Load()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "vectors-v1.json");
@@ -144,7 +153,7 @@ internal sealed class RejectedVector
 
     public string Reason { get; set; } = "";
 
-    /// <summary>False when the vector embeds a fresh signature and so differs on every regeneration.</summary>
+    /// <summary>False when the vector ends in a fresh signature; a regeneration keeps the committed one while the rest is unchanged.</summary>
     public bool Deterministic { get; set; } = true;
 }
 
@@ -188,4 +197,53 @@ internal static class VectorPaths
         Assert.NotNull(directory);
         return Path.Combine(directory!.FullName, "Fixtures");
     }
+}
+
+internal sealed class RequestProofVector
+{
+    public string Name { get; set; } = "";
+
+    public string Persona { get; set; } = "";
+
+    /// <summary>The name of the vector in <see cref="VectorFixture.Documents"/> whose document the proof binds.</summary>
+    public string Document { get; set; } = "";
+
+    public string Deployment { get; set; } = "";
+
+    /// <summary>The challenge in its text form, <c>chl_</c> and 64 hex digits.</summary>
+    public string Challenge { get; set; } = "";
+
+    /// <summary>SHA-256 of the complete document.</summary>
+    public string SubjectDigest { get; set; } = "";
+
+    public string SigningInput { get; set; } = "";
+
+    public string Digest { get; set; } = "";
+
+    public string Signature { get; set; } = "";
+
+    public string Proof { get; set; } = "";
+}
+
+internal sealed class RejectedProofVector
+{
+    public string Name { get; set; } = "";
+
+    public string Proof { get; set; } = "";
+
+    /// <summary>The name of the vector submitted with the proof, in <see cref="VectorFixture.Documents"/> unless <see cref="DocumentSet"/> names another list.</summary>
+    public string Document { get; set; } = "";
+
+    /// <summary>Null for <see cref="VectorFixture.Documents"/>; <c>rejected</c> for <see cref="VectorFixture.Rejected"/>.</summary>
+    public string? DocumentSet { get; set; }
+
+    /// <summary>The deployment the server checking the proof is.</summary>
+    public string Deployment { get; set; } = "";
+
+    public string Error { get; set; } = "";
+
+    public string Reason { get; set; } = "";
+
+    /// <summary>False when the proof ends in a fresh signature; a regeneration keeps the committed one while the rest is unchanged.</summary>
+    public bool Deterministic { get; set; } = true;
 }

@@ -1,12 +1,13 @@
 # Networking decision register
 
-**Status (2026-09-29): two decisions are the owner's approvals, and twenty-two more are approved under the owner's delegation.**
+**Status (2026-09-29): two decisions are the owner's approvals, and twenty-five more are approved under the owner's delegation.**
 - **D3** is **APPROVED** by the owner.
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
 - **N5** and **L6** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **D9b** and **P2** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **K1**, **K2**, **K6** and **K7** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **N3**, **D4**, **D5**, **D8**, **D9a**, **I1**, **N1**, **N7**, **P1**, **K3**, **K4**, and the new **R1**, **R2** and **R3**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decision batch A for NETWORK2".
+- **S1**, **D7** and **L8** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The request proof's decisions (N2-3b)".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
 
 **Every other product and architecture decision below is UNRESOLVED.**
@@ -279,6 +280,7 @@ The rule governs `name` only. Other texts are schema 2's (N2-3), and N7 governs 
 - confusable names ([UTS #39](https://www.unicode.org/reports/tr39/)), which a first test does not need;
 - persona names, which do not exist (D9a);
 - Hangul fillers, noncharacters and names made only of spaces, which are cosmetic and left to the UTS #39 work.
+- `[added 2026-09-30]` The default-ignorable code points the list leaves out, which a renderer is expected to draw as nothing. Unicode 18.0 has 4,048 of them: U+034F; U+17B4 and U+17B5; the variation selectors U+180B to U+180D, U+180F, U+FE00 to U+FE0F and U+E0100 to U+E01EF; the format characters U+1BCA0 to U+1BCA3 and U+1D173 to U+1D17A; the reserved U+2065, U+FFF0 to U+FFF8, U+E0000, U+E0002 to U+E001F, U+E0080 to U+E00FF and U+E01F0 to U+E0FFF; and the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0 (the bullet above). A name made only of them is accepted and shows nothing, and it can hide at least 64 bytes of data (one byte a variation selector: VS1 to VS256 alone are 256, and 64 of them fit in 256 bytes). Code points that draw as blank without being default-ignorable, such as the spaces above and U+2800 BRAILLE PATTERN BLANK, are outside this set. "Can't hide text" in the rationale holds for the listed characters only. Found by a second review of N2-2 (#38's first head `e03b1d9`) and checked against `master`'s code and Unicode 18.0's DerivedCoreProperties.txt; open as L13.
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. It checked the list against the Unicode Character Database (the 65 Cc code points) and UAX #9 (revision 52, Unicode 18.0.0), confirmed that `PlateNaming` folds Cc and Cf while U+2028, U+2029 and unpaired surrogates pass, and confirmed the CVE-2021-42574 citation. It asked for the exact error order and the invisible format characters, both added above.
 
@@ -535,6 +537,65 @@ The boundary tests change in N2-9, the first change that brings network code, to
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which refused `System.Net.Sockets` outright although R2's callback can't be constructed without `AddressFamily`, and a status code needs `HttpStatusCode`. It asked for this exact allowlist, and **concurred** with the amended entry on its recheck of `779e873`. It confirmed that the list is exactly what its compiled probe referenced, and that both ways of overriding certificate validation reference `SslPolicyErrors`, outside the list, so the type check refuses them too.
 
+### The request proof's decisions (N2-3b), September 29, 2026
+
+The entries below were decided for NETWORK2's increment N2-3b, the request proof, and are applied by it. They are researched against the primary sources cited in each, and a security-focused reviewer examined the design before any code and the implementation after. The request proof adds a signing context, a signed-byte change the owner approved in advance on conditions (see "Approved decisions").
+
+### S1: request proofs. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** Every document submission to a server carries a request proof (specification, section 14): snapshots and retractions alike. Viewing by share code needs none. A proof is signed by the document's own key, in its own signing context (L8), and binds:
+- the deployment name (D7);
+- a single-use challenge the server issued;
+- SHA-256 of the exact document submitted, signature included.
+
+A server refuses a submission whose proof fails section 14.4, resubmissions included, and returns a share code only in reply to a submission with a valid proof. How a server issues and consumes challenges is section 13, rule 10. Applied by N2-3b (the protocol), N2-7 (the server) and N2-9 (the client).
+
+**Rationale.**
+- Without a proof, anyone holding a signed document could submit it: a viewer given signed envelopes (D6), a leaked store, or an old revision the server has pruned (N2). With one, only the key's holder can, and only where and when they choose.
+- Freshness comes from a server challenge, not the client's clock. Nonces a server provides are what stop proofs being made in advance ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449.html), DPoP, section 11.2), and a nonce once used is treated like one never issued ([RFC 8555](https://www.rfc-editor.org/rfc/rfc8555.html), ACME, section 6.5). DPoP's alternative, a client timestamp and a unique id, needs server state all the same (RFC 9449, section 11.1) and fails a player whose clock is wrong.
+- Retractions need a proof too, departing from the baseline "not to retract": otherwise a retraction accepted by one deployment could be replayed to another (D7).
+- The key travels in the proof, as in DPoP (section 4.2) and ACME (section 6.2), so a later proof kind without a document still works; the library checks that it equals the document's key.
+
+**Consequences, recorded.**
+- A retraction can no longer be signed in advance and submitted later, or by someone else. That matters for K4 and the D2 details, where a pre-signed "emergency unpublish" could have been one answer to a lost key.
+- A retraction needs the challenge endpoint, like any other submission.
+- N6 stays open for a retraction's own `issuedAt` (section 13, rule 6); proofs don't depend on the client's clock.
+
+**Not settled:** the challenge lifetime beyond the 300-second baseline, the rate limits on issuing challenges, and the server's endpoints (N2-7); any later proof kind.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 29, 2026). It found that the proof defeats third-party submission, cross-deployment relay and proofs made in advance, and asked for eight changes before concurring. The changes: the server's name from configuration only, the challenge consumed atomically, a last label that starts with a letter, refusal rather than normalization, separate hostnames and test-only names, a subject digest open to later proof kinds, the whole operation bound, and the verified bytes stored. All eight are applied here. It then examined the implementation at `7e7015e` (September 29, 2026). It found the proof read and the submission checked exactly in the order of sections 14.3 and 14.4, each on one private copy of its input with every allocation bounded first; the bytes a server stores are the ones hashed and verified; and `Sign` proves only the signer's own valid document and produces nothing its own check would refuse. It asked for a vector of a valid proof over a document that fails its own verification, for a proof to be checkable only together with its document, and for the register and roadmap to show S1, D7 and L8 as decided. It **concurred** on its recheck of `5b39350`, after confirming with a verifier written from the specification that the new vector's proof is valid and only section 14.4, step 4 refuses it.
+
+### D7: documents are not bound to a deployment; submissions are. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** A document's signed bytes name no deployment, as today. What is bound is the act of submitting it: the request proof carries the deployment name, the DNS hostname the client connects to in one canonical form (specification, section 14.1), and a server refuses a proof made for another name. The client takes the name from its own configuration and builds its address from it; the server takes its own from its configuration, never from the request.
+
+**Rationale.** Relay happens at submission, so that is where the binding belongs: at a server that follows section 13, a document is useless without a fresh proof from its own key for that server. The alternative, a deployment id in every document's signing input, would tie each document to one server for good and change signed bytes again. The name is what TLS authenticates, the same approach as DPoP's `htu` (RFC 9449, section 4.2) and ACME's `url` (RFC 8555, section 6.4), at the level of a whole deployment.
+
+**Consequences, recorded.**
+- Documents stay portable signed statements. A server that ignores section 13, or a viewer given signed envelopes (D6), still accepts them wherever they came from.
+- A retraction accepted by one deployment does not reach another: a player who published to two unpublishes from each.
+- Separate deployments need separate hostnames, and a server that accepts real keys never uses a name reserved for tests (`localhost`, `example.com`, `.test` and the rest).
+
+**Not settled:** whether a profile can move between deployments, a later product question.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 29, 2026). It found that the proof defeats third-party submission, cross-deployment relay and proofs made in advance, and asked for eight changes before concurring. The changes: the server's name from configuration only, the challenge consumed atomically, a last label that starts with a letter, refusal rather than normalization, separate hostnames and test-only names, a subject digest open to later proof kinds, the whole operation bound, and the verified bytes stored. All eight are applied here. It then examined the implementation at `7e7015e` (September 29, 2026). It found the deployment name rule as specified: lowercase LDH labels, a last label that starts with a letter, which refuses IPv4 in decimal, hex and octal, and no normalization; and a proof compared only with the name the server passes in from its configuration. It asked for vectors of a label ending in a hyphen and of bytes outside ASCII, and suggested the special-use domains among the names reserved for tests. Both are applied, and it **concurred** on its recheck of `5b39350`.
+
+### L8: the signing-context rules. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
+
+**Option and scope.** The specification's section 5.1 states the rules every signing context follows:
+- its own length-prefixed tag, carrying the draft marker until the freeze;
+- after the tag, the protocol version and the signer's key, in a fixed canonical layout;
+- nothing signed that another party supplies, except inside a fixed-length field of a tagged input;
+- a new context only with its own section, vectors and a cross-context test.
+
+Version 1 has two contexts: the signed document and the request proof. Applied by N2-3b.
+
+**Rationale.** One persona key signs in both contexts. ECDSA's standard security notion, existential unforgeability under chosen messages, holds for any set of messages that cannot be confused, and the length-prefixed tags make every input of one context differ from every input of the other (here already at the first byte, since the tags' lengths differ). The known dangers of reusing a key come from using it with different primitives (signing and key agreement), not from separated messages under one scheme. Signing nothing a server supplies except inside a fixed field of a tagged input keeps a hostile server from using a client as a signing oracle.
+
+**Not settled:** later contexts (share grants, key rotation statements), which each follow these rules.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 29, 2026). It found that the proof defeats third-party submission, cross-deployment relay and proofs made in advance, and asked for eight changes before concurring. The changes: the server's name from configuration only, the challenge consumed atomically, a last label that starts with a letter, refusal rather than normalization, separate hostnames and test-only names, a subject digest open to later proof kinds, the whole operation bound, and the verified bytes stored. All eight are applied here. It then examined the implementation at `7e7015e` (September 29, 2026) and **concurred**: the two tags are length-prefixed and of different lengths (44 and 42 bytes; 38 and 36 at the freeze); one writer builds both the proof's signing input and its layout; the tests refuse a signature from either context in the other; and the vectors refuse, as a proof, both a document's own signature and a document-context signature over a proof's fields. Its one note on this entry's wording is applied in `5b39350`.
+
 ## Gates
 
 | Gate | Must be decided before |
@@ -594,7 +655,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 |---|---|---|---|---|---|
 | D1 | What a retraction means | A signed, terminal retraction with a permanent minimal record | Keep it signed and terminal; republishing uses a new profile id | yes, only if changed | UNRESOLVED |
 | D6 | Whether viewers receive signed envelopes or server-checked content | Undecided | Server-checked content (reversible later; signed proofs handed out cannot be recalled) | no | UNRESOLVED |
-| D7 | Whether documents are bound to a deployment | Not bound | Bind through a short-lived publish request proof. The alternative is a deployment id in the signing input, which is only possible before the freeze. | yes, only for the alternative | UNRESOLVED |
+| D7 | Whether documents are bound to a deployment | Not bound | Approved: documents stay unbound; each submission is bound through its request proof's deployment name, the canonical DNS hostname (see D7 above) | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K4 | Whether a backup is required before the first real publish | Undefined | Approved: a backup, or (while none exists) an explicit per-persona acknowledgement that a lost key means never updating or unpublishing, before the first real publish (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | K5 | Backup passphrase rules and key derivation route | Undefined | At least 15 characters, or a generated code; NFC; never truncated. The key derivation must use a route verified on every supported platform: `Rfc2898DeriveBytes.Pbkdf2` fails under Wine before 11.3, from source and a published report. Because D2 is approved in principle, this is also needed before any `.afpersona` file is written outside tests (part of "D2 details"). | no | UNRESOLVED |
 | N1 | Scope of revision and asset ids | Profile scoping only | Approved: revisions per (persona, profile); assets and digests per persona, never deduplicated or compared across personas (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
@@ -609,7 +670,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 |---|---|---|---|
 | N2 | Rollback by replaying a pruned revision | The server keeps every accepted revision id; a replay never becomes "latest" | UNRESOLVED |
 | N6 | Retractions blocked by a fast client clock | Exempt retractions from the future-clock check | UNRESOLVED |
-| S1 | Request proofs | Required to publish, not to retract | UNRESOLVED |
+| S1 | Request proofs | Approved: required for every document submission, snapshots and retractions alike, under a single-use server challenge (see S1 above) | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | S2 | What a tombstone holds | A peppered hash of (persona, profile) and a date | UNRESOLVED |
 | S3 | Profiles whose key is lost | Expiry after long inactivity, disclosed in advance | UNRESOLVED |
 | S4 | A persona-level revocation document | Defer; it would be an additive document type | UNRESOLVED |
@@ -621,12 +682,13 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 |---|---|---|
 | L2 | Conformance vectors thinner than the rule set (the large text limits live in unit tests only) | UNRESOLVED (NETWORK1, when a second implementation exists) |
 | L4 | A public-only key accepted by `EcdsaPersonaSigner` until first `Sign` | SETTLED for the key store core (September 29, 2026): `ProtectedPersonaKeyStore` makes every signer from checked material, which always holds the private half. The manager's public-key check stays, because the interface allows another store to differ |
-| L8 | Signing-context rules not yet in the specification | UNRESOLVED (before any second signing context) |
+| L8 | Signing-context rules not yet in the specification | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29**: specification, section 5.1 (see L8 above) |
 | L9 | Whether protocol tests gate plugin releases (`release.yml`) as well as `build.yml` | UNRESOLVED. Its "Linux never ran" part is closed: the ubuntu leg has run green twice (NETWORK0.md, section 13). |
 | I3 | Photo metadata in local `.aetherframe` exports (existing local behaviour, not networking) | UNRESOLVED |
 | L10 | Signer lease on a persona switch: may an operation holding a lease for persona A still sign as A after the player switches to B? The interim in `AetherFrame.Personas` (#23) revokes the lease on any change of selection, never revives it, and fails closed, following NETWORK1.md system 1. The alternatives are letting the operation finish as A (which needs system 1 amended) or refusing a switch while a lease is open. | UNRESOLVED (before the preview wiring, NETWORK1.md increment 9, lets a player start an operation that signs) |
 | L11 | Whether the persona suite also gates plugin releases (`release.yml`). Today only `build.yml` runs it. A question of the same kind as L9; L9 itself stays scoped to the protocol suite. | UNRESOLVED (with L9) |
 | L12 | Key files that no persona record names. The store has no delete (K6), so when the check after a durable write fails (a read-back that still fails after its retries, or bytes that differ), `AddKey` reports `CustodyFailed` and the envelope may stay under that fresh slot, which is never recorded or reused. A crash between the key write and the record write leaves the same kind of file. The wiring (increment 9) must detect such files and report them to the player; whether to offer removal, quarantine or recovery is decided there, with a security review. Found by the key store core's independent reviews (September 29, 2026). | UNRESOLVED (before increment 9 persists a record) |
+| L13 | The default-ignorable code points D4 does not refuse (4,048 in Unicode 18.0, listed under D4's "Not settled"): a name made only of them is accepted and shows nothing, and a name can hide at least 64 bytes of data in them. Refusing them changes which names are valid: a signed-byte change that NETWORK1.md's safeguard 3 reserves for the owner. The trade-off to weigh: local naming (`PlateNaming`) already folds the format characters among them to spaces, so refusing those costs an honest player nothing; but U+FE0E and U+FE0F choose how an emoji is drawn (U+2764 U+FE0F is a common heart), so refusing every variation selector would refuse names players type. | UNRESOLVED. Due before the freeze, since refusing more names after it would invalidate version 1 documents; with the UTS #39 work if that comes first. It does not gate a server that accepts only drafts (NETWORK2's N2-8 and N2-11), since drafts are signed again after the freeze. Changing the rule needs the owner's approval; the owner, who alone freezes version 1, sees it then either way. |
 
 ## 6. Closed items
 

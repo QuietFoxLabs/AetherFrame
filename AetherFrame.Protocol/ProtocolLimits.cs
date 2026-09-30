@@ -22,6 +22,21 @@ public static class ProtocolLimits
     /// <summary>The largest payload a signed document can carry, so that the document fits <see cref="MaxDocumentBytes"/>.</summary>
     public const int MaxPayloadBytes = MaxDocumentBytes - SignedDocumentOverheadBytes;
 
+    /// <summary>The longest deployment name, in bytes (docs/networking/ProtocolSpecification-v1.md, section 14.1): the longest DNS name in text form.</summary>
+    public const int MaxDeploymentNameBytes = 253;
+
+    /// <summary>The longest label of a deployment name, in bytes (RFC 1035, section 2.3.4).</summary>
+    public const int MaxDeploymentLabelBytes = 63;
+
+    /// <summary>
+    /// The fixed part of a request proof: magic, version, kind, key, the deployment name's length
+    /// byte, the challenge, the subject digest and the signature.
+    /// </summary>
+    public const int RequestProofOverheadBytes = 4 + 2 + 1 + ProtocolConstants.PublicKeyLength + 1 + ProtocolConstants.ChallengeLength + ProtocolConstants.DigestLength + ProtocolConstants.SignatureLength;
+
+    /// <summary>The largest request proof: the fixed part and the longest deployment name, 454 bytes.</summary>
+    public const int MaxRequestProofBytes = RequestProofOverheadBytes + MaxDeploymentNameBytes;
+
     /// <summary>
     /// The most Unicode scalar values (code points) one text field may hold. Counted in scalar
     /// values, not UTF-16 code units or bytes, so the limit means the same in every language.

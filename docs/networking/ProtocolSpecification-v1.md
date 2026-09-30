@@ -1,10 +1,10 @@
 # AetherFrame remote protocol, version 1 (DRAFT)
 
-**Status: DRAFT.** This document describes the wire format that `AetherFrame.Protocol` reads and writes today, precisely enough to build a second implementation, in any language, that produces byte-identical documents and verifies the same signatures without reading the C# source. It is not yet frozen. Version 1 becomes final only when the open product decisions in [NETWORK0.md](NETWORK0.md), "Open product decisions", are settled, because some of them change bytes that are signed (the `name` rules, D4; what an image digest covers, D5; whether a document is bound to a deployment, D7; what a retraction means, D1). Until then every document is a **draft**, marked in its bytes (decision N3, [DecisionRegister.md](DecisionRegister.md)): `protocolVersion` is `0x8001` and the signature tag ends in `-draft` (sections 5, 7 and 10). A test server may accept drafts; after the freeze no reader accepts one, and a draft can never be read or verified as a final version 1 document. What is not expected to change at the freeze: the envelope layout, the signing input's layout, the signature form, the key format and the persona identity derivation. The version number and the tag change from the draft marker to the final one.
+**Status: DRAFT.** This document describes the wire format that `AetherFrame.Protocol` reads and writes today, precisely enough to build a second implementation, in any language, that produces byte-identical documents and verifies the same signatures without reading the C# source. It is not yet frozen. Version 1 becomes final only when the open product decisions in [NETWORK0.md](NETWORK0.md), "Open product decisions", are settled, because some of them change bytes that are signed (what a retraction means, D1). The `name` rule (D4, section 8.1.1) and what an image digest covers (D5, section 8.2) are decided and written into this document, though L13 may still narrow the name rule before the freeze (section 8.1.1). Whether a document is bound to a deployment (D7) is decided without changing what documents sign: each submission is bound by a request proof instead (section 14). Until the freeze every document is a **draft**, marked in its bytes (decision N3, [DecisionRegister.md](DecisionRegister.md)): `protocolVersion` is `0x8001` and the signature tag ends in `-draft` (sections 5, 7 and 10). A test server may accept drafts; after the freeze no reader accepts one, and a draft can never be read or verified as a final version 1 document. What is not expected to change at the freeze: the envelope layout, the signing input's layout, the signature form, the key format and the persona identity derivation. The version number and the tag change from the draft marker to the final one.
 
 The committed test vectors (`AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json`, section 11) are the check that a second implementation is right. [NETWORK0.md](NETWORK0.md) explains why the protocol looks like this; this document only says what it is. Section 13 states what a server that accepts these documents is obliged to do with them.
 
-Version 1 is the NETWORK0 foundation: signed, identity-bearing documents. It has no transport, no request or response messages, no encryption and no discovery. Everything else a server or a client does with these bytes is outside this document.
+Version 1 is the NETWORK0 foundation: signed, identity-bearing documents, and the request proof that authorizes submitting one to a server (section 14). It has no transport, no request or response messages (a proof travels in whatever request a transport defines), no encryption and no discovery. Everything else a server or a client does with these bytes is outside this document.
 
 ## 1. Notation
 
@@ -40,7 +40,7 @@ A `text` is UTF-8 with these rules, and no others:
 
 An empty text is a `u32` zero and no bytes.
 
-A `name` field follows the stricter name rule of section 8.1.1 instead of these limits. The limits above apply to every other text; version 1 has none yet, and the unit tests keep covering them for the texts a later schema carries.
+A `name` field follows the stricter name rule of section 8.1.1 instead of these limits. The limits above apply to every other text. Schema 2's item texts (section 8.5) follow this section with a lower limit of 2,048 scalars, so no version 1 field reaches the 32,000-scalar limit; the unit tests keep covering it.
 
 ### 2.4 Enumerations
 
@@ -128,9 +128,27 @@ SigningInput = u8(44) ‖ "AetherFrame.Protocol.SignedDocument.v1-draft"
 - At the freeze the tag becomes the 38 ASCII bytes of `AetherFrame.Protocol.SignedDocument.v1` (length byte `0x26`) and the version `u16(1)`. A draft signature therefore never verifies as a final one, and the reverse.
 - `Digest = SHA-256(SigningInput)` is the value ECDSA signs and verifies.
 
-The signing input binds the protocol version, the document type, the key and the payload. A signature therefore verifies for exactly one (version, type, key, payload) and for nothing else: not for the same payload under another type, not for another version, not with another key, and not over the payload bytes alone. The tag separates document signatures from every other signature AetherFrame may ever define; any future signing context (a request proof, another document family) must use a different tag.
+The signing input binds the protocol version, the document type, the key and the payload. A signature therefore verifies for exactly one (version, type, key, payload) and for nothing else: not for the same payload under another type, not for another version, not with another key, and not over the payload bytes alone. The tag separates document signatures from every other signature AetherFrame defines: the request proof has its own (section 5.1), and so will any later signing context.
 
 The signing input is never transmitted; both sides rebuild it from the document.
+
+### 5.1 Signing contexts
+
+A persona's key signs in exactly two contexts in version 1, and in nothing else (decision L8):
+
+| Context | Tag during the draft | Section |
+|---|---|---|
+| Signed document | `AetherFrame.Protocol.SignedDocument.v1-draft` (44 bytes) | 5 |
+| Request proof | `AetherFrame.Protocol.RequestProof.v1-draft` (42 bytes) | 14 |
+
+Every context follows these rules:
+1. Its signing input starts with `u8(len(tag)) ‖ tag`, and no other context uses its tag. Because the tag's length comes first, no signing input of one context is ever equal to one of another, or a prefix of it.
+2. After the tag, the input binds the protocol version and the signer's full 65-byte public key (never a persona id, and never a truncation of either), in a fixed canonical layout: no field is optional, free-form or left out.
+3. Its tag carries the draft marker (decision N3, section 10) until the owner freezes the version: it ends in `-draft`, and changes together with the version at the freeze.
+4. A key signs only signing inputs built as this specification says. It never signs bytes another party supplies, except inside a fixed-length field of a tagged input, as a request proof's challenge (section 14.2).
+5. A new context needs its own tag, its own section here, vectors, and a test that its signatures verify in no other context, and no other context's in it.
+
+The persona identity (section 4) has a tag too, `AetherFrame.Protocol.PersonaId.v1`, but it is a hash domain, not a signing context: nothing is signed under it.
 
 ## 6. Signatures
 
@@ -199,7 +217,7 @@ A writer encodes the payload (section 8), builds the signing input (section 5) w
 
 ## 8. Payloads
 
-Each payload starts with its own `u16` schema version, independent of the protocol version: a later schema of the same document type can be introduced while the envelope stays at protocol version 1. A reader refuses any schema version it does not implement (`UnsupportedVersion`). Version 1 defines schema 1 of each type, and schema 2 of `ProfileSnapshot` (section 8.5).
+Each payload starts with its own `u16` schema version, independent of the protocol version: a later schema of the same document type can be introduced while the envelope's protocol version stays the same. A reader refuses any schema version it does not implement (`UnsupportedVersion`). Version 1 defines schema 1 of each type, and schema 2 of `ProfileSnapshot` (section 8.5).
 
 ### 8.1 ProfileSnapshot, schema 1
 
@@ -239,6 +257,8 @@ A reader checks in this order and stops at the first fault:
 5. more than 64 scalar values: `LimitExceeded`.
 
 A writer refuses the same names, and an unpaired surrogate as `InvalidText`.
+
+The rule may still refuse more code points before the freeze: L13 in [DecisionRegister.md](DecisionRegister.md) records the default-ignorable code points it allows, and changing it is the owner's decision.
 
 ### 8.2 ImageReference
 
@@ -383,19 +403,20 @@ Every refusal is one of these codes. A reader that wants to react to the kind of
 
 | Code | Meaning |
 |---|---|
-| InvalidFraming | The input does not start with the document magic. |
+| InvalidFraming | The input does not start with the magic of what is read: `AFPD` for a document, `AFRQ` for a request proof. |
 | UnsupportedVersion | The protocol version or a payload schema version is not one this reader implements. |
 | UnknownDocumentType | The document type is not listed in 7.1. |
 | Truncated | The input ended before a declared value was complete. |
-| TrailingBytes | Input continues after the last value of the document or of a payload. |
+| TrailingBytes | Input continues after the last value of the document, of a payload or of a request proof. |
 | LimitExceeded | A length, count, size or total is over its limit. |
 | InvalidLength | A length the format forbids, such as an empty payload. |
 | InvalidKey | The public key is not an uncompressed point on P-256. |
 | InvalidSignature | The signature is not 64 bytes with r and s in range and s in the low half. |
-| SignatureMismatch | The signature is well formed but does not verify over the document with its key. |
+| SignatureMismatch | The signature is well formed but does not verify over the document or request proof with its key. |
 | InvalidText | A text is not valid UTF-8 or contains U+0000, or a name contains a refused code point (section 8.1.1). |
 | InvalidValue | A value outside what its field allows: an unknown enumeration code, an all-zero identifier, a zero dimension, a timestamp out of range. |
 | NotCanonical | The input is well formed but not the one canonical encoding of its content, such as an unsorted set. |
+| ProofMismatch | A request proof verifies but does not authorize the submission it came with: it names another deployment, binds another document, or is signed by another key than the document's (section 14.4). |
 
 A reader never returns a partially decoded document: either every step of section 7.2 succeeds or nothing is produced.
 
@@ -411,6 +432,8 @@ A reader checks each rule at the earliest point in reading order at which it can
 - a rule over several fields of one item (the pixel product) when the last of them has been read;
 - after the last field: trailing bytes, then the rules over the whole payload: in schema 1 the total of the image byte lengths; in schema 2 that total, then the images' total pixels, then the total of the item texts, then the image references (section 8.5).
 
+A request proof is read in the order of section 14.3, and a submission checked in the order of section 14.4.
+
 The rejected test vectors each contain one fault. The library's adversarial tests cover the order for inputs with two.
 
 ## 10. Versioning policy
@@ -419,7 +442,8 @@ The rejected test vectors each contain one fault. The library's adversarial test
 - **The draft marker** (decision N3). Until the owner freezes a version, its documents are drafts: the version has its high bit set (`0x8000`), the low fifteen bits name the version it drafts, and the signature tag ends in `-draft`. Version 1's drafts are `0x8001` with `AetherFrame.Protocol.SignedDocument.v1-draft`. A draft-period reader accepts only the draft marker and refuses `1`; after the freeze a reader accepts only `1` with the final tag and refuses `0x8001`. A test server may accept drafts; a server after the freeze accepts none. A draft is never read or verified as final. The persona identity derivation (section 4) has no marker: an identity is a hash of a key, not a signature, so it is the same before and after the freeze. A new version uses a **new signature domain tag** (for example `...SignedDocument.v2`) as well as a new number, so a version 1 signature can never verify under version 2 even if the layouts coincided.
 - **Document type** (`u8` at offset 6): new types get new codes; codes are never reused or renumbered. A reader refuses codes it does not know. The type is part of the signing input, so a signature never carries across types.
 - **Payload schema version** (`u16` at the start of each payload): a type's payload can evolve without touching the envelope. A reader implements a closed set of schemas per type and refuses the rest. Fields are never added to an existing schema; a new schema number is a new layout.
-- **Domain tags** are fixed strings that are part of the byte format. Any new signing context AetherFrame introduces (a request proof, a share grant, a key rotation statement) must use its own tag, never this document tag.
+- **Domain tags** are fixed strings that are part of the byte format. Every signing context has its own (section 5.1): the document's and the request proof's in version 1. A later one, such as a share grant or a key rotation statement, needs its own too.
+- **Request proof kind** (`u8` at offset 6 of a proof): new kinds get new codes, which are never reused or renumbered. Each kind defines the layout after its kind byte, and a reader refuses kinds it does not know. Every kind has its own size limit (kind 1: 454 bytes). A reader's first check (section 14.3, step 1) is against the largest limit of the kinds it implements, and it checks the kind's own limit right after reading the kind, so an oversized proof of a known kind is `LimitExceeded` whichever kinds a reader implements. A reader that doesn't implement a later, larger kind refuses its proofs as `LimitExceeded` or as an unknown kind, as it refuses any kind it doesn't know. So a new kind never needs a new protocol version for its size alone.
 - **Limits** (section 2 and section 8) are part of the version: raising a limit is a new schema or protocol version, since a reader at the old limit would refuse documents a newer writer produces.
 - Nothing in version 1 is extensible by adding fields, keys or unknown-value passthrough. A reader that sees something it does not know refuses the document.
 
@@ -428,34 +452,128 @@ The rejected test vectors each contain one fault. The library's adversarial test
 `AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json` holds:
 
 - `personas`: two synthetic identities, A and B. Each private scalar is `SHA-256(label) mod n` for the label given, so an implementation can derive the private key, the public key (`d·G`) and the persona identity and compare all three. These keys exist only for testing and must never be used for anything else.
-- `documents`: for each sample, the canonical payload, the signing input, the digest, one valid signature and the complete document as hex, with the decoded field values expected from it. `profile-snapshot-maximal` is at the limits (a 256-byte name of 64 four-byte scalars, eight images totalling 40 MiB); its bytes are omitted for size and its `construction` says how to rebuild them, with the digest and signature over exactly that. `profile-snapshot-minimal` has a one-character name, the earliest timestamp and no images. `profile-layout-snapshot` is schema 2 (section 8.5) with every item kind once, an image background, a PNG and a JPEG. Every document carries the draft marker. Each snapshot vector has its own revision id (`rev_b2b2…`, `rev_b3b3…`, `rev_b4b4…`, `rev_b5b5…`, and `rev_b6b6…` for the layout): within one profile a revision id names exactly one document (section 13, rule 4), so vectors with different content never share one.
+- `documents`: for each sample, the canonical payload, the signing input, the digest, one valid signature and the complete document as hex. The schema 1 snapshots other than the maximal one, and the retraction, also give the decoded field values expected from them. `profile-snapshot-maximal` is at the limits (a 256-byte name of 64 four-byte scalars, eight images totalling 40 MiB); its bytes are not stored in the file, and its `construction` says how to rebuild them, with the digest and signature over exactly that. `profile-snapshot-minimal` has a one-character name, the earliest timestamp and no images. `profile-layout-snapshot` is schema 2 (section 8.5) with every item kind once, an image background, a PNG and a JPEG. Every document carries the draft marker. Each snapshot vector has its own revision id (`rev_b2b2…`, `rev_b3b3…`, `rev_b4b4…`, `rev_b5b5…`, and `rev_b6b6…` for the layout): within one profile a revision id names exactly one document (section 13, rule 4), so vectors with different content never share one.
 - `rejected`: documents that must be refused, each with the error code expected, derived from `profile-snapshot` by one change (a flipped bit, an extreme length, a substituted key, a high-S signature, and so on) or validly signed over a payload that breaks one schema rule. Every rule of the name (section 8.1.1) has an entry: its limits, a declared length over the byte limit with few bytes present, and at least one code point from every refused range. So do the three names the rule turned from valid samples into rejected ones (an empty name, a name with line breaks and invisible characters, and a 32,000-scalar name). Every fault of schema 2 the library's tests exercise has an entry (`signed-layout-...`): each range, each closed code, the identifiers, the item text limits, the image formats and order, and the four rules over the whole payload. Two entries carry the final version 1 marker instead of the draft one: a final document (`UnsupportedVersion`), and the same document with its version changed to the draft's (`SignatureMismatch`). The general 32,000-scalar text limit of section 2.3, which no version 1 field reaches any more, is covered by the library's unit tests, not by a vector.
 - `profiles`: the owner of each profile id the vectors use, as the record a backend would hold. The protocol cannot know owners; this table lets the tests check that every valid document is signed by the recorded owner of its profile id and that every `serverObligations` document is not.
+- `requestProofs`: valid request proofs (section 14), each for one of the `documents` under its own challenge, with the deployment, the subject digest, the signing input, its digest, the signature and the complete proof. Persona A proves `profile-snapshot` and `profile-layout-snapshot` at `plates.example.com`, and `profile-snapshot` again at the longest deployment name (253 bytes, which makes the largest proof, 454 bytes); persona B proves `profile-retraction`.
+- `rejectedProofs`: proofs that must be refused, each with the document and the deployment it is checked with (section 14.4) and the error expected. Each is derived from the first valid proof by one change, or signed validly but wrongly (in the document context, or by persona B over persona A's document). Every step of sections 14.3 and 14.4 has an entry except the document's size limit in section 14.4, step 3, which the library's unit tests cover, as they cover the text limit of section 2.3; so does each part of the deployment name rule. One entry is checked with a document from `rejected` instead, as its `documentSet` says: a valid proof over a document whose own signature fails, which only section 14.4, step 4 refuses.
 - `serverObligations`: valid documents that verify, each with the persona it verifies as, the profile id it carries, the recorded owner of that id (always another persona) and what a server is obliged to do with it (section 13). Both are signed by persona B and carry the profile id of persona A's snapshots: they are about (B, that id) and touch nothing of A's. Signature validity and authorization are different things: these verify, and a backend holding the `profiles` record refuses to treat them as A's acts.
 
-An implementation is right when it (1) derives the same keys and identities, (2) produces the same payload and signing-input bytes for the sample models, (3) verifies every stored signature, (4) accepts every stored document and decodes the expected values, (5) refuses every rejected document with the stated error, and (6) verifies each `serverObligations` document as the stated persona. ECDSA signatures are randomized, so a regeneration of the file (set `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1` and run the tests; the approved public API list has its own switch) yields different signatures; every other value is stable, and one rejected vector's error code (`signature-r-s-swapped`) depends on the signature and is recomputed.
+An implementation is right when it (1) derives the same keys and identities, (2) produces the same payload and signing-input bytes for the sample models, (3) verifies every stored signature, (4) accepts every stored document and decodes the expected values, (5) refuses every rejected document with the stated error, (6) verifies each `serverObligations` document as the stated persona, (7) builds the same proof signing inputs and accepts every request proof with its document and deployment, and (8) refuses every rejected proof with the stated error. ECDSA signatures are randomized. A regeneration of the file (set `AETHERFRAME_PROTOCOL_REGENERATE_VECTORS=1` and run the tests; the approved public API list has its own switch) keeps each committed signature whose signed bytes are unchanged, and signs afresh only what changed. Every other value is stable, and one rejected vector's error code (`signature-r-s-swapped`) depends on the signature and is recomputed.
 
-The test project contains two pieces written from this document rather than from the library: `ReferenceP256.cs`, an affine-arithmetic implementation of key derivation, the curve equation and ECDSA verification, and `ReferenceProtocol.cs`, the signing input, persona identity input and envelope built from the tables above. The vector tests check the personas, the five documents' signing inputs, digests, signatures and layouts against both. The rejected vectors are checked against the library only; an independent verifier written in another language during the 2026-09-28 review reproduced all of them.
+The test project contains three pieces written from this document rather than from the library: `ReferenceP256.cs`, an affine-arithmetic implementation of key derivation, the curve equation and ECDSA verification; `ReferenceProtocol.cs`, the signing input, persona identity input and envelope, and the request proof's signing input and layout, built from the tables above; and `ReferenceLayout` (in `LayoutSamples.cs`), schema 2's rich sample payload written out from section 8.5's tables. The vector tests check the personas, every entry of `documents` (its signing input, digest, signature and envelope) and every entry of `requestProofs` (its signing input, digest, signature and layout) against the first two, on every run; the `serverObligations` documents are verified by the library only; the layout tests check the rich payload against the third. Whether each rejected vector and each rejected proof is refused, and with which error, is checked against the library only; the two final-marker vectors' signatures are also checked against the first two pieces. An independent verifier written in another language reproduced all the rejected vectors of that time at the 2026-09-28 review. After N2-2 regenerated them, a second implementation written from this document reproduced all 107 at `cfc5171` (2026-09-29). N2-3a has since regenerated the file: every signature is new, the rejected vectors went from 107 to 155 (47 of them layout faults), and the layout document was added. N2-3b then added the request proofs and their refusals without changing any existing vector, since a regeneration now keeps every signature whose signed bytes are unchanged. At `5b39350`, a verifier written from this document by N2-3b's security reviewer confirmed that the four `requestProofs` verify, and that the four `rejectedProofs` of section 14.4 (`proof-for-another-deployment`, `proof-for-another-document`, `proof-by-another-persona` and `proof-of-a-document-that-does-not-verify`) fail at the step their names claim. No implementation outside this repository has checked the whole file as committed; a later change says so when one does.
 
 Worked example, persona A: label `AetherFrame.Protocol test persona A`; the public key and identity are in the fixture; the sample snapshot's payload begins `0001` (schema 1), then `a1a1…` (the profile id), `b2b2…` (the revision id), `00000000 6553f100` (createdAt 1,700,000,000), `0000000c` and `Sample Plate` in UTF-8, then `00000002` and two image references in ascending asset id order.
 
 ## 12. Not in version 1
 
-Deliberately absent, so that nothing has to be removed later: any transport (HTTP or otherwise), request and response messages, request authentication, encryption, key rotation or revocation statements, share grants or capability tokens, image bytes themselves, persona display names, timestamps with sub-second precision, floating-point values (schema 2 carries fixed-point integers), optional fields, and any form of unknown-field passthrough.
+Deliberately absent, so that nothing has to be removed later: any transport (HTTP or otherwise), request and response messages, request authentication beyond the request proof (section 14), encryption, key rotation or revocation statements, share grants or capability tokens, image bytes themselves, persona display names, timestamps with sub-second precision, floating-point values (schema 2 carries fixed-point integers), optional fields, and any form of unknown-field passthrough.
 
 ## 13. Server obligations
 
-The protocol verifies bytes; this section says what a server that accepts version 1 documents must do with a verified document. A valid document is an authorization by its signer for exactly what this section allows, and a server that applies it any other way lets a signature authorize something its signer never signed for. Rules 1, 2 and 8, and the storage half of rule 3, follow from the byte format and are settled; rule 9 is settled by decision N7. Rules 4 to 7 and the serving half of rule 3 are the **baseline** a backend implements unless the owner decides otherwise (NETWORK0.md, "Open product decisions"); they are policy, can change without a new protocol version, and are marked with the decision they depend on. Nothing in this section is enforced by the library: it holds no server state, and a backend that skips a rule is not caught by any test here.
+The protocol verifies bytes; this section says what a server that accepts version 1 documents must do with a verified document. A valid document is an authorization by its signer for exactly what this section allows, and a server that applies it any other way lets a signature authorize something its signer never signed for. Rules 1, 2 and 8, and the storage half of rule 3, follow from the byte format and are settled; rule 9 is settled by decision N7, and rule 10 by decisions S1 and D7. Rules 4 to 7 and the serving half of rule 3 are the **baseline** a backend implements unless the owner decides otherwise (NETWORK0.md, "Open product decisions"); they are policy, can change without a new protocol version, and are marked with the decision they depend on. Nothing in this section is enforced by the library: it holds no server state, and a backend that skips a rule is not caught by any test here.
 
 1. **Scope by owner.** A server keys every profile by (persona, profileId) (section 8.4). A snapshot is applied to the signing persona's profile of that id, creating the profile if it does not exist; a retraction is applied to the signing persona's profile of that id. Neither is ever looked up, matched or applied by profile id alone. Revision ids are scoped the same way, and assets and image digests by persona (section 8.4, decision N1). The `serverObligations` vectors are the conformance cases.
 2. **Identity comes from the key.** The persona of a document is the identity of the key that verified it (section 7.2). Persona ids carried in requests, sessions, URLs or headers never attribute a document; at most they are compared with the verified persona and the request refused when they differ.
 3. **Nothing is repaired or rewritten.** A server stores the exact bytes it verified, or nothing; it never re-encodes, trims, normalizes or fills in a document, and whatever it derives from one (a listing, a rendered view) is derived from those bytes. Whether viewers receive those signed bytes themselves or server-attested content derived from them is decision D6 (NETWORK0.md), not settled here; either way the stored record is the verified bytes.
 4. **Revision uniqueness** (decision D1). Within one profile, a revision id names exactly one document. Resubmitting a document whose bytes equal the stored one is idempotent: accepted, nothing changes. A document that carries a stored revision id with different bytes is refused.
 5. **Retraction** (decision D1). Once a retraction of (persona, profileId) is applied, no revision of that profile is served. Baseline: a retraction is terminal. The server keeps a minimal permanent record (persona, profileId, its own receipt time) and refuses every later snapshot of that profile whatever its `createdAt`; to publish again, the client uses a new profile id. Ordering snapshots against retractions by `createdAt` and `issuedAt` alone is not sufficient, because both are client clocks.
-6. **Timestamps** (decisions D1 and D7). `createdAt` and `issuedAt` are the client's claims. A server records its own receipt time and uses that for ordering and retention; it refuses a document whose timestamp is more than a bounded skew ahead of its receipt time (baseline: 300 seconds) and keeps, but does not trust, timestamps in the past.
+6. **Timestamps** (decisions D1 and N6). `createdAt` and `issuedAt` are the client's claims. A server records its own receipt time and uses that for ordering and retention; it refuses a document whose timestamp is more than a bounded skew ahead of its receipt time (baseline: 300 seconds) and keeps, but does not trust, timestamps in the past.
 7. **Image declarations** (decision D5). An `ImageReference` is a claim about bytes the server has yet to receive. Before serving an asset the server verifies the received bytes against the declared digest, sniffed format, byte length and dimensions, and serves nothing that fails. What it serves after processing (downscaling) is attested by the server, not signed by the creator.
 8. **Limits a document cannot carry** (NETWORK0.md, section 7: profiles per persona, storage per persona, active shares) are enforced by the server with a server-side refusal, never by altering or dropping part of a document.
 9. **Texts are plain text** (decision N7). A server, like every consumer, never interprets a text as markup, a format string, a path, a URL or a command, never puts one into HTML unescaped, and passes texts to a database only as query parameters.
+10. **Request proofs** (decisions S1 and D7). A server accepts a document only as a submission whose request proof passes section 14.4, whatever the document's type. A document without a proof, or with one that fails, is refused and changes nothing. Resubmitting a stored document needs a fresh proof too, and a share code is returned only in reply to a submission with a valid proof. The server's deployment name comes from its configuration only (section 14.1). A server that accepts documents signed by real keys refuses to start with a name reserved for tests. The challenges:
+    - are issued from a cryptographically secure generator, at least 128 bits unpredictable to anyone else, and issuing them is rate-limited;
+    - are each accepted at most once, across every instance that serves the name, and only for a bounded time after issue (baseline: 300 seconds);
+    - are consumed in one atomic step (known, unexpired and unused, then removed) after section 14.4 has passed and before any state changes or any share code is issued, whatever the submission's outcome afterwards (a refused revision, a terminal retraction). A consumed challenge is never restored, and a server that loses its record of challenges treats every one it issued as consumed;
+    - are taken only from the proof; a challenge sent any other way is ignored;
+    - when refused, are refused with their own retryable error that carries a fresh challenge;
+    - are never logged, and neither are proofs.
+
+## 14. Request proof
+
+A request proof authorizes one submission of one signed document to one deployment of a server (decisions S1 and D7, [DecisionRegister.md](DecisionRegister.md)). A document on its own verifies anywhere, for anyone who holds a copy. A server accepts one only with a fresh proof from the document's own key, made for that server under a challenge the server issued (section 13, rule 10). So only a document's signer can submit it, only to the deployment they chose, and only once per challenge.
+
+| Offset | Size | Field | Value |
+|---|---|---|---|
+| 0 | 4 | magic | ASCII `AFRQ` (`41 46 52 51`) |
+| 4 | 2 | protocolVersion | `u16` = `0x8001` while the protocol is a draft (section 10); `1` after the freeze |
+| 6 | 1 | proofKind | `u8`: 1 = document submission. Closed: any other value is `InvalidValue` |
+| 7 | 65 | personaPublicKey | section 3 |
+| 72 | 1 | deploymentLength | `u8`, 1 to 253 |
+| 73 | n | deployment | the deployment name, section 14.1 |
+| 73 + n | 32 | challenge | section 14.2 |
+| 105 + n | 32 | subjectDigest | for kind 1, SHA-256 of the complete signed document submitted, signature included |
+| 137 + n | 64 | signature | section 6 |
+
+A proof is 201 + n bytes, at most **454**, and ends immediately after its signature. The kind decides the layout after it: this table is kind 1's, and a later kind may define its own.
+
+The signing input (section 5.1):
+
+```
+ProofSigningInput = u8(42) ‖ "AetherFrame.Protocol.RequestProof.v1-draft"
+                  ‖ u16(0x8001)                 protocol version (the draft marker)
+                  ‖ u8(proofKind)
+                  ‖ PublicKey[65]
+                  ‖ u8(n) ‖ deployment
+                  ‖ challenge[32]
+                  ‖ subjectDigest[32]
+```
+
+- The tag is the 42 ASCII bytes `4165746865724672616d652e50726f746f636f6c2e5265717565737450726f6f662e76312d6472616674`, preceded by its length as one byte (`0x2a`).
+- The input is therefore the tag with its length, followed by the proof's bytes from offset 4 up to the signature.
+- At the freeze the tag becomes the 36 ASCII bytes of `AetherFrame.Protocol.RequestProof.v1` (length byte `0x24`) and the version `u16(1)`.
+- `Digest = SHA-256(ProofSigningInput)` is the value ECDSA signs and verifies, as in section 5.
+
+### 14.1 The deployment name
+
+The DNS hostname a client connects to over HTTPS (decision R2), in its one canonical form:
+- 1 to 253 bytes. A length of 0 is `InvalidLength` and one over 253 `LimitExceeded`, before the bytes are looked at.
+- Labels separated by `.`, each 1 to 63 bytes of `a` to `z`, `0` to `9` and `-`, neither starting nor ending with `-`: the LDH syntax of RFC 5890, section 2.3.1, in lowercase.
+- The last label starts with a letter, as every top-level domain does, so no IP address literal in any notation (`127.0.0.1`, `0x7f000001`) is a name.
+- Nothing else: no uppercase, no trailing dot, no port, no scheme, no path. Anything else is `InvalidValue`; a name is refused, never normalized.
+
+An internationalized name appears only as A-labels (`xn--…`), which are not checked beyond this rule: both sides take the name from their own configuration and compare bytes.
+
+- A **client** takes the name from its own configuration, never from anything a server sends (a response, a header, a redirect), and builds the address it connects to from the name, never the name from an address.
+- A **server** takes its own name from its configuration, checks it with this rule when it starts, and compares proofs with it. It never uses the request's `Host` header, the TLS server name or anything else in the request for this.
+- Separate deployments (production, staging, another operator's) never share a hostname, since ports and paths are not part of the name.
+- Some names no real deployment can have, and only tests use them: a single label; `localhost` and names under it; names under `test`, `example` and `invalid` (RFC 2606, RFC 6761); `example.com`, `example.net`, `example.org` and names under them; and names under the special-use or infrastructure domains `local` (RFC 6762), `alt` (RFC 9476), `onion` (RFC 7686), `internal` and `arpa`, which are not ordinary public DNS names. Private-use names are not unique: two operators could both run `plates.internal`, and a proof made for one would work at the other. The vectors use `plates.example.com`, and one uses the longest name, under `example.com`.
+
+### 14.2 The challenge
+
+32 bytes a server issues for one proof, which the client copies into the proof unchanged. The all-zero value is refused (`InvalidValue`), so a buffer a server forgot to fill is never accepted. Text form: `chl_` followed by the 64 lowercase hex digits, parsed as strictly as the identifiers of section 2.6.
+
+What makes a challenge work is the server's side of it (unpredictable, used once, short-lived), which the protocol cannot check: section 13, rule 10.
+
+### 14.3 Reading a proof
+
+A reader performs these steps in this order and stops at the first failure with the error named:
+1. If the input is longer than 454 bytes: `LimitExceeded`.
+2. Read the magic; if fewer than 4 bytes remain: `Truncated`; if they are not `AFRQ`: `InvalidFraming`. A signed document (`AFPD`) is never read as a proof, nor a proof as a document.
+3. Read `protocolVersion`, as section 7.2, step 3: `UnsupportedVersion`.
+4. Read `proofKind`; anything but 1: `InvalidValue`.
+5. Read the 65 key bytes (not yet validated).
+6. Read `deploymentLength` and check it (section 14.1), then read the name and check it: `InvalidLength`, `LimitExceeded`, `Truncated` or `InvalidValue`.
+7. Read the challenge and check it (section 14.2), the subject digest and the 64 signature bytes; then, if any input remains: `TrailingBytes`. At each read, too little input is `Truncated`.
+8. Validate the key (section 3): `InvalidKey`.
+9. Validate the signature's form (section 6, rules 1 to 3): `InvalidSignature`.
+10. Build the signing input from the fields as read, and verify the signature with the key: `SignatureMismatch`.
+
+A proof that passes these steps authorizes nothing yet: it must also match the submission it came with.
+
+### 14.4 Checking a submission
+
+A server that receives a document with its proof checks, in this order, and stops at the first failure:
+1. The proof, as section 14.3.
+2. The proof's deployment name equals the server's own: otherwise `ProofMismatch`.
+3. The document is at most 1,048,576 bytes (section 7.2, step 1): otherwise `LimitExceeded`. Its SHA-256 equals the proof's `subjectDigest`: otherwise `ProofMismatch`.
+4. The document, as section 7.2.
+5. The document's key equals the proof's key: otherwise `ProofMismatch`.
+
+Only then does the server consume the challenge (section 13, rule 10), and only after that does it act on the document. It stores the exact bytes it hashed and verified in steps 3 and 4 (rule 3), never the request's buffer read a second time.
+
+What a server does with a submission is decided by the proof's kind and the document, and by nothing else in the request. No header, query or other field may change what is stored, which profile it is applied to, or any setting. A parameter that should change the outcome needs a proof kind that signs it.
 
 ## Appendix A. Background patterns
 

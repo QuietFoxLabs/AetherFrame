@@ -7,8 +7,9 @@ namespace AetherFrame.Protocol.Signing;
 /// can obtain a signature over bytes the protocol did not frame. NETWORK0 ships one implementation,
 /// the in-memory <see cref="EcdsaPersonaSigner"/>; a signer over protected local storage is a later
 /// milestone (docs/networking/NETWORK0.md, "NETWORK1 integration points"). The protocol does not
-/// trust an implementation: <see cref="Documents.SignedDocumentCodec.Sign"/> reads
-/// <see cref="PublicKey"/> once and verifies every signature before it becomes part of a document.
+/// trust an implementation: <see cref="Documents.SignedDocumentCodec.Sign"/> and
+/// <see cref="Requests.RequestProofCodec.Sign"/> read <see cref="PublicKey"/> once and verify every
+/// signature before it becomes part of a document or a proof.
 /// </summary>
 public interface IPersonaSigner
 {
