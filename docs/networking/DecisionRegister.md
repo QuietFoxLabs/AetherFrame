@@ -1242,6 +1242,31 @@ All of these are now above.
 - a publish is authenticated before it holds a publish slot or has its body read past the proof: section 14.4's first two steps, a live challenge, and a bound, allowed signer. The protocol library gains `RequestProofCodec.CheckSubmissionProof` for those two steps. It changes no signed byte and authorizes nothing: `VerifySubmission`, with the document, is still what lets the server act. The specification's section 14.4 says a server may take its first two steps early;
 - a taken-over key's identity is kept, with no time, until that key binds again or opts out, so its plugin can be told. It never expires on its own: in stage 1 that is at most a row per takeover among two testers, and C7's list of what is kept names it.
 
+**N2-7c** (the image worker) applies I2 under the same approval (ServerApi-v1.md, section 8):
+- **One job per worker run.** The worker ends after each job, and a fresh container runs the next (N2-8), rather than the worker forking a decoder per job, so a job's processes end when its container does.
+  - A watchdog in the worker ends a stuck run 20 seconds after its job arrives (`Environment.FailFast`).
+  - It shares the run's process, so a run an exploit controls can defeat it, stay connected and take a later job. What bounds such a run is the deployment: N2-8 ends every worker container from outside after a fixed life, whatever it is doing, and starts a new one.
+  - Docker's restart policy can't do that, since its backoff grows between short runs, so N2-8 supervises the runs itself.
+- **Limits from the container.** The rlimits, the GC heap hard limit, `oom_score_adj` and the memory and process limits are the container's (N2-8).
+- **The socket.** It is the server's, mode 0660: the worker runs as its own user in the server's group (N2-8), and no one else can connect.
+- **The output check** compares a JPEG with the bytes ImageSharp 3.1.12 writes at quality 90, 4:2:0: its JFIF header, frame components, Huffman and quantization tables and scan header, byte for byte.
+  - Only the frame's size varies, and it must be the declared one.
+  - A PNG must be IHDR (8-bit RGBA), then only IDAT, then IEND.
+  - Tests cover images with metadata, greyscale JPEGs, 1-by-1 and 900-by-700 images (many IDAT chunks), an EXIF rotation (not applied), and hostile output: fill bytes, a thumbnail, other tables, a marker in the scan, and cut-off bytes at every length. Each is refused without throwing.
+- **Integrity.** I2's "strict segment integrity" is ImageSharp 4's `SegmentIntegrityHandling`. In 3.1.12 a PNG is decoded with `PngCrcChunkHandling.IgnoreNone`, so a CRC error in any chunk refuses it. Its JPEG decoder has no such switch, so a JPEG's segment integrity rests on section 8.2.1's walk before the decoder, and on the worker's isolation.
+- **ImageSharp 3.1.12, not 4.x.** 4.x checks a signed licence key at build time, which needs an account with Six Labors. That decision is the owner's, and is asked in the Owner inbox. 3.1.12 is the 3.x line's last release. Six Labors' advisories that 3.x doesn't fix, and why none reaches this worker, as the security review checked (September 30, 2026):
+
+  | Advisory | What it needs | Here |
+  | --- | --- | --- |
+  | GHSA-jj3q-cwqj-842r, GHSA-v76p-62qx-wwq2 (August 20, 2026) | TIFF CCITT or tiled fax decoding | no TIFF codec is configured, and section 8.2.1 refuses anything but PNG and JPEG first |
+  | GHSA-wmxv-xphr-5c9g (September 15) | BigTIFF decoding | the same |
+  | GHSA-jjfr-hcj7-qf5w, GHSA-j9gm-c75j-xc9q (September 15) | the TIFF CCITT encoders | the worker encodes only PNG and JPEG |
+  | GHSA-gwg2-r3hj-4w44 (September 15) | parsing an ICC profile's CLUT | metadata is skipped, so no profile is read; PNGs with `iCCP` are refused by section 8.2.1 |
+  | GHSA-j3p4-wp97-rph4 (September 15) | HistogramEqualization | not called |
+
+  GHSA-ffp7-56pq-64mr and GHSA-4q3p-rj5x-xv7p affect 4.x only. A new advisory is checked the same way when it appears. One that reaches the PNG or JPEG decoders as configured means the owner's licence key, and 4.x, before the server takes images again.
+- I2's recorded limit (a process left behind by one job reading a later one) is narrowed by one run per job and by N2-8's fixed life for each run. It is not closed, since a run an exploit controls can take the jobs that come during its life. I2's condition for widening the allowlist (per-job isolation, verified by the host) stands.
+
 N2-7b's security review examined these with the code (September 30, 2026). It asked for the day-number rule and the check's floor above, a limit on opting out per address, challenges from a `409` counted against the address, a deadline over the whole Lodestone fetch, re-reads applied only to the character they read, and checkpoints that a disconnect can't skip. All are applied.
 
 ## Gates

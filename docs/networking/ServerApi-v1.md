@@ -2,7 +2,7 @@
 
 What `server/AetherFrame.Server` answers, and how the plugin (N2-9 and N2-10) talks to it. It carries the protocol of [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) over HTTPS and applies decision batches B and C ([DecisionRegister.md](DecisionRegister.md)). It is a draft, like the protocol, until the owner's two-player test (NETWORK2.md, section 2) has passed.
 
-**Built so far** (N2-7b): everything below. The image worker (decision I2) comes in N2-7c; until then the server refuses every image (`image-refused`), so a Plate with images isn't published, rather than served unprocessed.
+**Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed.
 
 ## 1. Transport
 
@@ -122,3 +122,22 @@ Recorded in DecisionRegister.md as "N2-7b's server details":
 - **Forwarded headers** are believed from `AetherFrame:KnownProxies` alone (R4). The server refuses to start with ASP.NET Core's `ForwardedHeaders_Enabled` switch on, from any configuration source, since that switch clears the trusted lists; N2-8 puts Caddy's container address in `KnownProxies`, or every client would share one address's limits.
 - **A deletion's checkpoint** runs after the deletion commits, whether or not the client is still there. One that readers block for 30 seconds is retried every 30 seconds until it completes (D1).
 - **The allowlist** is read from the configuration at each use. Configuration from environment variables is read once, at start, so N2-8 keeps it in a configuration file that reloads, or removing an id takes a restart.
+
+## 8. The image worker
+
+Decision I2's worker, `server/AetherFrame.ImageWorker`, decodes each image a publish carries and encodes it again. The server serves only what the worker made, and only after checking it.
+- **The exchange.** The server owns a Unix socket (`AetherFrame:ImageWorkerSocket`) in a folder the worker's container mounts read-only. A worker run connects and receives one job:
+  - the job is `AFIJ`, version 1, the format (1 PNG, 2 JPEG), the width, the height, then the bytes;
+  - the run answers once, with `AFIR`, version 1, an outcome (0 re-encoded, 1 refused) and the bytes;
+  - then it ends. Both sides read strictly, within 8 MiB, and the server trusts nothing the worker sends.
+- **One job per run.** The worker's container is started again for the next job, so no process of one job survives into another once its run ends. A watchdog in the worker ends a stuck run 20 seconds after its job arrives. It runs in the worker's own process, so a run an exploit controls can defeat it. What bounds that run is the deployment, which ends every worker run from outside after a fixed life (N2-8). The server gives a job 30 seconds from the moment it is queued to get its turn and a worker, and a worker 30 seconds to answer. Jobs run one at a time, and at most 16 wait; beyond that, or with no worker in time, the publish gets `503`.
+- **Re-encoding.** ImageSharp's PNG and JPEG codecs only, with the GC heap as the allocator. The image is identified first and must match its declared format and size. One frame is decoded, with no metadata. The encoding is fixed: 8-bit RGBA non-interlaced PNG, or baseline 4:2:0 JPEG at quality 90, with no metadata block and no colour profile applied.
+- **The server's check** of the answer: section 8.2.1, the declared format and size, and exactly what the worker's encoder writes, and nothing more:
+  - for a PNG, `IHDR` (8-bit, RGBA, not interlaced), then only `IDAT`, then `IEND` at the very end;
+  - for a JPEG, the encoder's fixed bytes, compared exactly: SOI, its JFIF header (no thumbnail), a baseline frame of the declared size with its 4:2:0 components, its Huffman and quantization tables, and its scan header. Then entropy-coded data with no marker in it, and EOI.
+
+  A compromised worker therefore can't hand viewers tables, thumbnails or segments of its own. Every read in the check is bounded, and hostile output is refused, never thrown on.
+- **PNG checksums.** A PNG is decoded with every chunk's CRC checked, which is ImageSharp 3's form of I2's "strict segment integrity". Its JPEG decoder has no such switch.
+- **ImageSharp 3.1.12**, pinned by the lock file: the 3.x line's last release. The Six Labors Split License grants its Apache 2.0 terms to software under an open source licence, and AetherFrame is AGPL-3.0.
+  - Six Labors' advisories of August and September 2026 are fixed only in 4.1.x. None reaches this worker's configuration, as the register records for each.
+  - ImageSharp 4 checks a signed licence key at build time, which needs an account with Six Labors, and so the owner. The move to 4.x waits for the owner's decision in the Owner inbox.

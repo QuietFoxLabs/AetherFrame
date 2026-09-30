@@ -57,7 +57,12 @@ builder.Services.AddSingleton<Rereads>();
 builder.Services.AddSingleton<ContentStore>();
 builder.Services.AddSingleton<PublishSlots>();
 builder.Services.AddSingleton<Viewing>();
-builder.Services.AddSingleton<IImageProcessor, NoImageProcessor>();
+builder.Services.AddSingleton<ImageWorkerClient>();
+builder.Services.AddHostedService(services => services.GetRequiredService<ImageWorkerClient>());
+builder.Services.AddSingleton<IImageProcessor>(services =>
+    string.IsNullOrEmpty(services.GetRequiredService<IOptions<ServerOptions>>().Value.ImageWorkerSocket)
+        ? new NoImageProcessor()
+        : services.GetRequiredService<ImageWorkerClient>());
 builder.Services.AddHostedService<DatabaseStartup>();
 builder.Services.AddHostedService<CheckpointRetries>();
 builder.Services.AddHostedService<Housekeeping>();

@@ -46,6 +46,15 @@ internal sealed class TestServer : WebApplicationFactory<Program>
 
     public CapturedLog Log { get; } = new();
 
+    /// <summary>Whether the server talks to real worker runs over <see cref="ImageWorkerSocket"/>, rather than to <see cref="Images"/>. Set before the server starts.</summary>
+    public bool UseImageWorker { get; set; }
+
+    /// <summary>
+    /// The worker socket, in a short folder of its own: a Unix socket's path is limited to about 108
+    /// bytes, and some temporary folders are long.
+    /// </summary>
+    public string ImageWorkerSocket { get; } = Path.Combine(Path.GetTempPath(), "afw-" + Guid.NewGuid().ToString("N")[..12], "i.sock");
+
     /// <summary>The image worker: by default, it returns what it's given.</summary>
     public FakeImages Images { get; } = new();
 
@@ -72,6 +81,11 @@ internal sealed class TestServer : WebApplicationFactory<Program>
         builder.UseSetting("AetherFrame:AllowTestDeploymentName", "true");
         builder.UseSetting("AetherFrame:DatabasePath", DatabasePath);
         builder.UseSetting("AetherFrame:RereadsEnabled", "false");
+        if (UseImageWorker)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(ImageWorkerSocket)!);
+            builder.UseSetting("AetherFrame:ImageWorkerSocket", ImageWorkerSocket);
+        }
         for (var index = 0; index < Allowed.Length; index++)
         {
             builder.UseSetting($"AetherFrame:AllowedLodestoneIds:{index}", Allowed[index].ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -86,8 +100,11 @@ internal sealed class TestServer : WebApplicationFactory<Program>
             // The real Lodestone client, logging and all, with only its connection replaced.
             services.AddHttpClient(LodestoneHttpPages.ClientName).ConfigurePrimaryHttpMessageHandler(() => new FakeLodestoneHandler(Lodestone));
             services.PostConfigure<ServerOptions>(options => options.CheckFailureFloor = CheckFailureFloor);
-            services.RemoveAll<AetherFrame.Server.Images.IImageProcessor>();
-            services.AddSingleton<AetherFrame.Server.Images.IImageProcessor>(Images);
+            if (!UseImageWorker)
+            {
+                services.RemoveAll<AetherFrame.Server.Images.IImageProcessor>();
+                services.AddSingleton<AetherFrame.Server.Images.IImageProcessor>(Images);
+            }
         });
     }
 
@@ -95,12 +112,18 @@ internal sealed class TestServer : WebApplicationFactory<Program>
     {
         base.Dispose(disposing);
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try
+        foreach (var path in new[] { folder, Path.GetDirectoryName(ImageWorkerSocket)! })
         {
-            Directory.Delete(folder, recursive: true);
-        }
-        catch (IOException)
-        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+            }
         }
     }
 

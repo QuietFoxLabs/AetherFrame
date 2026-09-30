@@ -48,6 +48,12 @@ public sealed class ServerOptions
     /// </summary>
     public List<string> Worlds { get; set; } = [];
 
+    /// <summary>
+    /// The Unix socket the server listens on for image worker runs (decision I2), in a folder the
+    /// worker's container mounts read-only. Empty: no worker, and every image is refused.
+    /// </summary>
+    public string ImageWorkerSocket { get; set; } = "";
+
     /// <summary>The oldest plugin version the server answers, told to plugins by <c>/v1/status</c>.</summary>
     public string MinimumPlugin { get; set; } = "0.1.6";
 

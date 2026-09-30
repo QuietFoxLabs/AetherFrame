@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AetherFrame.Server\AetherFrame.Server.csproj" />
+    <ProjectReference Include="..\AetherFrame.ImageWorker\AetherFrame.ImageWorker.csproj" />
   </ItemGroup>
 
   <!-- The same test packages, at the same versions, as the other test projects. -->
