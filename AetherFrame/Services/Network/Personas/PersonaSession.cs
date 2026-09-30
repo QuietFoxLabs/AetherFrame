@@ -246,8 +246,30 @@ public sealed class PersonaSession
     /// </summary>
     public bool TryStart(string name, Func<PersonaManager, PersonaOperationOutcome> work, bool auditAfterFailure = false)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(work);
+        return StartOperation(name, work, auditAfterFailure, record: true);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="work"/> on the manager as <see cref="TryStart"/> does (one operation at a
+    /// time, off the framework thread, and waited for by unloading), for a caller that keeps its own
+    /// result, such as publishing (N2-6c). The view's last outcome is left as it was, so the persona
+    /// window never takes another window's operation for one of its own. When the work throws, the
+    /// session logs its kind and leaves the view as it was.
+    /// </summary>
+    public bool TryRun(string name, Action<PersonaManager> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        return StartOperation(name, manager =>
+        {
+            work(manager);
+            return PersonaOperationOutcome.Done();
+        }, auditAfterFailure: false, record: false);
+    }
+
+    private bool StartOperation(string name, Func<PersonaManager, PersonaOperationOutcome> work, bool auditAfterFailure, bool record)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
         var lease = seams.BeginOperation();
         if (lease is null)
         {
@@ -271,7 +293,7 @@ public sealed class PersonaSession
             return false;
         }
 
-        _ = Task.Run(() => RunOperation(name, target, work, auditAfterFailure, lease));
+        _ = Task.Run(() => RunOperation(name, target, work, auditAfterFailure, record, lease));
         return true;
     }
 
@@ -479,7 +501,7 @@ public sealed class PersonaSession
         }
     }
 
-    private void RunOperation(string name, PersonaManager target, Func<PersonaManager, PersonaOperationOutcome> work, bool auditAfterFailure, IDisposable lease)
+    private void RunOperation(string name, PersonaManager target, Func<PersonaManager, PersonaOperationOutcome> work, bool auditAfterFailure, bool record, IDisposable lease)
     {
         PersonaOperationOutcome outcome = PersonaOperationOutcome.Failed(null);
         try
@@ -493,7 +515,10 @@ public sealed class PersonaSession
         }
         finally
         {
-            Finish(lease, current => current.With(busy: false, lastOutcome: outcome, audit: outcome.Audit));
+            // An operation that keeps its own result leaves the view's last outcome as it was.
+            Finish(lease, record
+                ? current => current.With(busy: false, lastOutcome: outcome, audit: outcome.Audit)
+                : current => current.With(busy: false, lastOutcome: null, audit: null));
         }
     }
 

@@ -299,9 +299,9 @@ internal sealed class SnapshotCandidate
     /// <summary>
     /// Claims the candidate for its one signing attempt: true the first time, false ever after, even
     /// when that attempt failed. A signed revision takes its asset ids for good (N1), so a candidate
-    /// is signed at most once, and every result past the claim builds a new candidate. That keeps
-    /// two revisions from sharing an asset id only while every candidate has ids of its own: N2-6c's
-    /// second part draws them afresh for each candidate it builds.
+    /// is signed at most once, and every result past the claim builds a new candidate. With
+    /// <see cref="PlateSnapshotBuilder.Map"/> declaring every candidate's copies under asset ids of
+    /// its own, no two revisions, and no two personas, ever share one.
     /// </summary>
     internal bool TryClaimForSigning() => Interlocked.Exchange(ref claimed, 1) == 0;
 }

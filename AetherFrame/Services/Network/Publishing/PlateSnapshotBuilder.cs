@@ -115,10 +115,13 @@ internal static class PlateSnapshotBuilder
 
     /// <summary>
     /// The candidate for <paramref name="plate"/>, given what preparing each required copy
-    /// produced (<paramref name="preparations"/>, one for every requirement: its prepared copy,
-    /// with a fresh asset id, decision N1, its declaration and bytes, decision D5; or why there is
-    /// none), or every reason the Plate can't be shared as it is. The Plate
-    /// <see cref="TryResolve"/> was given must not have changed since.
+    /// produced (<paramref name="preparations"/>, one for every requirement: its prepared copy, its
+    /// declaration and bytes, decision D5; or why there is none), or every reason the Plate can't be
+    /// shared as it is. The Plate <see cref="TryResolve"/> was given must not have changed since.
+    /// Every copy the candidate uses is declared under an asset id drawn for this candidate alone
+    /// (N1), since neither the bytes nor the digest carry it: candidates built from the same
+    /// preparations never share one, and a candidate is signed at most once
+    /// (<see cref="SnapshotCandidate.TryClaimForSigning"/>), so no two revisions ever do.
     /// <list type="bullet">
     /// <item>An image whose managed file is missing or undecodable is left out when a component
     /// draws it, as the renderer draws nothing there, and refused when an element or the
@@ -933,13 +936,19 @@ internal static class PlateSnapshotBuilder
                 if (!checkedCopies.TryGetValue(requirement, out var asset))
                 {
                     var bytes = copy.Bytes.ToArray();
-                    asset = IsCopyOf(copy.Reference, bytes, requirement) ? copy.Reference.AssetId : null;
-                    checkedCopies[requirement] = asset;
-                    if (asset is not null)
+                    asset = null;
+                    if (IsCopyOf(copy.Reference, bytes, requirement))
                     {
-                        used.Add(copy.Reference);
+                        // Declared under an asset id of this candidate's own (N1): a preparation
+                        // may be used again, a candidate's ids never are.
+                        var declared = copy.Reference;
+                        var own = new ImageReference(AssetId.NewId(), declared.Sha256, declared.Format, declared.ByteLength, declared.Width, declared.Height);
+                        asset = own.AssetId;
+                        used.Add(own);
                         usedBytes.Add(bytes);
                     }
+
+                    checkedCopies[requirement] = asset;
                 }
 
                 if (asset is null)

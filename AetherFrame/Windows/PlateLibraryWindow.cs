@@ -143,6 +143,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     /// <summary>Opens the persona window, when this build has one; the header shows a Personas button only then.</summary>
     internal Action? OpenPersonas { get; set; }
 
+    /// <summary>Checks what sharing a Plate would send, when this build can; a Plate's menu shows the item only then.</summary>
+    internal Action<Guid>? CheckSharing { get; set; }
+
     public void Dispose()
     {
     }

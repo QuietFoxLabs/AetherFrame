@@ -160,6 +160,11 @@ internal sealed partial class PlateLibraryWindow
                 OpenExportDialog(plate.PlateId, plate.DisplayName);
             }
 
+            if (CheckSharing is { } checkSharing && ImGui.MenuItem("Check what would be shared (preview)"))
+            {
+                checkSharing(plate.PlateId);
+            }
+
             ImGui.Separator();
 
             if (ImGui.MenuItem("Rename"))

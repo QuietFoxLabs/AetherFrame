@@ -612,7 +612,8 @@ public sealed class PlateSnapshotBuilderTests
 
             var resolved = Resolve(plate);
             var prepared = Prepared(resolved);
-            var background = Build(resolved, prepared).Background;
+            var snapshot = Build(resolved, prepared);
+            var background = snapshot.Background;
 
             if (mode == ProfileBackgroundMode.None)
             {
@@ -634,9 +635,48 @@ public sealed class PlateSnapshotBuilderTests
             Assert.Equal(LayoutImageFit.Fit, background.ImageFit);
             Assert.Equal(LayoutFlips.Vertical, background.ImageFlips);
 
-            // Only Image mode shares its image; any other mode never names the one it kept.
-            Assert.Equal(mode == ProfileBackgroundMode.Image ? prepared.Values.Single().Copy!.Reference.AssetId : default, background.ImageAssetId);
+            // Only Image mode shares its image, under the candidate's own declaration of the
+            // prepared copy; any other mode never names the one it kept.
+            Assert.Equal(mode == ProfileBackgroundMode.Image ? snapshot.Images.Single().AssetId : default, background.ImageAssetId);
             Assert.Equal(mode == ProfileBackgroundMode.Image ? 1 : 0, resolved.Requirements.Count);
+            if (mode == ProfileBackgroundMode.Image)
+            {
+                var copy = prepared.Values.Single().Copy!.Reference;
+                Assert.NotEqual(copy.AssetId, background.ImageAssetId);
+                Assert.Equal(copy.Sha256ToArray(), snapshot.Images.Single().Sha256ToArray());
+            }
+        }
+    }
+
+    [Fact]
+    public void CandidatesBuiltFromTheSamePreparations_ShareNoAssetId()
+    {
+        var plate = Blank();
+        plate.Elements.Add(new ImageProfileElement { AssetId = Guid.NewGuid(), Size = new Vector2(64f, 32f), ZIndex = 0 });
+        plate.Elements.Add(new ImageProfileElement { AssetId = Guid.NewGuid(), Position = new Vector2(100f, 0f), Size = new Vector2(64f, 32f), ZIndex = 1 });
+        plate.Background = new ProfileBackground { Mode = ProfileBackgroundMode.Image, ImageAssetId = Guid.NewGuid(), Opacity = 1f };
+        var resolved = Resolve(plate);
+        var prepared = Prepared(resolved);
+
+        var first = Candidate(resolved, prepared);
+        var second = Candidate(resolved, prepared);
+
+        // The same copies, each declared under an asset id of its candidate's own (N1).
+        Assert.Equal(3, first.Images.Count);
+        Assert.Equal(first.Images.Select(i => Convert.ToHexString(i.Sha256)), second.Images.Select(i => Convert.ToHexString(i.Sha256)));
+        var preparedIds = prepared.Values.Select(p => p.Copy!.Reference.AssetId).ToHashSet();
+        var firstIds = first.Images.Select(i => i.AssetId).ToHashSet();
+        var secondIds = second.Images.Select(i => i.AssetId).ToHashSet();
+        Assert.Empty(firstIds.Intersect(secondIds));
+        Assert.Empty(firstIds.Intersect(preparedIds));
+        Assert.Empty(secondIds.Intersect(preparedIds));
+
+        // Each candidate's items and background name its own declarations, and nothing else.
+        foreach (var candidate in new[] { first, second })
+        {
+            var own = candidate.Images.Select(i => i.AssetId).ToHashSet();
+            var drawn = candidate.Items.OfType<LayoutImage>().Select(i => i.AssetId).Append(candidate.Background.ImageAssetId).ToHashSet();
+            Assert.True(own.SetEquals(drawn));
         }
     }
 
