@@ -98,7 +98,7 @@ public static class PersonaWindowModel
     /// </summary>
     public const string K4Text = "If this persona's key is lost, you can never update or unpublish what it shared, and no account can recover it; only the server's operator can then remove it, on your request. "
         + "Keys are lost by reinstalling Windows, moving to a new PC, deleting AetherFrame's data, or an administrator resetting your Windows password. "
-        + "AetherFrame's Network\\Personas folder holds your keys and the list of what each persona shared: keeping it keeps that list. "
+        + "AetherFrame's Network\\Personas folder holds your keys and the list of what each persona shared: keeping it keeps that list, which you need to update or unpublish. "
         + "It isn't a backup, though: on a new PC or a reinstalled Windows, the keys in it normally won't open.";
 
     /// <summary>What K2 says the plugin tells the player about the key's protection.</summary>

@@ -474,7 +474,7 @@ Persona features turn on only after all three. Each failure gives one message na
 - it is a separate confirmation with that text, naming the ordinary ways a key is lost: reinstalling Windows, moving to a new PC, deleting the plugin's data, or an administrator resetting the Windows password, which loses the key DPAPI protected it with;
 - it is recorded per persona in the persona registry, and asked once per persona; `[updated 2026-09-30: N2-5a records it as bit 0 of the record's flags (P3), set by PersonaManager.Acknowledge; a created or restored persona starts without it. N2-5b's window asks for it.]` `[updated 2026-09-30: N2-5c's persona window asks for it: the step opens, scrolled into view, whenever a persona is created or restored, names the persona, gives this text with K2's disclosure, and records nothing until the player ticks "I understand" and chooses Acknowledge; "Not now" leaves it to be asked again.]`
 - it is repeated in the persona window whenever a persona is created.
-- `[updated 2026-09-30: decision batch B adds to the text: once the key is lost, only the server's operator can remove what the persona published (S3); and the plugin's networking directory holds the keys and the list of what each persona published, which keeping it keeps, but it is no backup of the identity, since on a new PC or a reinstalled Windows its keys normally won't open (P4). The persona window says both.]`
+- `[updated 2026-09-30: decision batch B adds to the text: once the key is lost, only the server's operator can remove what the persona published (S3); and the plugin's networking directory holds the keys and the list of what each persona published, which keeping it keeps and which updating or unpublishing needs, but it is no backup of the identity, since on a new PC or a reinstalled Windows its keys normally won't open (P4). The persona window says both.]`
 
 Once the backup exists (stage 2), the first publish offers the backup first and the acknowledgement as the alternative.
 
@@ -724,7 +724,7 @@ The entries below were decided together for NETWORK2's increments N2-7, the serv
 - tests hold a reader open to prove the retry, and read `secure_delete` back from a fresh pooled connection;
 - N2-8's backups have a stated retention, quoted in the consent text, after which a deletion has reached every copy.
 
-**The order of checks** on every submission: section 14.4's proof, then the tombstone, then rule 4's revision check. Only the key holder ever learns "retracted", and a repeated retraction succeeds.
+**The order of checks** on every submission: section 14.4's proof, then, in stage 1, the persona allowlist (I2), then the tombstone, then rule 4's revision check. Only the key holder ever learns "retracted", and a repeated retraction succeeds.
 
 **Profiles the server never saw** are tombstoned too, rate-limited per persona and per address, since personas cost nothing and these rows are permanent and traceable to no one. A first snapshot still in flight (its challenge lives 300 seconds) that arrives after the unpublish is then refused.
 
@@ -826,13 +826,13 @@ The specification's section 8.4 "Open (N2)" paragraph is removed, and section 13
 
 **Option and scope for stage 1:**
 - no automatic expiry;
-- the operator (the owner) removes a profile on request, and verifies the requester out of band. A share code proves nothing about authorship, since every viewer holds it; in stage 1 only the two testers can ask;
+- the operator (the owner) removes a profile on request, and verifies the requester out of band. A share code proves nothing about authorship, since every viewer holds it; in stage 1 only the two testers can ask, since the persona allowlist (I2) lets only their personas publish;
 - a removal is a retraction in every way: the same deletions and the same tombstone (D1, S2);
 - K4's text mentions this path.
 
-**Not settled:** expiry after long inactivity, disclosed in advance, decided before any public server.
+**Not settled:** expiry after long inactivity, disclosed in advance, decided before the allowlist is removed.
 
-**Independent concurrence.** The same review **concurred** with no automatic expiry in stage 1. It asked that the operator verify a removal request out of band, since every viewer holds the share code, and that a removal delete and tombstone exactly as a retraction does, both above.
+**Independent concurrence.** The same review **concurred** with no automatic expiry in stage 1. It asked that the operator verify a removal request out of band, since every viewer holds the share code, and that a removal delete and tombstone exactly as a retraction does, both above. When it checked this recording, it asked that the allowlist (I2) enforce "only the two testers".
 
 ### S4: a persona-level revocation document. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
 
@@ -860,17 +860,18 @@ The specification's section 8.4 "Open (N2)" paragraph is removed, and section 13
 **Serving:** only under the share code, by index (D6), never by asset id or digest; with a fixed `Content-Type`, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`.
 
 **Isolation in stage 1:**
+- **Only the testers upload.** The server's configuration holds a persona allowlist: the two testers' persona ids, which the operator receives from them out of band (N2-8's runbook). A submission from any other persona is refused right after section 14.4's proof, before the tombstone, rule 7 or any decoding. Viewing by code stays open to anyone. The repository is public, so without the allowlist anyone could build the preview flavour, or write a client from the specification, make a persona for nothing, and upload to the owner's server.
 - The worker runs in a container of its own: `network_mode: none`, a read-only root filesystem, no database, tombstone key or configuration mounted, its own memory limit and a limit on its number of processes. Its environment carries no secret.
 - The server owns the listening socket, and the worker connects to it over a read-only mount, so the worker has no socket it could replace.
 - Decoders run one at a time. Each starts in its own process group with rlimits, an explicit GC heap hard limit and `oom_score_adj` 1000, and the group is killed when its job ends, whatever the outcome.
 - The server's queue of images is bounded at 16, refusing with a retryable error when full.
 - N2-8 checks at startup that the worker container has no network.
 
-**The limit, recorded.** In stage 1 the decoders run as the worker host's user. An exploit could therefore leave a process behind that outlives its job (a process can leave its group) and reads a later upload through `/proc`: another persona's image. It could also write a later job's output. The checks above see structure, not pixels, so the image could reach its thief in the pixels of the thief's own later upload. It has no network, database or key to reach. This is accepted for the two-player test on the owner's server only. **Per-job isolation is a condition of any server open to more than the two testers:** each decode runs as a user or in a namespace of its own, no process of it survives the job, and the host verifies that before the next one starts.
+**The limit, recorded.** In stage 1 the decoders run as the worker host's user. An exploit could therefore leave a process behind that outlives its job (a process can leave its group) and reads a later upload through `/proc`: another persona's image. It could also write a later job's output. The checks above see structure, not pixels, so the image could reach its thief in the pixels of the thief's own later upload. It has no network, database or key to reach. This is accepted for the two-player test on the owner's server only, where the allowlist confines uploads to the two testers' personas. **Removing the allowlist, to open a server to more than the two testers, requires per-job isolation,** and S3's decision on expiry: each decode runs as a user or in a namespace of its own, no process of it survives the job, and the host verifies that before the next one starts.
 
 **Rationale.** A hostile client can upload crafted bytes that match its own declaration, and every viewer decodes the result through Dalamud's native texture pipeline. ImageSharp is managed code, but not memory-safe in practice: CVE-2024-27929 was a use-after-free in its PNG decoder, CVE-2024-32036 left buffers uncleared, so output could carry another image's data, and more advisories came in September 2026.
 
-**Independent concurrence.** The same review **concurred**. It found ImageSharp's decoders not memory-safe in practice, and asked for rule 7's hash and length check before any decode; a worker container with no network, database, key or configuration; the server owning the socket; one decoder at a time, killed after its job; bounded memory and a bounded queue; and the worker's output treated as untrusted, down to its chunk inventory. All are now above. It asked for the limit's wording above, and concurred with accepting that risk for the two-player test on the owner's server, with per-job isolation required before any wider server, as proportionate.
+**Independent concurrence.** The same review **concurred**. It found ImageSharp's decoders not memory-safe in practice, and asked for rule 7's hash and length check before any decode; a worker container with no network, database, key or configuration; the server owning the socket; one decoder at a time, killed after its job; bounded memory and a bounded queue; and the worker's output treated as untrusted, down to its chunk inventory. All are now above. It asked for the limit's wording above, and concurred with accepting that risk for the two-player test on the owner's server, once an allowlist restricts uploads to the two testers' personas, with per-job isolation required before any wider server, as proportionate. It asked for that allowlist when it checked this recording (September 30, 2026), since nothing else stopped anyone else from uploading.
 
 ### R4: the share-code format. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
 
@@ -997,7 +998,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 
 ## 3. Decisions needed before the freeze or the first real server (G3)
 
-**Every row of this table is now approved** (decision batch B, September 30, 2026); K5 moved to the "D2 details" gate. A server may accept documents signed by real keys once N2-7 and N2-8 apply these decisions. The freeze stays the owner's, and L13 (section 5) is due before it.
+**Every row of this table is now approved** (decision batch B, September 30, 2026); K5 moved to the "D2 details" gate. The two-player test's server may accept documents signed by real keys once N2-7 and N2-8 apply these decisions. A server open to anyone else also needs I2's per-job isolation and S3's decision on expiry. The freeze stays the owner's, and L13 (section 5) is due before it.
 
 | Id | Question | Baseline | Recommendation (not approved) | Bytes | Status |
 |---|---|---|---|---|---|
@@ -1023,7 +1024,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | S2 | What a tombstone holds | Approved: HMAC-SHA256 under a tombstone key over (persona id, profile id), with the key's version and nothing else, kept for the deployment's life (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | S3 | Profiles whose key is lost | Approved for stage 1: no automatic expiry; the operator removes a profile on a request verified out of band, exactly as a retraction (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | S4 | A persona-level revocation document | Approved: deferred; the runbook covers a stolen key (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
-| I2 | Server image processing | Approved: every image re-processed by an isolated worker whose output is checked before storing, and served by index with fixed types; per-job isolation before any server wider than the two testers (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| I2 | Server image processing | Approved: every image re-processed by an isolated worker whose output is checked before storing, and served by index with fixed types; uploads only from an allowlist of the two testers' personas in stage 1, and per-job isolation before the allowlist is removed (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | R4 | The share-code format | Approved: `AF-` and 16 Crockford Base32 symbols, 75 random bits and a Damm check symbol; only in request bodies; lookups rate-limited per IPv4 /32 and per IPv6 /64, /56 and /48 (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | S5 | Server logging | Approved: no address stored in stage 1; logs hold no document, proof, challenge, share code or identifier, and are kept 14 days (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | P4 | A signed request that lists a persona's profiles | Approved: none in stage 1; the operator path (S3) covers a lost publication index (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |

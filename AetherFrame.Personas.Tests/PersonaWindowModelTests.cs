@@ -36,7 +36,7 @@ public sealed class PersonaWindowModelTests
         // persona folder does and doesn't do (P4).
         Assert.Contains("only the server's operator can then remove it", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("Network\\Personas folder holds your keys and the list of what each persona shared", PersonaWindowModel.K4Text, StringComparison.Ordinal);
-        Assert.Contains("keeping it keeps that list", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+        Assert.Contains("keeping it keeps that list, which you need to update or unpublish", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("It isn't a backup", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("normally won't open", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("Any program running as you, other Dalamud plugins included, can use it", PersonaWindowModel.K2Disclosure, StringComparison.Ordinal);
