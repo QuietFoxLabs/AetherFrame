@@ -335,9 +335,16 @@ public class OnboardingCoordinatorTests
         {
             if (!coordinator.Next(Basic))
             {
-                // "Add text" waits for a text element: the player adds one in the Advanced Editor.
-                Assert.Equal("text.add", coordinator.Session.CurrentStep!.Id);
-                Assert.True(coordinator.Next(Basic with { ActiveEditor = EditorSurfaceKind.Advanced, ElementSelected = true, TextElementSelected = true }));
+                // A held step (the Advanced Editor's steps, "Add text"): the player does what it
+                // shows, and then Next moves on.
+                var met = Basic;
+                for (var i = 0; coordinator.Session.IsNextHeld(met); i++)
+                {
+                    Assert.True(i < 4, coordinator.Session.CurrentStep!.Id);
+                    met = TutorialSessionTests.Meeting(met, coordinator.Session.NextWaitsFor(met));
+                }
+
+                Assert.True(coordinator.Next(met));
             }
 
             Assert.True(++guard < 200);
