@@ -75,7 +75,11 @@ The owner chose "Approve both now", whose stated terms were:
 
 Only the owner can change this approval.
 
-`[updated 2026-09-29: N2-3 is delivered as two increments, N2-3a (the layout schema) and N2-3b (the request proof), within the same approved scope. Each meets the conditions on its own: its decisions recorded, clean independent and security reviews, and green CI.]`
+**How N2-3 is delivered.** APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026. N2-3 is delivered as two increments, each with the conditions above applied on its own:
+- **N2-3a**, the layout schema: its decisions are D5, D8, D9a, I1, N1 and N7, all recorded in decision batch A.
+- **N2-3b**, the request proof: its decisions are S1, D7 and L8, recorded in N2-3b before it merges.
+
+The signed-byte changes the owner approved are unchanged: the layout schema and the request proof, nothing more. Rationale: two smaller pull requests are reviewed more thoroughly than one, and the layout does not depend on the request proof. This note records how the approval is applied; it does not change the approval, which only the owner can.
 
 ## Decisions approved under the delegation
 
@@ -336,7 +340,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - Showing the prepared copy makes the player's consent informed.
 - One rule for all animations is simpler than one per format.
 
-**Not settled:** I2, and schema 2's count limit.
+**Not settled:** I2. `[updated 2026-09-29: schema 2's limits are settled by N2-3a (specification, section 8.5): at most 8 images, whose pixels total at most 33,554,432. The publisher refuses a Plate over them with a message, never dropping or downscaling an image.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which relied on the publisher preparing images honestly, and asked for the receive-side rule, now above. It **concurred** with the amended entry on its recheck of `779e873`, adding that the sniff runs before any decoding and allows only frame types SOF0 to SOF2, also above.
 

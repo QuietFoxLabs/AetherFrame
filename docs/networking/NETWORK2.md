@@ -119,7 +119,7 @@ N2-7's server runs locally in its own tests and in the plugin's integration test
 
 **Acceptance carried into the increments:**
 - **N2-5** keeps D3 as approved: several personas, selected and switched only by the player, one active for identity operations, never bound to a character, Content ID or account, and switching never alters Plates or publishes.
-- **N2-6** keeps NETWORK1 increment 4's acceptance:
+- **N2-6** refuses a Plate over a whole-snapshot limit of the specification's section 8.5 (2,048 items, 8 images, 33,554,432 image pixels, 32,000 text scalars) with a message naming the limit, never clamping or trimming it. It keeps NETWORK1 increment 4's acceptance:
   - the builder reads only the saved Plate;
   - Plates, bindings and packages gain no publication state;
   - the publication index is per persona and apart from Plates (P1);

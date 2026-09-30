@@ -68,7 +68,7 @@ public enum LayoutItemKind : byte
 /// <summary>What the background draws under its pattern.</summary>
 public enum LayoutBackgroundMode : byte
 {
-    /// <summary>Nothing under the pattern.</summary>
+    /// <summary>Nothing at all: no base and no pattern.</summary>
     None = 0,
     /// <summary>The primary colour.</summary>
     SolidColor = 1,

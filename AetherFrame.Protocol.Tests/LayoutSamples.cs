@@ -92,14 +92,14 @@ internal static class ReferenceLayout
         w.I32(5_000);
         w.Text("Aria Starfall");
         w.Ident(LayoutSamples.Font);
-        w.U16(2_400);
+        w.I32(2_400);
         w.Color(255, 255, 255, 255);
         w.U8(0);
         w.U8(0);
         w.U8(0b1100_0011);
         w.I32(-150);
-        w.U16(100);
-        w.U16(800);
+        w.I32(100);
+        w.I32(800);
         w.Color(0, 0, 0, 255);
         w.U16(200);
         w.Color(0, 0, 0, 153);

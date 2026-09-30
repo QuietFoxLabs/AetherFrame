@@ -127,6 +127,7 @@ static class AetherFrame.Protocol.ProtocolLimits
     const Int32 SignedDocumentOverheadBytes
     const Int64 MaxImageBytes
     const Int64 MaxImagePixels
+    const Int64 MaxLayoutImagePixels
     const Int64 MaxProfileImageBytes
     const Int64 MaxUnixSeconds
 enum AetherFrame.Protocol.Remote.ImageFormat
@@ -276,8 +277,6 @@ sealed class AetherFrame.Protocol.Remote.LayoutText
     const Int32 MaxOutlineThickness
     const Int32 MaxShadowOffset
     const Int32 MinFontSize
-    const Int32 MinLetterSpacing
-    const Int32 MinLineSpacing
     new(LayoutPoint position, Int32 width, Int32 height, String text, String font, Int32 fontSize, LayoutColor color, LayoutHorizontalAlign align, LayoutVerticalAlign verticalAlign, LayoutTextFlags flags, Int32 letterSpacing, Int32 lineSpacing, Int32 autoFitMinimum, LayoutColor outlineColor, Int32 outlineThickness, LayoutColor shadowColor, Int32 shadowX, Int32 shadowY, LayoutTextLayout layout)
 enum AetherFrame.Protocol.Remote.LayoutTextFlags
     Byte value__

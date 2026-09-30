@@ -37,11 +37,14 @@ public static class ProtocolLimits
     /// <summary>The most UTF-8 bytes a Plate's remote name may occupy on the wire (decision D4).</summary>
     public const int MaxNameBytes = 256;
 
-    /// <summary>The most items a schema 2 layout lists (docs/networking/ProtocolSpecification-v1.md, section 8.5).</summary>
-    public const int MaxLayoutItems = 1024;
+    /// <summary>
+    /// The most items a schema 2 layout lists (docs/networking/ProtocolSpecification-v1.md, section
+    /// 8.5): above the most a local Plate draws (256 elements and 32 Vignettes of 32 quads).
+    /// </summary>
+    public const int MaxLayoutItems = 2048;
 
-    /// <summary>The most scalar values one text item of a layout holds.</summary>
-    public const int MaxLayoutItemTextScalars = 2000;
+    /// <summary>The most scalar values one text item of a layout holds: a local text (2,000) with both affixes and their spaces fits.</summary>
+    public const int MaxLayoutItemTextScalars = 2048;
 
     /// <summary>The most scalar values all the text items of one layout hold together.</summary>
     public const int MaxLayoutTextScalars = MaxTextScalars;
@@ -49,11 +52,17 @@ public static class ProtocolLimits
     /// <summary>The most bytes of a layout identifier (a font or an art id).</summary>
     public const int MaxLayoutIdentBytes = 96;
 
-    /// <summary>The largest coordinate, in hundredths of a canvas unit; the smallest is its negation.</summary>
-    public const int MaxLayoutCoordinate = 1_000_000;
+    /// <summary>The largest coordinate, in hundredths of a canvas unit (100,000 units, as a local Plate allows); the smallest is its negation.</summary>
+    public const int MaxLayoutCoordinate = 10_000_000;
 
     /// <summary>The largest extent (a width or a height), in hundredths of a canvas unit.</summary>
-    public const int MaxLayoutExtent = 1_000_000;
+    public const int MaxLayoutExtent = 10_000_000;
+
+    /// <summary>
+    /// The most pixels a layout's images declare together (2^25, about 128 MiB decoded as RGBA), so
+    /// a viewer's decoding stays bounded however well the images compress.
+    /// </summary>
+    public const long MaxLayoutImagePixels = 33_554_432;
 
     /// <summary>The smallest canvas width or height, in hundredths of a canvas unit (one unit).</summary>
     public const int MinLayoutCanvasExtent = 100;

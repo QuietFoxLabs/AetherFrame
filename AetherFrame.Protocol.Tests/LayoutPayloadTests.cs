@@ -42,6 +42,10 @@ public class LayoutPayloadTests
     [Fact]
     public void PayloadsWithSeveralFaults_AreRefusedForTheFirstInReadingOrder()
     {
+        static void Image(ReferenceLayout.Bytes w, byte fill, ulong byteLength = 1234, uint width = 640, uint height = 480) => LayoutPayload.Image(w, fill, byteLength: byteLength, width: width, height: height);
+        static void ImageItem(ReferenceLayout.Bytes w, byte fill) => LayoutPayload.ImageItem(w, fill);
+        static void TextItem(ReferenceLayout.Bytes w, string text) => LayoutPayload.TextItem(w, text: text);
+
         using var signer = TestPersonas.CreateA();
         ProtocolException Refuse(byte[] payload) => ProtocolAssert.Rejects(() => SignedDocumentCodec.Verify(PayloadBuilder.Signed(DocumentType.ProfileSnapshot, signer, payload)));
 
@@ -59,6 +63,27 @@ public class LayoutPayloadTests
             items: w => { w.U32((uint)texts.Length); foreach (var text in texts) { LayoutPayload.TextItem(w, text: text); } },
             images: w => { w.U32(1); LayoutPayload.Png(w, 0xc3); }));
         Assert.Equal(ProtocolError.LimitExceeded, totalFirst.Error);
+
+        // The rules over the whole payload in order: bytes, then pixels, then text.
+        var eight = Enumerable.Range(0, 8).Select(i => (byte)(0xa0 + i)).ToArray();
+        void DrawAll(ReferenceLayout.Bytes w, int extraTexts)
+        {
+            w.U32((uint)(eight.Length + extraTexts));
+            foreach (var fill in eight)
+            {
+                ImageItem(w, fill);
+            }
+
+            for (var i = 0; i < extraTexts; i++)
+            {
+                TextItem(w, text: new string('a', 2_000));
+            }
+        }
+
+        var bytesFirst = Refuse(LayoutPayload.Build(items: w => DrawAll(w, 17), images: w => { w.U32(8); foreach (var fill in eight) { Image(w, fill, byteLength: 8_388_608, width: 5_000, height: 4_000); } }));
+        Assert.Contains("bytes in total", bytesFirst.Message, StringComparison.Ordinal);
+        var pixelsFirst = Refuse(LayoutPayload.Build(items: w => DrawAll(w, 17), images: w => { w.U32(8); foreach (var fill in eight) { Image(w, fill, width: 5_000, height: 4_000); } }));
+        Assert.Contains("pixels in total", pixelsFirst.Message, StringComparison.Ordinal);
 
         // The format of an image before whether it is drawn.
         var webpFirst = Refuse(LayoutPayload.Build(images: w => { w.U32(1); LayoutPayload.Image(w, 0xc3, format: 3); }));
@@ -130,11 +155,11 @@ internal static class LayoutPayload
         ("font empty", ProtocolError.InvalidLength),
         ("font 97 bytes", ProtocolError.LimitExceeded),
         ("font uppercase", ProtocolError.InvalidValue),
-        ("font size 599", ProtocolError.InvalidValue),
+        ("font size 99", ProtocolError.InvalidValue),
         ("text align 3", ProtocolError.InvalidValue),
         ("text vertical align 3", ProtocolError.InvalidValue),
         ("letter spacing over max", ProtocolError.InvalidValue),
-        ("line spacing 49", ProtocolError.InvalidValue),
+        ("line spacing over max", ProtocolError.InvalidValue),
         ("auto-fit minimum over max", ProtocolError.InvalidValue),
         ("outline thickness over max", ProtocolError.InvalidValue),
         ("shadow x over max", ProtocolError.InvalidValue),
@@ -152,6 +177,8 @@ internal static class LayoutPayload
         ("image carried but not drawn", ProtocolError.InvalidValue),
         ("image drawn but not carried", ProtocolError.InvalidValue),
         ("texts over the total", ProtocolError.LimitExceeded),
+        ("image pixels over the total", ProtocolError.LimitExceeded),
+        ("field fault then truncation", ProtocolError.InvalidValue),
     ];
 
     public static byte[] Build(
@@ -199,7 +226,7 @@ internal static class LayoutPayload
 
     public static void TextItem(
         ReferenceLayout.Bytes w, int x = 4_000, int width = 40_000, string? text = null, byte[]? textBytes = null, uint? textLength = null, string font = LayoutSamples.Font,
-        int fontSize = 2_400, byte align = 0, byte verticalAlign = 0, int letterSpacing = 0, ushort lineSpacing = 100, ushort autoFit = 800, ushort outline = 200,
+        int fontSize = 2_400, byte align = 0, byte verticalAlign = 0, int letterSpacing = 0, int lineSpacing = 100, int autoFit = 800, ushort outline = 200,
         int shadowX = 300, byte layout = 1)
     {
         w.U8(1);
@@ -212,14 +239,14 @@ internal static class LayoutPayload
         w.Raw(bytes);
         w.U8((byte)font.Length);
         w.Raw(System.Text.Encoding.ASCII.GetBytes(font));
-        w.U16((ushort)fontSize);
+        w.I32(fontSize);
         w.Color(255, 255, 255, 255);
         w.U8(align);
         w.U8(verticalAlign);
         w.U8(1);
         w.I32(letterSpacing);
-        w.U16(lineSpacing);
-        w.U16(autoFit);
+        w.I32(lineSpacing);
+        w.I32(autoFit);
         w.Color(0, 0, 0, 255);
         w.U16(outline);
         w.Color(0, 0, 0, 153);
@@ -251,8 +278,8 @@ internal static class LayoutPayload
         w.Color(255, 255, 255, 255);
     }
 
-    public static void Image(ReferenceLayout.Bytes w, byte assetFill, byte format = 1) =>
-        w.Image(Enumerable.Repeat(assetFill, 16).ToArray(), Samples.Digest(0x11), format, 1234, 640, 480);
+    public static void Image(ReferenceLayout.Bytes w, byte assetFill, byte format = 1, ulong byteLength = 1234, uint width = 640, uint height = 480) =>
+        w.Image(Enumerable.Repeat(assetFill, 16).ToArray(), Samples.Digest(0x11), format, byteLength, width, height);
 
     public static void Png(ReferenceLayout.Bytes w, byte assetFill) => Image(w, assetFill);
 
@@ -264,29 +291,29 @@ internal static class LayoutPayload
         "background texture 21" => Build(background: w => Background(w, texture: 21)),
         "background scale 399" => Build(background: w => Background(w, scale: 399)),
         "background angle over max" => Build(background: w => Background(w, angle: 36_001)),
-        "background image without image mode" => Build(background: w => Background(w, mode: 1, assetFill: 0xc3)),
+        "background image without image mode" => Build(background: w => Background(w, mode: 1, assetFill: 0xc3), images: w => { w.U32(1); Png(w, 0xc3); }),
         "background image mode without image" => Build(background: w => Background(w, mode: 4)),
         "background fit 3" => Build(background: w => Background(w, fit: 3)),
         "background flips 4" => Build(background: w => Background(w, flips: 4)),
-        "items count over max" => Build(items: w => w.U32(1_025)),
+        "items count over max" => Build(items: w => w.U32(2_049)),
         "item kind 0" => Build(items: w => { w.U32(1); w.U8(0); }),
         "item kind 7" => Build(items: w => { w.U32(1); w.U8(7); }),
         "item kind 255" => Build(items: w => { w.U32(1); w.U8(255); }),
-        "text coordinate over max" => Build(items: w => { w.U32(1); TextItem(w, x: 1_000_001); }),
+        "text coordinate over max" => Build(items: w => { w.U32(1); TextItem(w, x: 10_000_001); }),
         "text width negative" => Build(items: w => { w.U32(1); TextItem(w, width: -1); }),
-        "text length over max bytes" => Build(items: w => { w.U32(1); TextItem(w, textBytes: [0x61], textLength: 8_001); }),
-        "text over max scalars" => Build(items: w => { w.U32(1); TextItem(w, text: new string('a', 2_001)); }),
+        "text length over max bytes" => Build(items: w => { w.U32(1); TextItem(w, textBytes: [0x61], textLength: 8_193); }),
+        "text over max scalars" => Build(items: w => { w.U32(1); TextItem(w, text: new string('a', 2_049)); }),
         "text with NUL" => Build(items: w => { w.U32(1); TextItem(w, textBytes: [0x61, 0x00]); }),
         "text invalid utf8" => Build(items: w => { w.U32(1); TextItem(w, textBytes: [0xFF]); }),
         "font empty" => Build(items: w => { w.U32(1); TextItem(w, font: string.Empty); }),
         "font 97 bytes" => Build(items: w => { w.U32(1); TextItem(w, font: "a" + new string('b', 96)); }),
         "font uppercase" => Build(items: w => { w.U32(1); TextItem(w, font: "Sans"); }),
-        "font size 599" => Build(items: w => { w.U32(1); TextItem(w, fontSize: 599); }),
+        "font size 99" => Build(items: w => { w.U32(1); TextItem(w, fontSize: 99); }),
         "text align 3" => Build(items: w => { w.U32(1); TextItem(w, align: 3); }),
         "text vertical align 3" => Build(items: w => { w.U32(1); TextItem(w, verticalAlign: 3); }),
-        "letter spacing over max" => Build(items: w => { w.U32(1); TextItem(w, letterSpacing: 4_001); }),
-        "line spacing 49" => Build(items: w => { w.U32(1); TextItem(w, lineSpacing: 49); }),
-        "auto-fit minimum over max" => Build(items: w => { w.U32(1); TextItem(w, autoFit: 9_601); }),
+        "letter spacing over max" => Build(items: w => { w.U32(1); TextItem(w, letterSpacing: 1_000_001); }),
+        "line spacing over max" => Build(items: w => { w.U32(1); TextItem(w, lineSpacing: -1_000_001); }),
+        "auto-fit minimum over max" => Build(items: w => { w.U32(1); TextItem(w, autoFit: 102_401); }),
         "outline thickness over max" => Build(items: w => { w.U32(1); TextItem(w, outline: 1_601); }),
         "shadow x over max" => Build(items: w => { w.U32(1); TextItem(w, shadowX: 4_001); }),
         "text layout 2" => Build(items: w => { w.U32(1); TextItem(w, layout: 2); }),
@@ -303,6 +330,8 @@ internal static class LayoutPayload
         "image carried but not drawn" => Build(images: w => { w.U32(1); Png(w, 0xc3); }),
         "image drawn but not carried" => Build(items: w => { w.U32(1); ImageItem(w); }),
         "texts over the total" => Build(items: w => { w.U32(17); for (var i = 0; i < 16; i++) { TextItem(w, text: new string('a', 2_000)); } TextItem(w, text: "a"); }),
+        "image pixels over the total" => Build(items: w => { w.U32(2); ImageItem(w, 0xc3); ImageItem(w, 0xd4); }, images: w => { w.U32(2); Image(w, 0xc3, width: 5_000, height: 4_000); Image(w, 0xd4, width: 5_000, height: 4_000); }),
+        "field fault then truncation" => Build(items: w => { w.U32(2); w.U8(9); })[..^1],
         _ => throw new ArgumentException(name),
     };
 }

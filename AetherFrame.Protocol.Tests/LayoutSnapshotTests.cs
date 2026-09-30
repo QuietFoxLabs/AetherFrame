@@ -67,13 +67,13 @@ public class LayoutSnapshotTests
     [Fact]
     public void Coordinates_ExtentsAndAngles_AreRangeChecked()
     {
-        new LayoutQuad(new LayoutPoint(-1_000_000, 1_000_000), default, default, default, default);
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutQuad(new LayoutPoint(-1_000_001, 0), default, default, default, default));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutTriangle(default, default, new LayoutPoint(0, 1_000_001), default));
+        new LayoutQuad(new LayoutPoint(-10_000_000, 10_000_000), default, default, default, default);
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutQuad(new LayoutPoint(-10_000_001, 0), default, default, default, default));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutTriangle(default, default, new LayoutPoint(0, 10_000_001), default));
 
-        LayoutSamples.Text(width: 0, height: 1_000_000);
+        LayoutSamples.Text(width: 0, height: 10_000_000);
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(width: -1));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(height: 1_000_001));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(height: 10_000_001));
 
         new LayoutImage(Samples.Asset1, default, 1, 1, 36_000, LayoutImageFit.Stretch, LayoutFlips.None, 255);
         new LayoutImage(Samples.Asset1, default, 1, 1, -36_000, LayoutImageFit.Stretch, LayoutFlips.None, 255);
@@ -84,24 +84,26 @@ public class LayoutSnapshotTests
     [Fact]
     public void TextFields_AreRangeCheckedAtBothEdges()
     {
-        LayoutSamples.Text(fontSize: 600);
-        LayoutSamples.Text(fontSize: 9_600);
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(fontSize: 599));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(fontSize: 9_601));
+        // The ranges a local Plate can hold, typed values included (1 to 1,024 units; spacing within 10,000).
+        LayoutSamples.Text(fontSize: 100);
+        LayoutSamples.Text(fontSize: 102_400);
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(fontSize: 99));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(fontSize: 102_401));
 
-        LayoutSamples.Text(letterSpacing: -1_000);
-        LayoutSamples.Text(letterSpacing: 4_000);
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(letterSpacing: -1_001));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(letterSpacing: 4_001));
+        LayoutSamples.Text(letterSpacing: -1_000_000);
+        LayoutSamples.Text(letterSpacing: 1_000_000);
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(letterSpacing: -1_000_001));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(letterSpacing: 1_000_001));
 
-        LayoutSamples.Text(lineSpacing: 50);
-        LayoutSamples.Text(lineSpacing: 300);
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(lineSpacing: 49));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(lineSpacing: 301));
+        LayoutSamples.Text(lineSpacing: -1_000_000);
+        LayoutSamples.Text(lineSpacing: 1_000_000);
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(lineSpacing: -1_000_001));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(lineSpacing: 1_000_001));
 
-        LayoutSamples.Text(autoFitMinimum: 600);
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(autoFitMinimum: 599));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(autoFitMinimum: 9_601));
+        LayoutSamples.Text(autoFitMinimum: 100);
+        LayoutSamples.Text(autoFitMinimum: 102_400, fontSize: 2_400);
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(autoFitMinimum: 99));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(autoFitMinimum: 102_401));
 
         LayoutSamples.Text(outlineThickness: 0);
         LayoutSamples.Text(outlineThickness: 1_600);
@@ -120,12 +122,12 @@ public class LayoutSnapshotTests
     [Fact]
     public void TextContent_FollowsTheGeneralTextRules_WithItsOwnLimit()
     {
-        // Section 2.3 with a limit of 2,000 scalars an item: line breaks and format characters are
+        // Section 2.3 with a limit of 2,048 scalars an item: line breaks and format characters are
         // content here (only a name refuses them), U+0000 and unpaired surrogates are refused.
         Assert.Equal("line\r\nbreak\t", LayoutSamples.Text("line\r\nbreak\t").Text);
         LayoutSamples.Text(string.Empty);
-        LayoutSamples.Text(new string('a', 2_000));
-        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Text(new string('a', 2_001)));
+        LayoutSamples.Text(new string('a', 2_048));
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Text(new string('a', 2_049)));
         ProtocolAssert.Throws(ProtocolError.InvalidText, () => LayoutSamples.Text("a" + (char)0));
         ProtocolAssert.Throws(ProtocolError.InvalidText, () => LayoutSamples.Text("a" + (char)0xD800));
     }
@@ -210,8 +212,8 @@ public class LayoutSnapshotTests
     public void Counts_AndTotals_AreLimited()
     {
         var quad = new LayoutQuad(default, default, default, default, default);
-        Assert.Equal(1_024, LayoutSamples.Minimal(Enumerable.Repeat<LayoutItem>(quad, 1_024)).Items.Count);
-        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Minimal(Enumerable.Repeat<LayoutItem>(quad, 1_025)));
+        Assert.Equal(2_048, LayoutSamples.Minimal(Enumerable.Repeat<LayoutItem>(quad, 2_048)).Items.Count);
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Minimal(Enumerable.Repeat<LayoutItem>(quad, 2_049)));
 
         var full = LayoutSamples.Text(new string('a', 2_000));
         Assert.Equal(32_000, LayoutSamples.Minimal(Enumerable.Repeat<LayoutItem>(full, 16)).TotalTextScalars);
@@ -224,6 +226,12 @@ public class LayoutSnapshotTests
         var big = ids.Take(6).Select(id => Samples.Image(id, bytes: ProtocolLimits.MaxImageBytes)).ToArray();
         ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Minimal(drawers.Take(6), big));
         Assert.Equal(5 * ProtocolLimits.MaxImageBytes, LayoutSamples.Minimal(drawers.Take(5), big.Take(5)).TotalImageBytes);
+
+        // The images' pixels in total: 33,554,432 at most, whatever their bytes.
+        var tall = ids.Take(2).Select(id => Samples.Image(id, width: 4_096, height: 4_096)).ToArray();
+        Assert.Equal(2, LayoutSamples.Minimal(drawers.Take(2), tall).Images.Count);
+        var over = ids.Take(2).Select(id => Samples.Image(id, width: 5_000, height: 4_000)).ToArray();
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Minimal(drawers.Take(2), over));
     }
 
     private static ProfileLayoutSnapshot Build(int canvasWidth = 128_000, int canvasHeight = 72_000) =>

@@ -226,8 +226,8 @@ public sealed class ProfileLayoutSnapshot : RemoteProfileDocument
 
     /// <summary>
     /// The rules over the whole payload, in the specification's order: the images' total bytes,
-    /// the items' total text, then that every drawn image is in the set and every image in the set
-    /// is drawn. <paramref name="images"/> is sorted by asset id.
+    /// their total pixels, the items' total text, then that every drawn image is in the set and
+    /// every image in the set is drawn. <paramref name="images"/> is sorted by asset id.
     /// </summary>
     private static (long TotalBytes, int TotalText) CheckWhole(LayoutBackground background, IReadOnlyList<LayoutItem> items, IReadOnlyList<ImageReference> images)
     {
@@ -240,6 +240,17 @@ public sealed class ProfileLayoutSnapshot : RemoteProfileDocument
         if (totalBytes > ProtocolLimits.MaxProfileImageBytes)
         {
             throw new ProtocolException(ProtocolError.LimitExceeded, $"A snapshot's images declare {ProtocolText.Number(totalBytes)} bytes in total; the limit is {ProtocolText.Number(ProtocolLimits.MaxProfileImageBytes)}.");
+        }
+
+        long totalPixels = 0;
+        foreach (var image in images)
+        {
+            totalPixels += (long)image.Width * image.Height;
+        }
+
+        if (totalPixels > ProtocolLimits.MaxLayoutImagePixels)
+        {
+            throw new ProtocolException(ProtocolError.LimitExceeded, $"A layout's images declare {ProtocolText.Number(totalPixels)} pixels in total; the limit is {ProtocolText.Number(ProtocolLimits.MaxLayoutImagePixels)}.");
         }
 
         var totalText = 0;

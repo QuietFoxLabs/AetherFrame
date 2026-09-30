@@ -87,23 +87,17 @@ public abstract class LayoutItem
 /// <summary>A text: its box, its final display text, its font and its style.</summary>
 public sealed class LayoutText : LayoutItem
 {
-    /// <summary>The smallest font size, in hundredths of a point.</summary>
-    public const int MinFontSize = 600;
+    /// <summary>The smallest font size, in hundredths of a canvas unit (1 unit, the smallest a local Plate draws).</summary>
+    public const int MinFontSize = 100;
 
-    /// <summary>The largest font size, in hundredths of a point.</summary>
-    public const int MaxFontSize = 9_600;
+    /// <summary>The largest font size, in hundredths of a canvas unit (1,024 units, as a local Plate allows).</summary>
+    public const int MaxFontSize = 102_400;
 
-    /// <summary>The letter spacing's range, in hundredths.</summary>
-    public const int MinLetterSpacing = -1_000;
+    /// <summary>The largest letter spacing either way, in hundredths of a canvas unit (10,000 units).</summary>
+    public const int MaxLetterSpacing = 1_000_000;
 
-    /// <summary>The letter spacing's range, in hundredths.</summary>
-    public const int MaxLetterSpacing = 4_000;
-
-    /// <summary>The line spacing's range, in hundredths.</summary>
-    public const int MinLineSpacing = 50;
-
-    /// <summary>The line spacing's range, in hundredths.</summary>
-    public const int MaxLineSpacing = 300;
+    /// <summary>The largest line spacing either way, in hundredths of the font size (a multiple of 10,000).</summary>
+    public const int MaxLineSpacing = 1_000_000;
 
     /// <summary>The thickest outline, in hundredths of a canvas unit.</summary>
     public const int MaxOutlineThickness = 1_600;
@@ -145,8 +139,8 @@ public sealed class LayoutText : LayoutItem
         LayoutFields.CheckRange(fontSize, MinFontSize, MaxFontSize, "text.fontSize");
         LayoutFields.CheckCode((byte)align, "text.align", (byte)LayoutHorizontalAlign.Right);
         LayoutFields.CheckCode((byte)verticalAlign, "text.verticalAlign", (byte)LayoutVerticalAlign.Bottom);
-        LayoutFields.CheckRange(letterSpacing, MinLetterSpacing, MaxLetterSpacing, "text.letterSpacing");
-        LayoutFields.CheckRange(lineSpacing, MinLineSpacing, MaxLineSpacing, "text.lineSpacing");
+        LayoutFields.CheckRange(letterSpacing, -MaxLetterSpacing, MaxLetterSpacing, "text.letterSpacing");
+        LayoutFields.CheckRange(lineSpacing, -MaxLineSpacing, MaxLineSpacing, "text.lineSpacing");
         LayoutFields.CheckRange(autoFitMinimum, MinFontSize, MaxFontSize, "text.autoFitMinimum");
         LayoutFields.CheckRange(outlineThickness, 0, MaxOutlineThickness, "text.outlineThickness");
         LayoutFields.CheckRange(shadowX, -MaxShadowOffset, MaxShadowOffset, "text.shadowX");
@@ -193,7 +187,7 @@ public sealed class LayoutText : LayoutItem
     /// <summary>The font family's identifier; a viewer that does not bundle it draws a placeholder.</summary>
     public string Font { get; }
 
-    /// <summary>The font size, in hundredths of a point.</summary>
+    /// <summary>The font size, in hundredths of a canvas unit.</summary>
     public int FontSize { get; }
 
     /// <summary>The text's colour.</summary>
@@ -208,13 +202,13 @@ public sealed class LayoutText : LayoutItem
     /// <summary>The text's switches: wrapping, style, auto-fit, outline and shadow.</summary>
     public LayoutTextFlags Flags { get; }
 
-    /// <summary>Extra space between letters, in hundredths.</summary>
+    /// <summary>Extra space between letters, in hundredths of a canvas unit; negative draws letters closer.</summary>
     public int LetterSpacing { get; }
 
-    /// <summary>The line spacing, in hundredths of the line height.</summary>
+    /// <summary>The line spacing as a multiple of the font size, in hundredths (100 is single spacing).</summary>
     public int LineSpacing { get; }
 
-    /// <summary>The smallest font size auto-fit shrinks to, in hundredths of a point.</summary>
+    /// <summary>The smallest font size auto-fit shrinks to, in hundredths of a canvas unit; a viewer uses at most the font size.</summary>
     public int AutoFitMinimum { get; }
 
     /// <summary>The outline's colour, its opacity folded into the alpha.</summary>
@@ -244,14 +238,14 @@ public sealed class LayoutText : LayoutItem
         writer.WriteI32(Height);
         writer.WriteText(Text, "text.text", ProtocolLimits.MaxLayoutItemTextScalars);
         LayoutFields.WriteIdent(writer, Font);
-        writer.WriteU16((ushort)FontSize);
+        writer.WriteI32(FontSize);
         Color.Write(writer);
         writer.WriteU8((byte)Align);
         writer.WriteU8((byte)VerticalAlign);
         writer.WriteU8((byte)Flags);
         writer.WriteI32(LetterSpacing);
-        writer.WriteU16((ushort)LineSpacing);
-        writer.WriteU16((ushort)AutoFitMinimum);
+        writer.WriteI32(LineSpacing);
+        writer.WriteI32(AutoFitMinimum);
         OutlineColor.Write(writer);
         writer.WriteU16((ushort)OutlineThickness);
         ShadowColor.Write(writer);
@@ -267,14 +261,14 @@ public sealed class LayoutText : LayoutItem
         var height = LayoutFields.ReadExtent(ref reader, "text.height", 0, ProtocolLimits.MaxLayoutExtent);
         var text = reader.ReadText("text.text", ProtocolLimits.MaxLayoutItemTextScalars);
         var font = LayoutFields.ReadIdent(ref reader, "text.font");
-        var fontSize = LayoutFields.ReadU16In(ref reader, "text.fontSize", MinFontSize, MaxFontSize);
+        var fontSize = LayoutFields.ReadI32In(ref reader, "text.fontSize", MinFontSize, MaxFontSize);
         var color = LayoutColor.Read(ref reader, "text.color");
         var align = (LayoutHorizontalAlign)LayoutFields.ReadCode(ref reader, "text.align", (byte)LayoutHorizontalAlign.Right);
         var verticalAlign = (LayoutVerticalAlign)LayoutFields.ReadCode(ref reader, "text.verticalAlign", (byte)LayoutVerticalAlign.Bottom);
         var flags = (LayoutTextFlags)reader.ReadU8("text.flags");
-        var letterSpacing = LayoutFields.ReadI32In(ref reader, "text.letterSpacing", MinLetterSpacing, MaxLetterSpacing);
-        var lineSpacing = LayoutFields.ReadU16In(ref reader, "text.lineSpacing", MinLineSpacing, MaxLineSpacing);
-        var autoFitMinimum = LayoutFields.ReadU16In(ref reader, "text.autoFitMinimum", MinFontSize, MaxFontSize);
+        var letterSpacing = LayoutFields.ReadI32In(ref reader, "text.letterSpacing", -MaxLetterSpacing, MaxLetterSpacing);
+        var lineSpacing = LayoutFields.ReadI32In(ref reader, "text.lineSpacing", -MaxLineSpacing, MaxLineSpacing);
+        var autoFitMinimum = LayoutFields.ReadI32In(ref reader, "text.autoFitMinimum", MinFontSize, MaxFontSize);
         var outlineColor = LayoutColor.Read(ref reader, "text.outlineColor");
         var outlineThickness = LayoutFields.ReadU16In(ref reader, "text.outlineThickness", 0, MaxOutlineThickness);
         var shadowColor = LayoutColor.Read(ref reader, "text.shadowColor");

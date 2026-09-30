@@ -217,8 +217,9 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
    - K4's acknowledgement is recorded per persona before any first publish;
    - persona features turn on only as K3 says; every local feature is untouched;
    - preview flavour only; a security reviewer concurs; an **In game** section for the persona window.
-4. **N2-6: the snapshot builder for schema 2, image preparation, the publication index and the outbox** (NETWORK1 increments 4 and 8). Prerequisites: P1, D4, D5, D8 and I1 (approved); N2-3 and N2-5 merged first. Acceptance:
+4. **N2-6: the snapshot builder for schema 2, image preparation, the publication index and the outbox** (NETWORK1 increments 4 and 8). Prerequisites: P1, D4, D5, D8 and I1 (approved); N2-3a and N2-5 merged first. Acceptance:
    - the builder reads only the saved Plate and builds a schema 2 snapshot; a name the name rule refuses is not altered but refused with a message asking to rename;
+   - a Plate over a whole-snapshot limit of section 8.5 (2,048 items, 8 images, 33,554,432 image pixels, 32,000 text scalars) is refused with a message naming the limit, never clamped or trimmed; angles are normalized into one turn, which draws identically;
    - images are prepared as D5 and I1 say: decoded and encoded again through Dalamud's texture pipeline, metadata dropped, colour under fully transparent pixels cleared, over-limit images refused;
    - Plates, bindings and packages gain no publication state; the publication index is per persona, named by slot, apart from Plates (P1);
    - the outbox holds signed documents and sends nothing until N2-9; its tests sign with synthetic keys only;
