@@ -22,6 +22,9 @@ internal sealed record IlMemberUse(string Type, ILOpCode OpCode, string Parent, 
 /// </summary>
 internal static class NetworkTypeUse
 {
+    /// <summary>How a type used as a generic type argument (a type's or a method's) is listed among the names a type references.</summary>
+    internal const string TypeArgumentPrefix = "type argument ";
+
     /// <summary>For each outermost type, by its full name, the full names of the types it references.</summary>
     internal static Dictionary<string, HashSet<string>> ReferencesByType(PEReader pe)
     {
@@ -210,7 +213,15 @@ internal static class NetworkTypeUse
 
         public string GetPinnedType(string elementType) => elementType;
 
-        public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments) => genericType + "<" + string.Join(",", typeArguments) + ">";
+        public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments)
+        {
+            foreach (var argument in typeArguments)
+            {
+                Referenced.Add(TypeArgumentPrefix + argument);
+            }
+
+            return genericType + "<" + string.Join(",", typeArguments) + ">";
+        }
 
         public string GetGenericTypeParameter(object? genericContext, int index) => "!" + index;
 
@@ -273,7 +284,11 @@ internal static class NetworkTypeUse
                 case HandleKind.MethodSpecification:
                     var specification = reader.GetMethodSpecification((MethodSpecificationHandle)handle);
                     Entity(specification.Method);
-                    specification.DecodeSignature(this, null);
+                    foreach (var argument in specification.DecodeSignature(this, null))
+                    {
+                        Referenced.Add(TypeArgumentPrefix + argument);
+                    }
+
                     break;
                 case HandleKind.StandaloneSignature:
                     var signature = reader.GetStandaloneSignature((StandaloneSignatureHandle)handle);

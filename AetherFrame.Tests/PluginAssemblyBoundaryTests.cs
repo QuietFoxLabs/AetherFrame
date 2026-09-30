@@ -36,6 +36,7 @@ public class PluginAssemblyBoundaryTests
         "System.Net.Quic",
         "AetherFrame.Protocol",
         "AetherFrame.Personas",
+        "Microsoft.Extensions.Http",
     ];
 
     /// <summary>The namespaces the networking code lives in, whichever assembly compiles it.</summary>
@@ -250,6 +251,116 @@ public class PluginAssemblyBoundaryTests
         }
 
         Assert.True(offending.Count == 0, "R2: " + string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void ThePlugin_MakesNoHttpObjectOutOfSight()
+    {
+        // R2: a client or handler with the defaults can also be made without naming a constructor:
+        // by reflection, or by a generic new(). So nothing references HttpClientHandler (R2's
+        // handler is SocketsHttpHandler) or Activator, and no HTTP object is a generic type argument.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        string[] httpObjects = ["System.Net.Http.HttpClient", "System.Net.Http.HttpMessageInvoker", "System.Net.Http.HttpClientHandler", "System.Net.Http.SocketsHttpHandler"];
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = new List<string>();
+        foreach (var (type, references) in NetworkTypeUse.ReferencesByType(pe))
+        {
+            foreach (var name in references)
+            {
+                var argument = name.StartsWith(NetworkTypeUse.TypeArgumentPrefix, StringComparison.Ordinal) ? name[NetworkTypeUse.TypeArgumentPrefix.Length..] : null;
+                if (name is "System.Net.Http.HttpClientHandler" or "System.Activator" || (argument is not null && httpObjects.Any(http => argument.StartsWith(http, StringComparison.Ordinal))))
+                {
+                    offending.Add(type + " names " + name);
+                }
+            }
+        }
+
+        Assert.True(offending.Count == 0, "R2: " + string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void EveryTypeInTheNetworkNamespace_ComesFromTheNetworkFolder()
+    {
+        // The other half of the namespace rule, read from the DLL: every type it defines in
+        // AetherFrame.Services.Network is one the C# parser found declared in a file under
+        // Services/Network. That covers sources linked in from elsewhere, csproj items, code under
+        // a condition the parse didn't take, and source generators.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (file, relative) in PluginSources())
+        {
+            if (!relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var text = File.ReadAllText(file);
+            foreach (var symbols in new[] { Array.Empty<string>(), ["AETHERFRAME_NETWORK_PREVIEW"] })
+            {
+                var tree = CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview, preprocessorSymbols: symbols));
+                foreach (var declaration in tree.GetRoot().DescendantNodes().Where(node => node is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax))
+                {
+                    if (declaration.Parent is BaseTypeDeclarationSyntax)
+                    {
+                        continue;
+                    }
+
+                    var ns = string.Join(".", declaration.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse().Select(namespaceDeclaration => NameOf(namespaceDeclaration.Name)));
+                    var (identifier, arity) = declaration switch
+                    {
+                        TypeDeclarationSyntax type => (type.Identifier.ValueText, type.TypeParameterList?.Parameters.Count ?? 0),
+                        DelegateDeclarationSyntax callback => (callback.Identifier.ValueText, callback.TypeParameterList?.Parameters.Count ?? 0),
+                        BaseTypeDeclarationSyntax other => (other.Identifier.ValueText, 0),
+                        _ => ("", 0),
+                    };
+                    declared.Add(ns + "." + identifier + (arity > 0 ? "`" + arity.ToString(System.Globalization.CultureInfo.InvariantCulture) : ""));
+                }
+            }
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var strays = NetworkTypeUse.ReferencesByType(pe).Keys
+            .Where(type => type.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal) && !declared.Contains(type))
+            .ToList();
+        Assert.True(strays.Count == 0, "R3: types in the network namespace that no file under Services/Network declares: " + string.Join(", ", strays));
+    }
+
+    [Fact]
+    public void PluginSources_ConditionOnlyOnThePreviewSymbol()
+    {
+        // The source checks parse each file as the player and the preview flavour: code under any
+        // other symbol (DEBUG, RELEASE, TRACE, NET...) would be compiled unparsed.
+        var offending = new List<string>();
+        foreach (var (file, relative) in PluginSources())
+        {
+            var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(file), new CSharpParseOptions(LanguageVersion.Preview));
+            foreach (var trivia in tree.GetRoot().DescendantTrivia(descendIntoTrivia: true))
+            {
+                var condition = trivia.GetStructure() switch
+                {
+                    IfDirectiveTriviaSyntax ifDirective => ifDirective.Condition,
+                    ElifDirectiveTriviaSyntax elifDirective => elifDirective.Condition,
+                    _ => null,
+                };
+                if (condition is not null && condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(name => name.Identifier.ValueText != "AETHERFRAME_NETWORK_PREVIEW"))
+                {
+                    offending.Add(relative);
+                }
+            }
+        }
+
+        Assert.True(offending.Count == 0, "Plugin sources condition on a symbol other than AETHERFRAME_NETWORK_PREVIEW: " + string.Join(", ", offending.Distinct()));
     }
 
     [Fact]
