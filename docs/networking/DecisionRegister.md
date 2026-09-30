@@ -1376,6 +1376,8 @@ It also made six smaller points, all applied as well:
 
 **Its recheck** of `d1605aa` found every point fixed, and one race left from the blocking point, also applied: a candidate handed over just before a re-save could be shown after its showing was withdrawn. Each character now has a showing generation that every withdrawal moves on; a candidate is shown or sent only under the generation its build started with, and the window never shows a showing beside a newer build. It also asked for notices when a send is stopped or an approval comes too late, and for an old persona's index to be emptied only once.
 
+**Its second recheck** of `3633f0d` found one lost update left: the service's own clean-up after acting on a candidate moved the generation on too, so a save whose build started during another save's commit could be skipped. Only a withdrawal (the player declining, or the candidate going out of date) moves it on now, with a test. It confirmed `3bdd052` clean for merging.
+
 ## Gates
 
 | Gate | Must be decided before |
