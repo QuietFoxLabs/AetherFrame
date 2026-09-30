@@ -1300,6 +1300,25 @@ N2-7b's security review examined these with the code (September 30, 2026). It as
 
 **Rationale.** A single small host, and as few moving parts as keep each decision's promise: no registry, no orchestrator, no remote log store. Each limit I2, S5 and D1 set is enforced where it can be seen, in `compose.yaml`, `aetherframe-worker.sh` and `host-setup.sh`, and checked by CI where CI can.
 
+### N2-9b's opt-in. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+Scope: how the plugin turns sharing on and off for a character (N2-9b), within batch C. Nothing here changes an owner's decision or a signed byte.
+
+- **The order of consent.** C3 asks for one consent per character that shows exactly what will be published, and a first showing of each new Plate before it is sent. A snapshot carries its binding's profile id (C4), which only the Lodestone check issues, so the candidate that will be signed can't exist before the check. The plugin therefore asks in two steps, and sends no Plate before both:
+  1. At opt-in, it shows C3's statements, C7's, K4's as C9 restates it, and C2's warning about the code, and asks the player to agree. Only then does it make the key, ask for a code, and run the check.
+  2. Before the first send (N2-9c), it shows the Active Plate exactly as it will be signed, under the profile id the check issued, as C3's first showing of a Plate never published before.
+
+  What the player agrees to at step 1 is only binding the character; nothing is published until step 2.
+- **The character's key** is a persona made by the plugin, labelled "Character key", with nothing about the character in the registry (C1). It is acknowledged (K4) when the player agrees, and selected only for the moment it signs. Every signature opens a lease and releases it at once, so no lease is held across a request (L10).
+- **What this PC keeps.** `sharing.afsh`, in the persona folder beside the registry, lists each character by the game's Content ID (the Active Plate's own local key), its key's slot and identity, its stage, and, once bound, the Lodestone id, profile id, name and World the check returned. It is read strictly and written as the registry is. A file that can't be read leaves sharing off and is never written over. The code is kept in memory only, since a new request replaces it anyway.
+- **Order of writes.** The key and the file are saved before a request that depends on them is sent, so a key the server may bind is always recorded.
+- **Turning sharing off** keeps the key, so turning it on again reuses it; the server deletes the binding (C4). **A key that can't be opened** (K2's words) is replaced by a new one at the player's choice: a new check moves the character to it (C1).
+- **Versions.** Before its first signed request in a session, the plugin reads `/v1/status` and stops, saying so, when the server needs a newer AetherFrame.
+- **Re-reads.** In N2-9b the plugin asks for a re-read when the sharing window shows a bound character under another name or World than its binding's, once per session. N2-9c adds C1's login trigger with publishing.
+- **Deferred to N2-9c:** pausing and resuming (C3), emptying a character's outbox when sharing is turned off (C4), and dropping the share check's signings (C3). Until N2-9c nothing is published, so no outbox entry can be sent.
+
+**Rationale.** The two-step consent keeps D5's point (6), as C3 amends it: what is signed is exactly what the player saw. A binding without a Plate shows nothing to anyone, since every lookup of it answers "not found". Recording the key before any request keeps a lost answer from leaving a binding no file knows about.
+
 ## Gates
 
 | Gate | Must be decided before |

@@ -422,7 +422,7 @@ internal sealed class CharacterSharing
             }
 
             var signer = new LeasedSigner(manager, entry.Slot, key);
-            var response = client.ActionAsync(kind, body, signer, SharingClient.MaxJsonAnswerBytes, stopping).GetAwaiter().GetResult();
+            var response = client.ActionAsync(kind, body, signer, stopping).GetAwaiter().GetResult();
             log($"Sharing: {SharingClient.PathOf(kind)} answered {(int)response.Status}.");
             if (response.Status == HttpStatusCode.Gone && Save(Replaced(entry.Unbound(SharingStage.TakenOver)), entry.ContentId))
             {

@@ -73,6 +73,7 @@
          Both are free of Dalamud and ImGui; the tests answer as the server would, in memory. -->
     <Compile Include="..\AetherFrame\Services\Network\Sharing\**\*.cs" Link="Linked\Services\Network\Sharing\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\AetherFrame\Services\Network\Transport\SharingClient.cs" Link="Linked\Services\Network\Transport\SharingClient.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Transport\SharingDeployment.cs" Link="Linked\Services\Network\Transport\SharingDeployment.cs" />
   </ItemGroup>
 
   <ItemGroup>

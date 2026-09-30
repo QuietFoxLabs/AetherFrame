@@ -274,7 +274,7 @@ public class CharacterSharingTests
             Personas = PersonaManager.Load(new ProtectedPersonaKeyStore(Blobs, new MaskingProtector()), new NoBackups(), new MemoryRegistry());
             File = new SharingStateFile(Root);
             Server = new FakeSharingServer();
-            Client = new SharingClient(FakeSharingServer.Deployment, Server, disposeHandler: false);
+            Client = new SharingClient(FakeSharingServer.Deployment, Server, disposeHandler: false, new Version(0, 1, 7));
             Sharing = new CharacterSharing((_, work) =>
             {
                 work(Personas);

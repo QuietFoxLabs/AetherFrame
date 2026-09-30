@@ -116,8 +116,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // Opting characters in and out of sharing (N2-9b), over the connection to the sharing server
     // (N2-9a, decision R2). Its operations are persona-session operations, which unloading waits
     // for, so the connection is disposed only after every owned operation has ended.
-    private readonly SharingHandler sharingHandler;
-    private readonly SharingClient sharingClient;
+    private readonly SharingConnection sharingConnection;
 #endif
 
     public Plugin()
@@ -353,12 +352,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
             // Sharing (N2-9b), reached from My Plates' header. Nothing is sent until the player
             // turns sharing on for a character, and then only on the player's action (R2).
-            sharingHandler = new SharingHandler();
-            sharingClient = new SharingClient(SharingDeployment.Name, sharingHandler.Handler, disposeHandler: false);
+            sharingConnection = new SharingConnection(AetherFrameBuildInfo.Current.ProductVersion);
             var characterSharing = new CharacterSharing(
                 personaSession.TryRun,
                 new SharingStateFile(PersonaSessionHost.PersonasDirectory(configDirectory)),
-                sharingClient,
+                sharingConnection.Client,
                 AetherFrameBuildInfo.Current.ProductVersion,
                 () => DateTimeOffset.UtcNow,
                 ownedOperations.Stopping,
@@ -583,8 +581,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     {
         thumbnailService.Dispose();
 #if AETHERFRAME_NETWORK_PREVIEW
-        sharingClient.Dispose();
-        sharingHandler.Dispose();
+        sharingConnection.Dispose();
 #endif
     }
 

@@ -49,6 +49,13 @@ public class SharingWireTests
     }
 
     [Fact]
+    public void ThePreviewBuild_TalksToTheOwnersDeployment_NeverATestName()
+    {
+        Assert.Equal("plates.aetherframe.dev", AetherFrame.Services.Network.Transport.SharingDeployment.Name.Value);
+        Assert.False(AetherFrame.Services.Network.Transport.SharingDeployment.Name.IsReservedForTesting);
+    }
+
+    [Fact]
     public void ACode_IsAfAndTenCrockfordSymbols()
     {
         Assert.True(LodestoneCode.IsCode("AF-0123456789"));
