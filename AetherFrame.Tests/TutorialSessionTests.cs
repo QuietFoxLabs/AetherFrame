@@ -42,6 +42,7 @@ public class TutorialSessionTests
     {
         TutorialCondition.CreatingOrEditingPlate or TutorialCondition.TemplateChooserOpen => snapshot with { TemplateChooserOpen = true },
         TutorialCondition.AnyEditorOpen or TutorialCondition.BasicEditorOpen => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Basic, PlateOpen = true },
+        TutorialCondition.TextElementSelected => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Advanced, PlateOpen = true, ElementSelected = true, TextElementSelected = true },
         _ => throw new ArgumentOutOfRangeException(nameof(condition), condition, "Add how the player meets this condition."),
     };
 
@@ -446,6 +447,31 @@ public class TutorialSessionTests
 
             Assert.Equal(TutorialSessionStatus.Completed, session.Status);
         }
+    }
+
+    [Fact]
+    public void RealScript_EveryStepThatAsksForAClick_CannotBeSkippedWithNext()
+    {
+        // The owner's rule (September 30): a step that asks the player to use the highlighted
+        // control, and moves on once they have, never lets Next past it before they do.
+        var steps = TutorialScriptValidation.AllSteps(TutorialScript.Chapters)
+            .Where(s => s.Mode == TutorialStepMode.Interact && s.AdvanceWhen != TutorialCondition.None)
+            .ToList();
+        Assert.Contains(steps, s => s.Id == "first.create");
+        Assert.Contains(steps, s => s.Id == "text.add");
+        Assert.All(steps, s =>
+        {
+            Assert.True(s.WaitsForAction, s.Id);
+            Assert.False(string.IsNullOrWhiteSpace(s.WaitHint), s.Id);
+        });
+
+        var session = new TutorialSession(TutorialScript.Chapters);
+        session.JumpToChapter(Advanced, 5);
+        Assert.Equal("text.add", session.CurrentStep!.Id);
+        session.Next(Advanced);
+        Assert.Equal("text.add", session.CurrentStep!.Id);
+        session.Next(Advanced with { ElementSelected = true, TextElementSelected = true });
+        Assert.Equal("text.content", session.CurrentStep!.Id);
     }
 
     [Fact]

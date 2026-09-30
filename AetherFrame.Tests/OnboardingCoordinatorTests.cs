@@ -333,7 +333,13 @@ public class OnboardingCoordinatorTests
         var guard = 0;
         while (coordinator.IsTutorialActive)
         {
-            coordinator.Next(Basic);
+            if (!coordinator.Next(Basic))
+            {
+                // "Add text" waits for a text element: the player adds one in the Advanced Editor.
+                Assert.Equal("text.add", coordinator.Session.CurrentStep!.Id);
+                Assert.True(coordinator.Next(Basic with { ActiveEditor = EditorSurfaceKind.Advanced, ElementSelected = true, TextElementSelected = true }));
+            }
+
             Assert.True(++guard < 200);
         }
 

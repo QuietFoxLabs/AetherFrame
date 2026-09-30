@@ -26,7 +26,10 @@ internal sealed class TutorialCardWindow : Window
         | ImGuiWindowFlags.AlwaysAutoResize;
 
     private const string ChaptersPopupId = "##AetherFrameTutorialChapters";
-    private const string CloseTooltip = "Close the tutorial for now. Help in My Plates resumes it where you left off.";
+    // How long the spotlight flashes after Next is pressed on a step that waits for the player.
+    private const double FlashSeconds = 1.2;
+
+    private const string CloseTooltip ="Close the tutorial for now. Help in My Plates resumes it where you left off.";
 
     private readonly OnboardingCoordinator coordinator;
     private readonly ITutorialHost host;
@@ -286,8 +289,10 @@ internal sealed class TutorialCardWindow : Window
     {
         if (!coordinator.Next(snapshot))
         {
-            // The step waits for the player: say what to do instead of moving on.
+            // The step waits for the player: say what to do, and flash the control to click,
+            // instead of moving on.
             heldStep = view.Step;
+            frame.FlashUntil = ImGui.GetTime() + FlashSeconds;
             return;
         }
 
