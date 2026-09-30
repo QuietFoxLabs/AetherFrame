@@ -44,6 +44,7 @@ enum AetherFrame.Personas.PersonaError
     const PersonaError LeaseRevoked
     const PersonaError NotAnOrphan
     const PersonaError RegistryFull
+    const PersonaError RegistryNewerVersion
     const PersonaError RegistryUnreadable
     const PersonaError RegistryWriteFailed
     const PersonaError UnknownPersona

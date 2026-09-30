@@ -121,30 +121,37 @@ public sealed class PersonaKeyFileStorage : IPersonaKeyBlobStorage
     /// <remarks>
     /// Lists the directory's entries once: every <c>.afkey</c> file whose name is a slot's text form
     /// is a slot; any other entry (a temporary file from an interrupted write, a stray file or folder)
-    /// is counted as skipped and never read. A directory that does not exist yet holds nothing.
+    /// is counted as skipped and never read. On Windows, where a name that differs only in case is
+    /// the same file, a name is compared as <see cref="Read"/> would find it, so a key the store can
+    /// open is never counted as a stray entry. A directory that does not exist yet holds nothing. Any
+    /// other failure (access denied, a file where the directory should be) throws, so that it is
+    /// reported as a failed listing and never taken for an empty one.
     /// </remarks>
     public PersonaKeyListing List()
     {
-        if (!System.IO.Directory.Exists(directory))
-        {
-            return new PersonaKeyListing(Array.Empty<PersonaSlotId>(), 0);
-        }
-
+        var ignoreCase = OperatingSystem.IsWindows();
         var slots = new System.Collections.Generic.List<PersonaSlotId>();
         var skipped = 0;
-        foreach (var entry in System.IO.Directory.EnumerateFileSystemEntries(directory))
+        try
         {
-            var name = Path.GetFileName(entry);
-            if (name.EndsWith(Extension, StringComparison.Ordinal)
-                && File.Exists(entry)
-                && PersonaSlotId.TryParse(name[..^Extension.Length], out var slot))
+            foreach (var entry in System.IO.Directory.EnumerateFileSystemEntries(directory))
             {
-                slots.Add(slot);
+                var name = Path.GetFileName(entry);
+                if (name.EndsWith(Extension, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                    && File.Exists(entry)
+                    && PersonaSlotId.TryParse(ignoreCase ? name[..^Extension.Length].ToLowerInvariant() : name[..^Extension.Length], out var slot))
+                {
+                    slots.Add(slot);
+                }
+                else
+                {
+                    skipped++;
+                }
             }
-            else
-            {
-                skipped++;
-            }
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return new PersonaKeyListing(Array.Empty<PersonaSlotId>(), 0);
         }
 
         return new PersonaKeyListing(slots, skipped);

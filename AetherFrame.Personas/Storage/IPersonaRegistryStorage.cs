@@ -6,7 +6,9 @@ namespace AetherFrame.Personas.Storage;
 /// Where the persona registry lives (decision P3 in docs/networking/DecisionRegister.md): one
 /// entry holding the encoded records and the selection, never any private material. The plugin
 /// fills it with a file in its own networking directory, replaced atomically and durably; the tests
-/// fill it with memory. The manager calls it only under its lock, one call at a time.
+/// fill it with memory. The manager calls it one call at a time: <see cref="Read"/> once, in
+/// <see cref="PersonaManager.Load"/>, before the manager exists, and <see cref="Replace"/> only
+/// under its lock.
 /// </summary>
 public interface IPersonaRegistryStorage
 {

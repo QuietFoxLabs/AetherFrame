@@ -28,7 +28,8 @@ public enum PersonaError
     /// A key store could not take a key into custody: its protector or its storage refused, or what
     /// it wrote did not read back as the key it was given. Nothing is held under the slot when the
     /// failure came before the storage accepted the key; after that, the envelope may stay under the
-    /// slot, which is never recorded or reused (L12 in docs/networking/DecisionRegister.md).
+    /// slot, which is never recorded or reused on its own: it is an orphan, which only the player's
+    /// <see cref="PersonaManager.RestoreOrphan"/> records (L12 in docs/networking/DecisionRegister.md).
     /// </summary>
     CustodyFailed,
 
@@ -55,17 +56,24 @@ public enum PersonaError
 
     /// <summary>
     /// The persona registry could not be read: it exists but is not a registry this build reads
-    /// (damaged, another version, over its limits), or the storage refused to read it. It is left
+    /// (damaged, not a registry, over its limits), or the storage refused to read it. It is left
     /// exactly as it was, never overwritten, and no manager is made from it (P3 in the decision
     /// register).
     /// </summary>
     RegistryUnreadable,
 
     /// <summary>
-    /// The persona registry could not be saved. Nothing changed in memory. The registry holds either
-    /// the state before the change or the state after it, and the next load shows whichever it is.
-    /// A key committed just before (a create or a restore) is then held with no record, and is
-    /// found and offered for restore as an orphan (L12).
+    /// The persona registry was written by a newer version of AetherFrame: its header names a
+    /// later registry version. It is left exactly as it was, never overwritten, and no manager is
+    /// made from it; updating AetherFrame reads it again (P3 in the decision register).
+    /// </summary>
+    RegistryNewerVersion,
+
+    /// <summary>
+    /// The persona registry could not be saved, so the change was not applied: memory holds the
+    /// state before it. The registry holds either that state or the state after the change, and the
+    /// next load shows whichever it is. A key committed just before (a create or a restore) is then
+    /// held with no record, and is found and offered for restore as an orphan (L12).
     /// </summary>
     RegistryWriteFailed,
 

@@ -13,7 +13,8 @@ namespace AetherFrame.Personas.Tests;
 /// <summary>
 /// The manager over a registry (decision P3): it loads what was saved; it refuses a registry it
 /// cannot read and never replaces it; it saves every change before applying it, so memory never
-/// holds a state the registry lacks; it keeps the registry to 256 personas, checked before any key
+/// shows a change the registry has not accepted (a failed save is not applied, though a restart
+/// may show it when the save's outcome is unknown); it keeps the registry to 256 personas, checked before any key
 /// is committed; it keeps K4's acknowledgement; it signs only for the persona an operation showed
 /// (L10); and its listings never wait on a save. Every key is synthetic and in memory, and so is the
 /// registry.
@@ -97,7 +98,7 @@ public sealed class PersonaRegistryTests : IDisposable
     [InlineData("damaged")]
     [InlineData("not a registry")]
     [InlineData("empty")]
-    [InlineData("a later version")]
+    [InlineData("version zero")]
     public void Load_OfARegistryThisBuildDoesNotRead_IsRefused_AndLeftAsItWas(string kind)
     {
         Load().Create("Main");
@@ -107,7 +108,7 @@ public sealed class PersonaRegistryTests : IDisposable
             "damaged" => Flip(bytes, 30),
             "not a registry" => Enumerable.Repeat((byte)0x5A, 100).ToArray(),
             "empty" => [],
-            _ => Rechecksummed(bytes, b => b[5] = 2),
+            _ => Rechecksummed(bytes, b => b[5] = 0),
         };
         registry.Bytes = refused;
         registry.Calls.Clear();
@@ -117,6 +118,29 @@ public sealed class PersonaRegistryTests : IDisposable
         Assert.DoesNotContain("Main", failure.Message, StringComparison.Ordinal);
         Assert.Equal(new[] { "Read" }, registry.Calls);
         Assert.Same(refused, registry.Bytes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Load_OfARegistryANewerAetherFrameWrote_IsToldApart_AndLeftAsItWas(bool laterLayout)
+    {
+        // A later version may place its checksum elsewhere, so the version is read before the
+        // checksum: either way the player is told to update, not that the file is damaged.
+        Load().Create("Main");
+        var newer = Rechecksummed(registry.Bytes!, b => b[5] = 2);
+        if (laterLayout)
+        {
+            newer = Flip(newer, newer.Length - 1);
+        }
+
+        registry.Bytes = newer;
+        registry.Calls.Clear();
+
+        var failure = Assert.Throws<PersonaException>(Load);
+        Assert.Equal(PersonaError.RegistryNewerVersion, failure.Error);
+        Assert.Equal(new[] { "Read" }, registry.Calls);
+        Assert.Same(newer, registry.Bytes);
     }
 
     [Fact]
@@ -273,6 +297,13 @@ public sealed class PersonaRegistryTests : IDisposable
         SavedOnce(manager.Deselect);
         Unchanged(manager.Deselect);
         SavedOnce(() => manager.RestoreBackup(backup, secret, "Far"));
+        var orphan = PersonaSlotId.NewId();
+        using (var material = PersonaKeyMaterial.Generate())
+        {
+            store.AddKey(orphan, material);
+        }
+
+        SavedOnce(() => manager.RestoreOrphan(orphan, "Found"));
 
         // Reads, and refusals, never save.
         Unchanged(() => _ = manager.Personas);

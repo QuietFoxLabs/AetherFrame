@@ -17,7 +17,9 @@ namespace AetherFrame.Personas.Storage;
 /// The checksum guards against corruption only: whoever can rewrite the registry runs as the user
 /// and can already read every key (K2). A label travels as UTF-16 code units, so no transcoding
 /// can change it. Decoding refuses anything but exactly this layout: every length is checked
-/// against what remains before it is read, and nothing is repaired.
+/// against what remains before it is read, and nothing is repaired. The magic and the version come
+/// before the checksum, and every later version keeps them where they are, so a registry a newer
+/// AetherFrame wrote is told apart from a damaged one.
 /// </summary>
 internal static class PersonaRegistryCodec
 {
@@ -90,10 +92,20 @@ internal static class PersonaRegistryCodec
     /// holds unique non-empty slots, valid and unique public keys, labels that are their own
     /// normalization, only known flags, and an active slot that names one of its records or none.
     /// </summary>
-    internal static bool TryDecode(ReadOnlySpan<byte> bytes, out IReadOnlyList<PersonaRecord> records, out PersonaSlotId active, out string reason)
+    internal static bool TryDecode(ReadOnlySpan<byte> bytes, out IReadOnlyList<PersonaRecord> records, out PersonaSlotId active, out string reason) =>
+        TryDecode(bytes, out records, out active, out reason, out _);
+
+    /// <summary>
+    /// As <see cref="TryDecode(ReadOnlySpan{byte}, out IReadOnlyList{PersonaRecord}, out PersonaSlotId, out string)"/>,
+    /// and says whether a refused registry names a later version. The magic and the version are
+    /// checked before the checksum, so a registry a newer AetherFrame wrote, whatever its later
+    /// layout, is told apart from a damaged one within this version's size limit.
+    /// </summary>
+    internal static bool TryDecode(ReadOnlySpan<byte> bytes, out IReadOnlyList<PersonaRecord> records, out PersonaSlotId active, out string reason, out bool newerVersion)
     {
         records = Array.Empty<PersonaRecord>();
         active = default;
+        newerVersion = false;
         if (bytes.Length > MaxBytes)
         {
             reason = $"it is larger than the {MaxBytes}-byte limit";
@@ -106,23 +118,25 @@ internal static class PersonaRegistryCodec
             return false;
         }
 
-        Span<byte> checksum = stackalloc byte[ChecksumLength];
-        SHA256.HashData(bytes[..^ChecksumLength], checksum);
-        if (!checksum.SequenceEqual(bytes[^ChecksumLength..]))
-        {
-            reason = "its checksum does not match";
-            return false;
-        }
-
         if (!bytes[..4].SequenceEqual(Magic))
         {
             reason = "it does not start with the registry magic";
             return false;
         }
 
-        if (BinaryPrimitives.ReadUInt16BigEndian(bytes[4..]) != Version)
+        var version = BinaryPrimitives.ReadUInt16BigEndian(bytes[4..]);
+        if (version != Version)
         {
-            reason = "it is a registry version this build does not read";
+            newerVersion = version > Version;
+            reason = newerVersion ? $"it is registry version {version}, which a newer AetherFrame wrote" : "it is a registry version this build does not read";
+            return false;
+        }
+
+        Span<byte> checksum = stackalloc byte[ChecksumLength];
+        SHA256.HashData(bytes[..^ChecksumLength], checksum);
+        if (!checksum.SequenceEqual(bytes[^ChecksumLength..]))
+        {
+            reason = "its checksum does not match";
             return false;
         }
 

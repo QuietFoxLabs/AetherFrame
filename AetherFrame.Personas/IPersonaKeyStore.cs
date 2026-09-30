@@ -15,12 +15,13 @@ namespace AetherFrame.Personas;
 /// its protector, and only a reviewed one may claim it.
 /// <para>
 /// The manager makes every call to a store, and to the signers it returns (signing and disposal
-/// alike), under its one lock, so an implementation is never called concurrently. The price is that
-/// every manager member, listings included, waits while a store call runs: an implementation that
-/// blocks (reading files, unprotecting keys, prompting) stalls a frame thread that only wanted a
-/// listing. The key store core keeps its calls short (a few small reads and writes and at most two
-/// protector calls); whether the wiring (increment 9) calls the manager off the frame thread or
-/// splits its lock is decided there.
+/// alike), under its one lock, so an implementation is never called concurrently. Listings never
+/// wait for it: <see cref="PersonaManager.Personas"/>, <see cref="PersonaManager.Active"/> and
+/// <see cref="PersonaManager.TryGet"/> read a snapshot without the lock. Every change, the audit,
+/// the check of an orphan and every signature do wait while a store call runs, so the plugin makes
+/// those calls off the framework thread: an implementation may block (reading files, unprotecting
+/// keys). The key store core keeps its calls short (a few small reads and writes and at most two
+/// protector calls).
 /// </para>
 /// <para>
 /// Custody is taken in two steps so that nothing is committed before it is checked: a key is made
@@ -51,18 +52,19 @@ public interface IPersonaKeyStore
 
     /// <summary>
     /// Commits a copy of <paramref name="material"/>'s key to custody under <paramref name="slot"/>.
-    /// Four rules bind every implementation. It commits exactly that key: the manager records the
-    /// persona as soon as this returns and never sees the key again, so a store that commits
-    /// anything else (a scalar that lost a byte in serialization, say) leaves a persona that can
-    /// never sign or be backed up; a store verifies what it wrote before it returns. It never
-    /// replaces: a slot the store already holds is refused with an exception and its key is left
-    /// exactly as it was. It returns only once the key is held and verified, and when it throws
+    /// Four rules bind every implementation. It commits exactly that key: once this returns, the
+    /// manager saves its registry and records the persona, and never sees the key again, so a store
+    /// that commits anything else (a scalar that lost a byte in serialization, say) leaves a persona
+    /// that can never sign or be backed up; a store verifies what it wrote before it returns. It
+    /// never replaces: a slot the store already holds is refused with an exception and its key is
+    /// left exactly as it was. It returns only once the key is held and verified, and when it throws
     /// before anything became durable, nothing is held under <paramref name="slot"/>; a store that
     /// cannot delete may be left holding an unverified key under that slot when the verification
     /// after a durable write fails, and must say so in its exception. The caller never records or
-    /// reuses a slot whose commit threw (L12 in docs/networking/DecisionRegister.md). It never
-    /// retains <paramref name="material"/> itself, which stays the caller's to dispose whether this
-    /// returns or throws.
+    /// reuses a slot whose commit threw on its own: such a key is an orphan, which only the player's
+    /// <see cref="PersonaManager.RestoreOrphan"/> records, after opening it and checking it again
+    /// (L12 in docs/networking/DecisionRegister.md). It never retains <paramref name="material"/>
+    /// itself, which stays the caller's to dispose whether this returns or throws.
     /// </summary>
     void AddKey(PersonaSlotId slot, PersonaKeyMaterial material);
 

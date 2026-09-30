@@ -28,11 +28,12 @@ namespace AetherFrame.Personas;
 /// <para>
 /// A manager made by <see cref="Load"/> keeps its records and its selection in a registry (decision
 /// P3): every change is saved first and applied in memory only once the save succeeded, so memory
-/// never holds a state the registry lacks. A failed save changes nothing in memory and is reported
-/// as <see cref="PersonaError.RegistryWriteFailed"/>; a key committed just before is then held with
-/// no record, and is offered for restore by <see cref="Audit"/> and <see cref="RestoreOrphan"/>
-/// (decision L12). A manager made by the constructor keeps nothing: it is for tests and for
-/// callers that hold no registry.
+/// never shows a change the registry has not accepted. A failed save is not applied, and is
+/// reported as <see cref="PersonaError.RegistryWriteFailed"/>; when its outcome is unknown (the
+/// storage held the new bytes, then failed), a restart may show the change after all. A key
+/// committed just before a failed save is held with no record, and is offered for restore by
+/// <see cref="Audit"/> and <see cref="RestoreOrphan"/> (decision L12). A manager made by the
+/// constructor keeps nothing: it is for tests and for callers that hold no registry.
 /// </para>
 /// <para>
 /// Every member is safe to call from any thread. Changes, store calls and every call to a store's
@@ -91,9 +92,11 @@ public sealed class PersonaManager
     /// player last left them. A registry that does not exist yet is a first run: no personas, none
     /// selected. A registry that exists but cannot be read, or is not one this build reads, is
     /// refused and left exactly as it was: never overwritten, never replaced, and no manager is made
-    /// from it, so the caller turns persona features off and names where the registry is.
+    /// from it, so the caller turns persona features off and names where the registry is. A
+    /// registry a newer AetherFrame wrote is refused the same way, but told apart, so the caller can
+    /// say to update rather than to move a damaged file aside.
     /// </summary>
-    /// <exception cref="PersonaException"><see cref="PersonaError.RegistryUnreadable"/>.</exception>
+    /// <exception cref="PersonaException"><see cref="PersonaError.RegistryUnreadable"/> or <see cref="PersonaError.RegistryNewerVersion"/>.</exception>
     public static PersonaManager Load(IPersonaKeyStore keys, IPersonaBackupCodec backups, IPersonaRegistryStorage registry)
     {
         ArgumentNullException.ThrowIfNull(keys);
@@ -115,9 +118,11 @@ public sealed class PersonaManager
             return manager;
         }
 
-        if (!PersonaRegistryCodec.TryDecode(bytes, out var records, out var active, out var reason))
+        if (!PersonaRegistryCodec.TryDecode(bytes, out var records, out var active, out var reason, out var newerVersion))
         {
-            throw new PersonaException(PersonaError.RegistryUnreadable, "The persona registry is not one this build reads (" + reason + "), and is left as it was.");
+            throw newerVersion
+                ? new PersonaException(PersonaError.RegistryNewerVersion, "The persona registry was written by a newer version of AetherFrame (" + reason + "), and is left as it was.")
+                : new PersonaException(PersonaError.RegistryUnreadable, "The persona registry is not one this build reads (" + reason + "), and is left as it was.");
         }
 
         lock (manager.gate)
@@ -288,7 +293,8 @@ public sealed class PersonaManager
     /// active one (decision L10): <paramref name="expectedSlot"/> with <paramref name="expectedKey"/>.
     /// When another persona is active, or none is, nothing is opened and the answer is
     /// <see cref="PersonaSignerAvailability.ActivePersonaChanged"/>: the operation stops, and the
-    /// player retries. The lease signs once and is disposed; no lease is held across I/O or a dialog.
+    /// player retries. The operation must sign once with the lease and dispose it, and must not hold
+    /// a lease across I/O or a dialog; nothing here enforces that, so it is the caller's rule.
     /// </summary>
     /// <exception cref="PersonaException"><see cref="PersonaError.InvalidKeyMaterial"/> when the store opened a key that is not the persona's.</exception>
     public PersonaSignerAvailability TryOpenSigner(PersonaSlotId expectedSlot, PersonaPublicKey expectedKey, out PersonaSignerLease? lease)
@@ -419,7 +425,8 @@ public sealed class PersonaManager
     /// keys held under a slot no record names (orphans), and records whose key is missing, unreadable
     /// or names another slot or key (unusable). An orphan's identity is its envelope header's claim,
     /// unverified until <see cref="VerifyOrphan"/> opens the key. A listing that fails is reported,
-    /// never thrown. Nothing is repaired, restored or deleted.
+    /// never thrown. Nothing is repaired, restored or deleted. It reads every key's envelope under
+    /// the lock, so the caller runs it off the framework thread.
     /// </summary>
     public PersonaAudit Audit()
     {
@@ -686,9 +693,26 @@ public sealed class PersonaManager
         }
     }
 
-    /// <summary>The registry's bytes for a state, or none when this manager keeps no registry.</summary>
-    private byte[]? Encode(IReadOnlyList<PersonaRecord> records, PersonaSlotId active) =>
-        registry is null ? null : PersonaRegistryCodec.Encode(records, active);
+    /// <summary>
+    /// The registry's bytes for a state, or none when this manager keeps no registry. Like the
+    /// document codecs, it checks its own output: bytes the next load would refuse are never saved.
+    /// It runs before anything changes, and before a new key is committed.
+    /// </summary>
+    private byte[]? Encode(IReadOnlyList<PersonaRecord> records, PersonaSlotId active)
+    {
+        if (registry is null)
+        {
+            return null;
+        }
+
+        var bytes = PersonaRegistryCodec.Encode(records, active);
+        if (!PersonaRegistryCodec.TryDecode(bytes, out _, out _, out var reason))
+        {
+            throw new InvalidOperationException("The persona registry this change would save does not read back (" + reason + "), so nothing was saved or committed.");
+        }
+
+        return bytes;
+    }
 
     private void Save(IReadOnlyList<PersonaRecord> records, PersonaSlotId active) => Save(Encode(records, active));
 
@@ -706,7 +730,7 @@ public sealed class PersonaManager
         }
         catch (Exception e)
         {
-            throw new PersonaException(PersonaError.RegistryWriteFailed, "The persona registry could not be saved, so nothing changed.", e);
+            throw new PersonaException(PersonaError.RegistryWriteFailed, "The persona registry could not be saved, so the change was not applied; if the storage kept it before failing, a restart shows it.", e);
         }
     }
 

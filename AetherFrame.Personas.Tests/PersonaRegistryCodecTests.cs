@@ -12,8 +12,9 @@ namespace AetherFrame.Personas.Tests;
 /// <summary>
 /// The persona registry's bytes (decision P3): exactly the layout the register gives, round trips
 /// that keep every record, flag, label and the selection exactly, and a refusal, with its reason,
-/// for every rule a registry can break. Each refusal is built field by field with a valid checksum,
-/// so it is refused for the rule it breaks and not for its checksum.
+/// for every rule a registry can break. Every refusal of a rule checked after the checksum is built
+/// field by field with a valid checksum, so it is refused for the rule it breaks and not for its
+/// checksum; the size and checksum refusals come before it, and each asserts its own reason.
 /// </summary>
 public class PersonaRegistryCodecTests
 {
@@ -102,6 +103,34 @@ public class PersonaRegistryCodecTests
         Assert.Contains(because, reason, StringComparison.Ordinal);
         Assert.Empty(records);
         Assert.True(active.IsEmpty);
+    }
+
+    [Fact]
+    public void TryDecode_TellsALaterVersionApart_BeforeItsChecksum_AndNothingElse()
+    {
+        var good = Record(Slot(PersonaSlotId.NewId()), KeyA.ToArray(), 0, "Main");
+        var later = Registry([good], version: 2);
+        var laterLayout = (byte[])later.Clone();
+        laterLayout[^1] ^= 0x01;
+
+        foreach (var bytes in new[] { later, laterLayout, Registry([good], version: ushort.MaxValue) })
+        {
+            Assert.False(PersonaRegistryCodec.TryDecode(bytes, out var records, out var active, out var reason, out var newerVersion));
+            Assert.True(newerVersion, reason);
+            Assert.Empty(records);
+            Assert.True(active.IsEmpty);
+        }
+
+        var damaged = Registry([good]);
+        damaged[20] ^= 0x01;
+        foreach (var bytes in new[] { Registry([good], version: 0), Registry([good], magic: "AFPS"u8.ToArray()), damaged, Array.Empty<byte>() })
+        {
+            Assert.False(PersonaRegistryCodec.TryDecode(bytes, out _, out _, out var reason, out var newerVersion));
+            Assert.False(newerVersion, reason);
+        }
+
+        Assert.True(PersonaRegistryCodec.TryDecode(Registry([good]), out _, out _, out _, out var current));
+        Assert.False(current);
     }
 
     public static IEnumerable<object[]> Refusals()

@@ -75,6 +75,42 @@ public class PersonaLabelTests
     }
 
     [Fact]
+    public void TheWhitespaceTrimmed_IsAFixedList_EveryOtherCharacterKeptOrRefused()
+    {
+        // Unicode's White_Space set, written out: the rule trims exactly these at either end, and
+        // keeps or refuses every other character the same way on every runtime.
+        int[] whitespace =
+        [
+            0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x0020, 0x0085, 0x00A0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003,
+            0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
+        ];
+
+        for (var code = 0; code <= 0xFFFF; code++)
+        {
+            var c = (char)code;
+            if (char.IsSurrogate(c))
+            {
+                continue;
+            }
+
+            var accepted = PersonaLabel.TryNormalize("x" + c, out var label);
+            if (Array.IndexOf(whitespace, code) >= 0)
+            {
+                Assert.True(accepted && label == "x", $"U+{code:X4} is trimmed");
+                Assert.True(PersonaLabel.TryNormalize(c + "x", out label) && label == "x", $"U+{code:X4} is trimmed");
+            }
+            else if (code is < 0x20 or (>= 0x7F and <= 0x9F))
+            {
+                Assert.False(accepted, $"U+{code:X4} is a control character");
+            }
+            else
+            {
+                Assert.True(accepted && label == "x" + c, $"U+{code:X4} is kept");
+            }
+        }
+    }
+
+    [Fact]
     public void Normalize_ThrowsInvalidLabelWithoutRepeatingTheText()
     {
         var exception = Assert.Throws<PersonaException>(() => PersonaLabel.Normalize("secret alt name\u0000"));
