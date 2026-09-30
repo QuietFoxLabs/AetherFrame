@@ -84,7 +84,7 @@ The remaining four came from Claude's questions in chat. The owner picked one op
 - reporting and hiding a Plate, and the operator's takedown;
 - whether K4 and the D2 backup still matter now that a Lodestone check can hand a character to a new key;
 - exactly what a viewer receives (D6 and I2 carried over, or narrowed);
-- how consent works when saving updates what others see (V2). V2 conflicts with two consent rules already recorded: D5's N2-6 note, point 6 (a consent screen before each signing), and #56's rule that a Plate signed from the share check is shown on that screen before its first send, or dropped. Batch C amends both explicitly, with a security reviewer's concurrence (for example, one consent per character at opt-in that covers later saves), and never routes around them.
+- how consent works when saving updates what others see (V2). V2 conflicts with D5's N2-6 note, point 6 (a consent screen before each signing), which is recorded, and with #56's proposed rule (#56 is open) that a Plate signed from the share check is shown on that screen before its first send, or dropped. Batch C amends both explicitly, with a security reviewer's concurrence (for example, one consent per character at opt-in that covers later saves), and never routes around them.
 
 ### D2: recovery from key loss. APPROVED IN PRINCIPLE (September 28, 2026)
 
