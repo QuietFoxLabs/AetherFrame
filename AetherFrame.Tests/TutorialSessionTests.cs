@@ -37,6 +37,14 @@ public class TutorialSessionTests
         ]),
     ];
 
+    /// <summary><paramref name="snapshot"/> after the player has done what <paramref name="condition"/> waits for.</summary>
+    private static TutorialContextSnapshot Meeting(TutorialContextSnapshot snapshot, TutorialCondition condition) => condition switch
+    {
+        TutorialCondition.CreatingOrEditingPlate or TutorialCondition.TemplateChooserOpen => snapshot with { TemplateChooserOpen = true },
+        TutorialCondition.AnyEditorOpen or TutorialCondition.BasicEditorOpen => snapshot with { TemplateChooserOpen = false, ActiveEditor = EditorSurfaceKind.Basic, PlateOpen = true },
+        _ => throw new ArgumentOutOfRangeException(nameof(condition), condition, "Add how the player meets this condition."),
+    };
+
     private static bool AllAvailable(TutorialTarget target) => target != TutorialTarget.None;
 
     private static bool NoneAvailable(TutorialTarget target) => false;
@@ -419,15 +427,17 @@ public class TutorialSessionTests
                 Assert.True(++guard < 200, "the tutorial never ends");
                 if (session.IsNextHeld(snapshot))
                 {
-                    // A step that waits for the player holds Next, and says what it waits for; the
-                    // chapter picker still moves on, so it is never a trap.
+                    // A step that waits for the player holds Next and says what it waits for; once
+                    // the player has done it, Next moves on, and the walk continues in the original
+                    // state, so every later step is still walked from it.
                     Assert.True(view.NextHeld);
                     Assert.True(session.CurrentStep!.WaitsForAction);
                     Assert.False(string.IsNullOrWhiteSpace(session.CurrentStep.WaitHint));
                     var held = session.CurrentStep;
                     Assert.True(session.Next(snapshot));
                     Assert.Same(held, session.CurrentStep);
-                    session.JumpToChapter(snapshot, session.ChapterIndex + 1);
+                    session.Next(Meeting(snapshot, held.AdvanceWhen));
+                    Assert.NotSame(held, session.CurrentStep);
                     continue;
                 }
 
@@ -498,8 +508,12 @@ public class TutorialSessionTests
         session.Next(Library);
         Assert.Equal("first.template", session.CurrentStep!.Id);
 
-        // Back still works from a held step, and so does leaving the tour.
+        // Back still works from a held step, and so do the chapter picker and leaving the tour.
         Assert.True(session.Back(Library));
+        Assert.Equal("first.create", session.CurrentStep!.Id);
+        session.JumpToChapter(Library, 3);
+        Assert.Equal(3, session.ChapterIndex);
+        session.JumpToChapter(Library, 2);
         Assert.Equal("first.create", session.CurrentStep!.Id);
         session.Skip();
         Assert.Equal(TutorialSessionStatus.Skipped, session.Status);
@@ -518,10 +532,19 @@ public class TutorialSessionTests
         Assert.Equal("first.workspace", session.CurrentStep!.Id);
         Assert.False(session.IsNextHeld(Basic));
 
-        // Entering the chapter with a Plate already open starts at the editor.
+        // Entering the chapter with a Plate already open starts at the editor, even with My Plates closed.
         var again = new TutorialSession(TutorialScript.Chapters);
         again.JumpToChapter(Basic, 2);
         Assert.Equal("first.workspace", again.CurrentStep!.Id);
+        Assert.False(Advanced.MyPlatesOpen);
+        again.JumpToChapter(Advanced, 2);
+        Assert.Equal("first.workspace", again.CurrentStep!.Id);
+
+        // Going back from there still shows "Start a new Plate" again, and doesn't bounce forward.
+        Assert.True(again.Back(Advanced));
+        Assert.Equal("first.create", again.CurrentStep!.Id);
+        Assert.False(again.TryAutoAdvance(Advanced));
+        Assert.Equal("first.create", again.CurrentStep!.Id);
     }
 
     [Fact]

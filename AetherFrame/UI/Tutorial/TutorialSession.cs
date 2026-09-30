@@ -383,7 +383,10 @@ internal sealed class TutorialSession
         return IsRunning;
     }
 
+    // A step that waits for the player is done once its "done when" holds, whether or not its own
+    // window is showing: a player who reaches "Start a new Plate" with a Plate already open in an
+    // editor and My Plates closed has nothing left to do there.
     private static bool ShouldPassOver(TutorialStep step, TutorialContextSnapshot snapshot) =>
         (step.SkipIfUnmet && !snapshot.Satisfies(step.Requires))
-        || (step.AdvanceWhen != TutorialCondition.None && snapshot.Satisfies(step.Requires) && snapshot.Satisfies(step.AdvanceWhen));
+        || (step.AdvanceWhen != TutorialCondition.None && (snapshot.Satisfies(step.Requires) || step.WaitsForAction) && snapshot.Satisfies(step.AdvanceWhen));
 }

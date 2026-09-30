@@ -123,8 +123,6 @@ internal sealed class TutorialOverlayWindow : Window
             owner = anchor.OwnerWindowId;
         }
 
-        KeepInFront(step, owner);
-
         if (frame.CardSize.X <= 0f)
         {
             frame.CardSize = new Vector2(AetherMetrics.TutorialCardWidth, 220f) * scale;
@@ -134,6 +132,7 @@ internal sealed class TutorialOverlayWindow : Window
             frameCount, step, work, DimmedArea(), visible,
             AetherMetrics.SpotlightMargin * scale, AetherMetrics.TutorialCardGap * scale, AetherMetrics.TutorialCardViewportInset * scale);
         TutorialOverlayState.IsSpotlightActive = true;
+        KeepInFront(step, owner);
 
         // What the windows may bring into view: the step's own control (also while it's missing,
         // so a scrolled region can reveal it), or the way to meet a prerequisite.
@@ -166,6 +165,12 @@ internal sealed class TutorialOverlayWindow : Window
     /// It happens again whenever that window rises above the card (a popup opened later comes to
     /// the front by itself, and a modal popup would dim the card behind it); it doesn't happen
     /// every frame, so a menu the player opens afterwards still shows in front.
+    ///
+    /// <para>A popup is the exception. It is already in front of AetherFrame's windows, and a
+    /// modal one dims everything behind it by itself, so the shades stay behind it and never cover
+    /// any of it, its title bar included. Only the card comes in front of it, so the card isn't
+    /// dimmed, and only when the card doesn't overlap the spotlight: a card over a modal popup
+    /// can't be clicked, and would hide the part of the popup beneath it.</para>
     /// </summary>
     private void KeepInFront(TutorialStepView step, uint owner)
     {
@@ -179,22 +184,35 @@ internal sealed class TutorialOverlayWindow : Window
         raisedPresentation = step.Presentation;
         raisedOwner = owner;
 
-        if (owner != 0)
+        var ownerWindow = owner != 0 ? ImGuiP.FindWindowByID(owner) : default;
+        if (!ownerWindow.IsNull && (ownerWindow.Flags & ImGuiWindowFlags.Popup) != 0)
         {
-            var window = ImGuiP.FindWindowByID(owner);
-            if (!window.IsNull)
+            var card = new ScreenRect(frame.CardPosition, frame.CardPosition + frame.CardSize);
+            if (tutorialWindows.Count > 0 && card.Intersect(frame.Hole).IsEmpty)
             {
-                ImGuiP.BringWindowToDisplayFront(window);
+                BringToDisplayFront(tutorialWindows[^1]);
             }
+
+            return;
+        }
+
+        if (!ownerWindow.IsNull)
+        {
+            ImGuiP.BringWindowToDisplayFront(ownerWindow);
         }
 
         foreach (var tutorialWindow in tutorialWindows)
         {
-            var window = ImGuiP.FindWindowByName(tutorialWindow.WindowName);
-            if (!window.IsNull)
-            {
-                ImGuiP.BringWindowToDisplayFront(window);
-            }
+            BringToDisplayFront(tutorialWindow);
+        }
+    }
+
+    private static void BringToDisplayFront(Window window)
+    {
+        var imgui = ImGuiP.FindWindowByName(window.WindowName);
+        if (!imgui.IsNull)
+        {
+            ImGuiP.BringWindowToDisplayFront(imgui);
         }
     }
 

@@ -54,7 +54,10 @@ internal static class TutorialAnchorMarks
         TutorialOverlayState.Registry.Record(target, new ScreenRect(min, max), clip, ImGui.GetFrameCount(), CurrentTopLevelWindowId());
     }
 
-    /// <summary>The id of the top-level window being drawn (the root of a child region; a popup is its own root), or 0.</summary>
+    /// <summary>
+    /// The id of the top-level window being drawn, or 0: the root of a child region, the dock host
+    /// of a docked window (ImGui orders docked windows by their host), and a popup is its own.
+    /// </summary>
     private static uint CurrentTopLevelWindowId()
     {
         var window = ImGuiP.GetCurrentWindow();
@@ -63,11 +66,15 @@ internal static class TutorialAnchorMarks
             return 0;
         }
 
-        var root = window.RootWindow;
+        var root = window.RootWindowDockTree;
         return root.IsNull ? window.ID : root.ID;
     }
 
-    /// <summary>Records the current window (a child region, say) as <paramref name="target"/>.</summary>
+    /// <summary>
+    /// Records the current window as <paramref name="target"/>. A top-level window (a popup such as
+    /// the Create Plate chooser) is recorded whole, title bar included; a child region is clipped
+    /// like its content, since its parent may scroll it partly out of view.
+    /// </summary>
     internal static void MarkWindow(TutorialTarget target)
     {
         if (target == TutorialTarget.None)
@@ -76,7 +83,16 @@ internal static class TutorialAnchorMarks
         }
 
         var min = ImGui.GetWindowPos();
-        MarkRect(target, min, min + ImGui.GetWindowSize());
+        var max = min + ImGui.GetWindowSize();
+        var window = ImGuiP.GetCurrentWindow();
+        if (!window.IsNull && !window.RootWindow.IsNull && window.ID == window.RootWindow.ID)
+        {
+            var whole = new ScreenRect(min, max);
+            TutorialOverlayState.Registry.Record(target, whole, whole, ImGui.GetFrameCount(), CurrentTopLevelWindowId());
+            return;
+        }
+
+        MarkRect(target, min, max);
     }
 
     /// <summary>Whether the tutorial is pointing at <paramref name="target"/> right now (to scroll to it, open its section or tab).</summary>
