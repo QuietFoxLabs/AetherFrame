@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AetherFrame.Protocol.Remote;
 using AetherFrame.Services.Network.Publishing;
 using Dalamud.Interface.Textures;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Plugin.Services;
 
 namespace AetherFrame.Hosting.Network.Publishing;
@@ -54,11 +55,10 @@ internal sealed class DalamudImageCodec : IImageCodec
 
     public async Task<DecodedImage?> DecodeAsync(ReadOnlyMemory<byte> file, CancellationToken cancellation)
     {
+        IDalamudTextureWrap wrap;
         try
         {
-            using var wrap = await textures.CreateFromImageAsync(file, "AetherFrame publishing", cancellation).ConfigureAwait(false);
-            var (specification, pixels) = await readback.GetRawImageAsync(wrap, default, leaveWrapOpen: true, cancellation).ConfigureAwait(false);
-            return new DecodedImage(specification.Width, specification.Height, specification.Pitch, specification.DxgiFormat, pixels);
+            wrap = await textures.CreateFromImageAsync(file, "AetherFrame publishing", cancellation).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -66,7 +66,25 @@ internal sealed class DalamudImageCodec : IImageCodec
         }
         catch (Exception)
         {
+            // The file doesn't decode, as the renderer finds it.
             return null;
+        }
+
+        using (wrap)
+        {
+            try
+            {
+                var (specification, pixels) = await readback.GetRawImageAsync(wrap, default, leaveWrapOpen: true, cancellation).ConfigureAwait(false);
+                return new DecodedImage(specification.Width, specification.Height, specification.Pitch, specification.DxgiFormat, pixels);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                return DecodedImage.ReadBackFailed;
+            }
         }
     }
 

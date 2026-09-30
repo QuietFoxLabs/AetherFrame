@@ -153,8 +153,9 @@ internal static class PreparedContainer
                 // Dalamud's EXIF block, which only says the colour space: removed, whole.
                 exif = true;
             }
-            else if (code is 0xDB or 0xC0 or 0xC4 or 0xDD)
+            else if (code is 0xDB or 0xC0 or 0xC4 || (code == 0xDD && length == 4))
             {
+                // DRI holds only its restart interval: a segment of exactly 4 bytes.
                 kept.Add((offset, segment));
             }
             else if (code == 0xDA)

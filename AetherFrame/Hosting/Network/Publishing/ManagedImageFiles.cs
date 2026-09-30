@@ -22,13 +22,13 @@ internal sealed class ManagedImageFiles : IManagedImages
 
     public byte[]? TryRead(Guid image)
     {
-        if (assets.ResolveAssetPath(image) is not { } path)
-        {
-            return null;
-        }
-
         try
         {
+            if (assets.ResolveAssetPath(image) is not { } path)
+            {
+                return null;
+            }
+
             using var stream = File.OpenRead(path);
             if (stream.Length > ImageSafety.MaxFileBytes)
             {

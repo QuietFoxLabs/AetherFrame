@@ -18,7 +18,11 @@ namespace AetherFrame.Services.Network.Publishing;
 /// bytes between the starts of its rows (<paramref name="Pitch"/>, which may exceed the width's
 /// bytes), its DXGI format, and the bytes.
 /// </summary>
-internal sealed record DecodedImage(int Width, int Height, int Pitch, int DxgiFormat, byte[] Pixels);
+internal sealed record DecodedImage(int Width, int Height, int Pitch, int DxgiFormat, byte[] Pixels)
+{
+    /// <summary>A file that decoded, whose pixels couldn't be read back: the texture pipeline failed, not the file, so it isn't missing.</summary>
+    internal static readonly DecodedImage ReadBackFailed = new(0, 0, 0, 0, []);
+}
 
 /// <summary>
 /// What preparing needs from the texture pipeline (the plugin's is Dalamud's, through WIC): decoding
@@ -27,7 +31,11 @@ internal sealed record DecodedImage(int Width, int Height, int Pitch, int DxgiFo
 /// </summary>
 internal interface IImageCodec
 {
-    /// <summary>The file's image, decoded and read back whole; null when it can't be decoded.</summary>
+    /// <summary>
+    /// The file's image, decoded and read back whole; null when the file can't be decoded (as the
+    /// renderer finds it), and <see cref="DecodedImage.ReadBackFailed"/> when it decoded but its
+    /// pixels couldn't be read back.
+    /// </summary>
     Task<DecodedImage?> DecodeAsync(ReadOnlyMemory<byte> file, CancellationToken cancellation);
 
     /// <summary>The pixels (<paramref name="width"/> by <paramref name="height"/>, RGBA, rows packed), encoded in <paramref name="format"/>; null when that fails.</summary>
@@ -106,6 +114,13 @@ internal static class ImagePreparer
         if (await codec.DecodeAsync(file, cancellation).ConfigureAwait(false) is not { } decoded)
         {
             return ImagePreparation.Unavailable(ImageUnavailableReason.Missing);
+        }
+
+        // The renderer draws a file that decodes; one the pipeline then failed to read back is
+        // refused, never left out as if it were missing.
+        if (ReferenceEquals(decoded, DecodedImage.ReadBackFailed))
+        {
+            return ImagePreparation.Unavailable(ImageUnavailableReason.Unshareable);
         }
 
         if (decoded.Width != requirement.SourceWidth || decoded.Height != requirement.SourceHeight)

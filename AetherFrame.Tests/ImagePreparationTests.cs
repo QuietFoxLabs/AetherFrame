@@ -83,8 +83,14 @@ public sealed class ImagePreparationTests
         Assert.True(ImagePreparer.TryCrop(new DecodedImage(5, 3, 40, ImagePreparer.Rgba64, wide), window, out var fromWide, out _));
         Assert.Equal(expected, fromWide);
 
-        // Anything else is refused: sRGB and float formats, a short buffer, a short pitch, a window outside.
-        foreach (var format in new[] { 29, 91, 2, 10, 71 })
+        // The last row may end short of the pitch: only its pixels need to be there.
+        var tight = Readback(source, 5, 3, ImagePreparer.Rgba, pitch: 32);
+        Assert.True(ImagePreparer.TryCrop(tight with { Pixels = tight.Pixels[..((2 * 32) + 20)] }, window, out var fromTight, out _));
+        Assert.Equal(expected, fromTight);
+
+        // Anything else is refused: sRGB, float and block-compressed formats, one channel (a
+        // greyscale image, R8 or R16), a short buffer, a short pitch, a window outside.
+        foreach (var format in new[] { 29, 91, 2, 10, 71, 61, 56 })
         {
             Assert.False(ImagePreparer.TryCrop(Readback(source, 5, 3, format, pitch: 20), window, out _, out _));
         }
@@ -159,12 +165,34 @@ public sealed class ImagePreparationTests
             JpegFrom(Segment(0xE0, [.. "JFIF"u8, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 9, 9, 9]), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
             JpegFrom(Segment(0xE0, [.. "JFIF"u8, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0]), Dqt(), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
             JpegFrom(App0(), [0xFF, .. Dqt()], Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
+            JpegFrom(App0(), Dqt(), Segment(0xDD, [0, 4, 0]), Sof0(8, 8), Dht(), Sos(), Entropy(), Eoi()),
             [.. bare, 0x00],
             bare[..^1],
         })
         {
             Assert.Null(PreparedContainer.Clean(refused, ImageFormat.Jpeg));
         }
+    }
+
+    [Fact]
+    public void WhatWindowsEncoderWrites_IsCleanedToExactlyTheInventory()
+    {
+        // Real WIC output, kept as fixtures: a PNG with sRGB, gAMA and pHYs before its image data,
+        // and a JPEG with its 16-byte JFIF APP0, two DQT, SOF0 at 4:2:0, four DHT and one scan.
+        var png = Fixture("wic-rgba-4x2.png");
+        Assert.Equal(new[] { "IHDR", "sRGB", "gAMA", "pHYs", "IDAT", "IEND" }, PngChunks(png));
+        var cleanedPng = PreparedContainer.Clean(png, ImageFormat.Png)!;
+        Assert.Equal(new[] { "IHDR", "IDAT", "IEND" }, PngChunks(cleanedPng));
+        Assert.Equal(new SniffedImage(ImageFormat.Png, 4, 2), ImageSniffer.Sniff(cleanedPng));
+
+        var jpeg = Fixture("wic-flat-8x8.jpg");
+        Assert.Same(jpeg, PreparedContainer.Clean(jpeg, ImageFormat.Jpeg));
+        Assert.Equal(new SniffedImage(ImageFormat.Jpeg, 8, 8), ImageSniffer.Sniff(jpeg));
+
+        // Dalamud's own call adds its EXIF block right after APP0 (start of image and APP0 are
+        // the first 20 bytes): removed whole, it gives WIC's JPEG back, byte for byte.
+        byte[] withExif = [.. jpeg[..20], .. DalamudExif(), .. jpeg[20..]];
+        Assert.Equal(jpeg, PreparedContainer.Clean(withExif, ImageFormat.Jpeg));
     }
 
     [Fact]
@@ -248,6 +276,11 @@ public sealed class ImagePreparationTests
         var srgb = new FakeCodec();
         srgb.Decodes(file, new DecodedImage(4, 2, 16, 29, new byte[32]));
         Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, srgb));
+
+        // A file that decoded but couldn't be read back is the pipeline's failure: refused, never missing.
+        var failedReadBack = new FakeCodec();
+        failedReadBack.Decodes(file, DecodedImage.ReadBackFailed);
+        Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, failedReadBack));
         Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, new FakeCodec { Encoder = (_, _, _, _) => null }));
         Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, new FakeCodec { Encoder = (rgba, width, height, _) => PngWith(Chunk("tEXt", KeyedText()), width, height, rgba) }));
         Assert.Equal(ImageUnavailableReason.Unshareable, await Reason(whole, new FakeImages { [Photo] = file }, new FakeCodec { Encoder = (rgba, width, height, _) => Png(width + 1, height, [.. rgba, .. new byte[height * 4]]) }));
@@ -387,6 +420,10 @@ public sealed class ImagePreparationTests
     private static byte[] Png(int width, int height, byte[] rgba) =>
         PngFrom(Chunk("IHDR", Header(width, height)), Chunk("IDAT", Deflate(width, height, rgba)), Chunk("IEND", []));
 
+    /// <summary>A PNG as WIC's encoder writes one (measured on Windows 11): sRGB (perceptual) and gAMA (1/2.2) before the image data.</summary>
+    private static byte[] PngAsWicWrites(int width, int height, byte[] rgba) =>
+        PngFrom(Chunk("IHDR", Header(width, height)), Chunk("sRGB", [0]), Chunk("gAMA", [0x00, 0x00, 0xB1, 0x8F]), Chunk("IDAT", Deflate(width, height, rgba)), Chunk("IEND", []));
+
     private static byte[] PngWith(byte[] extra) => PngWith(extra, 2, 2, new byte[16]);
 
     private static byte[] PngWith(byte[] extra, int width, int height, byte[] rgba) =>
@@ -496,7 +533,31 @@ public sealed class ImagePreparationTests
 
     private static byte[] App0() => Segment(0xE0, [.. "JFIF"u8, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]);
 
-    /// <summary>The EXIF block Dalamud's encoder adds: little-endian TIFF with one ColorSpace tag.</summary>
+    /// <summary>A real encoder's output, from Fixtures/wic.</summary>
+    private static byte[] Fixture(string name) => File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "wic", name));
+
+    /// <summary>A PNG's chunk types, in order.</summary>
+    private static string[] PngChunks(byte[] png)
+    {
+        var types = new List<string>();
+        for (var offset = 8; offset + 12 <= png.Length; offset += 12 + (int)BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(offset)))
+        {
+            types.Add(System.Text.Encoding.ASCII.GetString(png, offset + 4, 4));
+        }
+
+        return types.ToArray();
+    }
+
+    /// <summary>The EXIF block Dalamud's own call adds, as a JPEG holds it: big-endian TIFF whose IFD0 points to an Exif sub-IFD holding the colour space.</summary>
+    private static byte[] DalamudExif() => Segment(0xE1,
+    [
+        .. "Exif"u8, 0, 0,
+        (byte)'M', (byte)'M', 0, 0x2A, 0, 0, 0, 8,
+        0, 1, 0x87, 0x69, 0, 4, 0, 0, 0, 1, 0, 0, 0, 26, 0, 0, 0, 0,
+        0, 1, 0xA0, 0x01, 0, 3, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0,
+    ]);
+
+    /// <summary>A small EXIF block: little-endian TIFF with one ColorSpace tag.</summary>
     private static byte[] Exif() => Segment(0xE1, [.. "Exif"u8, 0, 0, 0x49, 0x49, 0x2A, 0, 8, 0, 0, 0, 1, 0, 0x01, 0xA0, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
     private static byte[] Dqt() => Segment(0xDB, [0, .. Enumerable.Repeat((byte)1, 64)]);
@@ -548,7 +609,7 @@ public sealed class ImagePreparationTests
 
         internal List<(byte[] Rgba, int Width, int Height, ImageFormat Format)> Encoded { get; } = new();
 
-        internal Func<byte[], int, int, ImageFormat, byte[]?> Encoder { get; init; } = (rgba, width, height, format) => format == ImageFormat.Jpeg ? Jpeg(width, height) : Png(width, height, rgba);
+        internal Func<byte[], int, int, ImageFormat, byte[]?> Encoder { get; init; } = (rgba, width, height, format) => format == ImageFormat.Jpeg ? Jpeg(width, height) : PngAsWicWrites(width, height, rgba);
 
         /// <summary>Whether it hands back premultiplied colour, as a pipeline measured otherwise might.</summary>
         internal bool Premultiplies { get; init; }
