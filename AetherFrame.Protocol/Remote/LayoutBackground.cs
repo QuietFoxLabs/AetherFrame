@@ -96,7 +96,7 @@ public sealed class LayoutBackground
     /// <summary>How the image is mirrored.</summary>
     public LayoutFlips ImageFlips { get; }
 
-    internal void Write(CanonicalWriter writer)
+    internal void Write(CanonicalWriter writer, LayoutImageNaming naming)
     {
         writer.WriteU8((byte)Mode);
         Primary.Write(writer);
@@ -107,15 +107,16 @@ public sealed class LayoutBackground
         writer.WriteU8(TextureIntensity);
         writer.WriteI32(TextureScale);
         writer.WriteI32(TextureRotation);
-        Span<byte> id = stackalloc byte[ProtocolConstants.OpaqueIdLength];
-        ImageAssetId.WriteBytes(id);
-        writer.WriteFixed(id);
+        naming.Write(writer, ImageAssetId);
         writer.WriteU8((byte)ImageFit);
         writer.WriteU8((byte)ImageFlips);
     }
 
-    /// <summary>Reads a background, checking each field as soon as it is read.</summary>
-    internal static LayoutBackground Read(ref CanonicalReader reader)
+    /// <summary>
+    /// Reads a background, checking each field as soon as it is read. Its image is named as
+    /// <paramref name="naming"/> says.
+    /// </summary>
+    internal static LayoutBackground Read(ref CanonicalReader reader, LayoutImageNaming naming)
     {
         var mode = (LayoutBackgroundMode)LayoutFields.ReadCode(ref reader, "background.mode", (byte)LayoutBackgroundMode.Image);
         var primary = LayoutColor.Read(ref reader, "background.primary");
@@ -126,7 +127,7 @@ public sealed class LayoutBackground
         var intensity = reader.ReadU8("background.textureIntensity");
         var scale = LayoutFields.ReadExtent(ref reader, "background.textureScale", MinTextureScale, MaxTextureScale);
         var rotation = LayoutFields.ReadAngle(ref reader, "background.textureRotation");
-        var imageAssetId = AssetId.FromBytesOrEmpty(reader.ReadFixed(ProtocolConstants.OpaqueIdLength, "background.imageAssetId"));
+        var imageAssetId = naming.Read(ref reader, "background.imageAssetId");
         CheckImage(mode, imageAssetId);
         var fit = (LayoutImageFit)LayoutFields.ReadCode(ref reader, "background.imageFit", (byte)LayoutImageFit.Fill);
         var flips = (LayoutFlips)LayoutFields.ReadFlags(ref reader, "background.imageFlips", (byte)(LayoutFlips.Horizontal | LayoutFlips.Vertical));

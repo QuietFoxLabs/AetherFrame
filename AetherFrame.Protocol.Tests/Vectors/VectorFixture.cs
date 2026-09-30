@@ -61,6 +61,12 @@ internal sealed class VectorFixture
     /// <summary>Action requests a server refuses when it checks them as the action, with the body and deployment named.</summary>
     public List<RejectedActionVector> RejectedActions { get; set; } = [];
 
+    /// <summary>Valid served profiles (section 8.6), each with the marker it carries.</summary>
+    public List<ServedProfileVector> ServedProfiles { get; set; } = [];
+
+    /// <summary>Served profiles a viewer refuses, each with the error expected.</summary>
+    public List<RejectedServedVector> RejectedServedProfiles { get; set; } = [];
+
     public static VectorFixture Load()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "vectors-v1.json");
@@ -299,4 +305,32 @@ internal sealed class RejectedProofVector
 
     /// <summary>False when the proof ends in a fresh signature; a regeneration keeps the committed one while the rest is unchanged.</summary>
     public bool Deterministic { get; set; } = true;
+}
+
+internal sealed class ServedProfileVector
+{
+    public string Name { get; set; } = "";
+
+    /// <summary>The document vector whose snapshot the body is built from, when there is one.</summary>
+    public string? Document { get; set; }
+
+    /// <summary>How to rebuild the snapshot, when no document vector holds it.</summary>
+    public string? Construction { get; set; }
+
+    public string Marker { get; set; } = "";
+
+    /// <summary>The served profile's exact bytes, in hex.</summary>
+    public string Body { get; set; } = "";
+}
+
+internal sealed class RejectedServedVector
+{
+    public string Name { get; set; } = "";
+
+    /// <summary>The bytes a viewer receives, in hex.</summary>
+    public string Body { get; set; } = "";
+
+    public string Error { get; set; } = "";
+
+    public string Reason { get; set; } = "";
 }

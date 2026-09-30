@@ -12,9 +12,28 @@ internal static class Mutator
         "extreme payload length", "version bytes", "type byte", "key bytes", "signature bytes", "duplicate region", "zero region", "swap regions",
     ];
 
+    /// <summary>The strategies that assume nothing about the input's layout, for inputs that aren't signed documents.</summary>
+    public static readonly string[] GenericStrategies =
+    [
+        "flip bit", "set byte", "insert byte", "delete byte", "truncate", "append", "extreme length at random offset",
+        "duplicate region", "zero region", "swap regions",
+    ];
+
     public static byte[] Apply(Random random, byte[] document, out string strategy)
     {
         strategy = Strategies[random.Next(Strategies.Length)];
+        return Apply(random, document, strategy);
+    }
+
+    /// <summary>One of <see cref="GenericStrategies"/>, for any input of at least 32 bytes.</summary>
+    public static byte[] ApplyGeneric(Random random, byte[] input, out string strategy)
+    {
+        strategy = GenericStrategies[random.Next(GenericStrategies.Length)];
+        return Apply(random, input, strategy);
+    }
+
+    private static byte[] Apply(Random random, byte[] document, string strategy)
+    {
         var copy = (byte[])document.Clone();
         var offset = copy.Length == 0 ? 0 : random.Next(copy.Length);
         switch (strategy)

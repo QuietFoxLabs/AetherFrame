@@ -26,25 +26,28 @@ public abstract class LayoutItem
     /// <summary>The scalar values of the item's text, or 0 when it has none.</summary>
     internal virtual int TextScalars => 0;
 
-    internal void Write(CanonicalWriter writer)
+    internal void Write(CanonicalWriter writer, LayoutImageNaming naming)
     {
         writer.WriteU8((byte)Kind);
-        WriteFields(writer);
+        WriteFields(writer, naming);
     }
 
-    private protected abstract void WriteFields(CanonicalWriter writer);
+    private protected abstract void WriteFields(CanonicalWriter writer, LayoutImageNaming naming);
 
-    /// <summary>Reads one item: its kind, then that kind's fields, each checked as soon as it is read.</summary>
-    internal static LayoutItem Read(ref CanonicalReader reader)
+    /// <summary>
+    /// Reads one item: its kind, then that kind's fields, each checked as soon as it is read. Images
+    /// are named as <paramref name="naming"/> says.
+    /// </summary>
+    internal static LayoutItem Read(ref CanonicalReader reader, LayoutImageNaming naming)
     {
         var kind = (LayoutItemKind)reader.ReadU8("item.kind");
         return kind switch
         {
             LayoutItemKind.Text => LayoutText.ReadFields(ref reader),
-            LayoutItemKind.Image => LayoutImage.ReadFields(ref reader),
+            LayoutItemKind.Image => LayoutImage.ReadFields(ref reader, naming),
             LayoutItemKind.Quad => new LayoutQuad(LayoutPoint.Read(ref reader, "quad.a"), LayoutPoint.Read(ref reader, "quad.b"), LayoutPoint.Read(ref reader, "quad.c"), LayoutPoint.Read(ref reader, "quad.d"), LayoutColor.Read(ref reader, "quad.color")),
             LayoutItemKind.Triangle => new LayoutTriangle(LayoutPoint.Read(ref reader, "triangle.a"), LayoutPoint.Read(ref reader, "triangle.b"), LayoutPoint.Read(ref reader, "triangle.c"), LayoutColor.Read(ref reader, "triangle.color")),
-            LayoutItemKind.ImageQuad => ReadImageQuad(ref reader),
+            LayoutItemKind.ImageQuad => ReadImageQuad(ref reader, naming),
             LayoutItemKind.ArtQuad => ReadArtQuad(ref reader),
             _ => throw new ProtocolException(ProtocolError.InvalidValue, $"Layout item kind {ProtocolText.Number((byte)kind)} is not known."),
         };
@@ -64,16 +67,9 @@ public abstract class LayoutItem
         return assetId;
     }
 
-    private protected static void WriteAsset(CanonicalWriter writer, AssetId assetId)
+    private static LayoutImageQuad ReadImageQuad(ref CanonicalReader reader, LayoutImageNaming naming)
     {
-        Span<byte> id = stackalloc byte[ProtocolConstants.OpaqueIdLength];
-        assetId.WriteBytes(id);
-        writer.WriteFixed(id);
-    }
-
-    private static LayoutImageQuad ReadImageQuad(ref CanonicalReader reader)
-    {
-        var assetId = AssetId.FromBytes(reader.ReadFixed(ProtocolConstants.OpaqueIdLength, "imageQuad.assetId"));
+        var assetId = CheckAsset(naming.Read(ref reader, "imageQuad.assetId"), "imageQuad.assetId");
         return new LayoutImageQuad(assetId, LayoutPoint.Read(ref reader, "imageQuad.a"), LayoutPoint.Read(ref reader, "imageQuad.b"), LayoutPoint.Read(ref reader, "imageQuad.c"), LayoutPoint.Read(ref reader, "imageQuad.d"), LayoutColor.Read(ref reader, "imageQuad.tint"));
     }
 
@@ -231,7 +227,7 @@ public sealed class LayoutText : LayoutItem
 
     internal override int TextScalars => textScalars;
 
-    private protected override void WriteFields(CanonicalWriter writer)
+    private protected override void WriteFields(CanonicalWriter writer, LayoutImageNaming naming)
     {
         Position.Write(writer);
         writer.WriteI32(Width);
@@ -333,9 +329,9 @@ public sealed class LayoutImage : LayoutItem
 
     internal override AssetId DrawnAsset => AssetId;
 
-    private protected override void WriteFields(CanonicalWriter writer)
+    private protected override void WriteFields(CanonicalWriter writer, LayoutImageNaming naming)
     {
-        WriteAsset(writer, AssetId);
+        naming.Write(writer, AssetId);
         Position.Write(writer);
         writer.WriteI32(Width);
         writer.WriteI32(Height);
@@ -345,9 +341,9 @@ public sealed class LayoutImage : LayoutItem
         writer.WriteU8(Opacity);
     }
 
-    internal static LayoutImage ReadFields(ref CanonicalReader reader)
+    internal static LayoutImage ReadFields(ref CanonicalReader reader, LayoutImageNaming naming)
     {
-        var assetId = AssetId.FromBytes(reader.ReadFixed(ProtocolConstants.OpaqueIdLength, "image.assetId"));
+        var assetId = CheckAsset(naming.Read(ref reader, "image.assetId"), "image.assetId");
         var position = LayoutPoint.Read(ref reader, "image.position");
         var width = LayoutFields.ReadExtent(ref reader, "image.width", 0, ProtocolLimits.MaxLayoutExtent);
         var height = LayoutFields.ReadExtent(ref reader, "image.height", 0, ProtocolLimits.MaxLayoutExtent);
@@ -395,7 +391,7 @@ public sealed class LayoutQuad : LayoutItem
     /// <summary>The fill colour.</summary>
     public LayoutColor Color { get; }
 
-    private protected override void WriteFields(CanonicalWriter writer)
+    private protected override void WriteFields(CanonicalWriter writer, LayoutImageNaming naming)
     {
         A.Write(writer);
         B.Write(writer);
@@ -436,7 +432,7 @@ public sealed class LayoutTriangle : LayoutItem
     /// <summary>The fill colour.</summary>
     public LayoutColor Color { get; }
 
-    private protected override void WriteFields(CanonicalWriter writer)
+    private protected override void WriteFields(CanonicalWriter writer, LayoutImageNaming naming)
     {
         A.Write(writer);
         B.Write(writer);
@@ -488,9 +484,9 @@ public sealed class LayoutImageQuad : LayoutItem
 
     internal override AssetId DrawnAsset => AssetId;
 
-    private protected override void WriteFields(CanonicalWriter writer)
+    private protected override void WriteFields(CanonicalWriter writer, LayoutImageNaming naming)
     {
-        WriteAsset(writer, AssetId);
+        naming.Write(writer, AssetId);
         A.Write(writer);
         B.Write(writer);
         C.Write(writer);
@@ -540,7 +536,7 @@ public sealed class LayoutArtQuad : LayoutItem
     /// <summary>The colour the artwork is multiplied by, its alpha the opacity.</summary>
     public LayoutColor Tint { get; }
 
-    private protected override void WriteFields(CanonicalWriter writer)
+    private protected override void WriteFields(CanonicalWriter writer, LayoutImageNaming naming)
     {
         LayoutFields.WriteIdent(writer, Art);
         A.Write(writer);

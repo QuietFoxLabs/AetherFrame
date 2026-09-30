@@ -22,6 +22,13 @@ public static class ProtocolLimits
     /// <summary>The largest payload a signed document can carry, so that the document fits <see cref="MaxDocumentBytes"/>.</summary>
     public const int MaxPayloadBytes = MaxDocumentBytes - SignedDocumentOverheadBytes;
 
+    /// <summary>
+    /// The largest served profile, in bytes (section 8.6, decision D6): the document limit, which a
+    /// served profile never reaches, since it is its snapshot's payload less the ids, the time and
+    /// the image references' digests and lengths, plus 22 bytes. Longer input is refused before it is parsed.
+    /// </summary>
+    public const int MaxServedProfileBytes = MaxDocumentBytes;
+
     /// <summary>The longest deployment name, in bytes (docs/networking/ProtocolSpecification-v1.md, section 14.1): the longest DNS name in text form.</summary>
     public const int MaxDeploymentNameBytes = 253;
 

@@ -184,11 +184,11 @@ public sealed class ProfileLayoutSnapshot : RemoteProfileDocument
         writer.WriteName(Name, "name");
         writer.WriteI32(CanvasWidth);
         writer.WriteI32(CanvasHeight);
-        Background.Write(writer);
+        Background.Write(writer, LayoutImageNaming.AssetIds);
         writer.WriteCount(items.Length);
         foreach (var item in items)
         {
-            item.Write(writer);
+            item.Write(writer, LayoutImageNaming.AssetIds);
         }
 
         writer.WriteCount(images.Length);
@@ -220,13 +220,13 @@ public sealed class ProfileLayoutSnapshot : RemoteProfileDocument
         var name = reader.ReadName("name");
         var canvasWidth = LayoutFields.ReadExtent(ref reader, "canvasWidth", ProtocolLimits.MinLayoutCanvasExtent, ProtocolLimits.MaxLayoutCanvasExtent);
         var canvasHeight = LayoutFields.ReadExtent(ref reader, "canvasHeight", ProtocolLimits.MinLayoutCanvasExtent, ProtocolLimits.MaxLayoutCanvasExtent);
-        var background = LayoutBackground.Read(ref reader);
+        var background = LayoutBackground.Read(ref reader, LayoutImageNaming.AssetIds);
 
         var itemCount = reader.ReadCount(ProtocolLimits.MaxLayoutItems, "items");
         var items = new LayoutItem[itemCount];
         for (var index = 0; index < itemCount; index++)
         {
-            items[index] = LayoutItem.Read(ref reader);
+            items[index] = LayoutItem.Read(ref reader, LayoutImageNaming.AssetIds);
         }
 
         var imageCount = reader.ReadCount(ProtocolLimits.MaxImagesPerProfile, "images");
