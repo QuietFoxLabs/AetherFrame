@@ -110,15 +110,24 @@ public static class PersonaCapabilityProbe
     /// Runs the probe with the Windows DPAPI protector, whose protection claim is the Windows
     /// provider identifier on a blob it has just made (<see cref="DpapiPersonaKeyProtector.CarriesWindowsProvider"/>),
     /// in a fresh directory under <paramref name="scratchRoot"/>. The claim is bound here, never
-    /// passed in, so no caller can turn it on. Blocking: call it off the framework thread.
+    /// passed in: the overload that takes a claim is internal and exists for the tests, and N2-5
+    /// calls only this one, which its review checks. Blocking: call it off the framework thread.
     /// </summary>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="scratchRoot"/> is not a full path.</exception>
     public static PersonaCapabilities Run(DpapiPersonaKeyProtector protector, string scratchRoot)
     {
         ArgumentNullException.ThrowIfNull(protector);
-        return Run(protector, blob => DpapiPersonaKeyProtector.CarriesWindowsProvider(blob), scratchRoot);
+        return RunWithDpapiClaim(protector, scratchRoot);
     }
+
+    /// <summary>
+    /// The public entry point's body, with the protector's type widened so the tests can show that
+    /// the DPAPI claim is what decides: a protector whose blobs don't carry the Windows identifier
+    /// turns no persona feature on.
+    /// </summary>
+    internal static PersonaCapabilities RunWithDpapiClaim(IPersonaKeyProtector protector, string scratchRoot) =>
+        Run(protector, blob => DpapiPersonaKeyProtector.CarriesWindowsProvider(blob), scratchRoot);
 
     /// <summary>
     /// The probe with any protector and its own claim, a known answer and a verifier. Internal: a

@@ -9,8 +9,9 @@ namespace AetherFrame.Personas;
 /// for real keys is <see cref="Storage.ProtectedPersonaKeyStore"/> (the key store core, K1, K2, K6
 /// and K7 in docs/networking/DecisionRegister.md), which keeps protected envelopes in a storage and
 /// through a protector the plugin supplies: the Windows DPAPI protector (N2-4, NETWORK1 increment 7)
-/// is compiled only into the networking preview flavour, and nothing wires a store to the plugin yet. Nothing about this interface makes a key safe: that is a
-/// property of an implementation and its protector, and only a reviewed one may claim it.
+/// is compiled only into the networking preview flavour, and nothing wires a store to the plugin
+/// yet. Nothing about this interface makes a key safe: that is a property of an implementation and
+/// its protector, and only a reviewed one may claim it.
 /// <para>
 /// The manager makes every call to a store, and to the signers it returns (signing and disposal
 /// alike), under its one lock, so an implementation is never called concurrently. The price is that

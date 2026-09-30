@@ -105,6 +105,7 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
     [InlineData("02000000d08c9ddf0115d1118c7a00c04fc297eb", false)]
     [InlineData("01000000d08c9ddf0115d1118c7a00c04fc297ea", false)]
     [InlineData("df9d8cd0150111d18c7a00c04fc297eb00000000", false)]
+    [InlineData("0100000057696e652043727970743332206f6b00", false)]
     [InlineData("", false)]
     public void TheProtectionClaim_RestsOnTheWindowsProvidersIdentifierAlone(string hex, bool claimed)
     {
@@ -120,7 +121,8 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
         }
 
         var storage = new PersonaKeyFileStorage(directory.Path);
-        var store = new ProtectedPersonaKeyStore(storage, protector);
+        var reports = new System.Collections.Generic.List<string>();
+        var store = new ProtectedPersonaKeyStore(storage, protector, reports.Add);
         using var material = store.GenerateKey();
         var slot = PersonaSlotId.NewId();
         store.AddKey(slot, material);
@@ -135,6 +137,7 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
         var copied = PersonaSlotId.NewId();
         File.WriteAllBytes(Path.Combine(directory.Path, copied + PersonaKeyFileStorage.Extension), envelope);
         Assert.Null(store.OpenSigner(copied));
+        Assert.Contains("the envelope names another slot", reports[^1], StringComparison.Ordinal);
 
         // A forged header: the slot inside the envelope rewritten to the new slot's (bytes 6 to 21),
         // so every check before DPAPI passes and only DPAPI's entropy, the original header, refuses it.
@@ -143,6 +146,24 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
         forged.WriteBytes(rewritten.AsSpan(6, 16));
         File.WriteAllBytes(Path.Combine(directory.Path, forged + PersonaKeyFileStorage.Extension), rewritten);
         Assert.Null(store.OpenSigner(forged));
+        Assert.Contains("could not open the key on this account", reports[^1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSecretUnprotectReturns_IsOnThePinnedObjectHeap()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // An array on the pinned object heap reports the oldest generation from the start; an
+        // ordinary new array starts in generation 0, where the collector may move it and leave a copy.
+        var context = Context(0x41);
+        var opened = protector.Unprotect(protector.Protect(RandomNumberGenerator.GetBytes(32), context), context);
+        Assert.NotNull(opened);
+        Assert.Equal(GC.MaxGeneration, GC.GetGeneration(opened!));
+        Assert.Equal(0, GC.GetGeneration(new byte[32]));
     }
 
     [Fact]

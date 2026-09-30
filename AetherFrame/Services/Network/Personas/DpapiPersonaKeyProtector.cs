@@ -15,16 +15,18 @@ namespace AetherFrame.Services.Network.Personas;
 /// What it protects against, and what not: a key file copied to another account or another machine
 /// does not open without that account's Windows password. Anything running as the same Windows user
 /// can open it, other plugins in the game process included; a roaming profile or a domain's backup
-/// key can recover it on another machine; and an account without a password protects nothing (K2's
-/// rationale). It claims protection only when a blob it has just made carries the Windows DPAPI
+/// key can recover it on another machine; and without a Windows password, a copied profile opens at
+/// once (K2's rationale). It claims protection only when a blob it has just made carries the Windows DPAPI
 /// provider identifier (<see cref="CarriesWindowsProvider"/>, K3): Wine's DPAPI obfuscates only,
 /// and writes its own marker instead.
 /// </para>
 /// <para>
-/// Every buffer that holds a secret lives on the pinned object heap, so the garbage collector never
-/// moves it and leaves no copy behind, and is zeroed before it is released: the copy of the input,
-/// and DPAPI's output before <c>LocalFree</c>. On a system without crypt32, <see cref="Protect"/>
-/// throws and <see cref="Unprotect"/> returns null, as the protector contract says.
+/// Its managed copies of the secret, the input's and the one <see cref="Unprotect"/> returns, are on
+/// the pinned object heap, where the garbage collector never moves them and so never leaves a copy
+/// behind, and are zeroed before release (the second by its caller: the store zeroes what
+/// <see cref="Unprotect"/> returns). DPAPI's own output is zeroed before <c>LocalFree</c>. On a
+/// system without crypt32, <see cref="Protect"/> throws and <see cref="Unprotect"/> returns null,
+/// as the protector contract says.
 /// </para>
 /// <para>
 /// DPAPI authenticates neither bytes appended after a blob nor the blob's 16-byte provider
@@ -91,9 +93,16 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
             var entropy = Pinned(context);
             var inputBlob = new NativeMethods.DataBlob(input.Length, Marshal.UnsafeAddrOfPinnedArrayElement(input, 0));
             var entropyBlob = new NativeMethods.DataBlob(entropy.Length, Marshal.UnsafeAddrOfPinnedArrayElement(entropy, 0));
-            if (!NativeMethods.CryptProtectData(ref inputBlob, null, ref entropyBlob, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output))
+            var protectedOk = NativeMethods.CryptProtectData(ref inputBlob, null, ref entropyBlob, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output);
+            var error = Marshal.GetLastPInvokeError();
+
+            // The pinned object heap stops these arrays moving, not being collected: once their
+            // addresses are taken nothing else references them, so they are kept alive past the call.
+            GC.KeepAlive(input);
+            GC.KeepAlive(entropy);
+            if (!protectedOk)
             {
-                throw new CryptographicException(Marshal.GetLastPInvokeError());
+                throw new CryptographicException(error);
             }
 
             return CopyOut(output) ?? throw new CryptographicException("DPAPI returned no usable blob.");
@@ -120,9 +129,12 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
             var entropy = Pinned(context);
             var inputBlob = new NativeMethods.DataBlob(input.Length, Marshal.UnsafeAddrOfPinnedArrayElement(input, 0));
             var entropyBlob = new NativeMethods.DataBlob(entropy.Length, Marshal.UnsafeAddrOfPinnedArrayElement(entropy, 0));
-            return NativeMethods.CryptUnprotectData(ref inputBlob, IntPtr.Zero, ref entropyBlob, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output)
-                ? CopyOut(output)
-                : null;
+            var opened = NativeMethods.CryptUnprotectData(ref inputBlob, IntPtr.Zero, ref entropyBlob, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output);
+
+            // As in Protect: kept alive past the call, since pinning never stops a collection.
+            GC.KeepAlive(input);
+            GC.KeepAlive(entropy);
+            return opened ? CopyOut(output) : null;
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
@@ -142,7 +154,7 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
         return copy;
     }
 
-    /// <summary>A managed copy of DPAPI's output, or null when it is empty or larger than any blob this protector handles.</summary>
+    /// <summary>A managed copy of DPAPI's output on the pinned object heap, or null when it is empty or larger than any blob this protector handles.</summary>
     private static byte[]? CopyOut(NativeMethods.DataBlob output)
     {
         if (output.Data == IntPtr.Zero || output.Length is <= 0 or > MaxBlobLength)
@@ -150,7 +162,7 @@ public sealed class DpapiPersonaKeyProtector : IPersonaKeyProtector
             return null;
         }
 
-        var copy = new byte[output.Length];
+        var copy = GC.AllocateUninitializedArray<byte>(output.Length, pinned: true);
         Marshal.Copy(output.Data, copy, 0, output.Length);
         return copy;
     }

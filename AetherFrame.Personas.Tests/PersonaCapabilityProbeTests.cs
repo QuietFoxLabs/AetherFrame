@@ -171,6 +171,17 @@ public class PersonaCapabilityProbeTests : IDisposable
     }
 
     [Fact]
+    public void TheBoundDpapiClaim_Decides_ForAProtectorWithoutWindowsBlobs()
+    {
+        // The fake's blobs work but carry no Windows DPAPI identifier: under the claim the public
+        // entry point binds, it turns no persona feature on.
+        var result = PersonaCapabilityProbe.RunWithDpapiClaim(new FakeProtector(), directory.Path);
+        Assert.True(result.CanView);
+        Assert.False(result.CanUsePersonas);
+        Assert.Equal(PersonaCapability.KeyProtection, result.Missing);
+    }
+
+    [Fact]
     public void Run_RefusesMissingArgumentsAndARelativeScratchRoot()
     {
         Assert.Throws<ArgumentNullException>(() => PersonaCapabilityProbe.Run(null!, Claims, directory.Path));

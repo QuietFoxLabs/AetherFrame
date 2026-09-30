@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using Xunit;
 
@@ -176,6 +177,23 @@ public class PluginAssemblyBoundaryTests
             if ((type.Attributes & System.Reflection.TypeAttributes.Import) != 0)
             {
                 found.Add("COM import " + metadata.GetString(type.Namespace) + "." + metadata.GetString(type.Name));
+            }
+        }
+
+        // Every calli instruction names a stand-alone method signature; an unmanaged calling
+        // convention there is a call through a native function pointer (delegate* unmanaged).
+        for (var row = 1; row <= metadata.GetTableRowCount(TableIndex.StandAloneSig); row++)
+        {
+            var signature = metadata.GetStandaloneSignature(MetadataTokens.StandaloneSignatureHandle(row));
+            if (signature.GetKind() != StandaloneSignatureKind.Method)
+            {
+                continue;
+            }
+
+            var header = metadata.GetBlobReader(signature.Signature).ReadSignatureHeader();
+            if (header.CallingConvention is not (SignatureCallingConvention.Default or SignatureCallingConvention.VarArgs))
+            {
+                found.Add("an unmanaged calli signature (" + header.CallingConvention + ")");
             }
         }
 
