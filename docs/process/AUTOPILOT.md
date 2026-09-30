@@ -9,7 +9,7 @@ Claude runs AetherFrame end to end: it plans, decides OPEN items, builds, review
 | Control checkout | `E:\AetherFrameWork`, always clean and on `master`. Task work never happens here. |
 | Task worktrees | `E:\AetherFrameWork\.claude\worktrees\<slug>`, one per task, branch `claude/<slug>` |
 | Off limits | `E:\Plugin development`: the old primary checkout, its stashes and worktrees. The autopilot never reads from it, writes to it or runs git in it. It is backed up under `E:\AetherFrame Archives\Primary checkout backups\`. The exception in CLAUDE.md, for a session that already lives in one of Claude's clean worktrees there, never applies to an autopilot run, which always works from `E:\AetherFrameWork`. |
-| Status and queue | ROADMAP.md: section 2 for status, section 8 for the next five tasks |
+| Status and queue | ROADMAP.md: "Status at a glance" and section 2 for status, section 8 for the next five tasks; [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52) for the live status between merges |
 | Decisions | `docs/networking/DecisionRegister.md` for networking; ROADMAP.md section 5 for everything else |
 | Owner inbox | The open GitHub issue labelled `owner-inbox`: the only place the autopilot asks the owner for anything |
 | Test build the game loads | `E:\AetherFrame Test Build\` (the owner's Dalamud dev plugin location) |
@@ -70,10 +70,15 @@ A scheduled task starts one run every two hours. Runs never overlap. Each run:
 
 ## Live status
 
-The owner asked on September 30, 2026 for GitHub to show realtime status. So:
-- **[Issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52) is the live status.** Edit its body in place, never with a comment, whenever a pull request opens, changes state, gets a review verdict or merges. Do the same when a build is made or installed, and when what waits on the owner changes. Put the time of the change at its top.
-- **ROADMAP.md's "Status at a glance"** opens the roadmap. Every pull request that changes the status updates it, with its own time, and so do the NETWORK2 table and the builds.
-- A session that sees another session's pull request records it there too, and touches nothing of it.
+The owner asked on September 30, 2026: "please update the roadmap in the github to show realtime status". ROADMAP.md, section 5, records the decision that answers it, APPROVED (Claude, under the owner's delegation of September 29, 2026):
+- **[Issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52) is the live status.** Edit its body in place, never with a comment, and put the time its facts were verified at its top. Do it whenever:
+  - a pull request opens, changes state, gets a review verdict or merges;
+  - a build is made or installed;
+  - what waits on the owner changes.
+
+  The issue asks the owner to reply in the Owner inbox, which stays the only place owner input is read.
+- **ROADMAP.md's "Status at a glance"** opens the roadmap. Every pull request that changes the status updates it, including its NETWORK2 and Builds tables, with the time its facts were verified.
+- A session that sees another session's pull request records it in the block and in #52, and touches nothing of it.
 
 ## Merge gate
 
