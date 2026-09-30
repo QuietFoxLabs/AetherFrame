@@ -258,6 +258,24 @@ public sealed class ShareCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task Unloading_DoesntWaitForTheKnownAnswerCheck()
+    {
+        var plate = Save(image: true);
+        using var stopping = new CancellationTokenSource();
+        var neverEnds = new TaskCompletionSource<bool>();
+        using var check = NewCheck(stopping: stopping.Token, selfTest: () => neverEnds.Task);
+
+        check.Begin(plate.ProfileId);
+        check.OnFrame();
+        Assert.Equal(ShareCheckStage.Preparing, check.View.Stage);
+
+        stopping.Cancel();
+        await WaitFor(() => registrationsOpen == 0);
+        Assert.Equal(ShareCheckStage.Preparing, check.View.Stage);
+        Assert.DoesNotContain(log, line => line.Contains("check failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task EachImagesSize_IsReadOncePerCheck_WhileFontsLoad()
     {
         var plate = Save(image: true);

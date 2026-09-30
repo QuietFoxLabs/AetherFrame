@@ -254,10 +254,16 @@ internal sealed class ShareCheck : IDisposable
         try
         {
             // A false result or any exception turns preparation off for the session (D5's N2-6 note, (3)).
+            // Waiting for it observes the check's cancellation; the check itself runs on and keeps
+            // its result for the session.
             bool passed;
             try
             {
-                passed = await seams.SelfTest().ConfigureAwait(false);
+                passed = await seams.SelfTest().WaitAsync(cancellation).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                return;
             }
             catch (Exception e)
             {
