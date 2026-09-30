@@ -1,6 +1,6 @@
 # NETWORK2: from local preparation to a two-player test
 
-**Status (2026-09-30): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`) and N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) are merged, and N2-4 (the DPAPI key protector and the capability probe) is implemented in the preview flavour. Nothing reaches a player.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
+**Status (2026-09-30): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`), N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) and N2-4 (the DPAPI key protector and the capability probe, [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), `2d98245`) are merged. Nothing reaches a player.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
 
 **Safeguards.** Safeguards 2 to 8 of [NETWORK1.md](NETWORK1.md), section 4, hold throughout NETWORK2:
 - no persistent key before G1 is complete;
@@ -147,7 +147,7 @@ N2-7's server runs locally in its own tests and in the plugin's integration test
 
 The owner's other request is a more modern and more fluid interface, with less going back and forth between menus. Under the ordering in ROADMAP.md, section 5, it follows this plan, and is interleaved wherever networking waits on the owner or on a review.
 
-Its first step is an audit of the current flows: which tasks need a trip between windows or menus, and what one place could hold them instead. The audit's results become tasks in ROADMAP.md, section 8. The sharing screens of N2-5, N2-9 and N2-10 are designed to fit where that audit is heading, not the old flows.
+Its first step is an audit of the current flows: which tasks need a trip between windows or menus, and what one place could hold them instead. The audit's results become tasks in ROADMAP.md, section 8. The sharing screens of N2-5, N2-9 and N2-10 are designed to fit where that audit is heading, not the old flows. `[updated 2026-09-30: the audit is written, [docs/InterfaceAudit.md](../InterfaceAudit.md); its proposals are interface tasks in ROADMAP.md, section 8.]`
 
 ## 7. What this plan does not decide
 
