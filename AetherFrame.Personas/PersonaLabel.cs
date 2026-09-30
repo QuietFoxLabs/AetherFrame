@@ -7,12 +7,11 @@ namespace AetherFrame.Personas;
 /// their personas apart ("Main", "RP alt"). It is shown only to the player on this installation;
 /// it is never published, never part of a persona's identity, and never written to a log by this
 /// assembly. Surrounding whitespace is trimmed; what remains must be 1 to <see cref="MaxLength"/>
-/// UTF-16 code units with no control characters. Nothing else is rewritten.
+/// UTF-16 code units with no control characters and no unpaired surrogates, so that a label
+/// survives the registry's round trip exactly. Nothing else is rewritten.
 /// <para>
-/// PROVISIONAL under D9a (docs/networking/DecisionRegister.md, "Persona display name"), which is
-/// UNRESOLVED. This is the register's recommended option, a private local label only, implemented
-/// so the in-memory model can be exercised; it is not an approval of that option. The rule, the
-/// limit, and whether a label exists at all may change or go when the owner decides D9a.
+/// Decision D9a (docs/networking/DecisionRegister.md) approved this option: a private local label
+/// only, never in any document, request, record or log.
 /// </para>
 /// </summary>
 public static class PersonaLabel
@@ -35,9 +34,19 @@ public static class PersonaLabel
             return false;
         }
 
-        foreach (var c in trimmed)
+        for (var index = 0; index < trimmed.Length; index++)
         {
+            var c = trimmed[index];
             if (char.IsControl(c))
+            {
+                return false;
+            }
+
+            if (char.IsHighSurrogate(c) && index + 1 < trimmed.Length && char.IsLowSurrogate(trimmed[index + 1]))
+            {
+                index++;
+            }
+            else if (char.IsSurrogate(c))
             {
                 return false;
             }
@@ -49,5 +58,5 @@ public static class PersonaLabel
 
     /// <exception cref="PersonaException"><see cref="PersonaError.InvalidLabel"/>.</exception>
     internal static string Normalize(string? text) =>
-        TryNormalize(text, out var label) ? label : throw new PersonaException(PersonaError.InvalidLabel, $"A persona label is 1 to {MaxLength} characters once trimmed, with no control characters.");
+        TryNormalize(text, out var label) ? label : throw new PersonaException(PersonaError.InvalidLabel, $"A persona label is 1 to {MaxLength} characters once trimmed, with no control characters and no unpaired surrogates.");
 }

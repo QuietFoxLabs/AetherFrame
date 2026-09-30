@@ -13,7 +13,8 @@ namespace AetherFrame.Personas.Storage;
 /// The contract: <see cref="WriteNew"/> is atomic and durable, holds exactly the bytes it was given
 /// or nothing, and never replaces (a held slot is refused with an exception and stays as it was);
 /// <see cref="Read"/> returns exactly what is held, null for nothing, and throws only when the
-/// storage itself fails. Nothing here deletes. Called one call at a time, through the store.
+/// storage itself fails; <see cref="List"/> names every slot held and counts what it skipped.
+/// Nothing here deletes. Called one call at a time, through the store.
 /// </para>
 /// </summary>
 public interface IPersonaKeyBlobStorage
@@ -27,4 +28,11 @@ public interface IPersonaKeyBlobStorage
     /// blob is refused, and that blob is left exactly as it was.
     /// </summary>
     void WriteNew(PersonaSlotId slot, ReadOnlySpan<byte> blob);
+
+    /// <summary>
+    /// Every slot a blob is held under, and how many entries were skipped because they are not a
+    /// slot's name (an interrupted write's temporary entry, a stray entry). Nothing is empty when the
+    /// place the blobs live does not exist yet. Throws only when the storage itself fails.
+    /// </summary>
+    PersonaKeyListing List();
 }

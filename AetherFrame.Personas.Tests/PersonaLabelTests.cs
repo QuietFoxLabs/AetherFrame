@@ -54,6 +54,27 @@ public class PersonaLabelTests
     }
 
     [Fact]
+    public void TryNormalize_KeepsSurrogatePairs_AndRefusesUnpairedSurrogates()
+    {
+        // Built from a code point: an unpaired surrogate cannot be written in source, and the
+        // registry keeps a label as code units, so only whole pairs may reach it.
+        var pair = char.ConvertFromUtf32(0x1F98A);
+        var high = pair[0].ToString();
+        var low = pair[1].ToString();
+        Assert.True(PersonaLabel.TryNormalize("Fox " + pair, out var kept));
+        Assert.Equal("Fox " + pair, kept);
+        Assert.True(PersonaLabel.TryNormalize(pair + pair, out _));
+
+        Assert.False(PersonaLabel.TryNormalize("Fox " + high, out _));
+        Assert.False(PersonaLabel.TryNormalize(high + "Fox", out _));
+        Assert.False(PersonaLabel.TryNormalize("Fox " + low, out _));
+        Assert.False(PersonaLabel.TryNormalize(low + high, out _));
+        Assert.False(PersonaLabel.TryNormalize(high + high + low, out _));
+        Assert.False(PersonaLabel.TryNormalize(pair + low, out _));
+        Assert.Equal(PersonaError.InvalidLabel, Assert.Throws<PersonaException>(() => PersonaLabel.Normalize(high)).Error);
+    }
+
+    [Fact]
     public void Normalize_ThrowsInvalidLabelWithoutRepeatingTheText()
     {
         var exception = Assert.Throws<PersonaException>(() => PersonaLabel.Normalize("secret alt name\u0000"));

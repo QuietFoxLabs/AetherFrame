@@ -6,7 +6,7 @@ namespace AetherFrame.Personas;
 /// </summary>
 public enum PersonaError
 {
-    /// <summary>A label is empty once trimmed, longer than <see cref="PersonaLabel.MaxLength"/> UTF-16 code units, or contains a control character.</summary>
+    /// <summary>A label is empty once trimmed, longer than <see cref="PersonaLabel.MaxLength"/> UTF-16 code units, or contains a control character or an unpaired surrogate.</summary>
     InvalidLabel,
 
     /// <summary>A local identifier is not its prefix followed by 32 lowercase hex digits, or is all zero.</summary>
@@ -47,9 +47,35 @@ public enum PersonaError
     /// <summary>
     /// A signer lease was used after the active selection changed (another persona selected, or the
     /// persona deselected): the lease no longer signs, and a new one must be opened for the persona
-    /// that is active now. This is the interim, fail-closed policy; see
-    /// docs/networking/NETWORK1_PersonaFoundation.md, section 7, for the decision it awaits (L10 in
-    /// the decision register).
+    /// that is active now. Decision L10 in docs/networking/DecisionRegister.md: a switch revokes
+    /// every lease opened before it, and an operation stops rather than sign for a persona that is
+    /// no longer active.
     /// </summary>
     LeaseRevoked,
+
+    /// <summary>
+    /// The persona registry could not be read: it exists but is not a registry this build reads
+    /// (damaged, another version, over its limits), or the storage refused to read it. It is left
+    /// exactly as it was, never overwritten, and no manager is made from it (P3 in the decision
+    /// register).
+    /// </summary>
+    RegistryUnreadable,
+
+    /// <summary>
+    /// The persona registry could not be saved. Nothing changed in memory. The registry holds either
+    /// the state before the change or the state after it, and the next load shows whichever it is.
+    /// A key committed just before (a create or a restore) is then held with no record, and is
+    /// found and offered for restore as an orphan (L12).
+    /// </summary>
+    RegistryWriteFailed,
+
+    /// <summary>The registry already holds <see cref="PersonaManager.MaxPersonas"/> personas; nothing was made or committed.</summary>
+    RegistryFull,
+
+    /// <summary>
+    /// The slot is not a key that can be restored as a persona: a record already names it, no key is
+    /// held under it, the key does not open on this account or does not match its envelope, or its
+    /// identity is already held by another persona (L12).
+    /// </summary>
+    NotAnOrphan,
 }

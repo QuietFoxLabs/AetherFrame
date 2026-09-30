@@ -29,6 +29,12 @@ internal sealed class InMemoryKeyBlobStorage : IPersonaKeyBlobStorage
     /// <summary>Thrown by every <see cref="Read"/> while set.</summary>
     public Exception? ReadFailure { get; set; }
 
+    /// <summary>Thrown by every <see cref="List"/> while set.</summary>
+    public Exception? ListFailure { get; set; }
+
+    /// <summary>How many entries <see cref="List"/> reports as skipped, as a directory with stray entries would.</summary>
+    public int SkippedEntries { get; set; }
+
     /// <summary>
     /// How many <see cref="Read"/> calls fail once the next <see cref="WriteNew"/> has held its blob,
     /// each with <see cref="ReadAfterWriteFailure"/>: a file a scanner opened just after it was written.
@@ -92,6 +98,85 @@ internal sealed class InMemoryKeyBlobStorage : IPersonaKeyBlobStorage
         if (FailNextWriteAfterHolding is { } late)
         {
             FailNextWriteAfterHolding = null;
+            throw late;
+        }
+    }
+
+    public PersonaKeyListing List()
+    {
+        Calls.Add(nameof(List));
+        if (ListFailure is { } failure)
+        {
+            throw failure;
+        }
+
+        return new PersonaKeyListing(new List<PersonaSlotId>(blobs.Keys), SkippedEntries);
+    }
+
+    /// <summary>Removes what is held under a slot, as a player deleting a key file would; the store itself never deletes.</summary>
+    public void Remove(PersonaSlotId slot) => blobs.Remove(slot);
+}
+
+/// <summary>
+/// A registry storage for tests: one byte array that vanishes with the process. It replaces
+/// atomically unless told to fail, can be told to fail after holding the new bytes (the indeterminate
+/// case), can block inside <see cref="Replace"/> until released (to show listings never wait on a
+/// save), and records every call.
+/// </summary>
+internal sealed class InMemoryRegistryStorage : IPersonaRegistryStorage
+{
+    public byte[]? Bytes { get; set; }
+
+    public List<string> Calls { get; } = new();
+
+    /// <summary>Thrown by <see cref="Read"/> while set.</summary>
+    public Exception? ReadFailure { get; set; }
+
+    /// <summary>Thrown by the next <see cref="Replace"/> before anything changes.</summary>
+    public Exception? FailNextReplace { get; set; }
+
+    /// <summary>Thrown by the next <see cref="Replace"/> after the new bytes are held: a save whose outcome the caller cannot know.</summary>
+    public Exception? FailNextReplaceAfterHolding { get; set; }
+
+    /// <summary>When set, the next <see cref="Replace"/> signals <see cref="Entered"/> and waits for this before holding anything.</summary>
+    public System.Threading.ManualResetEventSlim? HoldNextReplace { get; set; }
+
+    public System.Threading.ManualResetEventSlim Entered { get; } = new(false);
+
+    public int Replacements { get; private set; }
+
+    public byte[]? Read()
+    {
+        Calls.Add(nameof(Read));
+        if (ReadFailure is { } failure)
+        {
+            throw failure;
+        }
+
+        return Bytes is null ? null : (byte[])Bytes.Clone();
+    }
+
+    public void Replace(ReadOnlySpan<byte> bytes)
+    {
+        Calls.Add(nameof(Replace));
+        if (HoldNextReplace is { } hold)
+        {
+            HoldNextReplace = null;
+            Entered.Set();
+            hold.Wait();
+        }
+
+        if (FailNextReplace is { } failure)
+        {
+            FailNextReplace = null;
+            throw failure;
+        }
+
+        Bytes = bytes.ToArray();
+        Replacements++;
+        if (FailNextReplaceAfterHolding is { } late)
+        {
+            FailNextReplaceAfterHolding = null;
             throw late;
         }
     }

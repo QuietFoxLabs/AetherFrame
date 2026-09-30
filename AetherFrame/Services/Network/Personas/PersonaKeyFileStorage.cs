@@ -117,6 +117,39 @@ public sealed class PersonaKeyFileStorage : IPersonaKeyBlobStorage
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lists the directory's entries once: every <c>.afkey</c> file whose name is a slot's text form
+    /// is a slot; any other entry (a temporary file from an interrupted write, a stray file or folder)
+    /// is counted as skipped and never read. A directory that does not exist yet holds nothing.
+    /// </remarks>
+    public PersonaKeyListing List()
+    {
+        if (!System.IO.Directory.Exists(directory))
+        {
+            return new PersonaKeyListing(Array.Empty<PersonaSlotId>(), 0);
+        }
+
+        var slots = new System.Collections.Generic.List<PersonaSlotId>();
+        var skipped = 0;
+        foreach (var entry in System.IO.Directory.EnumerateFileSystemEntries(directory))
+        {
+            var name = Path.GetFileName(entry);
+            if (name.EndsWith(Extension, StringComparison.Ordinal)
+                && File.Exists(entry)
+                && PersonaSlotId.TryParse(name[..^Extension.Length], out var slot))
+            {
+                slots.Add(slot);
+            }
+            else
+            {
+                skipped++;
+            }
+        }
+
+        return new PersonaKeyListing(slots, skipped);
+    }
+
     private string FileFor(PersonaSlotId slot)
     {
         if (slot.IsEmpty)

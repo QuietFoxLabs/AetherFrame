@@ -160,6 +160,50 @@ public sealed class ProtectedPersonaKeyStore : IPersonaKeyStore
     /// <inheritdoc />
     public PersonaKeyMaterial? OpenKey(PersonaSlotId slot) => Open(slot);
 
+    /// <inheritdoc />
+    public PersonaKeyListing ListHeld() => storage.List();
+
+    /// <inheritdoc />
+    public PersonaKeyPeekStatus PeekPublicKey(PersonaSlotId slot, out PersonaPublicKey? publicKey)
+    {
+        publicKey = null;
+        byte[]? envelope;
+        try
+        {
+            envelope = slot.IsEmpty ? null : storage.Read(slot);
+        }
+        catch (Exception)
+        {
+            return PersonaKeyPeekStatus.Unreadable;
+        }
+
+        if (envelope is null)
+        {
+            return PersonaKeyPeekStatus.Missing;
+        }
+
+        // Another protector's envelope never opens here, so it is not a key this store holds usably.
+        if (!ProtectedKeyEnvelope.TryDecode(envelope, out var decoded) || !string.Equals(decoded.ProtectorId, protector.Id, StringComparison.Ordinal))
+        {
+            return PersonaKeyPeekStatus.Unreadable;
+        }
+
+        if (decoded.Slot != slot)
+        {
+            return PersonaKeyPeekStatus.NamesAnotherSlot;
+        }
+
+        publicKey = decoded.PublicKey;
+        return PersonaKeyPeekStatus.Held;
+    }
+
+    /// <inheritdoc />
+    public PersonaPublicKey? OpenPublicKey(PersonaSlotId slot)
+    {
+        using var material = Open(slot);
+        return material?.PublicKey;
+    }
+
     /// <summary>
     /// The envelope decoded, unprotected and imported: the key the slot holds, or null with a
     /// reported reason. Every reason is unavailability, never an exception: no envelope, an

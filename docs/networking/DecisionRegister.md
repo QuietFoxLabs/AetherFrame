@@ -1,6 +1,6 @@
 # Networking decision register
 
-**Status (2026-09-29): two decisions are the owner's approvals, and twenty-five more are approved under the owner's delegation.**
+**Status (2026-09-30): two decisions are the owner's approvals, and twenty-eight more are approved under the owner's delegation.**
 - **D3** is **APPROVED** by the owner.
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
 - **N5** and **L6** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
@@ -8,6 +8,7 @@
 - **K1**, **K2**, **K6** and **K7** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **N3**, **D4**, **D5**, **D8**, **D9a**, **I1**, **N1**, **N7**, **P1**, **K3**, **K4**, and the new **R1**, **R2** and **R3**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decision batch A for NETWORK2".
 - **S1**, **D7** and **L8** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The request proof's decisions (N2-3b)".
+- **L10**, **L12** and the new **P3** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The persona registry's decisions (N2-5a)".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
 
 **Every other product and architecture decision below is UNRESOLVED.**
@@ -329,7 +330,7 @@ The protocol has no persona display name; what others see is the Plate's own con
 
 **Rationale.** D3 keeps personas independent. A label such as "Main, Aria on Twintania" would tie a persona to a character the moment it was published.
 
-**Not settled:** a public name (stage 2 at the earliest). N2-5 removes the "provisional" wording from `PersonaLabel` and `PersonaManager`.
+**Not settled:** a public name (stage 2 at the earliest). N2-5 removes the "provisional" wording from `PersonaLabel` and `PersonaManager`. `[updated 2026-09-30: done in N2-5a. PersonaLabel also refuses unpaired surrogates, so a label survives the registry's round trip exactly (P3).]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: a local-only label is the only option consistent with D3 and ROADMAP.md, section 4, rule 8.
 
@@ -458,7 +459,7 @@ Persona features turn on only after all three. Each failure gives one message na
 
 **In NETWORK2's first stage there is no backup,** so the acknowledgement is required:
 - it is a separate confirmation with that text, naming the ordinary ways a key is lost: reinstalling Windows, moving to a new PC, deleting the plugin's data, or an administrator resetting the Windows password, which loses the key DPAPI protected it with;
-- it is recorded per persona in the persona registry, and asked once per persona;
+- it is recorded per persona in the persona registry, and asked once per persona; `[updated 2026-09-30: N2-5a records it as bit 0 of the record's flags (P3), set by PersonaManager.Acknowledge; a created or restored persona starts without it. N2-5b's window asks for it.]`
 - it is repeated in the persona window whenever a persona is created.
 
 Once the backup exists (stage 2), the first publish offers the backup first and the acknowledgement as the alternative.
@@ -596,6 +597,93 @@ Version 1 has two contexts: the signed document and the request proof. Applied b
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 29, 2026). It found that the proof defeats third-party submission, cross-deployment relay and proofs made in advance, and asked for eight changes before concurring. The changes: the server's name from configuration only, the challenge consumed atomically, a last label that starts with a letter, refusal rather than normalization, separate hostnames and test-only names, a subject digest open to later proof kinds, the whole operation bound, and the verified bytes stored. All eight are applied here. It then examined the implementation at `7e7015e` (September 29, 2026) and **concurred**: the two tags are length-prefixed and of different lengths (44 and 42 bytes; 38 and 36 at the freeze); one writer builds both the proof's signing input and its layout; the tests refuse a signature from either context in the other; and the vectors refuse, as a proof, both a document's own signature and a document-context signature over a proof's fields. Its one note on this entry's wording is applied in `5b39350`.
 
+### The persona registry's decisions (N2-5a), September 30, 2026
+
+The entries below were decided for NETWORK2's increment N2-5a, the persisted persona registry in `AetherFrame.Personas`, and are applied by it. N2-5b applies the rest in the plugin: the registry file, the key file's written-through move, the single-writer lock, the capability probe at session start, the persona window and K4's step. A security-focused reviewer examined the design before any code and the implementation after.
+
+### L10: signing across a persona switch. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** A change of selection revokes every signer lease opened before it, and a revoked lease never signs again, as #23's interim does. An operation is also **bound to the persona it showed the player**:
+- when it starts, it records that persona's slot and public key: for publishing, the persona the consent screen shows;
+- it opens its lease with `PersonaManager.TryOpenSigner(expectedSlot, expectedKey)`, which opens nothing and answers `ActivePersonaChanged` unless exactly that persona is active;
+- it holds no lease across I/O or a dialog: one lease, one signature, disposed at once.
+
+Every signer the plugin opens goes through `TryOpenSigner`. `TryOpenActiveSigner` stays for tests and for callers that show no persona, and N2-5b adds a boundary test refusing it in the plugin's sources. Nothing is sent on a switch: selecting a persona sends nothing (D3), and a signed document waiting in N2-6's outbox is sent only when the player retries while its persona is active. Request proofs already refuse any key but the document's (S1). Applied by N2-5a, the library; N2-6 and N2-9 follow it.
+
+**Rationale.** A switch during the consent screen must never make an operation sign, as the new persona, what the player approved for the old one. Revoking leases stops a lease opened before the switch; binding stops one opened after it. The alternatives are refused:
+- **finishing as the old persona** signs for a persona that is not active, which NETWORK1.md's system 1 forbids;
+- **refusing a switch while a lease is open** would let a stuck operation lock the player out of their own identity choice (D3).
+
+**Not settled:** nothing for version 1.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 30, 2026). It asked for the binding above, because revoking leases alone left a switch possible between showing a persona and signing, and **concurred** once it was applied. It asked for "every plugin caller uses `TryOpenSigner`" to be checkable, which N2-5b's boundary test makes it.
+
+### L12: key files no record names. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** A key held under a slot no record names is an **orphan**. Orphans come from a check that fails after a key write (`AddKey` reports `CustodyFailed`), a crash between the key write and the registry save, or a registry save that fails after a key was committed (P3). They are:
+- **detected** by `PersonaManager.Audit()`, which lists the key storage and compares it with the records without opening any key. Entries that aren't a slot's name are skipped and counted. A listing that fails is reported, never thrown, and blocks nothing.
+- **checked against the records:** a record whose key is missing or unreadable (damaged, not an envelope, or another protector's), or whose envelope names another slot or another public key, is reported as **unusable**, with that reason. The record stays; nothing is repaired.
+- **reported by slot**, with the identity the envelope's header claims shown as **unverified**, since anyone who can write the key files can forge a header. `PersonaManager.VerifyOrphan(slot)` proves the claim by opening the key on this account (`IPersonaKeyStore.OpenPublicKey`, which disposes the key at once), on demand and off the framework thread.
+- **restored only by the player**, with `PersonaManager.RestoreOrphan(slot, label)`. It checks everything again under the manager's lock: no record names the slot, the registry has room, the key opens on this account and matches its envelope, and no persona holds its identity. The record takes its public key from the key opened then and keeps the slot; it is not selected, starts without K4's acknowledgement, and is saved before it is applied. A key copied from another installation opens only under the same Windows credentials; when it does, its slot exists on two installations, as `PersonaSlotId`'s documentation now says.
+- **never deleted** (K6). N2-5b's window names where the key files are, and warns that a removed key can never be used again.
+
+Logs name slots only, never identities or paths.
+
+**Rationale.** A key with no record is still the player's identity. Deleting it could destroy the only means of updating or unpublishing what it signed (D2's premise), and ignoring it would hide that identity. Restoring takes the player's explicit act, because an orphan may be a key the player set aside on purpose, or one planted by software running as the player. That software can already read every key (K2), so the checks guard against mistakes, not against it. A retry after a failed save commits the key under a fresh slot, so the first copy stays an orphan whose identity a record now holds, and restoring it is refused.
+
+**Not settled:** removing or setting aside an orphan from the window, and how the window shows orphans and unusable records (N2-5b).
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 30, 2026). It asked for the audit to open no key, for records to be checked against their keys, for an orphan's identity to be shown as an unverified claim, for a restore to check everything again under the lock, and for `PersonaSlotId`'s documentation to cover a copied key. It **concurred** on one condition: the check that opens an orphan returns the opened key's public key rather than a yes or no, so the check and the restored record come from one read. `IPersonaKeyStore.OpenPublicKey` does that.
+
+### P3: how the persona registry is kept. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.**
+- **Where.** One file in the plugin's own networking directory, beside the key files. Never the plugin configuration or Dalamud's reliable storage, and no identity in a file name (K2; NETWORK1.md, safeguard 7). The file is N2-5b's; N2-5a defines its bytes and the manager's use of `IPersonaRegistryStorage`.
+- **The bytes**, big-endian: `magic "AFPR" | version u16 = 1 | count u32 (0..256) | records | activeSlot[16] (all zero for none) | sha256[32] of everything before it`. A record is `slot[16] | publicKey[65] | flags u8 (bit 0: K4 acknowledged) | labelLength u16 (UTF-16 code units, 1..64) | label (UTF-16BE code units)`. At most 256 personas and 54,330 bytes, and no private material.
+- **Integrity.** The checksum guards against corruption only, and there is no MAC: whoever can rewrite the file runs as the player and can already read every key (K2). A forged record can't make another key sign, since the signer checks refuse it. A swapped label can't be stopped, so N2-9's consent screen shows the persona's identity as well as its label.
+- **Loading.** `PersonaManager.Load` reads the registry once. No registry (the file or its directory not found) is a first run. A registry that can't be read (access denied, a sharing violation, over 54,330 bytes) or doesn't decode is refused with `RegistryUnreadable`, and is **never overwritten or replaced**. The plugin then turns persona features off with a message naming where the file is; moving the file aside brings every key back as an orphan to restore (L12). Decoding refuses anything but exactly this layout, checking in order:
+  - the size, then the checksum, magic, version and count;
+  - each record's slot (non-zero and unique), public key (a valid P-256 point, with a unique identity), flags (bit 0 only) and label (1 to 64 code units, equal to its own normalization);
+  - that no bytes follow the records, and that the selection names a record or none.
+
+  A temporary file is never read. The registry-less constructor stays for tests, and the plugin never falls back to it.
+- **Saving: persist, then apply.** Every change (create, restore from a backup, restore an orphan, rename, select, deselect, acknowledge) encodes the state that would result and has `IPersonaRegistryStorage.Replace` save it atomically and durably. Only then does the manager apply it in memory, under its lock. So:
+  - a failed save changes nothing in memory and reports `RegistryWriteFailed`;
+  - the selection counter moves only when a new selection is applied, so a failed switch revokes no lease;
+  - a change that changes nothing saves nothing;
+  - a save that fails after the storage held the new bytes is indeterminate. Memory keeps the state from before it and the file may hold either, and both are consistent, because a key committed with no record is an orphan (L12).
+- **Before a key is committed**, everything that can be decided in advance is checked: the label, the room (`RegistryFull` at 256), the key's identity against every persona held, and the registry that would result. After `AddKey`, only the save can fail.
+- **Listings** (`Personas`, `Active`, `TryGet`) read an immutable snapshot published after each change, without the lock, so they never wait on a save, a key write or the protector.
+- **The selection** is one for the installation. It is never keyed by a character, Content ID or account, and is restored only from the player's own last Select or Deselect. The first persona is never selected for the player (D3).
+
+**What N2-5b must do with it:**
+- **One writer.** An exclusive lock file, held for the session, taken before `Load` reads anything and released in the plugin's `Dispose`.
+- **The file's replacement.** The temporary file is flushed in the same directory, then moved over the registry with `MoveFileExW` and `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`. A new key file is moved with `MOVEFILE_WRITE_THROUGH`. Never `MOVEFILE_COPY_ALLOWED`.
+- **Not `File.Move`**, which never writes through.
+- **Not `ReplaceFile`**, whose write-through flag is documented as unsupported, and which can leave the registry missing after `ERROR_UNABLE_TO_MOVE_REPLACEMENT`. A missing registry would read as a first run.
+- **The boundary tests and K2's text** are amended for that one native declaration.
+
+Microsoft states `MOVEFILE_WRITE_THROUGH`'s flush guarantee explicitly only for a move that copies and deletes; that residual risk is recorded here.
+
+**Rationale.** Persist, then apply means memory never holds a state the file lacks: after any failure, what the player sees is what a restart shows, or a key the audit offers back. Refusing an unreadable registry, rather than starting empty, keeps a sharing violation or a damaged file from erasing every record at the next save. Code units rather than a text encoding keep `System.Text` out of the persona assembly and make a label round-trip exactly. For the same reason `PersonaLabel` refuses unpaired surrogates, a D9a implementation note.
+
+**Not settled:** a later version of the bytes (none exists), and whether the encrypted backup (the D2 details) also covers the registry.
+
+**Independent concurrence.** A security-focused reviewer with no shared context examined the design first (September 30, 2026). It asked for:
+- K4's flag in the record;
+- every refusal that can be decided in advance made before a key is committed, and persist, then apply;
+- labels as UTF-16 code units, and the exact layout with every length checked before it is read;
+- an unreadable registry never replaced, and no fallback to a registry-less manager;
+- one global selection;
+- one writer, the written-through replace, and the boundary amendment;
+- no paths in logs, and no identities in names.
+
+It checked the write-through requirements against Microsoft's `MoveFileExW` and `ReplaceFileW` pages and the .NET source. It **concurred** on two conditions:
+- N2-5b takes the lock before `Load` reads anything and releases it deterministically. Dalamud reloads plugins in-process, and a lock left to the finalizer would turn persona features off until the game restarts. This is recorded for N2-5b.
+- Listings never wait on I/O, which the snapshot provides.
+
+Its note to state the size cap is applied: 54,330 bytes.
+
 ## Gates
 
 | Gate | Must be decided before |
@@ -610,7 +698,7 @@ Version 1 has two contexts: the signed document and the request proof. Applied b
 
 ## 1. Decisions that must be approved before any persistent private key is created (G1)
 
-- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b, P2, K1, K2, K6, K7, N3, K3 and P1 (APPROVED, Claude, under the owner's delegation of September 29, 2026). **Every row of this table except "D2 details", which has its own gate, is now approved,** so G1 is complete for native Windows. K8 and K9 below still gate any other platform, and the "D2 details" still gate any `.afpersona` file.
+- **Approved so far:** D3 (APPROVED) and D2 (APPROVED IN PRINCIPLE) by the owner; N5, L6, D9b, P2, K1, K2, K6, K7, N3, K3, P1 and P3 (APPROVED, Claude, under the owner's delegation of September 29, 2026). **Every row of this table except "D2 details", which has its own gate, is now approved,** so G1 is complete for native Windows. K8 and K9 below still gate any other platform, and the "D2 details" still gate any `.afpersona` file.
 - **No row of this table other than "D2 details" remains to be approved** before a persistent private key is created outside tests on native Windows.
 - **"D2 details"** has its own gate: before any `.afpersona` file is written or restored outside tests.
 - **Approved rows** state the approved option in the recommendation column.
@@ -631,6 +719,7 @@ Version 1 has two contexts: the signed document and the request proof. Applied b
 | K7 | Where cryptographic implementations come from | Platform only (.NET over CNG/NCrypt) | Approved: platform implementations only, .NET or the same platform's APIs called directly. A third-party library or an algorithm in our own code is a separate owner decision with its own review, and is never chosen to keep the package at three files (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
 | P1 | Where "this Plate was published" is remembered | Undefined | Approved: a private publication index per persona in the plugin's networking files; never in Plate JSON, bindings, packages, Templates, configuration or logs (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | P2 | Who can create keys during NETWORK1 | Nobody yet: the preview flavour holds the code, no key store exists | Approved: preview builds only, by the compile-time switch `AetherFrameNetworkPreview`; player and official builds contain none of the networking code (see "Decisions approved under the delegation") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026)** |
+| P3 | How the persona registry is kept | Nothing kept: the manager held its records in memory only | Approved: one file of its own bytes beside the key files (`AFPR`, version 1, at most 256 personas and 54,330 bytes, a SHA-256 checksum against corruption); persist, then apply; an unreadable registry refused and never replaced; the file itself, its written-through replace and the single-writer lock are N2-5b's (see "The persona registry's decisions (N2-5a)") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 
 Only if persona features are pursued under Wine, Proton or macOS. These must be decided before a persistent key is created there, and only after measurements under those platforms:
 
@@ -685,9 +774,9 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | L8 | Signing-context rules not yet in the specification | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29**: specification, section 5.1 (see L8 above) |
 | L9 | Whether protocol tests gate plugin releases (`release.yml`) as well as `build.yml` | UNRESOLVED. Its "Linux never ran" part is closed: the ubuntu leg has run green twice (NETWORK0.md, section 13). |
 | I3 | Photo metadata in local `.aetherframe` exports (existing local behaviour, not networking) | UNRESOLVED |
-| L10 | Signer lease on a persona switch: may an operation holding a lease for persona A still sign as A after the player switches to B? The interim in `AetherFrame.Personas` (#23) revokes the lease on any change of selection, never revives it, and fails closed, following NETWORK1.md system 1. The alternatives are letting the operation finish as A (which needs system 1 amended) or refusing a switch while a lease is open. | UNRESOLVED (before the preview wiring, NETWORK1.md increment 9, lets a player start an operation that signs) |
+| L10 | Signer lease on a persona switch: may an operation holding a lease for persona A still sign as A after the player switches to B? The interim in `AetherFrame.Personas` (#23) revokes the lease on any change of selection, never revives it, and fails closed, following NETWORK1.md system 1. The alternatives are letting the operation finish as A (which needs system 1 amended) or refusing a switch while a lease is open. | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30**: revoked on any switch, and each operation bound to the persona it showed (see L10 above) |
 | L11 | Whether the persona suite also gates plugin releases (`release.yml`). Today only `build.yml` runs it. A question of the same kind as L9; L9 itself stays scoped to the protocol suite. | UNRESOLVED (with L9) |
-| L12 | Key files that no persona record names. The store has no delete (K6), so when the check after a durable write fails (a read-back that still fails after its retries, or bytes that differ), `AddKey` reports `CustodyFailed` and the envelope may stay under that fresh slot, which is never recorded or reused. A crash between the key write and the record write leaves the same kind of file. The wiring (increment 9) must detect such files and report them to the player; whether to offer removal, quarantine or recovery is decided there, with a security review. Found by the key store core's independent reviews (September 29, 2026). | UNRESOLVED (before increment 9 persists a record) |
+| L12 | Key files that no persona record names. The store has no delete (K6), so when the check after a durable write fails (a read-back that still fails after its retries, or bytes that differ), `AddKey` reports `CustodyFailed` and the envelope may stay under that fresh slot, which is never recorded or reused. A crash between the key write and the record write leaves the same kind of file. The wiring (increment 9) must detect such files and report them to the player; whether to offer removal, quarantine or recovery is decided there, with a security review. Found by the key store core's independent reviews (September 29, 2026). | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30**: detected and reported, restored only by the player, never deleted (see L12 above) |
 | L13 | The default-ignorable code points D4 does not refuse (4,048 in Unicode 18.0, listed under D4's "Not settled"): a name made only of them is accepted and shows nothing, and a name can hide at least 64 bytes of data in them. Refusing them changes which names are valid: a signed-byte change that NETWORK1.md's safeguard 3 reserves for the owner. The trade-off to weigh: local naming (`PlateNaming`) already folds the format characters among them to spaces, so refusing those costs an honest player nothing; but U+FE0E and U+FE0F choose how an emoji is drawn (U+2764 U+FE0F is a common heart), so refusing every variation selector would refuse names players type. | UNRESOLVED. Due before the freeze, since refusing more names after it would invalidate version 1 documents; with the UTS #39 work if that comes first. It does not gate a server that accepts only drafts (NETWORK2's N2-8 and N2-11), since drafts are signed again after the freeze. Changing the rule needs the owner's approval; the owner, who alone freezes version 1, sees it then either way. |
 
 ## 6. Closed items

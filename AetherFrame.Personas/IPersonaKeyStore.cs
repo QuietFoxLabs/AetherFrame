@@ -1,3 +1,4 @@
+using AetherFrame.Personas.Storage;
 using AetherFrame.Protocol.Signing;
 
 namespace AetherFrame.Personas;
@@ -26,8 +27,11 @@ namespace AetherFrame.Personas;
 /// (<see cref="GenerateKey"/>) or restored by a codec without the store holding it, the manager
 /// checks its identity against the personas it holds, and only then does the store commit it
 /// (<see cref="AddKey"/>). A refusal before the commit therefore never leaves a key in a store
-/// without a record. Nothing in this interface deletes a key, so a commit that fails after the
-/// store's storage accepted the key is the one case that can: see <see cref="AddKey"/>.
+/// without a record. Nothing in this interface deletes a key, so a key can be held with no record in
+/// two cases: a commit that fails after the store's storage accepted the key (see
+/// <see cref="AddKey"/>), and a registry save that fails after a commit (P3). Both are found by
+/// <see cref="ListHeld"/> and <see cref="PeekPublicKey"/>, and offered to the player for restore
+/// (L12 in docs/networking/DecisionRegister.md).
 /// </para>
 /// <para>
 /// Ownership is the same everywhere: material or a signer a store returns is the caller's to
@@ -79,4 +83,22 @@ public interface IPersonaKeyStore
     /// manager calls it for nothing but an export the player asked for.
     /// </summary>
     PersonaKeyMaterial? OpenKey(PersonaSlotId slot);
+
+    /// <summary>Every slot a key is held under, as the storage lists them. Throws only when the storage itself fails.</summary>
+    PersonaKeyListing ListHeld();
+
+    /// <summary>
+    /// What the key's envelope header says about <paramref name="slot"/>, read without opening the
+    /// key: <paramref name="publicKey"/> is the public key it names when the status is
+    /// <see cref="PersonaKeyPeekStatus.Held"/>, and null otherwise. The header is unverified: anyone
+    /// who can write the key storage could forge it, which only opening the key would show. Never throws.
+    /// </summary>
+    PersonaKeyPeekStatus PeekPublicKey(PersonaSlotId slot, out Protocol.Identity.PersonaPublicKey? publicKey);
+
+    /// <summary>
+    /// The public key of the key held under <paramref name="slot"/>, proven by opening it (the same
+    /// checks as <see cref="OpenSigner"/>) and disposing the material at once; null when it does not
+    /// open. No private material leaves the store. Unavailability is null, never an exception.
+    /// </summary>
+    Protocol.Identity.PersonaPublicKey? OpenPublicKey(PersonaSlotId slot);
 }

@@ -132,6 +132,37 @@ public class PersonaKeyFileStorageTests : IDisposable
     }
 
     [Fact]
+    public void List_IsEmptyBeforeTheDirectoryExists_AndMakesNothing()
+    {
+        var storage = NewStorage("later");
+        var listing = storage.List();
+        Assert.Empty(listing.Slots);
+        Assert.Equal(0, listing.Skipped);
+        Assert.False(Directory.Exists(storage.Directory));
+    }
+
+    [Fact]
+    public void List_NamesEverySlotHeld_AndCountsEverythingElseAsSkipped_WithoutReadingIt()
+    {
+        var storage = NewStorage();
+        var first = PersonaSlotId.NewId();
+        var second = PersonaSlotId.NewId();
+        storage.WriteNew(first, Bytes(10, 1));
+        storage.WriteNew(second, Bytes(10, 2));
+
+        // Not a slot's key file: what an interrupted write leaves, a stray file, a key file whose
+        // name is not a slot's text form (upper case is not), and a folder named like a key file.
+        File.WriteAllBytes(Path.Combine(directory.Path, PersonaSlotId.NewId() + PersonaKeyFileStorage.Extension + ".tmp"), Bytes(3, 3));
+        File.WriteAllBytes(Path.Combine(directory.Path, "notes.txt"), Bytes(3, 4));
+        File.WriteAllBytes(Path.Combine(directory.Path, PersonaSlotId.NewId().ToString().ToUpperInvariant() + PersonaKeyFileStorage.Extension), Bytes(3, 5));
+        Directory.CreateDirectory(Path.Combine(directory.Path, PersonaSlotId.NewId() + PersonaKeyFileStorage.Extension));
+
+        var listing = storage.List();
+        Assert.Equal(new[] { first, second }.OrderBy(s => s.ToString()), listing.Slots.OrderBy(s => s.ToString()));
+        Assert.Equal(4, listing.Skipped);
+    }
+
+    [Fact]
     public void TheStoreOverFilesRoundTripsAKey()
     {
         var storage = NewStorage("keys");
