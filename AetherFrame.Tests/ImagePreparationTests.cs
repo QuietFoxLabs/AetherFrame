@@ -177,7 +177,7 @@ public sealed class ImagePreparationTests
     [Fact]
     public void WhatWindowsEncoderWrites_IsCleanedToExactlyTheInventory()
     {
-        // Real WIC output, kept as fixtures: a PNG with sRGB, gAMA and pHYs before its image data,
+        // Real WIC output, kept in ImageFixtures: a PNG with sRGB, gAMA and pHYs before its image data,
         // and a JPEG with its 16-byte JFIF APP0, two DQT, SOF0 at 4:2:0, four DHT and one scan.
         var png = Fixture("wic-rgba-4x2.png");
         Assert.Equal(new[] { "IHDR", "sRGB", "gAMA", "pHYs", "IDAT", "IEND" }, PngChunks(png));
@@ -533,8 +533,8 @@ public sealed class ImagePreparationTests
 
     private static byte[] App0() => Segment(0xE0, [.. "JFIF"u8, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]);
 
-    /// <summary>A real encoder's output, from Fixtures/wic.</summary>
-    private static byte[] Fixture(string name) => File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "wic", name));
+    /// <summary>A real encoder's output, from ImageFixtures.</summary>
+    private static byte[] Fixture(string name) => File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "ImageFixtures", name));
 
     /// <summary>A PNG's chunk types, in order.</summary>
     private static string[] PngChunks(byte[] png)
