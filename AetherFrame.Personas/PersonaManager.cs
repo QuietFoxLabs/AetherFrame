@@ -730,7 +730,7 @@ public sealed class PersonaManager
         }
         catch (Exception e)
         {
-            throw new PersonaException(PersonaError.RegistryWriteFailed, "The persona registry could not be saved, so the change was not applied; if the storage kept it before failing, a restart shows it.", e);
+            throw new PersonaException(PersonaError.RegistryWriteFailed, "The persona registry could not be saved, so the change was not applied; if the storage kept it before failing, a restart may show it.", e);
         }
     }
 

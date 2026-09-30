@@ -217,6 +217,12 @@ public class PersonaKeyFileStorageTests : IDisposable
             return;
         }
 
+        // Mode 000 denies everyone but a privileged process, which reads the directory anyway.
+        if (Environment.IsPrivilegedProcess)
+        {
+            return;
+        }
+
         var storage = NewStorage("keys");
         storage.WriteNew(PersonaSlotId.NewId(), Bytes(3, 1));
         File.SetUnixFileMode(storage.Directory, UnixFileMode.None);

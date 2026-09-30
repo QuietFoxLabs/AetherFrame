@@ -19,7 +19,9 @@ namespace AetherFrame.Personas.Storage;
 /// can change it. Decoding refuses anything but exactly this layout: every length is checked
 /// against what remains before it is read, and nothing is repaired. The magic and the version come
 /// before the checksum, and every later version keeps them where they are, so a registry a newer
-/// AetherFrame wrote is told apart from a damaged one.
+/// AetherFrame wrote is told apart from a damaged one, within this version's size limit. The one
+/// exception is damage to the two version bytes that leaves a value above 1, which reads as a newer
+/// version; nothing is overwritten either way.
 /// </summary>
 internal static class PersonaRegistryCodec
 {
@@ -112,9 +114,11 @@ internal static class PersonaRegistryCodec
             return false;
         }
 
-        if (bytes.Length < HeaderLength + TrailerLength)
+        // The magic and the version first, which need only six bytes, so a later version is told
+        // apart whatever its size; then this version's own minimum.
+        if (bytes.Length < 4 + 2)
         {
-            reason = "it is shorter than an empty registry";
+            reason = "it is shorter than a registry's header";
             return false;
         }
 
@@ -129,6 +133,12 @@ internal static class PersonaRegistryCodec
         {
             newerVersion = version > Version;
             reason = newerVersion ? $"it is registry version {version}, which a newer AetherFrame wrote" : "it is a registry version this build does not read";
+            return false;
+        }
+
+        if (bytes.Length < HeaderLength + TrailerLength)
+        {
+            reason = "it is shorter than an empty registry";
             return false;
         }
 

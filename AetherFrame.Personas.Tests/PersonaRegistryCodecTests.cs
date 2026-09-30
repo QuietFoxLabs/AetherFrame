@@ -113,7 +113,9 @@ public class PersonaRegistryCodecTests
         var laterLayout = (byte[])later.Clone();
         laterLayout[^1] ^= 0x01;
 
-        foreach (var bytes in new[] { later, laterLayout, Registry([good], version: ushort.MaxValue) })
+        // A later version whose header is all there is: six bytes are enough to tell it apart.
+        byte[] headerOnly = [.. "AFPR"u8, 0, 2];
+        foreach (var bytes in new[] { later, laterLayout, Registry([good], version: ushort.MaxValue), headerOnly })
         {
             Assert.False(PersonaRegistryCodec.TryDecode(bytes, out var records, out var active, out var reason, out var newerVersion));
             Assert.True(newerVersion, reason);

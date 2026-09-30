@@ -63,17 +63,19 @@ public enum PersonaError
     RegistryUnreadable,
 
     /// <summary>
-    /// The persona registry was written by a newer version of AetherFrame: its header names a
-    /// later registry version. It is left exactly as it was, never overwritten, and no manager is
-    /// made from it; updating AetherFrame reads it again (P3 in the decision register).
+    /// The persona registry's header names a later registry version: a newer AetherFrame wrote it,
+    /// or, when AetherFrame is already up to date, damage hit its version bytes. It is left exactly
+    /// as it was, never overwritten, and no manager is made from it; updating AetherFrame reads it
+    /// again (P3 in the decision register).
     /// </summary>
     RegistryNewerVersion,
 
     /// <summary>
     /// The persona registry could not be saved, so the change was not applied: memory holds the
-    /// state before it. The registry holds either that state or the state after the change, and the
-    /// next load shows whichever it is. A key committed just before (a create or a restore) is then
-    /// held with no record, and is found and offered for restore as an orphan (L12).
+    /// state before it. The registry holds either that state or the state after the change, and a
+    /// restart before the next successful save shows whichever it is. A key committed just before
+    /// (a create or a restore) is then held with no record, and is found and offered for restore as
+    /// an orphan (L12).
     /// </summary>
     RegistryWriteFailed,
 

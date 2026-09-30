@@ -18,10 +18,11 @@ namespace AetherFrame.Personas;
 /// alike), under its one lock, so an implementation is never called concurrently. Listings never
 /// wait for it: <see cref="PersonaManager.Personas"/>, <see cref="PersonaManager.Active"/> and
 /// <see cref="PersonaManager.TryGet"/> read a snapshot without the lock. Every change, the audit,
-/// the check of an orphan and every signature do wait while a store call runs, so the plugin makes
-/// those calls off the framework thread: an implementation may block (reading files, unprotecting
-/// keys). The key store core keeps its calls short (a few small reads and writes and at most two
-/// protector calls).
+/// the check of an orphan, opening a signer (which calls the protector on every publish), every
+/// signature and an export's opening of its key do wait while a store call runs, so the plugin
+/// makes those calls off the framework thread: an implementation may block (reading files,
+/// unprotecting keys). The key store core keeps its calls short (a few small reads and writes and
+/// at most two protector calls).
 /// </para>
 /// <para>
 /// Custody is taken in two steps so that nothing is committed before it is checked: a key is made
