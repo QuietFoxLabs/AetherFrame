@@ -24,9 +24,10 @@ namespace AetherFrame.Services.Network.Personas;
 /// Its managed copies of the secret, the input's and the one <see cref="Unprotect"/> returns, are on
 /// the pinned object heap, where the garbage collector never moves them and so never leaves a copy
 /// behind, and are zeroed before release (the second by its caller: the store zeroes what
-/// <see cref="Unprotect"/> returns). DPAPI's own output is zeroed before <c>LocalFree</c>. On a
-/// system without crypt32, <see cref="Protect"/> throws and <see cref="Unprotect"/> returns null,
-/// as the protector contract says.
+/// <see cref="Unprotect"/> returns). Every buffer passed to DPAPI is kept alive across the call,
+/// since pinning stops an array moving but not being collected. DPAPI's own output is zeroed before
+/// <c>LocalFree</c>. On a system without crypt32, <see cref="Protect"/> throws and
+/// <see cref="Unprotect"/> returns null, as the protector contract says.
 /// </para>
 /// <para>
 /// DPAPI authenticates neither bytes appended after a blob nor the blob's 16-byte provider

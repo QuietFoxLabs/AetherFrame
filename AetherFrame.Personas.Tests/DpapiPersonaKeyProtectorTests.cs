@@ -158,12 +158,11 @@ public class DpapiPersonaKeyProtectorTests : IDisposable
         }
 
         // An array on the pinned object heap reports the oldest generation from the start; an
-        // ordinary new array starts in generation 0, where the collector may move it and leave a copy.
+        // ordinary new array would start in generation 0, where the collector may move it and leave a copy.
         var context = Context(0x41);
         var opened = protector.Unprotect(protector.Protect(RandomNumberGenerator.GetBytes(32), context), context);
         Assert.NotNull(opened);
         Assert.Equal(GC.MaxGeneration, GC.GetGeneration(opened!));
-        Assert.Equal(0, GC.GetGeneration(new byte[32]));
     }
 
     [Fact]
