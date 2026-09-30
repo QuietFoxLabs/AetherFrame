@@ -94,13 +94,10 @@ internal static class ProfileTextRenderer
         // cache below still recognizes it frame to frame.
         var isPlaceholder = string.IsNullOrEmpty(element.Text);
         var content = isPlaceholder ? placeholder : displayOverride ?? element.GetDisplayText();
-        if (string.IsNullOrEmpty(content) || scale <= 0f)
-        {
-            return;
-        }
 
-        var textAlpha = Math.Clamp(element.Color.W, 0f, 1f) * (isPlaceholder ? PlaceholderAlpha : 1f);
-        if (textAlpha <= 0f)
+        // Whether a text draws at all is PaintVisibility's rule, which a shared snapshot follows too.
+        var textAlpha = PaintVisibility.TextAlpha(element) * (isPlaceholder ? PlaceholderAlpha : 1f);
+        if (!PaintVisibility.TextDraws(content, textAlpha) || scale <= 0f)
         {
             return;
         }

@@ -296,6 +296,8 @@ The rule governs `name` only. Other texts are schema 2's (N2-3), and N7 governs 
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. It checked the list against the Unicode Character Database (the 65 Cc code points) and UAX #9 (revision 52, Unicode 18.0.0), confirmed that `PlateNaming` folds Cc and Cf while U+2028, U+2029 and unpaired surrogates pass, and confirmed the CVE-2021-42574 citation. It asked for the exact error order and the invisible format characters, both added above.
 
+`[updated 2026-09-30: N2-6a's snapshot builder refuses a Plate whose name fails this rule, with a reason asking to rename it, never altering the name; ProfileLayoutSnapshot.IsValidName checks the rule exactly as the codec does.]`
+
 ### D5: an image digest covers the prepared copy. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** An `ImageReference`'s `sha256`, `format`, `byteLength`, `width` and `height` describe the **prepared copy** the client uploads, never the player's original file:
@@ -314,9 +316,22 @@ N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the sou
 
 **Not settled:**
 - I2; `[updated 2026-09-30: settled by decision batch B (I2).]`
-- the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result). N2-6 also clears the colour under fully transparent pixels, which a straight-alpha round trip would otherwise keep, and the consent screen shows each whole prepared image, not only the part a Plate element crops.
+- the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result). N2-6 also clears the colour under fully transparent pixels, which a straight-alpha round trip would otherwise keep, and the consent screen shows each whole prepared image, not only the part a Plate element crops. `[updated 2026-09-30: N2-6's design amends this entry, APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026. (1) A prepared copy is cropped to the union of the windows the Plate draws of it: Fill's centred window for an image element or the background, the whole image for Stretch, Fit and a component's image. Nothing of an image outside what is drawn leaves the machine, and Fill on the cropped copy gives each item back its own window. Preparation refuses a decoded image whose size differs from the size the window was computed from. (2) Colour that alpha hides is cleared, not only under alpha 0: each channel becomes round(round(c*a/255)*255/a), and 0 where a is 0. (3) After encoding, the container is walked against an allowlist measured at the pinned Dalamud (PNG: IHDR, IDAT, IEND; JPEG: SOI, APP0 JFIF, DQT, SOF0, DHT, DRI, SOS, EOI). The EXIF APP1 block Dalamud's encoder adds to every JPEG is stripped, and anything else is refused, before the copy is hashed. (4) JPEG (quality 0.92, 4:2:0) for an opaque JPEG source, PNG otherwise; no colour conversion and no embedded profile. (5) The consent screen shows each prepared copy, which is now the drawn window, not the whole image. N2-6b applies all of this.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. `GetRawImageAsync` and `SaveToStreamAsync` exist on `ITextureReadbackProvider` in the installed Dalamud; a round trip through a texture cannot carry container metadata; and decoding the player's own managed copies adds no surface beyond import. It asked for the narrower rationale and the two N2-6 points above.
+
+**Independent concurrence (N2-6).** A security-focused reviewer with no shared context examined N2-6's design (September 30, 2026). It did **not concur** with the first revision, and asked for nine changes, all made in the second:
+- a candidate built before the consent screen and signed exactly as shown;
+- one persona-session commit with the publication index as its commit point;
+- only what finished rendering visibly draws, proven by a canary test;
+- each image cropped to what is drawn;
+- colour that alpha hides cleared;
+- the metadata drop enforced on the encoder's actual output;
+- the sniffer's exact rules written into the specification;
+- the renderer matched where it resolves more than the Plate stores (effect opacity, the Basic name's fitting, fonts not yet built, the skip rules shared with it);
+- a bounded, versioned index and outbox, never treated as empty when unreadable.
+
+It answered the design's open questions from primary sources (Microsoft's WIC encoder pages, the PNG specification's third edition, and Dalamud's decoder and encoder at the installed commit), which gave (3) and (4) above. It then **concurred with the second revision on one condition**: preparation checks that the decoded size equals the size a window was computed from, since an animated WebP's first frame can be smaller than its header's canvas. That is (1) above.
 
 ### D8: no metadata-only snapshot reaches players. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -353,7 +368,7 @@ The protocol has no persona display name; what others see is the Plate's own con
 - at most 8,192 pixels a side and 20,000,000 pixels in all;
 - at most 8 MiB each.
 
-The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is refused with a message; nothing is downscaled silently.** The consent screen shows the prepared copies, so a first frame instead of an animation, or colours after conversion, are visible before anything leaves.
+The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is refused with a message; nothing is downscaled silently.** The consent screen shows the prepared copies, so a first frame instead of an animation, or colours after conversion, are visible before anything leaves. `[updated 2026-09-30: N2-6's design converts no colour and embeds no profile (D5), so there is no conversion to show; the consent screen shows each prepared copy, cropped to what the Plate draws.]`
 
 **What a viewer accepts, whoever published.** A hostile publisher can skip preparation, so the limit is enforced where images are received, not trusted from the sender:
 - schema 2's `ImageReference.format` allows only PNG (1) and JPEG (2) (N2-3);

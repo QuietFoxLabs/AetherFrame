@@ -59,6 +59,7 @@
     <Compile Include="..\AetherFrame\UI\Rendering\PlateViewerLayout.cs" Link="Linked\UI\Rendering\PlateViewerLayout.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\PlateViewerTarget.cs" Link="Linked\UI\Rendering\PlateViewerTarget.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\PlateCardPreview.cs" Link="Linked\UI\Rendering\PlateCardPreview.cs" />
+    <Compile Include="..\AetherFrame\UI\Rendering\ImageFitLayout.cs" Link="Linked\UI\Rendering\ImageFitLayout.cs" />
     <!-- NETWORK2's snapshot builder (N2-6a) is compiled into the plugin only in the networking
          preview flavour. It is free of Dalamud and ImGui, so it is tested here, against the real
          Plate model and the protocol library's own codec (referenced below). The player DLL is
