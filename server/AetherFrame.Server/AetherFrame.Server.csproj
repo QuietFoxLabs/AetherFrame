@@ -32,6 +32,11 @@
     <ProjectReference Include="..\..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
   </ItemGroup>
 
+  <!-- The server's side of the image worker's one exchange; the worker compiles the same file. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\ImageJobs.cs" Link="Shared\ImageJobs.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.8.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />

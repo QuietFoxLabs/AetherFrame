@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The image worker (docs/networking/NETWORK2.md, N2-7c; decision I2): it decodes an uploaded image
+    and encodes it again, one job per run, in a container of its own with no network, no database, no
+    key and no configuration (N2-8). It connects to the socket the server owns, answers one job, and
+    ends; a watchdog ends it if a job runs too long.
+
+    SixLabors.ImageSharp is pinned by the lock file to 3.1.12, the 3.x line's latest, patched for every
+    advisory GitHub lists. It is used under the Six Labors Split License's Apache 2.0 terms, which it
+    grants to software under an open source license: AetherFrame is AGPL-3.0. ImageSharp 4 checks a
+    signed licence key at build time, which needs an account with Six Labors (the owner's): the move
+    to 4.x waits for that, or for the 3.x line to stop receiving fixes.
+  -->
+
+  <Import Project="..\..\Version.props" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AetherFrame.ImageWorker</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\ImageJobs.cs" Link="Shared\ImageJobs.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,367 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using AetherFrame.ImageJobs;
+using AetherFrame.ImageWorker;
+using AetherFrame.Protocol.Documents;
+using AetherFrame.Protocol.Identity;
+using AetherFrame.Protocol.Remote;
+using AetherFrame.Protocol.Requests;
+using AetherFrame.Server.Images;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Metadata.Profiles.Exif;
+using SixLabors.ImageSharp.PixelFormats;
+using Xunit;
+
+namespace AetherFrame.Server.Tests;
+
+/// <summary>
+/// The image worker (decision I2): what it re-encodes and what it leaves out, the server's exact
+/// check of its output, the one exchange between them, and a publish through a real worker run.
+/// </summary>
+public class ImageWorkerTests
+{
+    private const string Secret = "secret-metadata";
+
+    [Fact]
+    public void APng_IsReEncodedWithoutItsMetadata_ToExactlyTheWorkersChunks()
+    {
+        var input = Images.Png(40, 30, withMetadata: true);
+        Assert.Contains(Secret, Encoding.ASCII.GetString(input), StringComparison.Ordinal);
+        var output = ImageRecoder.Recode(JobFormat.Png, 40, 30, input);
+        Assert.NotNull(output);
+        Assert.DoesNotContain(Secret, Encoding.ASCII.GetString(output), StringComparison.Ordinal);
+        Assert.True(ProcessedImages.Check(output, Images.Declared(ImageFormat.Png, 40, 30, input)));
+        Assert.True(ProcessedImages.IsWorkerPng(output));
+    }
+
+    [Fact]
+    public void AJpeg_IsReEncodedWithoutItsMetadata()
+    {
+        var input = Images.Jpeg(64, 48, withMetadata: true);
+        var output = ImageRecoder.Recode(JobFormat.Jpeg, 64, 48, input);
+        Assert.NotNull(output);
+        Assert.DoesNotContain(Secret, Encoding.ASCII.GetString(output), StringComparison.Ordinal);
+        Assert.True(ProcessedImages.Check(output, Images.Declared(ImageFormat.Jpeg, 64, 48, input)));
+    }
+
+    [Fact]
+    public void AGreyscaleJpeg_ComesBackInColour_AndOneByOneSurvives()
+    {
+        var grey = Images.Jpeg(16, 16, grey: true);
+        var output = ImageRecoder.Recode(JobFormat.Jpeg, 16, 16, grey);
+        Assert.NotNull(output);
+        Assert.True(ProcessedImages.IsWorkerJpeg(output));
+
+        var tiny = ImageRecoder.Recode(JobFormat.Png, 1, 1, Images.Png(1, 1));
+        Assert.NotNull(tiny);
+        Assert.True(ProcessedImages.IsWorkerPng(tiny));
+    }
+
+    [Fact]
+    public void AnImageUnlikeItsJob_OrNoImage_IsRefused()
+    {
+        var png = Images.Png(40, 30);
+        Assert.Null(ImageRecoder.Recode(JobFormat.Png, 41, 30, png));
+        Assert.Null(ImageRecoder.Recode(JobFormat.Jpeg, 40, 30, png));
+        Assert.Null(ImageRecoder.Recode(JobFormat.Png, 40, 30, [1, 2, 3]));
+        Assert.Null(ImageRecoder.Recode(JobFormat.Png, 40, 30, png[..(png.Length / 2)]));
+        Assert.Null(ImageRecoder.Recode(JobFormat.Png, 40, 30, []));
+    }
+
+    [Fact]
+    public void TheServersCheck_RefusesAnythingTheWorkersEncoderDoesntWrite()
+    {
+        var png = ImageRecoder.Recode(JobFormat.Png, 40, 30, Images.Png(40, 30))!;
+        var declaredPng = Images.Declared(ImageFormat.Png, 40, 30, png);
+        Assert.True(ProcessedImages.Check(png, declaredPng));
+
+        // A valid PNG with a text chunk, or in RGB, or interlaced: not what the worker writes.
+        Assert.False(ProcessedImages.Check(Images.Png(40, 30, withMetadata: true), declaredPng));
+        Assert.False(ProcessedImages.Check(Images.Png(40, 30, rgb: true), declaredPng));
+        Assert.False(ProcessedImages.Check(Images.Png(40, 30, interlaced: true), declaredPng));
+        Assert.False(ProcessedImages.Check(png, Images.Declared(ImageFormat.Png, 40, 31, png)));
+
+        var jpeg = ImageRecoder.Recode(JobFormat.Jpeg, 64, 48, Images.Jpeg(64, 48))!;
+        var declaredJpeg = Images.Declared(ImageFormat.Jpeg, 64, 48, jpeg);
+        Assert.True(ProcessedImages.Check(jpeg, declaredJpeg));
+
+        // With EXIF, or with one component: refused.
+        Assert.False(ProcessedImages.Check(Images.Jpeg(64, 48, withMetadata: true), declaredJpeg));
+        Assert.False(ProcessedImages.Check(Images.Jpeg(64, 48, grey: true), declaredJpeg));
+
+        // The same frame marked progressive (SOF2), which section 8.2.1 allows and the worker never writes.
+        var progressive = (byte[])jpeg.Clone();
+        var frame = progressive.AsSpan().IndexOf(new byte[] { 0xFF, 0xC0 });
+        progressive[frame + 1] = 0xC2;
+        Assert.False(ProcessedImages.Check(progressive, declaredJpeg));
+
+        // A comment segment spliced in after the JFIF header.
+        var withComment = jpeg[..20].Concat(new byte[] { 0xFF, 0xFE, 0x00, 0x04, (byte)'h', (byte)'i' }).Concat(jpeg[20..]).ToArray();
+        Assert.False(ProcessedImages.Check(withComment, declaredJpeg));
+    }
+
+    [Fact]
+    public async Task TheWire_CarriesOneJobAndOneReply_AndRefusesAnythingElse()
+    {
+        using var stream = new MemoryStream();
+        await ImageJobWire.WriteJobAsync(stream, new ImageJob(1, 40, 30, [1, 2, 3]), default);
+        stream.Position = 0;
+        var job = await ImageJobWire.ReadJobAsync(stream, default);
+        Assert.Equal((1, 40, 30), (job!.Format, job.Width, job.Height));
+        Assert.Equal([1, 2, 3], job.Bytes);
+
+        static async Task<ImageJob?> ReadJob(byte[] bytes) => await ImageJobWire.ReadJobAsync(new MemoryStream(bytes), default);
+        var good = stream.ToArray();
+        Assert.Null(await ReadJob(good[..^1]));
+        Assert.Null(await ReadJob([.. "AFIX"u8.ToArray(), .. good[4..]]));
+        var badFormat = (byte[])good.Clone();
+        badFormat[5] = 3;
+        Assert.Null(await ReadJob(badFormat));
+        var huge = (byte[])good.Clone();
+        huge[14] = 0x7F;
+        Assert.Null(await ReadJob(huge));
+
+        using var reply = new MemoryStream();
+        await ImageJobWire.WriteReplyAsync(reply, [9, 8], default);
+        reply.Position = 0;
+        Assert.Equal([9, 8], await ImageJobWire.ReadReplyAsync(reply, default));
+        using var refusal = new MemoryStream();
+        await ImageJobWire.WriteReplyAsync(refusal, null, default);
+        refusal.Position = 0;
+        Assert.Null(await ImageJobWire.ReadReplyAsync(refusal, default));
+    }
+
+    [Fact]
+    public async Task TheServer_SendsAJobToAWorkerRun_AndChecksWhatComesBack()
+    {
+        using var folder = new TempFolder();
+        using var client = NewClient(folder.Path);
+        using var stop = new CancellationTokenSource();
+        await client.StartAsync(stop.Token);
+        var workers = RunWorkersAsync(folder.Socket, stop.Token);
+        try
+        {
+            var png = Images.Png(40, 30, withMetadata: true);
+            var processed = await client.ProcessAsync(Images.Declared(ImageFormat.Png, 40, 30, png), png, default);
+            Assert.False(processed.IsBusy);
+            Assert.NotNull(processed.Bytes);
+            Assert.True(ProcessedImages.Check(processed.Bytes, Images.Declared(ImageFormat.Png, 40, 30, png)));
+
+            // The next job gets a fresh run: one job per process.
+            var jpeg = Images.Jpeg(64, 48);
+            Assert.NotNull((await client.ProcessAsync(Images.Declared(ImageFormat.Jpeg, 64, 48, jpeg), jpeg, default)).Bytes);
+
+            // A worker that can't decode the bytes refuses them.
+            var junk = Images.Png(40, 30);
+            junk[^20] ^= 0xFF;
+            var refused = await client.ProcessAsync(Images.Declared(ImageFormat.Png, 40, 30, junk), junk.Take(40).ToArray(), default);
+            Assert.Null(refused.Bytes);
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await client.StopAsync(default);
+            await workers.WaitAsync(TimeSpan.FromSeconds(10)).ContinueWith(_ => { }, TaskScheduler.Default);
+        }
+    }
+
+    [Fact]
+    public async Task NoWorker_IsBusy_AndTheQueueIsBounded()
+    {
+        using var folder = new TempFolder();
+        using var client = NewClient(folder.Path);
+        client.WorkerPatience = TimeSpan.FromSeconds(3);
+        using var stop = new CancellationTokenSource();
+        await client.StartAsync(stop.Token);
+        try
+        {
+            var png = Images.Png(4, 4);
+            var declared = Images.Declared(ImageFormat.Png, 4, 4, png);
+            var waiting = Enumerable.Range(0, ImageWorkerClient.MaxQueued).Select(_ => client.ProcessAsync(declared, png, default)).ToList();
+            await Task.Delay(200);
+            Assert.True((await client.ProcessAsync(declared, png, default)).IsBusy);
+            Assert.All(await Task.WhenAll(waiting), result => Assert.True(result.IsBusy));
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await client.StopAsync(default);
+        }
+    }
+
+    [Fact]
+    public async Task AWorkerThatAnswersJunk_OrHangsUp_RefusesTheImage()
+    {
+        using var folder = new TempFolder();
+        using var client = NewClient(folder.Path);
+        using var stop = new CancellationTokenSource();
+        await client.StartAsync(stop.Token);
+        try
+        {
+            var png = Images.Png(4, 4);
+            var declared = Images.Declared(ImageFormat.Png, 4, 4, png);
+            var junk = FakeWorkerAsync(folder.Socket, "AFIR"u8.ToArray().Concat(new byte[] { 1, 0, 0x7F, 0, 0, 0 }).ToArray());
+            Assert.Null((await client.ProcessAsync(declared, png, default)).Bytes);
+            await junk;
+            var hangUp = FakeWorkerAsync(folder.Socket, []);
+            Assert.Null((await client.ProcessAsync(declared, png, default)).Bytes);
+            await hangUp;
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await client.StopAsync(default);
+        }
+    }
+
+    [Fact]
+    public async Task APlateWithAnImage_IsPublishedThroughARealWorker_AndServedAsItsReEncode()
+    {
+        using var server = new TestServer { UseImageWorker = true };
+        using var aria = server.NewPlayer();
+        using var bram = server.NewPlayer();
+        using var stop = new CancellationTokenSource();
+        var profile = ProfileId.Parse((await aria.BindAsync(12345678)).GetProperty("profileId").GetString()!);
+        await bram.BindAsync(23456789, "Bram Oakes", "Gilgamesh");
+        var workers = RunWorkersAsync(server.ImageWorkerSocket, stop.Token);
+        try
+        {
+            var png = Images.Png(40, 30, withMetadata: true);
+            using (var published = await aria.PublishAsync(Plates.Snapshot(profile, "Plate", png), png))
+            {
+                Assert.Equal(HttpStatusCode.NoContent, published.StatusCode);
+            }
+
+            using var lookup = await bram.SendAsync("/v1/lookup", RequestProofKind.Lookup, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}");
+            var served = ServedProfile.Read(await lookup.Content.ReadAsByteArrayAsync());
+            using var image = await bram.SendAsync("/v1/image", RequestProofKind.Image, $"{{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\",\"marker\":\"{served.Marker}\",\"index\":0}}");
+            var bytes = await image.Content.ReadAsByteArrayAsync();
+            Assert.NotEqual(png, bytes);
+            Assert.DoesNotContain(Secret, Encoding.ASCII.GetString(bytes), StringComparison.Ordinal);
+            Assert.True(ProcessedImages.IsWorkerPng(bytes));
+            Assert.Equal(new SniffedImage(ImageFormat.Png, 40, 30), ImageSniffer.Sniff(bytes));
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await workers.WaitAsync(TimeSpan.FromSeconds(10)).ContinueWith(_ => { }, TaskScheduler.Default);
+        }
+    }
+
+    private static ImageWorkerClient NewClient(string folder)
+    {
+        var options = Options.Create(new ServerOptions { ImageWorkerSocket = System.IO.Path.Combine(folder, "images.sock") });
+        return new ImageWorkerClient(options, NullLogger<ImageWorkerClient>.Instance) { WorkerPatience = TimeSpan.FromSeconds(10), JobDeadline = TimeSpan.FromSeconds(10) };
+    }
+
+    /// <summary>Worker runs, one after another, as the container's restart policy would start them.</summary>
+    internal static Task RunWorkersAsync(string socket, CancellationToken stop) => Task.Run(async () =>
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            try
+            {
+                await WorkerRun.RunOnceAsync(socket, stop);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception) when (!stop.IsCancellationRequested)
+            {
+                await Task.Delay(50, stop);
+            }
+        }
+    }, stop);
+
+    /// <summary>A worker that reads a job and answers <paramref name="reply"/>, whatever it is.</summary>
+    private static Task FakeWorkerAsync(string socket, byte[] reply) => Task.Run(async () =>
+    {
+        using var connection = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified);
+        await connection.ConnectAsync(new System.Net.Sockets.UnixDomainSocketEndPoint(socket));
+        await using var stream = new System.Net.Sockets.NetworkStream(connection, ownsSocket: false);
+        await ImageJobWire.ReadJobAsync(stream, default);
+        await stream.WriteAsync(reply);
+        connection.Shutdown(System.Net.Sockets.SocketShutdown.Both);
+    });
+
+    private sealed class TempFolder : IDisposable
+    {
+        public TempFolder()
+        {
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "af-img-" + Guid.NewGuid().ToString("N")[..12]);
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public string Socket => System.IO.Path.Combine(Path, "images.sock");
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+}
+
+/// <summary>Images made with ImageSharp itself, with and without the metadata a worker must drop.</summary>
+internal static class Images
+{
+    public static byte[] Png(int width, int height, bool withMetadata = false, bool rgb = false, bool interlaced = false)
+    {
+        using var image = new Image<Rgba32>(width, height, new Rgba32(10, 200, 30, 128));
+        if (withMetadata)
+        {
+            image.Metadata.GetPngMetadata().TextData.Add(new SixLabors.ImageSharp.Formats.Png.Chunks.PngTextData("Comment", "secret-metadata", "", ""));
+        }
+
+        using var output = new MemoryStream();
+        image.Save(output, new PngEncoder
+        {
+            BitDepth = PngBitDepth.Bit8,
+            ColorType = rgb ? PngColorType.Rgb : PngColorType.RgbWithAlpha,
+            InterlaceMethod = interlaced ? PngInterlaceMode.Adam7 : PngInterlaceMode.None,
+            SkipMetadata = !withMetadata,
+        });
+        return output.ToArray();
+    }
+
+    public static byte[] Jpeg(int width, int height, bool withMetadata = false, bool grey = false)
+    {
+        using var image = new Image<Rgba32>(width, height, new Rgba32(200, 100, 30, 255));
+        if (withMetadata)
+        {
+            image.Metadata.ExifProfile = new ExifProfile();
+            image.Metadata.ExifProfile.SetValue(ExifTag.Software, "secret-metadata");
+        }
+
+        using var output = new MemoryStream();
+        image.Save(output, new JpegEncoder
+        {
+            Quality = 80,
+            ColorType = grey ? JpegEncodingColor.Luminance : JpegEncodingColor.YCbCrRatio420,
+            SkipMetadata = !withMetadata,
+        });
+        return output.ToArray();
+    }
+
+    public static ImageReference Declared(ImageFormat format, int width, int height, byte[] bytes) =>
+        new(AssetId.NewId(), SHA256.HashData(bytes), format, bytes.Length, width, height);
+}

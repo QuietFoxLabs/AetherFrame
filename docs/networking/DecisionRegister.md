@@ -1242,6 +1242,13 @@ All of these are now above.
 - a publish is authenticated before it holds a publish slot or has its body read past the proof: section 14.4's first two steps, a live challenge, and a bound, allowed signer. The protocol library gains `RequestProofCodec.CheckSubmissionProof` for those two steps. It changes no signed byte and authorizes nothing: `VerifySubmission`, with the document, is still what lets the server act. The specification's section 14.4 says a server may take its first two steps early;
 - a taken-over key's identity is kept, with no time, until that key binds again or opts out, so its plugin can be told. It never expires on its own: in stage 1 that is at most a row per takeover among two testers, and C7's list of what is kept names it.
 
+**N2-7c** (the image worker) applies I2 under the same approval (ServerApi-v1.md, section 8):
+- **One job per worker run.** The container restarts the worker for each job (N2-8), rather than the worker forking a decoder per job, so a job's processes end with its run. A watchdog ends a run 20 seconds after its job arrives.
+- **Limits from the container.** The rlimits, the GC heap hard limit, `oom_score_adj` and the memory and process limits are the container's (N2-8).
+- **The output check** is pinned to what ImageSharp 3.1.12 writes. A test re-encodes images with metadata, greyscale JPEGs and 1-by-1 images, and checks each against it.
+- **ImageSharp 3.1.12, not 4.x.** 4.x needs a signed licence key at build time, which only the owner can obtain. Every advisory GitHub lists for ImageSharp is fixed in 3.1.12.
+- I2's recorded limit (a process left behind by one job reading a later one) is narrowed by one run per job. Whether it is closed depends on N2-8's container settings, and I2's condition for widening the allowlist (per-job isolation, verified by the host) stands until N2-8 shows it.
+
 N2-7b's security review examined these with the code (September 30, 2026). It asked for the day-number rule and the check's floor above, a limit on opting out per address, challenges from a `409` counted against the address, a deadline over the whole Lodestone fetch, re-reads applied only to the character they read, and checkpoints that a disconnect can't skip. All are applied.
 
 ## Gates

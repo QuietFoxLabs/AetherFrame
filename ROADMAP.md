@@ -16,7 +16,7 @@ Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52
   - the 10 checks for preview build `febf0cb`, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)), in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5910883556). The game loaded it at 12:02 UTC. It supersedes `ae80c75`, whose 10 tutorial checks, posted by a second Claude session, still apply to it, as do the earlier preview posts' networking checks;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
-- **In progress:** N2-7, the server. The protocol's part is done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)), and so is the server's first part, the Lodestone check ([#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65)). Publishing and viewing are this change; the image worker comes next (section 8, task 3).
+- **In progress:** N2-7, the server. The protocol's part ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)) and the server's two parts ([#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66)) are done. The image worker is this change; deployment (N2-8) comes next.
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
@@ -45,7 +45,7 @@ Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52
 | N2-6b: the image rule, then image preparation | done: [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50) |
 | N2-6c: the publication index, the outbox and the commit | done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) |
 | N2-C: decision batch C, viewing by character (V1 to V5) | done: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61) |
-| N2-7: the server | in progress: N2-7a is done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)), and N2-7b's first part ([#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65)); its second part is this change |
+| N2-7: the server | in progress: N2-7a and N2-7b are done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66)); N2-7c, the image worker, is this change |
 | N2-8: deployment | planned; needs the owner's domain and server |
 | N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
 
@@ -303,7 +303,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - Binding follows C1: one key, one character; a takeover by another key deletes what the old one published; the newest read of a name and World hides an older binding. A daily re-read follows renames and removes a binding only after two "not found" pages a day apart.
   - Opting out deletes at once, with `secure_delete` and a truncating checkpoint retried past readers. Limits follow C6. The log holds a route, a status and a failure's kind, and a test checks that no identifier, code, name or World reaches it.
   - The details batch C left open are recorded as "N2-7b's server details". CI runs the server's 78 tests.
-- NETWORK2 increment N2-7b, part 2, publishing and viewing: this change.
+- NETWORK2 increment N2-7b, part 2, publishing and viewing: [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), merged as `a003aed`.
   - `/v1/publish` checks the proof and the challenge, then:
     - the binding and the allowlist, and C6's limit;
     - that the document is a schema 2 snapshot under the binding's profile id, no more than 300 seconds ahead of the server's clock (N6);
@@ -314,6 +314,10 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - Pausing is the opting-out kind with `{"mode": "pause"}`: the Plate goes, the binding stays. A key whose character was taken over gets `410`.
   - A publish is authenticated (its proof, a live challenge, a bound and allowed signer) before it takes one of two publish slots or reads its body; the protocol library gains `CheckSubmissionProof` for section 14.4's first two steps, with no signed-byte change.
   - Until the image worker (N2-7c), every image is refused. CI runs the server's 103 tests.
+- NETWORK2 increment N2-7c, the image worker: this change. `server/AetherFrame.ImageWorker` re-encodes each image with ImageSharp 3.1.12, one job per run, over a Unix socket the server owns.
+  - The server checks each answer against section 8.2.1, the declared format and size, and the exact chunks or segments the worker writes.
+  - A publish's images are now re-encoded rather than refused. With no worker socket configured, the server still refuses them.
+  - The details are in ServerApi-v1.md, section 8, and in the register. CI runs the server's 113 tests, one of which publishes through a real worker run.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
@@ -351,7 +355,7 @@ N2-C, decision batch C, is done ([#61](https://github.com/QuietFoxLabs/AetherFra
      - lookups by exact name and World (C5), and reports;
      - rate limits (C6), and logging as S5 and C7 say, with a log-capture test;
      - each action endpoint takes its kind from its route, never from the request, and bounds a request's size before reading it;
-   - **N2-7c, the image worker** (I2): a process of its own that decodes and encodes again, whose output the server checks with its own strict parser;
+   - **N2-7c, the image worker** (I2), this change: a process of its own that decodes and encodes again, one job per run, whose output the server checks with its own strict parser;
    - its own test suite runs in CI. No plugin code, and nothing deployed.
 
 4. **N2-8: the deployment kit** (containers, Caddy, the deploy workflow and the runbook). Prerequisites: N2-7 merged; G3, complete since batch B. The owner's domain and server are needed only for a real deploy (NETWORK2.md, section 4). Acceptance:

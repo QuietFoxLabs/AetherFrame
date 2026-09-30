@@ -150,8 +150,9 @@ internal sealed class ServerDatabase
         var deadline = DateTime.UtcNow + CheckpointPatience;
         while (true)
         {
-            await using (var connection = await OpenAsync(cancellation))
+            try
             {
+                await using var connection = await OpenAsync(cancellation);
                 await using var command = connection.CreateCommand();
                 command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
                 await using var reader = await command.ExecuteReaderAsync(cancellation);
@@ -160,6 +161,10 @@ internal sealed class ServerDatabase
                     CheckpointOwed = false;
                     return true;
                 }
+            }
+            catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6)
+            {
+                // SQLITE_BUSY or SQLITE_LOCKED as an error rather than a result: busy all the same.
             }
 
             if (DateTime.UtcNow >= deadline)
