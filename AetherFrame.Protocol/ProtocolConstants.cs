@@ -4,14 +4,15 @@ using System.Text;
 namespace AetherFrame.Protocol;
 
 /// <summary>
-/// The fixed bytes of protocol version 1: the document magic, the version number and the domain
-/// separation tags. Every value here is part of the wire format (docs/networking/ProtocolSpecification-v1.md)
-/// and is fixed for version 1, except that the freeze replaces the draft marker below (the version
-/// and the signature tag) with the final one; a new version gets new tags.
+/// The fixed bytes of protocol version 1: the document and request proof magics, the version number
+/// and the domain separation tags. Every value here is part of the wire format
+/// (docs/networking/ProtocolSpecification-v1.md) and is fixed for version 1, except that the freeze
+/// replaces the draft marker below (the version and both signing tags, the document's and the
+/// request proof's) with the final one; a new version gets new tags.
 /// <para>
 /// Until the owner freezes version 1, this build writes and reads only drafts of it (decision N3,
-/// docs/networking/DecisionRegister.md): the version is <see cref="DraftVersionFlag"/> | 1 and the
-/// signature tag ends in "-draft". A draft can never be read as final or verify as final, and the
+/// docs/networking/DecisionRegister.md): the version is <see cref="DraftVersionFlag"/> | 1 and both
+/// signing tags end in "-draft". A draft can never be read as final or verify as final, and the
 /// persona identity derivation is the same for both, so an identity survives the freeze.
 /// </para>
 /// </summary>
