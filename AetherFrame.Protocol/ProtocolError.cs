@@ -37,7 +37,7 @@ public enum ProtocolError
     /// <summary>The signature is well formed but does not verify over the document with its key.</summary>
     SignatureMismatch,
 
-    /// <summary>A text field is not valid UTF-8 or contains U+0000. A text field over its length limit is <see cref="LimitExceeded"/>.</summary>
+    /// <summary>A text field is not valid UTF-8 or contains U+0000, or a name contains a code point the name rule refuses (specification, section 8.1.1). A text field over its length limit is <see cref="LimitExceeded"/>.</summary>
     InvalidText,
 
     /// <summary>A value is outside what its field allows: an unknown enumeration code, an all-zero identifier, a zero dimension, a timestamp out of range.</summary>

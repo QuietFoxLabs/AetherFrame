@@ -19,8 +19,9 @@ public static class PlateNaming
     /// <summary>
     /// Trims the name and folds control characters (e.g. a pasted newline) and Unicode format
     /// characters (zero-width spaces and joiners, byte order marks, bidirectional overrides, tag
-    /// characters — none of which show as anything) to spaces, so a name can't be invisible or
-    /// render its neighbours backwards. Returns false with a player-facing <paramref name="error"/>
+    /// characters — none of which show as anything) to spaces, so none of those can hide in a name or
+    /// render its neighbours backwards. Other invisible characters, such as variation selectors, are
+    /// kept (docs/networking/DecisionRegister.md, L13). Returns false with a player-facing <paramref name="error"/>
     /// for an empty or over-long result.
     /// </summary>
     public static bool TryNormalizeName(string? input, out string normalized, out string? error)
