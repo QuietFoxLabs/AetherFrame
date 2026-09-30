@@ -1219,6 +1219,19 @@ All of these are now above.
 - count checks per Lodestone id and address range;
 - vectors that keep the proof kinds apart.
 
+### N2-7b's server details. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Scope.** What decision batches B and C leave to the server's implementation: its HTTP framing, the details of checks and re-reads, and the limits C6 doesn't state. [ServerApi-v1.md](ServerApi-v1.md), section 7, lists them, and the server's tests hold each.
+
+**Rationale.** Each choice keeps to what C1, C2, C6 and S5 require and fills in only what they leave open:
+- a failed check keeps the code, since a code is already bound to one key, lives an hour, and becomes useless once a check succeeds;
+- re-reads get half the fetch budget, so the daily schedule never blocks a player's check;
+- the newest read of a name and World wins, as C1 says for checks;
+- image limits follow the lookup limits, at up to 8 images a Plate;
+- IPv6 limits scale with the prefix, as R4 describes.
+
+N2-7b's security review examines these with the code.
+
 ## Gates
 
 | Gate | Must be decided before |
