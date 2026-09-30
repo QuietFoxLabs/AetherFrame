@@ -25,7 +25,7 @@ namespace AetherFrame.Tests;
 /// Opting characters in and out (N2-9b), against a server answered in memory that checks every
 /// request's proof as the real one does: each is signed by the character's own key, for its path.
 /// </summary>
-public class CharacterSharingTests
+public partial class CharacterSharingTests
 {
     private const ulong Aria = 0x0040_0000_1234_5678;
     private const ulong Bram = 0x0040_0000_8765_4321;
