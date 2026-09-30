@@ -266,17 +266,21 @@ internal sealed class TutorialOverlayWindow : Window
         }
 
         // The ring, over everything: the glow accent, with the frame corners; a soft breath while
-        // the player is meant to use the control, so the eye is drawn to it.
+        // the player is meant to use the control, so the eye is drawn to it. Right after Next was
+        // pressed on a step that waits for that control, it flashes, thicker and brighter.
         var scale = ImGuiHelpers.GlobalScale;
         var drawList = ImGui.GetForegroundDrawList();
         var min = frame.Hole.Min;
         var max = frame.Hole.Max;
         var rounding = AetherMetrics.RadiusMd * scale;
-        var pulse = frame.AllowInteraction ? 0.75f + (0.25f * MathF.Sin((float)ImGui.GetTime() * 3f)) : 1f;
+        var time = ImGui.GetTime();
+        var flashing = time < frame.FlashUntil;
+        var pulse = flashing ? (MathF.Sin((float)time * 16f) > 0f ? 1f : 0.3f)
+            : frame.AllowInteraction ? 0.75f + (0.25f * MathF.Sin((float)time * 3f)) : 1f;
         var ring = AetherPalette.Glow with { W = 0.95f * pulse };
 
-        AetherControls.Glow(drawList, min, max, rounding, AetherPalette.GlowSoft with { W = AetherPalette.GlowSoft.W * pulse }, 10f * scale);
-        drawList.AddRect(min, max, ImGui.GetColorU32(ring), rounding, ImDrawFlags.None, AetherMetrics.SpotlightRing * scale);
+        AetherControls.Glow(drawList, min, max, rounding, AetherPalette.GlowSoft with { W = AetherPalette.GlowSoft.W * pulse }, (flashing ? 20f : 10f) * scale);
+        drawList.AddRect(min, max, ImGui.GetColorU32(ring), rounding, ImDrawFlags.None, AetherMetrics.SpotlightRing * scale * (flashing ? 2.5f : 1f));
         AetherBrand.DrawCorners(drawList, min, max, 5f * scale, Math.Min(14f * scale, Math.Min(frame.Hole.Width, frame.Hole.Height) / 3f), Math.Max(1.5f, 2f * scale), ring);
 
         // A small hand marks a control that's meant to be used.

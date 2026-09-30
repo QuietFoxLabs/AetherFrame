@@ -196,6 +196,23 @@ public class TutorialGeometryTests
     }
 
     [Fact]
+    public void Card_GoesRight_OfATallNarrowHole_EvenWhenBelowHasRoom()
+    {
+        // The Basic Editor's section list: tall and narrow, with room both below and to the right.
+        var hole = new ScreenRect(new Vector2(100f, 100f), new Vector2(300f, 700f));
+
+        var (position, side) = TutorialCardPlacement.Place(hole, Card, Viewport, gap: 14f, inset: 12f);
+
+        Assert.Equal(TutorialCardSide.Right, side);
+        Assert.Equal(new Vector2(314f, 100f), position);
+
+        // With no room on the right, the left comes next.
+        var atRightEdge = new ScreenRect(new Vector2(1600f, 100f), new Vector2(1800f, 700f));
+        var (_, leftSide) = TutorialCardPlacement.Place(atRightEdge, Card, Viewport, gap: 14f, inset: 12f);
+        Assert.Equal(TutorialCardSide.Left, leftSide);
+    }
+
+    [Fact]
     public void Card_GoesBeside_WhenNeitherAboveNorBelowFits()
     {
         // A hole spanning almost the full height leaves room only to its right.
