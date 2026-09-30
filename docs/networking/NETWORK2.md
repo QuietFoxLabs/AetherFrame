@@ -1,6 +1,6 @@
 # NETWORK2: from local preparation to a two-player test
 
-**Status (2026-09-30): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`), N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) and N2-4 (the DPAPI key protector and the capability probe, [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), `2d98245`) are merged. N2-5a, the persona registry in the library ([#44](https://github.com/QuietFoxLabs/AetherFrame/pull/44), `836c6ef`), and N2-5b, the plugin's persona storage and session ([#45](https://github.com/QuietFoxLabs/AetherFrame/pull/45), `5ca0c07`), are merged, and N2-5c, the persona window, is this change. Nothing reaches a player: all of it is in the preview flavour only.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
+**Status (2026-09-30): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`), N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) and N2-4 (the DPAPI key protector and the capability probe, [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), `2d98245`) are merged. N2-5a, the persona registry in the library ([#44](https://github.com/QuietFoxLabs/AetherFrame/pull/44), `836c6ef`), N2-5b, the plugin's persona storage and session ([#45](https://github.com/QuietFoxLabs/AetherFrame/pull/45), `5ca0c07`), and N2-5c, the persona window ([#46](https://github.com/QuietFoxLabs/AetherFrame/pull/46), `04e3976`), are merged. Decision batch B, for the server, is this change. Nothing reaches a player: all of it is in the preview flavour only.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
 
 **Safeguards.** Safeguards 2 to 8 of [NETWORK1.md](NETWORK1.md), section 4, hold throughout NETWORK2:
 - no persistent key before G1 is complete;
@@ -33,8 +33,8 @@ Two players on native Windows, each running a **networking preview build**, and 
 2. **Publish.** A picks a saved Plate and chooses Share. A consent screen shows what leaves the computer and what the server learns:
    - **The actual content to be published:** every text as it will appear, and the prepared copies of the images.
    - **Game-filled text, flagged.** Adventure Plate Classic fills itself from the logged-in character (name, Home World, Data Center, job, Free Company tag). Publishing adds no name, World or Content ID of its own, but a Plate may already contain them, and the screen says which texts came from the game.
-   - **The persona's public key.** Every Plate one persona publishes can be tied together by anyone holding their codes, so a persona used for several characters links those characters.
-   - **What the server sees:** the player's network address and when they publish, as well as the profile, revision and asset identifiers.
+   - **The persona's public key.** Every Plate one persona publishes can be tied together by anyone holding their codes, so a persona used for several characters links those characters. `[updated 2026-09-30: under D6 viewers receive no persona id or key, so code holders can't tie a persona's Plates together by it. The server, which sees the key with every submission, can, so a persona used for several characters links those characters for the server.]`
+   - **What the server sees:** the player's network address and when they publish, as well as the profile, revision and asset identifiers. `[updated 2026-09-30: and what it keeps (decision batch B): the address is seen and not stored (S5); content and identifiers are kept until unpublishing, plus the backup window (D1); logs are kept 14 days, without identifiers (S5). The screen also says that the plugin's Network\Personas folder holds the keys and the list of what each persona published, which keeping it keeps and which updating or unpublishing needs, but that it is no backup of the identity (P4).]`
 
    A confirms and gets a **share code**.
 3. **View.** A sends the code to B by any means (game chat, Discord). B enters it in AetherFrame. The Plate opens in a read-only viewer and looks as it does for A, as long as both run the same build. It is never added to B's Library unless B explicitly saves a copy (a later increment).
@@ -71,14 +71,14 @@ Player A's plugin (preview)                          Owner's server             
   - It turns a schema 2 snapshot into an in-memory Plate that is never saved, and draws it with the shared renderer. It touches no Library, Template or binding.
   - Components and fonts resolve only against the viewer's own bundled set. An identifier it doesn't know is drawn as a placeholder and named in a note, never fetched.
   - It accepts only the images I1 allows: it sniffs the bytes before decoding and refuses anything but a non-animated 8-bit PNG or an 8-bit JPEG with 1 or 3 components, within the limits imports use (ROADMAP.md, section 4, rule 5).
-  - Whether the viewer checks the signature itself or receives server-checked content is D6.
+  - Whether the viewer checks the signature itself or receives server-checked content is D6. `[updated 2026-09-30: server-checked content (D6): the viewer receives a served profile and images by index, and verifies no signature.]`
 - **Server.** `server/AetherFrame.Server`, a small ASP.NET Core service in this repository, built and tested by CI like the rest:
   - It references `AetherFrame.Protocol` and verifies every document before storing anything.
   - It applies the server obligations of [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md), section 13.
-  - It issues share codes that can't be guessed.
+  - It issues share codes that can't be guessed. `[updated 2026-09-30: in R4's form, the AF- prefix and 75 random bits with a check symbol.]`
   - It rate-limits publishing and lookups by persona and by address, with IPv6 prefixes handled.
   - It keeps quotas and per-persona storage (N1).
-  - It keeps its logs and access logs off or bounded, with no Plate content and no addresses beyond the rate-limit window.
+  - It keeps its logs and access logs off or bounded, with no Plate content and no addresses beyond the rate-limit window. `[updated 2026-09-30: S5 stores no address at all in stage 1, puts no identifier in any log, and keeps logs 14 days.]`
   - It refuses clients below a minimum version with a clear message.
 - **Hosting.** One small Linux server, a domain name, Docker, and Caddy for automatic Let's Encrypt certificates. Dalamud's guidance ([Plugin Technical Considerations](https://dalamud.dev/plugin-development/technical-considerations/)) requires HTTPS with a certificate from a trusted authority and a DNS hostname rather than an IP address. It recommends dual-stack support with IPv6-aware rate limits, and version checks so outdated clients are handled. A GitHub Actions workflow deploys a reviewed commit, each run waiting for the owner's approval in a protected environment, as publication does today.
 - **Distribution for the test (the tester kit, decided in N2-11).** P2 leaves the tester kit unsettled, and its package check keeps a preview DLL from becoming a release or a test build. The recommendation: a separately staged preview kit with its own procedure in AUTOPILOT.md, which the owner installs as the dev plugin and gives to the second player. A preview channel, or networking in player builds, is a later decision.
@@ -88,7 +88,7 @@ Player A's plugin (preview)                          Owner's server             
 Nothing is needed from the owner until increment N2-8. Then, with exact steps posted in the Owner inbox:
 1. Buy a domain, and keep it on automatic renewal: a lapsed domain could be registered by someone else, who could then serve players' plugins (R2).
 2. Rent a small Linux server (a few dollars a month) with IPv4, and IPv6 if offered, and point the domain's `A` (and `AAAA`) records at it.
-3. Create the deploy key and the server's secret values (the S2 pepper, if S2 keeps one), and add them as secrets of a protected GitHub environment. Claude never sees or handles a credential or a secret.
+3. Create the deploy key and the server's secret values (S2's tombstone key), and add them as secrets of a protected GitHub environment. Claude never sees or handles a credential or a secret.
 4. Approve each deploy run in GitHub.
 
 For the test itself (N2-11), the owner installs the preview kit, gives it to the second player, and runs the checklist with them. A formal in-game pass of the current test build (`01a14a5`) is still needed for the separate 0.1.7 release.
@@ -111,10 +111,10 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 | N2-5b | Plugin: the registry file and the key file's written-through move, the single-writer lock, and the persona session (the capability probe, the lock, the registry and the audit, off the framework thread); preview test builds | G1 complete (with N3, K3 and P1 from batch A), L10, L12, P3 | N2-2 (the draft marker exists before any persistent key signs), N2-4, N2-5a |
 | N2-5c | Plugin: the persona window: personas, K4's step with K2's disclosure, L12's orphans; the Personas button in My Plates | K2, K4, L10, L12 | N2-5b |
 | N2-6 | Plugin: the snapshot builder for schema 2, image preparation, the publication index and the outbox (NETWORK1 increments 4 and 8) | P1, D4, D5, D8, I1 | N2-3a, N2-5 |
-| N2-7 | Server: verify, store and serve; share codes; retraction; quotas and rate limits; version checks; its own test suite in CI | Decision batch B: D1, D6, K5, N2, N6, S2, S3, S4, I2; the share-code format; server logging | N2-3a, N2-3b |
-| N2-8 | Deployment kit: container, Caddy, the deploy workflow with owner approval, the runbook | G3 complete (D1, D6, D7, K4, K5, N1, N7) before the deployed server accepts documents signed by real keys; the owner's hosting (section 4) | N2-7 |
+| N2-7 | Server: verify, store and serve; share codes; retraction; quotas and rate limits; version checks; its own test suite in CI | Decision batch B, recorded: D1, D6, N2, N6, S2, S3, S4, I2, R4 (the share-code format), S5 (server logging) and P4; K5 moved to the "D2 details" gate | N2-3a, N2-3b |
+| N2-8 | Deployment kit: container, Caddy, the deploy workflow with owner approval, the runbook | G3 complete (D1, D6, D7, K4, N1, N7, R1 to R3; complete since batch B) before the two-player test's server accepts documents signed by real keys, and then only from the testers' personas (I2's allowlist); the backups' retention (D1); the owner's hosting (section 4) | N2-7 |
 | N2-9 | Plugin: the transport, publish and unpublish, the consent screen, share codes | The boundary amendment and the transport (batch A) | N2-5, N2-6, N2-7 |
-| N2-10 | Plugin: the viewer (open by code, check per D6, render read-only, refresh) | N7, I1, K3 (viewing), D6, I2 | N2-3a, N2-7, N2-9 |
+| N2-10 | Plugin: the viewer (open by code, read the served profile (D6), render read-only, refresh) | N7, I1, K3 (viewing), D6, I2 | N2-3a, N2-7, N2-9 |
 | N2-11 | The preview test kit and the two-player checklist | The tester kit (P2's unsettled item) and the matching AUTOPILOT.md procedure; G3 complete | everything above, and the owner's server |
 
 `[updated 2026-09-30: N2-5 is delivered in three parts, as N2-3 was in two: N2-5a (the library), N2-5b (the plugin's persona storage and session) and N2-5c (the persona window); "N2-5" elsewhere in this plan means all three.]`
@@ -126,11 +126,13 @@ N2-7's server runs locally in its own tests and in the plugin's integration test
 - **N2-6** refuses a Plate over a whole-snapshot limit of the specification's section 8.5 (2,048 items, 8 images, 33,554,432 image pixels, 32,000 text scalars), or holding a value no layout field can express (a text with U+0000, a gradient endpoint with a colour component outside 0 to 1), with a message naming it, never clamping or trimming it. Any other value the renderer itself resolves (a colour component outside 0 to 1, an unknown font) is carried as the renderer resolves it. It keeps NETWORK1 increment 4's acceptance:
   - the builder reads only the saved Plate;
   - Plates, bindings and packages gain no publication state;
-  - the publication index is per persona and apart from Plates (P1);
-  - the outbox sends nothing until N2-9;
+  - the publication index is per persona and apart from Plates (P1), in `Network\Personas\`, beside the registry and outside `keys\` (P4);
+  - the outbox keeps a revision's exact signed bytes until the server acknowledges them, never signs a revision id twice (N2), and sends nothing until N2-9;
   - its tests sign with synthetic keys only.
-- **N2-7** keeps section 3's server list: codes that can't be guessed, rate-limited lookups, bounded logs, version checks, and the specification's section 13.
+- **N2-7** keeps section 3's server list: codes that can't be guessed, rate-limited lookups, bounded logs, version checks, and the specification's section 13. It applies decision batch B as the register records it: D1's deletions and order of checks, D6's served profile, N2's revision records, N6's exemption, S2's tombstones, S3's removal, I2's persona allowlist and image worker, R4's share codes and S5's logging.
 - **N2-9** tells a player whose key doesn't open when they first share, in K2's words: damaged, or made on another Windows account or PC. The persona window can't: its audit reads key files' headers and opens no key, so such a persona looks normal there until it signs (N2-5c's security review).
+- **N2-9** also runs one operation at a time per profile, and unpublishing drops that profile's pending outbox entries (D1). It sends only each profile's newest pending snapshot, and asks before sending one signed more than a day ago (N2). It explains the server's clock-ahead error (N6), and shares codes by /tell, reading every spelling R4 accepts and redacting each in logs (R4). Its consent screen says what S5 and P4 require, and repeats K4's text, which says what S3 and P4 require, and the persona window lets a tester copy their persona's full identity for the operator's allowlist (I2).
+- **N2-10** keeps I1's sniff of each image, holds content in memory only, clears the Plate when a refresh answers "not found", never describes content as signed or verified, and tells the viewer that opening a code sends their address to the server (D6).
 
 **Where NETWORK1's increments go:**
 - 2 becomes N2-2.

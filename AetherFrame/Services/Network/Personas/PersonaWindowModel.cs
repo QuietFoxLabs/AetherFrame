@@ -92,9 +92,14 @@ public static class PersonaWindowModel
     /// <summary>When no persona is in use.</summary>
     public const string NoneInUse = "No persona is in use. Nothing is shared either way.";
 
-    /// <summary>K4's acknowledgement, with the ordinary ways a key is lost.</summary>
-    public const string K4Text = "If this persona's key is lost, you can never update or unpublish what it shared, and no account can recover it. "
-        + "Keys are lost by reinstalling Windows, moving to a new PC, deleting AetherFrame's data, or an administrator resetting your Windows password.";
+    /// <summary>
+    /// K4's acknowledgement: the ordinary ways a key is lost, that only the server's operator can then
+    /// remove what the persona shared (S3), and what keeping the persona folder does and doesn't do (P4).
+    /// </summary>
+    public const string K4Text = "If this persona's key is lost, you can never update or unpublish what it shared, and no account can recover it; only the server's operator can then remove what it shared, on your request. "
+        + "Keys are lost by reinstalling Windows, moving to a new PC, deleting AetherFrame's data, or an administrator resetting your Windows password. "
+        + "AetherFrame's Network\\Personas folder holds your keys and the list of what each persona shared: keeping it keeps that list, which you need to update or unpublish. "
+        + "It isn't a backup, though: on a new PC or a reinstalled Windows, the keys in it normally won't open.";
 
     /// <summary>What K2 says the plugin tells the player about the key's protection.</summary>
     public const string K2Disclosure = "Windows protects the key for your account. A copy of your Windows profile opens it wherever your Windows password is known, "
