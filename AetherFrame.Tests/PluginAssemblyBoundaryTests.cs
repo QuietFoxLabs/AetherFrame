@@ -45,16 +45,36 @@ public class PluginAssemblyBoundaryTests
     private static readonly string[] NetworkingNames = ["AetherFrame.Protocol", "AetherFrame.Personas", "Services.Network", "Hosting.Network", "Windows.Network"];
 
     /// <summary>Networking APIs no plugin source outside <c>Services/Network</c> may use, in any flavour.</summary>
-    private static readonly string[] NetworkingApis = ["HttpClient", "HttpMessageHandler", "HappyEyeballs", "WebRequest", "WebClient", "System.Net.", "OpenLink", "Dns."];
+    private static readonly string[] NetworkingApis = ["HttpClient", "HttpMessageHandler", "HttpMessageInvoker", "SocketsHttpHandler", "DelegatingHandler", "HappyEyeballs", "WebRequest", "WebClient", "System.Net.", "OpenLink", "Dns."];
 
     /// <summary>
     /// Networking APIs no plugin source may use at all, <c>Services/Network</c> included (decision
     /// R3): raw sockets, TLS streams, WebSockets, QUIC, DNS, the old request types, a listener, mail,
     /// and Dalamud's link opener. <c>Sockets</c> is matched as a whole name, so R3's
     /// <c>SocketsHttpHandler</c> passes. Every way of overriding certificate validation is named
-    /// too: the type check refuses them already, as each references <c>SslPolicyErrors</c>.
+    /// too: the type check refuses them already, as each references <c>SslPolicyErrors</c>. So are
+    /// starting a process (a link opened in a browser leaves as surely as a request), and a
+    /// networking type named in a string, which reflection could load past the type check.
     /// </summary>
-    private static readonly string[] RefusedEverywhere = ["WebRequest", "WebClient", "OpenLink", "Dns.", "SslStream", "WebSocket", "System.Net.Quic", "QuicConnection", "QuicListener", "HttpListener", "System.Net.Mail", "System.Net.Security", "TcpClient", "UdpClient", "NetworkStream", "HappyHttpClient", "ServerCertificateCustomValidationCallback", "DangerousAcceptAnyServerCertificateValidator", "RemoteCertificateValidationCallback", "SslOptions"];
+    private static readonly string[] RefusedEverywhere = ["WebRequest", "WebClient", "OpenLink", "Dns.", "SslStream", "WebSocket", "System.Net.Quic", "QuicConnection", "QuicListener", "HttpListener", "System.Net.Mail", "System.Net.Security", "TcpClient", "UdpClient", "NetworkStream", "SocketException", "SocketError", "HappyHttpClient", "ServerCertificateCustomValidationCallback", "DangerousAcceptAnyServerCertificateValidator", "RemoteCertificateValidationCallback", "SslOptions", "Process.Start", "ProcessStartInfo", "ShellExecute", "\"System.Net", "\"Dalamud.Networking"];
+
+    /// <summary>
+    /// What the handler must never be told (decision R2): to send Windows or proxy credentials or a
+    /// client certificate, to accept any certificate or change how TLS is set up, to decompress, to
+    /// ask for another HTTP version, or to use another proxy or a cookie store. Refused by name, as
+    /// member references in the compiled DLL, whatever the source looked like.
+    /// </summary>
+    private static readonly string[] RefusedHttpMembers =
+    [
+        "set_UseDefaultCredentials", "set_Credentials", "set_DefaultProxyCredentials", "set_PreAuthenticate",
+        "set_ClientCertificateOptions", "get_ClientCertificates", "set_ServerCertificateCustomValidationCallback",
+        "get_DangerousAcceptAnyServerCertificateValidator", "get_SslOptions", "set_SslOptions", "set_AutomaticDecompression",
+        "set_DefaultRequestVersion", "set_DefaultVersionPolicy", "set_Version", "set_VersionPolicy", "set_Proxy",
+        "set_CookieContainer", "set_MaxAutomaticRedirections",
+    ];
+
+    /// <summary>The line breaks C# reads that <see cref="File.ReadLines(string)"/> doesn't, which could hide code on a line that starts as a comment.</summary>
+    private static readonly char[] HiddenLineBreaks = [(char)0x85, (char)0x2028, (char)0x2029];
 
     /// <summary>
     /// The only assemblies of <c>System.Net</c> the preview flavour may reference (decision R3):
@@ -93,7 +113,8 @@ public class PluginAssemblyBoundaryTests
             .ToList();
 
         Assert.NotEmpty(references);
-        var forbidden = references.Where(name => ForbiddenAssemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToList();
+        var forbidden = references.Where(name => ForbiddenAssemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            || name.Equals("System.Net", StringComparison.OrdinalIgnoreCase) || name.StartsWith("System.Net.", StringComparison.OrdinalIgnoreCase)).ToList();
 
         // Decision R3: the preview flavour may reference HTTP and the network primitives, nothing else.
         if (PreviewFlavour)
@@ -138,6 +159,109 @@ public class PluginAssemblyBoundaryTests
 
         Assert.True(networking.Count == 0, "The plugin uses: " + string.Join(", ", networking));
         Assert.True(dalamudNetworking.Count == 0, "The plugin uses Dalamud's networking: " + string.Join(", ", dalamudNetworking));
+    }
+
+    [Fact]
+    public void NetworkingTypes_AreNamedOnlyInsideServicesNetwork()
+    {
+        // Decision R3: in the compiled DLL, whatever the sources looked like, no type outside
+        // AetherFrame.Services.Network names a networking type anywhere: signatures, attributes, base
+        // types or IL. The player build names none at all (above).
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = new List<string>();
+        foreach (var (type, references) in NetworkTypeUse.ReferencesByType(pe))
+        {
+            if (type.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            offending.AddRange(references
+                .Where(name => name.StartsWith("System.Net.", StringComparison.Ordinal) || name.StartsWith("Dalamud.Networking.", StringComparison.Ordinal))
+                .Select(name => type + " names " + name));
+        }
+
+        Assert.True(offending.Count == 0, "R3: networking only under Services/Network. " + string.Join("; ", offending));
+    }
+
+    [Fact]
+    public void ThePlugin_TellsHttpNothingR2RulesOut()
+    {
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var offending = NetworkTypeUse.MemberReferences(pe.GetMetadataReader())
+            .Where(member => member.Parent.StartsWith("System.Net.Http.", StringComparison.Ordinal) && RefusedHttpMembers.Contains(member.Name, StringComparer.Ordinal))
+            .Select(member => member.Parent + "." + member.Name)
+            .ToList();
+        Assert.True(offending.Count == 0, "R2: " + string.Join(", ", offending));
+    }
+
+    [Fact]
+    public void TheSharingHandler_FollowsNoRedirectAndKeepsNoCookie()
+    {
+        // R2: SharingHandler's constructor sets AllowAutoRedirect and UseCookies to false, read
+        // from the compiled IL: each setter is called right after the constant 0 is loaded.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var metadata = pe.GetMetadataReader();
+        var handler = metadata.TypeDefinitions
+            .Select(metadata.GetTypeDefinition)
+            .Where(type => metadata.GetString(type.Namespace) == "AetherFrame.Services.Network.Transport" && metadata.GetString(type.Name) == "SharingHandler")
+            .ToList();
+        if (handler.Count == 0)
+        {
+            Assert.False(PreviewFlavour, "The preview flavour holds SharingHandler.");
+            return;
+        }
+
+        var constructor = metadata.GetMethodDefinition(Assert.Single(handler[0].GetMethods(), handle => metadata.GetString(metadata.GetMethodDefinition(handle).Name) == ".ctor"));
+        var instructions = IlScan.Instructions(pe.GetMethodBody(constructor.RelativeVirtualAddress).GetILReader());
+        var setToFalse = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 1; index < instructions.Count; index++)
+        {
+            var (opCode, token) = instructions[index];
+            if ((opCode == ILOpCode.Callvirt || opCode == ILOpCode.Call) && MetadataTokens.Handle(token).Kind == HandleKind.MemberReference
+                && instructions[index - 1].OpCode == ILOpCode.Ldc_i4_0)
+            {
+                setToFalse.Add(metadata.GetString(metadata.GetMemberReference((MemberReferenceHandle)MetadataTokens.Handle(token)).Name));
+            }
+        }
+
+        Assert.Contains("set_AllowAutoRedirect", setToFalse);
+        Assert.Contains("set_UseCookies", setToFalse);
+    }
+
+    [Fact]
+    public void PluginSources_HoldNoLineBreakTheScansCantSee()
+    {
+        // C# ends a line at U+0085, U+2028 and U+2029 too; File.ReadLines doesn't, so code after one
+        // on a line that starts with // would compile unscanned.
+        var offending = new List<string>();
+        foreach (var (file, relative) in PluginSources())
+        {
+            if (File.ReadAllText(file).IndexOfAny(HiddenLineBreaks) >= 0)
+            {
+                offending.Add(relative);
+            }
+        }
+
+        Assert.True(offending.Count == 0, "Plugin sources hold a line break only the compiler reads: " + string.Join(", ", offending));
     }
 
     /// <summary>Whether <paramref name="type"/> (namespace and name) is declared directly in <paramref name="ns"/>.</summary>
@@ -368,12 +492,15 @@ public class PluginAssemblyBoundaryTests
             foreach (var line in File.ReadLines(file))
             {
                 lineNumber++;
-                if (line.TrimStart().StartsWith("//", StringComparison.Ordinal) || line.TrimStart().StartsWith("///", StringComparison.Ordinal))
+                if (line.TrimStart().StartsWith("//", StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                var refused = RefusedEverywhere.Any(api => line.Contains(api, StringComparison.Ordinal)) || NamesSockets(line);
+                // A global using would carry a networking namespace into every file unseen.
+                var globalUsing = line.Contains("global using", StringComparison.Ordinal)
+                    && (line.Contains("System.Net", StringComparison.Ordinal) || line.Contains("Dalamud.Networking", StringComparison.Ordinal));
+                var refused = RefusedEverywhere.Any(api => line.Contains(api, StringComparison.Ordinal)) || NamesSockets(line) || globalUsing;
                 var outsideTheFolder = !inNetworkFolder && NetworkingApis.Any(api => line.Contains(api, StringComparison.Ordinal));
                 if (refused || outsideTheFolder)
                 {

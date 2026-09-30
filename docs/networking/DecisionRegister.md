@@ -651,7 +651,13 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 
 The boundary tests change in N2-9, the first change that brings network code, to enforce exactly this list, both by referenced types in the compiled flavour and by a source scan. Until then they keep refusing every networking API everywhere, which is NETWORK1.md's safeguard 1. The source scan's `Sockets` substring would match `SocketsHttpHandler`, so N2-9 makes it match whole names.
 
-`[updated 2026-09-30: applied by N2-9a, the plugin's transport. The boundary tests enforce this list in the preview flavour: its referenced assemblies, its referenced types (Dalamud's networking types included), and a source scan that matches Sockets as a whole name and also refuses each name for overriding certificate validation. R2 sets no TLS option, so System.Net.Security stays refused. The player flavour references no networking at all, as before.]`
+`[updated 2026-09-30: applied by N2-9a, the plugin's transport.]` APPROVED (Claude, under the owner's delegation of September 29, 2026). The boundary tests enforce this list on the compiled DLL, in both flavours:
+- its referenced assemblies: no System.Net assembly but the two above, and none at all in the player flavour;
+- its referenced types, Dalamud's networking types included;
+- where they are named: no type outside AetherFrame.Services.Network names a networking type in any signature, attribute, base type or IL instruction, whatever the source looked like (N2-9a's security review showed a source scan alone can be bypassed);
+- R2's handler rules, by the names of the members the DLL calls: no credentials, client certificate, certificate override, TLS option, decompression, HTTP version, proxy or cookie store is ever set, and SharingHandler turns redirects and cookies off.
+
+The source scan adds to that: Sockets is matched as a whole name; no source may name a networking API outside Services/Network, start a process, name a networking type in a string, or carry a networking namespace in a global using; and no source may hold a line break that only the compiler reads (U+0085, U+2028, U+2029). R2 sets no TLS option, so System.Net.Security stays refused. What stays outside the tests: reflection or dynamic code that builds a type's name at run time, which no plugin code does; this register is the rule for it. Credentials a player writes into the proxy environment variables go to that proxy, as for any program on the PC: the plugin sets none (R2).
 
 **Rationale.** It is the smallest surface R2 needs, found by compiling a minimal R2 transport against the installed Dalamud and reading the type references it produces. Dalamud's callback provides dual-stack connections without the plugin opening sockets itself.
 
