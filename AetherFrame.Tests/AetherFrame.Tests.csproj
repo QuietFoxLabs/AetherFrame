@@ -59,6 +59,15 @@
     <Compile Include="..\AetherFrame\UI\Rendering\PlateViewerLayout.cs" Link="Linked\UI\Rendering\PlateViewerLayout.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\PlateViewerTarget.cs" Link="Linked\UI\Rendering\PlateViewerTarget.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\PlateCardPreview.cs" Link="Linked\UI\Rendering\PlateCardPreview.cs" />
+    <!-- NETWORK2's snapshot builder (N2-6a) is compiled into the plugin only in the networking
+         preview flavour. It is free of Dalamud and ImGui, so it is tested here, against the real
+         Plate model and the protocol library's own codec (referenced below). The player DLL is
+         unaffected: its boundary tests keep proving that it holds no protocol type. -->
+    <Compile Include="..\AetherFrame\Services\Network\Publishing\**\*.cs" Link="Linked\Services\Network\Publishing\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
   </ItemGroup>
 
   <!-- Files written by the tagged releases' own persistence code (Fixtures/v0.1.x) and the
