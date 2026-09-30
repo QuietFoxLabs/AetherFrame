@@ -90,7 +90,7 @@ public class LayoutPayloadTests
         Assert.Contains("text.position.x", coordinateFirst.Message, StringComparison.Ordinal);
         var fontSizeFirst = Refuse(LayoutPayload.Build(items: w => { w.U32(1); TextItem(w, fontSize: 99); })[..^6]);
         Assert.Contains("text.fontSize", fontSizeFirst.Message, StringComparison.Ordinal);
-        var backgroundFirst = Refuse(LayoutPayload.Build(background: w => LayoutPayload.Background(w, mode: 1, assetFill: 0xc3))[..^6]);
+        var backgroundFirst = Refuse(LayoutPayload.Build(background: w => LayoutPayload.Background(w, mode: 1, assetFill: 0xc3))[..^10]);
         Assert.Contains("image mode", backgroundFirst.Message, StringComparison.Ordinal);
 
         // The format of an image before whether it is drawn.
