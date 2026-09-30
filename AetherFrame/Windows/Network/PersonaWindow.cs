@@ -140,7 +140,6 @@ internal sealed class PersonaWindow : Window
                     break;
                 case PersonaAction.RestoreKey:
                     restoreNames.Remove(asked.Slot);
-                    checks.Remove(asked.Slot);
 
                     // A restored persona starts without K4's acknowledgement, as a new one does.
                     if (outcome.Persona is { } restored)
@@ -486,7 +485,10 @@ internal sealed class PersonaWindow : Window
         }
     }
 
-    /// <summary>A path as the window shows it, from <c>%APPDATA%</c> on when it lies there, with a button that copies that same form.</summary>
+    /// <summary>
+    /// A path as the window shows it, from <c>%APPDATA%</c> or <c>%USERPROFILE%</c> on when it lies
+    /// there (<see cref="PersonaWindowModel.DisplayPath"/>), with a button that copies that same form.
+    /// </summary>
     private void DrawPath(string caption, string id, string path)
     {
         var shown = PersonaWindowModel.DisplayPath(path, applicationData, userProfile);

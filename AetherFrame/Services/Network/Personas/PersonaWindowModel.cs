@@ -112,11 +112,11 @@ public static class PersonaWindowModel
 
     /// <summary>
     /// The causes of a key file whose header can't be read: it doesn't decode, it is another
-    /// protector's, or reading it failed (another program holding it, say). A key made on another
-    /// Windows account has a readable header, so it isn't among them; it shows only when the key is
-    /// opened.
+    /// protector's, or opening it failed (another program holding it, or no permission). A key made
+    /// on another Windows account has a readable header, so it isn't among them; it shows only when
+    /// the key is opened.
     /// </summary>
-    public const string UnreadableHeaderCauses = "damaged, not a key file this version reads, or in use by another program";
+    public const string UnreadableHeaderCauses = "damaged, not a key file this version reads, or can't be opened (in use by another program, or no permission)";
 
     private const string SaveFailed = "Couldn't save your personas, so this change wasn't applied. If it shows after a restart, the save got through.";
 

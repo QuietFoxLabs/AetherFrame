@@ -147,6 +147,7 @@ public sealed class PersonaWindowModelTests
         Assert.Contains(PersonaWindowModel.UnreadableHeaderCauses, unreadable, StringComparison.Ordinal);
         Assert.DoesNotContain("another Windows account", unreadable, StringComparison.Ordinal);
         Assert.Contains("in use by another program", unreadable, StringComparison.Ordinal);
+        Assert.Contains("no permission", unreadable, StringComparison.Ordinal);
 
         // A header's claim is unverified (L12): the words say what it names, never whose key it is.
         Assert.Equal("Its key file is a copy of another key file.", PersonaWindowModel.Describe(PersonaUnusableReason.KeyNamesAnotherSlot));
