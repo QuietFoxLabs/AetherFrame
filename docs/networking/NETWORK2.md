@@ -130,6 +130,7 @@ N2-7's server runs locally in its own tests and in the plugin's integration test
   - the outbox sends nothing until N2-9;
   - its tests sign with synthetic keys only.
 - **N2-7** keeps section 3's server list: codes that can't be guessed, rate-limited lookups, bounded logs, version checks, and the specification's section 13.
+- **N2-9** tells a player whose key doesn't open when they first share, in K2's words: damaged, or made on another Windows account or PC. The persona window can't: its audit reads key files' headers and opens no key, so such a persona looks normal there until it signs (N2-5c's security review).
 
 **Where NETWORK1's increments go:**
 - 2 becomes N2-2.
