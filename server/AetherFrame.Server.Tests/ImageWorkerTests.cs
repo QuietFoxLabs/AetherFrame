@@ -61,11 +61,166 @@ public class ImageWorkerTests
         var grey = Images.Jpeg(16, 16, grey: true);
         var output = ImageRecoder.Recode(JobFormat.Jpeg, 16, 16, grey);
         Assert.NotNull(output);
-        Assert.True(ProcessedImages.IsWorkerJpeg(output));
+        Assert.True(ProcessedImages.IsWorkerJpeg(output, 16, 16));
 
         var tiny = ImageRecoder.Recode(JobFormat.Png, 1, 1, Images.Png(1, 1));
         Assert.NotNull(tiny);
         Assert.True(ProcessedImages.IsWorkerPng(tiny));
+    }
+
+    [Fact]
+    public void ALargeNoisyPng_ComesBackInManyIdatChunks_AndPasses()
+    {
+        var random = new Random(7);
+        using var image = new Image<Rgba32>(900, 700);
+        image.ProcessPixelRows(rows =>
+        {
+            for (var y = 0; y < rows.Height; y++)
+            {
+                foreach (ref var pixel in rows.GetRowSpan(y))
+                {
+                    pixel = new Rgba32((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256), 255);
+                }
+            }
+        });
+        using var input = new MemoryStream();
+        image.SaveAsPng(input);
+        var output = ImageRecoder.Recode(JobFormat.Png, 900, 700, input.ToArray());
+        Assert.NotNull(output);
+        Assert.True(CountChunks(output, "IDAT") > 1);
+        Assert.True(ProcessedImages.Check(output, Images.Declared(ImageFormat.Png, 900, 700, output)));
+    }
+
+    [Fact]
+    public void AnExifOrientation_IsNotApplied()
+    {
+        using var image = new Image<Rgba32>(64, 48, new Rgba32(1, 2, 3, 255));
+        image.Metadata.ExifProfile = new ExifProfile();
+        image.Metadata.ExifProfile.SetValue(ExifTag.Orientation, (ushort)6);
+        using var input = new MemoryStream();
+        image.SaveAsJpeg(input);
+        var output = ImageRecoder.Recode(JobFormat.Jpeg, 64, 48, input.ToArray());
+        Assert.NotNull(output);
+        Assert.Equal(new SniffedImage(ImageFormat.Jpeg, 64, 48), ImageSniffer.Sniff(output));
+    }
+
+    [Fact]
+    public void APngWithABadChecksum_IsRefused()
+    {
+        var png = Images.Png(40, 30);
+        var bad = (byte[])png.Clone();
+        bad[8 + 8 + 13] ^= 0xFF;
+        Assert.Null(ImageRecoder.Recode(JobFormat.Png, 40, 30, bad));
+        Assert.NotNull(ImageRecoder.Recode(JobFormat.Png, 40, 30, png));
+    }
+
+    [Fact]
+    public void HostileWorkerOutput_IsRefusedWithoutThrowing()
+    {
+        var jpeg = ImageRecoder.Recode(JobFormat.Jpeg, 64, 48, Images.Jpeg(64, 48))!;
+        var declared = Images.Declared(ImageFormat.Jpeg, 64, 48, jpeg);
+        Assert.True(ProcessedImages.Check(jpeg, declared));
+
+        // Fill bytes before EOI, and before the JFIF header: section 8.2.1 allows both.
+        byte[] fillAtEnd = [.. jpeg[..^2], 0xFF, 0xFF, 0xD9];
+        byte[] fillAtStart = [0xFF, 0xD8, 0xFF, .. jpeg[2..]];
+        Assert.False(ProcessedImages.Check(fillAtEnd, declared));
+        Assert.False(ProcessedImages.Check(fillAtStart, declared));
+
+        // A JFIF header grown to carry a thumbnail.
+        var thumbnail = new byte[100 * 50 * 3];
+        var app0Length = 16 + thumbnail.Length;
+        byte[] withThumbnail = [0xFF, 0xD8, 0xFF, 0xE0, (byte)(app0Length >> 8), (byte)app0Length, .. jpeg[6..17], 100, 50, .. thumbnail, .. jpeg[20..]];
+        Assert.False(ProcessedImages.Check(withThumbnail, declared));
+
+        // Other Huffman tables, and a marker inside the scan.
+        var tables = (byte[])jpeg.Clone();
+        var huffman = tables.AsSpan().IndexOf(new byte[] { 0xFF, 0xC4 });
+        tables[huffman + 30] ^= 0x01;
+        Assert.False(ProcessedImages.Check(tables, declared));
+        var marker = (byte[])jpeg.Clone();
+        marker[^10] = 0xFF;
+        marker[^9] = 0xD0;
+        Assert.False(ProcessedImages.Check(marker, declared));
+
+        // Short or empty inputs at every step.
+        for (var length = 0; length < jpeg.Length; length += 37)
+        {
+            Assert.False(ProcessedImages.IsWorkerJpeg(jpeg.AsSpan(0, length), 64, 48));
+        }
+
+        var png = ImageRecoder.Recode(JobFormat.Png, 40, 30, Images.Png(40, 30))!;
+        for (var length = 0; length < png.Length; length += 7)
+        {
+            Assert.False(ProcessedImages.IsWorkerPng(png.AsSpan(0, length)));
+        }
+
+        // A chunk whose length runs past the end.
+        var runaway = (byte[])png.Clone();
+        runaway[8 + 25 + 0] = 0x7F;
+        Assert.False(ProcessedImages.IsWorkerPng(runaway));
+    }
+
+    [Fact]
+    public async Task AStaleWorkerConnection_IsSkippedForTheNextRun()
+    {
+        using var folder = new TempFolder();
+        using var client = NewClient(folder.Path);
+        using var stop = new CancellationTokenSource();
+        await client.StartAsync(stop.Token);
+        try
+        {
+            // A run that connects and ends before any job.
+            using (var stale = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified))
+            {
+                // The listener starts in the background: try until it answers.
+                for (var attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        await stale.ConnectAsync(new System.Net.Sockets.UnixDomainSocketEndPoint(folder.Socket));
+                        break;
+                    }
+                    catch (System.Net.Sockets.SocketException) when (attempt < 100)
+                    {
+                        await Task.Delay(50);
+                    }
+                }
+
+                stale.Shutdown(System.Net.Sockets.SocketShutdown.Both);
+            }
+
+            await Task.Delay(200);
+            var workers = RunWorkersAsync(folder.Socket, stop.Token);
+            var png = Images.Png(40, 30);
+            var processed = await client.ProcessAsync(Images.Declared(ImageFormat.Png, 40, 30, png), png, default);
+            Assert.NotNull(processed.Bytes);
+            await stop.CancelAsync();
+            await workers.WaitAsync(TimeSpan.FromSeconds(10)).ContinueWith(_ => { }, TaskScheduler.Default);
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await client.StopAsync(default);
+        }
+    }
+
+    private static int CountChunks(byte[] png, string type)
+    {
+        var count = 0;
+        var position = 8;
+        while (position + 12 <= png.Length)
+        {
+            var length = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(position));
+            if (Encoding.ASCII.GetString(png, position + 4, 4) == type)
+            {
+                count++;
+            }
+
+            position += 12 + length;
+        }
+
+        return count;
     }
 
     [Fact]

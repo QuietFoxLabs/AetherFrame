@@ -58,6 +58,8 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
 
             try
             {
+                var job = new ImageJob((byte)declared.Format, declared.Width, declared.Height, bytes.ToArray());
+
                 // A worker run that ended before it took the job (its connection is stale) is skipped
                 // for the next one; one that took it and failed refuses the image.
                 while (true)
@@ -80,11 +82,17 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
                         await using var stream = new NetworkStream(worker, ownsSocket: false);
                         try
                         {
-                            await ImageJobWire.WriteJobAsync(stream, new ImageJob((byte)declared.Format, declared.Width, declared.Height, bytes.ToArray()), deadline.Token);
+                            await ImageJobWire.WriteJobAsync(stream, job, deadline.Token);
                         }
                         catch (Exception e) when (e is IOException or SocketException && !cancellation.IsCancellationRequested)
                         {
                             continue;
+                        }
+                        catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+                        {
+                            // A run that connected and never read: refused, like one that stalls on the job.
+                            logger.LogWarning("An image job wasn't taken in time.");
+                            return ImageProcessing.Refused;
                         }
 
                         try
@@ -129,8 +137,9 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
         listener.Bind(new UnixDomainSocketEndPoint(path));
         if (!OperatingSystem.IsWindows())
         {
-            // The worker runs as another user; it may connect, and nothing else is in the folder.
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.OtherRead | UnixFileMode.OtherWrite);
+            // The worker runs as another user in the server's group (N2-8): the group may connect,
+            // and no one else.
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.GroupWrite);
         }
 
         listener.Listen(4);

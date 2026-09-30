@@ -48,13 +48,17 @@ public static class WorkerRun
         return 0;
     }
 
-    /// <summary>Ends the process with exit code 2 once <paramref name="deadline"/> has passed: the one limit a stuck decoder can't hold off.</summary>
+    /// <summary>
+    /// Ends the process at once, with no cleanup, once <paramref name="deadline"/> has passed. It
+    /// stops a decoder that is stuck, not one an exploit controls, which runs in this same process:
+    /// that is what the deployment's own limit on a worker run's life is for (N2-8).
+    /// </summary>
     public static void StartWatchdog(TimeSpan deadline)
     {
         var thread = new Thread(() =>
         {
             Thread.Sleep(deadline);
-            Environment.Exit(2);
+            Environment.FailFast("The image job ran past its deadline.");
         })
         {
             IsBackground = true,

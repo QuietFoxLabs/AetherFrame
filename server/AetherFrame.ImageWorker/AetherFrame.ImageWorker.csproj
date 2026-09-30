@@ -6,11 +6,12 @@
     key and no configuration (N2-8). It connects to the socket the server owns, answers one job, and
     ends; a watchdog ends it if a job runs too long.
 
-    SixLabors.ImageSharp is pinned by the lock file to 3.1.12, the 3.x line's latest, patched for every
-    advisory GitHub lists. It is used under the Six Labors Split License's Apache 2.0 terms, which it
-    grants to software under an open source license: AetherFrame is AGPL-3.0. ImageSharp 4 checks a
-    signed licence key at build time, which needs an account with Six Labors (the owner's): the move
-    to 4.x waits for that, or for the 3.x line to stop receiving fixes.
+    SixLabors.ImageSharp is pinned by the lock file to 3.1.12, the 3.x line's last release. It is
+    used under the Six Labors Split License's Apache 2.0 terms, which it grants to software under an
+    open source license: AetherFrame is AGPL-3.0. Six Labors' advisories of August and September 2026
+    are fixed only in 4.1.x; none reaches this worker's configuration (DecisionRegister.md, N2-7c).
+    ImageSharp 4 checks a signed licence key at build time, which needs an account with Six Labors,
+    the owner's: the move to 4.x waits for that decision (Owner inbox).
   -->
 
   <Import Project="..\..\Version.props" />
