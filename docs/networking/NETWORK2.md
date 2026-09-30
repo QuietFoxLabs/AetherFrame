@@ -147,7 +147,7 @@ N2-7's server runs locally in its own tests and in the plugin's integration test
 
 The owner's other request is a more modern and more fluid interface, with less going back and forth between menus. Under the ordering in ROADMAP.md, section 5, it follows this plan, and is interleaved wherever networking waits on the owner or on a review.
 
-Its first step is an audit of the current flows: which tasks need a trip between windows or menus, and what one place could hold them instead. The audit's results become tasks in ROADMAP.md, section 8. The sharing screens of N2-5, N2-9 and N2-10 are designed to fit where that audit is heading, not the old flows. `[updated 2026-09-30: the audit is written, [docs/InterfaceAudit.md](../InterfaceAudit.md); its proposals are interface tasks in ROADMAP.md, section 8.]`
+Its first step is an audit of the current flows: which tasks need a trip between windows or menus, and what one place could hold them instead. The audit's results become tasks in ROADMAP.md, section 8. The sharing screens of N2-5, N2-9 and N2-10 are designed to fit where that audit is heading, not the old flows. `[updated 2026-09-30: the audit is written, in docs/InterfaceAudit.md; its proposals are interface tasks in ROADMAP.md, section 8.]`
 
 ## 7. What this plan does not decide
 
