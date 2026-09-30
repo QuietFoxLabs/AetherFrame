@@ -8,30 +8,30 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 13:23 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 17:10 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
   - a verdict on test build `01a14a5`, which gates the 0.1.7 release. It is staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`; the game now runs the preview builds, so it goes back in the test folder when the owner asks;
+  - the tutorial checks for preview build `a933c50` (Next held until you do what a step asks, [#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60) and [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63)), given in chat;
   - the 10 checks for preview build `febf0cb`, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)), in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5910883556). The game loaded it at 12:02 UTC. It supersedes `ae80c75`, whose 10 tutorial checks, posted by a second Claude session, still apply to it, as do the earlier preview posts' networking checks;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
-- **In progress:**
-  - interface task 1, a Plate menu in the editors (this change, [#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59));
-  - the tutorial card beside tall, narrow controls ([#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60), by a second Claude session).
+- **In progress:** N2-7, the server. Its first part, signed action requests in the protocol, is this change ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62)); the served profile's format comes next, then the server itself (section 8, task 3).
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
   - the owner's one-time switch of Dalamud's Dev Plugin Locations to `E:\AetherFrame Test Build\AetherFrame.dll` (seen in `dalamudConfig.json` at 11:51 UTC, read only). Each new test build now reaches the game by itself: Dalamud's log shows preview `302af2f` loaded at 09:45 UTC, `ae80c75` at 11:48 UTC and `febf0cb` at 12:02 UTC, with no restart;
   - the tutorial card's fixes from the owner's first run through it ([#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), merged as `ae80c75`, by a second Claude session);
   - N2-6c's second part, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56), merged as `febf0cb`), which completes N2-6; nothing it builds is sent;
+  - interface task 1, the editors' Plate menu ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59), merged as `7e84f79`), and the tutorial fixes from the owner's second run: the card beside tall controls, and Next held until a step's action is done, flashing the control ([#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60) and [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63), merged as `a933c50`);
+  - decision batch C, viewing by character ([#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61), merged as `f467032`);
   - the re-plan of sharing around the owner's decisions V1 to V5 ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), merged as `b75deba`, by a second Claude session): an opted-in player right-clicks another opted-in player's character, or searches their name and World, and views their Active Plate as a finished picture. Characters are proved by a Lodestone check, personas are hidden, and share codes are retired.
 - **Next, for the two-player test:**
-  1. N2-C: decision batch C, viewing by character, before any sharing code beyond N2-6 (section 8);
-  2. N2-7: the server;
-  3. N2-8: deployment;
-  4. N2-9: the sharing flow in the plugin;
-  5. N2-10: the viewer;
-  6. N2-11: the test kit and the two-player checklist.
+  1. N2-7: the server (in progress);
+  2. N2-8: deployment;
+  3. N2-9: the sharing flow in the plugin;
+  4. N2-10: the viewer;
+  5. N2-11: the test kit and the two-player checklist.
 - **Next, for the interface:** section 8's task 2, Open another Plate... and New Plate... in the Plate menu, then tasks 3 to 6, then the second pass's tasks 7 to 16 ([#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), merged). Those include one editor window with Basic and Advanced as modes (task 8, the owner's decision, section 5), which will carry the Plate menu.
 
 | NETWORK2 increment | State |
@@ -44,8 +44,8 @@ Verified September 30, 2026, at 13:23 UTC. **For the live status, see [issue #52
 | N2-6a: the snapshot builder | done: [#48](https://github.com/QuietFoxLabs/AetherFrame/pull/48) |
 | N2-6b: the image rule, then image preparation | done: [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50) |
 | N2-6c: the publication index, the outbox and the commit | done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) |
-| N2-C: decision batch C, viewing by character (V1 to V5) | done: C1 to C9 (this change) |
-| N2-7: the server | planned |
+| N2-C: decision batch C, viewing by character (V1 to V5) | done: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61) |
+| N2-7: the server | in progress: part 1, signed action requests (this change, [#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62)) |
 | N2-8: deployment | planned; needs the owner's domain and server |
 | N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
 
@@ -53,7 +53,7 @@ Verified September 30, 2026, at 13:23 UTC. **For the live status, see [issue #52
 | --- | --- |
 | v0.1.6 | released to the testing channel |
 | Test build `01a14a5` (player) | waiting for the owner's verdict; staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`, which the game no longer loads |
-| Preview build `febf0cb` (`master` after [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)) | in `E:\AetherFrame Test Build\` since September 30, 12:02 UTC, installed after a two-minute notice, with a copy in `E:\AetherFrame Test Builds\2026-09-30 febf0cb preview\`. The game loaded it at 12:02 UTC, with no restart. It supersedes preview build `ae80c75`, which a second Claude session installed at 11:48 UTC. |
+| Preview build `a933c50` (`master` after [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63)) | in `E:\AetherFrame Test Build\` since September 30, 17:07 UTC, installed after a two-minute notice, with a copy in `E:\AetherFrame Test Builds\2026-09-30 a933c50 preview\`. The game loaded it at 17:07 UTC, with no restart. It supersedes preview build `febf0cb`, whose checks still apply. |
 | `master` | `b75deba` (after [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), which changed documents only), CI green on both platforms |
 
 ## 1. Goal and scope
@@ -293,24 +293,14 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - every candidate declares its copies under asset ids of its own, and signing and listing run as persona-session operations that leave the persona window's outcomes alone.
 - Interface task 1, a Plate menu in both editors: [#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59), merged as `7e84f79`. The Plate's name in the editors' action bar opens it, with View (the movable Plate Viewer, unsaved changes included), Set Active, Save as New Plate, Save as Template, Export and Rename, so none of them needs a trip to My Plates; Delete stays on My Plates' cards. My Plates' Plate actions and their prompts moved first into one component the two menus share, with tests pinning the runner, the unsaved-changes question and each action's messages. Save as New Plate saves the document as it is, unsaved changes included, as a new Plate after the original, which keeps its last saved version; the editor continues on the copy, and nothing can be edited while it is written. The viewer is View in every menu, so Preview is only the editors'. When an editor is too narrow for its whole top bar, the save state and its buttons take a second row instead of being cut off, as they were at the Basic editor's minimum width. The tour points at the menu and moves to version 2. The choices among the audit's two passes are recorded in section 5.
 - The tutorial card beside tall, narrow controls: [#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60), merged as `c53a015`. For a spotlight taller than it is wide, the card tries the right, then the left, before below and above, so step 13's card sits beside the Basic Editor's section list (the owner's report of September 30). Every step that asks for a click on the highlighted control (10, 11 and 24) now holds Next, and pressing Next flashes that control (the owner's request of the same day).
-- The tutorial waits for the way there: this change. A step whose requirement isn't met while it spotlights the control that meets it (step 19, the Advanced Editor's tools, spotlighting the Basic | Advanced switch) holds Next and flashes that control (the owner's report of September 30).
-- NETWORK2 increment N2-C, decision batch C, viewing by character: this change. C1 to C9 in the register settle the character and its key (the Lodestone id, one key per character), the Lodestone check (the self-introduction element only), one consent per character with live publishing (amending D5's N2-6 note, point 6), one server-issued profile id per binding and opting out without tombstones, viewing from the right-click menu and exact name search by opted-in players only, rate limits, what the server keeps (no lookup log), the stage 1 allowlist by Lodestone id, and the new signed request kind, which the owner approved in advance. A security reviewer concurred after three fixes.
+- The tutorial waits for the way there: [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63), merged as `a933c50`. A step whose requirement isn't met while it spotlights the control that meets it (step 19, the Advanced Editor's tools, spotlighting the Basic | Advanced switch) holds Next and flashes that control (the owner's report of September 30).
+- NETWORK2 increment N2-C, decision batch C, viewing by character: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61), merged as `f467032`. C1 to C9 in the register settle the character and its key (the Lodestone id, one key per character), the Lodestone check (the self-introduction element only), one consent per character with live publishing (amending D5's N2-6 note, point 6), one server-issued profile id per binding and opting out without tombstones, viewing from the right-click menu and exact name search by opted-in players only, rate limits, what the server keeps (no lookup log), the stage 1 allowlist by Lodestone id, and the new signed request kind, which the owner approved in advance. A security reviewer concurred after three fixes.
+- NETWORK2 increment N2-7a, part 1, signed action requests: this change ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62)). Request proof kinds 2 to 8, one per action of section 14.5 (the Lodestone code, check and re-read, opting out, a lookup, an image, a report), bind a body of at most 4,096 bytes to the character's key; `RequestProofCodec` gains `SignAction` and `VerifyAction`, and kinds never cross. Vectors cover every step, and each cross-kind vector is refused by the kind check alone. The owner approved this signed-byte change in advance; C9 as built is recorded in the register, and a security reviewer concurred.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
 
-**Before any sharing code beyond N2-6: N2-C, decision batch C, viewing by character** (the owner's V1 to V5). Each decision is researched from primary sources, concurred with by a security-focused reviewer, and recorded in the register:
-- the character's key: the canonical form of name and World, and what a rename or World transfer does;
-- the Lodestone check: the code, where it goes, how the server reads the Lodestone, how often, what it keeps, and a later check by another key (which also recovers a lost key);
-- publishing: when the Active Plate is sent (opting in, saving it, changing it), per character, and what opting out deletes;
-- viewing: which game right-click menus offer "View AetherFrame Plate", the name search's limits, and that neither works without opting in;
-- what the server learns, keeps and logs about lookups and searches (S5 carried over), and rate limits against scraping who has opted in;
-- reporting and hiding a Plate, and the operator's takedown steps;
-- how consent works when saving updates what others see (V2). V2 conflicts with D5's N2-6 note, point 6 (a consent screen before each signing), which is recorded, and with the rule #56 recorded in D5's entry, that a Plate signed from the share check is shown on that screen before its first send, or dropped. Batch C amends both explicitly, with a security reviewer's concurrence (for example, one consent per character at opt-in that covers later saves), and never routes around them;
-- K4 and the D2 backup under V3, and what the persona window becomes (R5 has already retired R1 and R4), and exactly what a viewer receives;
-- NETWORK2.md's increments N2-7 to N2-11 restated to match. No code.
-
-Tasks 1, 3 and 4 below keep their numbers; where they name share codes, read them under V1 to V5 until batch C restates them.
+N2-C, decision batch C, is done ([#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61)). Where tasks 1, 3 and 4 below name share codes, tombstones or a persona allowlist, batch C replaces them: no share codes (R5), no tombstones in stage 1 (C4), and an allowlist of the testers' Lodestone ids (C8).
 
 1. **N2-6: the snapshot builder for schema 2, image preparation, the publication index and the outbox** (NETWORK1 increments 4 and 8), in three parts, following its reviewed design (D5's N2-6 note): N2-6a, the builder, and N2-6b, image preparation (its first part, the image rule in the specification, and its second, the preparation itself), are done (above); N2-6c's first part, the publication index, the outbox and the commit, is merged ([#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55)), and so is its second part, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56), merged as `febf0cb`): N2-6 is complete. Prerequisites: P1, D4, D5, D8 and I1 (approved); N2-3a and N2-5b merged first. Acceptance:
    - the builder reads only the saved Plate and builds a schema 2 snapshot; a name the name rule refuses is not altered but refused with a message asking to rename;
@@ -332,15 +322,19 @@ Tasks 1, 3 and 4 below keep their numbers; where they name share codes, read the
    - the dry run passes, and the owner approves the publication run in GitHub;
    - `pluginmaster.json` on `plugin-repository` serves 0.1.7 in testing, with the pinned icon address.
 
-3. **N2-7: the server** (`server/AetherFrame.Server`, ASP.NET Core on .NET 10). Prerequisites: decision batch B, recorded (D1, D6, N2, N6, S2, S3, S4, I2, R4, S5 and P4, each with a security reviewer's concurrence); N2-3a and N2-3b merged. It may be split into parts, as N2-3 and N2-5 were. Acceptance:
-   - it verifies every submission with `RequestProofCodec.VerifySubmission` before storing anything, and applies the specification's section 13, rule 10 included: challenges consumed atomically, a deployment name from configuration only, test-only names refused with real keys;
-   - it stores the exact verified bytes and keys everything by (persona, profile id) (rules 1 to 5). It prunes superseded revisions but keeps their (revision id, SHA-256), ordering by its own sequence (N2). It applies retractions terminally, with D1's deletions, secure delete and a truncating checkpoint, and S2's keyed tombstones, in D1's order of checks. It exempts retractions from the skew check (N6);
-   - it serves D6's served profile, specified beside section 8.5 with vectors and a strict decoder in the protocol library, and I2's re-processed images by share code and index;
-   - stage 1's persona allowlist, from configuration: a submission from any other persona is refused right after the proof check, before the tombstone or any decoding, and viewing stays open (I2, S3);
-   - share codes in R4's form, only in request bodies, with its rate limits; logging as S5 says, with a log-capture test over the server and the image worker;
-   - quotas per persona, and version checks (R2);
-   - its own test suite runs in CI, including the conformance cases of rule 10 that the library cannot check;
-   - no plugin code, and nothing deployed.
+3. **N2-7: the server** (`server/AetherFrame.Server`, ASP.NET Core on .NET 10), in parts, each its own reviewed pull request, following decision batch B as batch C restates it:
+   - **N2-7a, the protocol's part:** signed action requests (part 1, this change), then D6's served profile (part 2): its specification beside section 8.5, an encoder, a strict decoder that is never a `VerifiedDocument`, and vectors;
+   - **N2-7b, the server:**
+     - challenges as section 13, rule 10 says;
+     - the Lodestone code and check (C2), behind the Lodestone-id allowlist (C8), with the Lodestone faked in tests;
+     - bindings, one per key, each with one profile id (C1, C4), and the daily re-read;
+     - publishing through section 14.4, then rule 4 and N2's revision records, and N6's skew check;
+     - opting out with D1's deletions;
+     - lookups by exact name and World (C5), and reports;
+     - rate limits (C6), and logging as S5 and C7 say, with a log-capture test;
+     - each action endpoint takes its kind from its route, never from the request, and bounds a request's size before reading it;
+   - **N2-7c, the image worker** (I2): a process of its own that decodes and encodes again, whose output the server checks with its own strict parser;
+   - its own test suite runs in CI. No plugin code, and nothing deployed.
 
 4. **N2-8: the deployment kit** (containers, Caddy, the deploy workflow and the runbook). Prerequisites: N2-7 merged; G3, complete since batch B. The owner's domain and server are needed only for a real deploy (NETWORK2.md, section 4). Acceptance:
    - container images for the server and the image worker, built in CI. The worker is isolated as I2 says, with no network, a read-only root, no database, key or configuration, and its own memory and process limits, and the server checks that at startup;
