@@ -134,6 +134,56 @@ public class PluginAssemblyBoundaryTests
         roots.Any(root => ns == root || ns.StartsWith(root + ".", StringComparison.Ordinal));
 
     [Fact]
+    public void NativeCalls_AreDpapisAlone_AndOnlyInThePreviewFlavour()
+    {
+        // The player build calls no native function at all. The preview flavour calls exactly the
+        // three DPAPI needs (docs/networking/DecisionRegister.md, K2), all from the DPAPI protector.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var metadata = pe.GetMetadataReader();
+        var imports = new List<string>();
+        foreach (var handle in metadata.MethodDefinitions)
+        {
+            var method = metadata.GetMethodDefinition(handle);
+            var import = method.GetImport();
+            if (import.Module.IsNil)
+            {
+                continue;
+            }
+
+            var type = metadata.GetTypeDefinition(method.GetDeclaringType());
+            while (type.GetDeclaringType() is { IsNil: false } outer)
+            {
+                type = metadata.GetTypeDefinition(outer);
+            }
+
+            var owner = metadata.GetString(type.Namespace) + "." + metadata.GetString(type.Name);
+            imports.Add(owner + ": " + metadata.GetString(metadata.GetModuleReference(import.Module).Name) + "!" + metadata.GetString(import.Name));
+        }
+
+        imports.Sort(StringComparer.Ordinal);
+        if (PreviewFlavour)
+        {
+            Assert.Equal(
+                [
+                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptProtectData",
+                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptUnprotectData",
+                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: kernel32.dll!LocalFree",
+                ],
+                imports);
+        }
+        else
+        {
+            Assert.True(imports.Count == 0, "The player build calls: " + string.Join(", ", imports));
+        }
+    }
+
+    [Fact]
     public void ThePluginConfiguration_HasNoPersonaMembers()
     {
         var path = RepositoryPaths.PluginAssembly();
