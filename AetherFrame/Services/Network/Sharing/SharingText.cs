@@ -4,8 +4,9 @@ namespace AetherFrame.Services.Network.Sharing;
 
 /// <summary>
 /// The words of the sharing window (N2-9b): the consent a character's opting in asks for (decisions
-/// C3, C7 and K4 as C9 restates it), the Lodestone steps (C2), and what each outcome means. None of
-/// it holds a name, a World, a code or an id: the window draws those on their own, unformatted.
+/// C3, C5, C7, K2 and K4 as C9 restates it), the Lodestone steps (C2), and what each outcome means.
+/// None of it holds a name, a World, a code or an id: the window draws those on their own,
+/// unformatted.
 /// </summary>
 internal static class SharingText
 {
@@ -14,21 +15,28 @@ internal static class SharingText
 
     internal const string ConsentTitle = "Before you turn sharing on for this character";
 
-    /// <summary>What turning sharing on means, one statement each (C3, C7, and K4 as C9 restates it).</summary>
+    /// <summary>What turning sharing on means, one statement each (C3, C5, C7, K2, and K4 as C9 restates it).</summary>
     internal static readonly string[] Consent =
     [
         "Other players who have turned sharing on can view this character's Active Plate as a picture: by right-clicking the character in game, or by searching for its name and World. They never get the Plate itself, its Template or your original images.",
-        "Once sharing is on, saving this character's Active Plate shares the new version without asking again. Before a Plate is shared for the first time, you'll see exactly what will be sent. My Plates marks the shared Plate, and you can turn sharing off at any time.",
-        "Turning sharing off deletes everything the server holds for this character: its Plate, its images and its check.",
+        "Once sharing is on, saving this character's Active Plate shares the new version without asking again. Before a Plate is shared for the first time, you'll see exactly what will be sent, and nothing is shared unless you agree. My Plates marks the shared Plate, and you can pause or turn off sharing at any time.",
+        "Turning sharing off deletes this character's Plate, its images and its check from the server at once. The server's backups keep copies for up to 7 days before they are deleted too.",
+        "Other players can report a Plate. The server keeps a report (the character, the reason, and the reporting player's key) for up to 30 days, or until it is dealt with, even if sharing is turned off.",
         "Anyone who has turned sharing on can find out, from this character's name, that its player uses AetherFrame, and so Dalamud.",
         "The server keeps this character's Lodestone id, name and World, a key that proves the character is yours, and your latest shared Plate. It sees the network address of anyone who shares or views, and doesn't store it. It keeps no record of who viewed whom.",
         "The key stays on this PC. If you share this character from another PC, or after reinstalling Windows, checking it again there moves sharing to it, and what this PC shared is deleted.",
+        "Windows protects the key for your account. A copy of your Windows profile opens it wherever your Windows password is known, and at once if your account has no password. Any program running as you, other Dalamud plugins included, can use it. On a work or school PC, your organisation may be able to recover it.",
         "To prove the character is yours, you'll paste a short code into its Lodestone profile. While the code is there, anyone reading the profile can see that you use AetherFrame, so delete it once the check passes.",
     ];
 
     internal const string Agree = "I understand, and I want to share this character's Active Plate.";
 
     internal const string TurnOn = "Turn on sharing";
+
+    internal const string NewKeyTitle = "Start again with a new key";
+
+    internal const string NewKeyBound =
+        "The server still shares this character under the key that can't be opened here. Checking the character with a new key moves sharing to it; until then, nothing changes.";
 
     internal const string CodeStepCopy = "1. Copy this code:";
 
@@ -43,9 +51,14 @@ internal static class SharingText
 
     internal const string AddressInvalid = "That isn't a Lodestone character page's address. Open your character's page on the Lodestone and copy the address from your browser.";
 
-    internal const string CodeLife = "The code works once, for an hour. If a check doesn't pass, you can fix the profile and check again.";
+    internal const string CodeLife =
+        "The code works once. If a check doesn't pass, you can fix the profile and check again. If AetherFrame reloads before the check passes, get a new code and paste that one instead.";
+
+    internal const string CodeExpired = "This code has run out. Get a new one.";
 
     internal const string NoCodeYet = "Get a code to start the Lodestone check.";
+
+    internal const string NoNameYet = "AetherFrame can't read your character's name and World right now. Try again in a moment.";
 
     internal const string SharedLine = "Sharing is on for this character, as it appears on the Lodestone:";
 
@@ -53,15 +66,17 @@ internal static class SharingText
         "Your Active Plate will be shared when you save it. Publishing arrives in the next preview build, so nothing is shared yet.";
 
     internal const string TurnOffConfirm =
-        "Turn off sharing for this character? The server deletes everything it holds for it: its Plate, its images and its check. To share again, you'll need a new Lodestone check.";
+        "Turn off sharing for this character? The server deletes its Plate, its images and its check at once. To share again, you'll need a new Lodestone check.";
 
     internal const string TurnOffAllConfirm =
-        "Turn off sharing for every character on this PC? The server deletes everything it holds for each of them. To share again, each needs a new Lodestone check.";
+        "Turn off sharing for every character on this PC? The server deletes what it holds for each of them. To share again, each needs a new Lodestone check.";
 
     internal const string NoCharacter = "Log in to a character to turn sharing on or off for it.";
 
     internal const string Unreadable =
-        "AetherFrame couldn't read which characters you share on this PC, so sharing stays off here until it can. Nothing was changed or deleted.";
+        "AetherFrame couldn't read the file that records which characters you share from this PC (sharing.afsh, in the folder below). It may be damaged, or saved by a newer AetherFrame. " +
+        "Nothing more is sent from here until it can be read, and nothing was changed or deleted. Characters you already share stay shared on the server. " +
+        "To fix it, update AetherFrame, or move the file aside and turn sharing on again for each character, which moves sharing to a new check.";
 
     internal const string PersonasUnavailable = "Sharing needs this PC's keys, which aren't available right now:";
 
@@ -69,20 +84,29 @@ internal static class SharingText
 
     internal const string Busy = "Working...";
 
+    /// <summary>How long a code has left, in words.</summary>
+    internal static string CodeLeft(TimeSpan left) =>
+        left <= TimeSpan.Zero ? CodeExpired
+        : left.TotalMinutes < 1.5 ? "The code runs out in about a minute."
+        : "The code runs out in about " + ((int)Math.Round(left.TotalMinutes)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " minutes.";
+
     /// <summary>What a notice means, in words.</summary>
     internal static string Notice(SharingNoticeKind kind) => kind switch
     {
         SharingNoticeKind.CodeReady => "Here's your code. Follow the steps below.",
         SharingNoticeKind.CheckPassed => "The check passed: this character is yours on the server. You can now delete the code from your Lodestone profile.",
-        SharingNoticeKind.CheckFailed => "The check didn't pass. Make sure the code is saved in the Character Profile of the character whose page you pasted, then check again. It can take a minute for the Lodestone to show a change.",
+        SharingNoticeKind.CheckFailed => "The check didn't pass. Make sure you're logged in as the character whose page you pasted, and that the code is saved in its Character Profile, then check again. It can take a minute for the Lodestone to show a change.",
         SharingNoticeKind.TurnedOff => "Sharing is off for this character. The server deleted what it held for it.",
+        SharingNoticeKind.TurnedOffAll => "Sharing is off for every character on this PC. The server deleted what it held for them.",
+        SharingNoticeKind.TurnOffIncomplete => "Sharing couldn't be turned off for every character: some are still shared. Log in to each of them and open this window to see why, or try again later.",
+        SharingNoticeKind.NewKeyDropped => "The new key was dropped. The server still shares this character under the key that can't be opened here.",
         SharingNoticeKind.TakenOver => "Another AetherFrame, on another PC or after a reinstall, checked this character, so it now shares from there. The server deleted what this PC shared. To share from here again, turn sharing on again.",
-        SharingNoticeKind.NoLongerBound => "The server no longer holds this character, so sharing is off for it here. This happens when the Lodestone no longer shows the character, or it was removed on request. You can turn sharing on again.",
+        SharingNoticeKind.NoLongerBound => "The server no longer shares this character: its Lodestone page no longer shows it, or it was taken out of the test or removed on request. Sharing is off for it here, and anything the server still held for it was deleted. You can turn sharing on again.",
         SharingNoticeKind.Renamed => "The server read this character's Lodestone page again, and now finds it by its current name and World.",
         SharingNoticeKind.TooMany => "That's been tried too many times for now. Please wait a while, then try again.",
         SharingNoticeKind.TryLater => "The sharing server is busy. Please try again in a few minutes.",
         SharingNoticeKind.Unreachable => "AetherFrame couldn't reach the sharing server. Check your connection, or try again later.",
-        SharingNoticeKind.UpdateNeeded => "The sharing server needs a newer AetherFrame. Please update it, then try again.",
+        SharingNoticeKind.UpdateNeeded => "The sharing server needs a newer AetherFrame. Please update it, then try again. You can still turn sharing off.",
         SharingNoticeKind.KeyUnavailable => "This character's key can't be opened on this PC: it may be damaged, or it was made under another Windows account or on another PC. You can start again with a new key; a new Lodestone check moves sharing to it.",
         SharingNoticeKind.Refused => "The sharing server refused that, or answered in a way AetherFrame doesn't understand. Please try again later.",
         SharingNoticeKind.SaveFailed => "AetherFrame couldn't save your sharing settings on this PC. Nothing else was changed.",
@@ -92,5 +116,5 @@ internal static class SharingText
 
     /// <summary>Whether a notice reports a problem, rather than progress.</summary>
     internal static bool IsProblem(SharingNoticeKind kind) =>
-        kind is not (SharingNoticeKind.CodeReady or SharingNoticeKind.CheckPassed or SharingNoticeKind.TurnedOff or SharingNoticeKind.Renamed);
+        kind is not (SharingNoticeKind.CodeReady or SharingNoticeKind.CheckPassed or SharingNoticeKind.TurnedOff or SharingNoticeKind.TurnedOffAll or SharingNoticeKind.NewKeyDropped or SharingNoticeKind.Renamed);
 }

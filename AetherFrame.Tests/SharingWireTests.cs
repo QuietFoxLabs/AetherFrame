@@ -72,19 +72,20 @@ public class SharingWireTests
     {
         Assert.Equal("{}", Encoding.UTF8.GetString(SharingWire.Empty()));
         Assert.Equal("{\"mode\":\"pause\"}", Encoding.UTF8.GetString(SharingWire.Pause()));
-        Assert.Equal("{\"lodestoneId\":\"12345678\",\"code\":\"AF-0123456789\"}", Encoding.UTF8.GetString(SharingWire.Check("12345678", "AF-0123456789")));
-        Assert.Throws<ArgumentException>(() => SharingWire.Check("012", "AF-0123456789"));
-        Assert.Throws<ArgumentException>(() => SharingWire.Check("12345678", "AF-\"}"));
+        Assert.Equal("{\"lodestoneId\":\"12345678\",\"code\":\"AF-0123456789\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}", Encoding.UTF8.GetString(SharingWire.Check("12345678", "AF-0123456789", "Aria Starfall", "Gilgamesh")));
+        Assert.Throws<ArgumentException>(() => SharingWire.Check("012", "AF-0123456789", "Aria Starfall", "Gilgamesh"));
+        Assert.Throws<ArgumentException>(() => SharingWire.Check("12345678", "AF-\"}", "Aria Starfall", "Gilgamesh"));
+        Assert.Throws<ArgumentException>(() => SharingWire.Check("12345678", "AF-0123456789", "", "Gilgamesh"));
     }
 
     [Fact]
     public void Answers_AreReadStrictly()
     {
-        Assert.Equal("AF-0123456789", SharingWire.ReadCode(Utf8("{\"code\":\"AF-0123456789\",\"expiresInSeconds\":3600}")));
+        Assert.Equal(("AF-0123456789", 3600), SharingWire.ReadCode(Utf8("{\"code\":\"AF-0123456789\",\"expiresInSeconds\":3600}")));
         var check = SharingWire.ReadCheck(Utf8($"{{\"profileId\":\"{Profile}\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}}"));
         Assert.Equal(new CheckAnswer(Profile, "Aria Starfall", "Gilgamesh"), check);
         Assert.Equal(("Aria Starfall", "Gilgamesh"), SharingWire.ReadReread(Utf8("{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}")));
-        Assert.Equal(new Version(0, 1, 6), SharingWire.ReadMinimumPlugin(Utf8("{\"protocolVersion\":32769,\"api\":1,\"minimumPlugin\":\"0.1.6\"}")));
+        Assert.Equal((32769, 1, new Version(0, 1, 6)), SharingWire.ReadStatus(Utf8("{\"protocolVersion\":32769,\"api\":1,\"minimumPlugin\":\"0.1.6\"}")));
 
         string[] refused =
         [
@@ -106,7 +107,12 @@ public class SharingWireTests
         Assert.Throws<InvalidDataException>(() => SharingWire.ReadCheck(Utf8($"{{\"profileId\":\"{Profile}\",\"name\":\"Aria\\nStarfall\",\"world\":\"Gilgamesh\"}}")));
         Assert.Throws<InvalidDataException>(() => SharingWire.ReadCheck(Utf8("{\"profileId\":\"prf_nope\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}")));
         Assert.Throws<InvalidDataException>(() => SharingWire.ReadReread(Utf8("{\"name\":\"\",\"world\":\"Gilgamesh\"}")));
-        Assert.Throws<InvalidDataException>(() => SharingWire.ReadMinimumPlugin(Utf8("{\"protocolVersion\":32769,\"api\":1,\"minimumPlugin\":\"soon\"}")));
+        foreach (var minimum in new[] { "soon", "0.1.6.0", " 0.1.6", "+0.1.6", "0.1", "0..6", "123456.0.0" })
+        {
+            Assert.Throws<InvalidDataException>(() => SharingWire.ReadStatus(Utf8("{\"protocolVersion\":32769,\"api\":1,\"minimumPlugin\":\"" + minimum + "\"}")));
+        }
+
+        Assert.Throws<InvalidDataException>(() => SharingWire.ReadStatus(Utf8("{\"protocolVersion\":\"32769\",\"api\":1,\"minimumPlugin\":\"0.1.6\"}")));
     }
 
     [Fact]
@@ -120,6 +126,7 @@ public class SharingWireTests
             new SharingCharacter(3, slot, Key, SharingStage.Shared, "12345678", Profile, "Aria Starfall", "Gilgamesh"),
             new SharingCharacter(ulong.MaxValue, PersonaSlotId.NewId(), Key, SharingStage.Paused, "9", Profile, "Bram Oakes", "Cactuar"),
             new SharingCharacter(5, PersonaSlotId.NewId(), Key, SharingStage.TakenOver),
+            new SharingCharacter(6, PersonaSlotId.NewId(), Key, SharingStage.Shared, "7", Profile, "Cid Nan", "Balmung", PersonaSlotId.NewId(), Key),
         };
 
         var decoded = SharingStateCodec.Decode(SharingStateCodec.Encode(characters));
@@ -130,7 +137,7 @@ public class SharingWireTests
     public void TheSharingFile_RefusesWhatItDoesntHold()
     {
         var slot = PersonaSlotId.NewId();
-        var good = $"{{\"contentId\":\"3\",\"slot\":\"{slot}\",\"key\":\"{Key}\",\"stage\":\"shared\",\"lodestoneId\":\"12345678\",\"profileId\":\"{Profile}\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}}";
+        var good = $"{{\"contentId\":\"3\",\"slot\":\"{slot}\",\"key\":\"{Key}\",\"stage\":\"shared\",\"lodestoneId\":\"12345678\",\"profileId\":\"{Profile}\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\",\"newSlot\":null,\"newKey\":null}}";
         Assert.Single(SharingStateCodec.Decode(Utf8($"{{\"version\":1,\"characters\":[{good}]}}")));
 
         string[] refused =
@@ -147,6 +154,8 @@ public class SharingWireTests
             $"{{\"version\":1,\"characters\":[{good.Replace("\"contentId\":\"3\"", "\"contentId\":\"0\"", StringComparison.Ordinal)}]}}",
             $"{{\"version\":1,\"characters\":[{good.Replace("\"contentId\":\"3\"", "\"contentId\":3", StringComparison.Ordinal)}]}}",
             $"{{\"version\":1,\"characters\":[{good.Replace(",\"world\":\"Gilgamesh\"", "", StringComparison.Ordinal)}]}}",
+            $"{{\"version\":1,\"characters\":[{good.Replace("\"newSlot\":null", $"\"newSlot\":\"{PersonaSlotId.NewId()}\"", StringComparison.Ordinal)}]}}",
+            $"{{\"version\":1,\"characters\":[{good.Replace("\"newSlot\":null", $"\"newSlot\":\"{slot}\"", StringComparison.Ordinal).Replace("\"newKey\":null", $"\"newKey\":\"{Key}\"", StringComparison.Ordinal)}]}}",
         ];
         foreach (var text in refused)
         {
