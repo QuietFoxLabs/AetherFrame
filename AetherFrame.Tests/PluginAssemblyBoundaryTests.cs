@@ -5,6 +5,9 @@ using System.Linq;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
 
 namespace AetherFrame.Tests;
@@ -224,8 +227,10 @@ public class PluginAssemblyBoundaryTests
         var offending = new List<string>();
         foreach (var use in NetworkTypeUse.MemberUses(pe))
         {
+            // Any use of a constructor counts, a subclass's base() call as much as a new: the two
+            // unsealed types would otherwise be made with their defaults through a class of our own.
             var where = use.Type + ": " + use.Parent + "." + use.Name;
-            if (use.OpCode == ILOpCode.Newobj && use.Name == ".ctor")
+            if (use.Name == ".ctor")
             {
                 if (use.Parent == "System.Net.Http.SocketsHttpHandler" && use.Type != "AetherFrame.Services.Network.Transport.SharingHandler")
                 {
@@ -269,39 +274,45 @@ public class PluginAssemblyBoundaryTests
     public void TheNetworkNamespace_IsDeclaredOnlyInTheNetworkFolder()
     {
         // The compiled check above exempts AetherFrame.Services.Network by namespace, and R3 is
-        // about the folder: so no file outside Services/Network may declare that namespace, in any
-        // flavour, and every file inside it declares it.
+        // about the folder. So every type a plugin source declares, read as the compiler reads it
+        // (nested namespaces, whitespace, comments, escapes and verbatim names included), in the
+        // player flavour and in the preview flavour, is in that namespace exactly when its file is
+        // under Services/Network.
         var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
         var offending = new List<string>();
+        var types = 0;
         foreach (var (file, relative) in PluginSources())
         {
             var inside = relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase);
-            var declared = false;
-            foreach (var line in File.ReadLines(file))
+            var text = File.ReadAllText(file);
+            foreach (var symbols in new[] { Array.Empty<string>(), ["AETHERFRAME_NETWORK_PREVIEW"] })
             {
-                var trimmed = line.TrimStart();
-                if (!trimmed.StartsWith("namespace ", StringComparison.Ordinal))
+                var tree = CSharpSyntaxTree.ParseText(text, new CSharpParseOptions(LanguageVersion.Preview, preprocessorSymbols: symbols));
+                foreach (var declaration in tree.GetRoot().DescendantNodes().Where(node => node is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax))
                 {
-                    continue;
+                    types++;
+                    var ns = string.Join(".", declaration.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse().Select(namespaceDeclaration => NameOf(namespaceDeclaration.Name)));
+                    var network = ns == "AetherFrame.Services.Network" || ns.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal);
+                    if (network != inside)
+                    {
+                        offending.Add(relative + " (" + (ns.Length == 0 ? "no namespace" : ns) + ")");
+                    }
                 }
-
-                declared = true;
-                var name = trimmed["namespace ".Length..].TrimEnd(';', ' ', '{');
-                var network = name == "AetherFrame.Services.Network" || name.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal);
-                if (network != inside)
-                {
-                    offending.Add(relative);
-                }
-            }
-
-            if (inside && !declared)
-            {
-                offending.Add(relative + " (no namespace)");
             }
         }
 
-        Assert.True(offending.Count == 0, "R3: the network namespace belongs to Services/Network alone: " + string.Join(", ", offending));
+        Assert.True(types > 0, "no type was read");
+        Assert.True(offending.Count == 0, "R3: the network namespace belongs to Services/Network alone: " + string.Join(", ", offending.Distinct()));
     }
+
+    /// <summary>A namespace's name as the compiler binds it: escapes undone, <c>@</c> dropped.</summary>
+    private static string NameOf(NameSyntax name) => name switch
+    {
+        QualifiedNameSyntax qualified => NameOf(qualified.Left) + "." + NameOf(qualified.Right),
+        AliasQualifiedNameSyntax aliased => NameOf(aliased.Name),
+        SimpleNameSyntax simple => simple.Identifier.ValueText,
+        _ => name.ToString(),
+    };
 
     [Fact]
     public void TheSharingHandler_FollowsNoRedirectAndKeepsNoCookie()
