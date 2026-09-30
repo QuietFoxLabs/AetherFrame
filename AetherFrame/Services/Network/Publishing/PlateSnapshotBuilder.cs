@@ -76,6 +76,15 @@ internal static class PlateSnapshotBuilder
         ProfileVisualBounds.FillDrawnElements(plate, ProfileRenderOptions.Finished, paintOrder, drawn);
         ComponentPaintPlan.Build(plate, drawn, BuiltInComponentCatalog.Instance, plan, Measure);
 
+        // A theme or orientation a newer build made changes how components draw here: the colour
+        // of one without its own, and where one without an anchor element sits.
+        if (plate.BasicPlate is { } basic
+            && ((!string.IsNullOrEmpty(basic.ThemeId) && ProfileThemePresets.Find(basic.ThemeId) is null) || !Enum.IsDefined(basic.Orientation))
+            && plan.Exists(step => step.Component is not null))
+        {
+            problems.Add(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null));
+        }
+
         // What the Profile View shows is what its window is sized to: these bounds, from the plan
         // without measured text, as every surface that fits a Plate computes them.
         var view = ProfileVisualBounds.Compute(plate, ProfileRenderOptions.Finished);

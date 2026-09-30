@@ -965,6 +965,19 @@ public sealed class PlateSnapshotBuilderTests
             plate.Background = background;
             Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null, Background: true), Assert.Single(Refusals(Resolve(plate))));
         }
+
+        // A theme or orientation a newer build made changes how components draw (the colour of one
+        // without its own, where one without an anchor sits): refused when a component is drawn.
+        foreach (var newer in new Action<BasicPlateSettings>[] { basic => basic.ThemeId = "af.theme.from-the-future", basic => basic.Orientation = (AdventurePlateOrientation)9 })
+        {
+            var framed = ComponentDocuments.WithAnchors();
+            newer(framed.BasicPlate ??= new BasicPlateSettings());
+            framed.Components = [ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameLine)];
+            Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null), Assert.Single(Refusals(Resolve(framed))));
+
+            framed.Components = [];
+            Assert.NotNull(Candidate(Resolve(framed)));
+        }
     }
 
     [Fact]
