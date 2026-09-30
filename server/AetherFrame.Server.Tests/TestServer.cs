@@ -179,7 +179,7 @@ internal sealed class Player(TestServer server, HttpClient client) : IDisposable
     {
         var code = await CodeAsync();
         server.Lodestone.Pages[lodestoneId] = LodestoneHtml.Character(name, world, "Hello! " + code + " Thanks.");
-        using var response = await CheckAsync(lodestoneId, code);
+        using var response = await CheckAsync(lodestoneId, code, name, world);
         Xunit.Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return await response.Content.ReadFromJsonElementAsync();
     }
@@ -203,8 +203,9 @@ internal sealed class Player(TestServer server, HttpClient client) : IDisposable
         return await PostRawAsync("/v1/publish", Envelope(proof, Plates.PublishPayload(document, images)));
     }
 
-    public Task<HttpResponseMessage> CheckAsync(long lodestoneId, string code) =>
-        SendAsync("/v1/lodestone/check", RequestProofKind.LodestoneCheck, $"{{\"lodestoneId\":\"{lodestoneId}\",\"code\":\"{code}\"}}");
+    /// <summary>Sends a check, claiming to be <paramref name="name"/> of <paramref name="world"/>, as the plugin's logged-in character.</summary>
+    public Task<HttpResponseMessage> CheckAsync(long lodestoneId, string code, string name = "Aria Starfall", string world = "Gilgamesh") =>
+        SendAsync("/v1/lodestone/check", RequestProofKind.LodestoneCheck, $"{{\"lodestoneId\":\"{lodestoneId}\",\"code\":\"{code}\",\"name\":\"{name}\",\"world\":\"{world}\"}}");
 
     public void Dispose()
     {

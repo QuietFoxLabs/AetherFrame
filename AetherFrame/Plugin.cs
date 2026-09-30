@@ -32,6 +32,8 @@ using AetherFrame.Hosting.Network;
 using AetherFrame.Hosting.Network.Publishing;
 using AetherFrame.Services.Network.Personas;
 using AetherFrame.Services.Network.Publishing;
+using AetherFrame.Services.Network.Sharing;
+using AetherFrame.Services.Network.Transport;
 using AetherFrame.Windows.Network;
 #endif
 
@@ -110,6 +112,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // The share check (N2-6c): a Plate's saved state as it would be shared, signed into the outbox
     // on this PC. Its preparation is an owned operation; the window is disposed with the others.
     private readonly ShareCheckWindow shareCheckWindow;
+
+    // Opting characters in and out of sharing (N2-9b), over the connection to the sharing server
+    // (N2-9a, decision R2). Its operations are persona-session operations, which unloading waits
+    // for, so the connection is disposed only after every owned operation has ended.
+    private readonly SharingConnection sharingConnection;
 #endif
 
     public Plugin()
@@ -342,6 +349,21 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             WindowSystem.AddWindow(shareCheckWindow);
             plateLibraryWindow.CheckSharing = shareCheckWindow.Open;
             editorPlateMenu.Menu.CheckSharing = shareCheckWindow.Open;
+
+            // Sharing (N2-9b), reached from My Plates' header. Nothing is sent until the player
+            // turns sharing on for a character, and then only on the player's action (R2).
+            sharingConnection = new SharingConnection(AetherFrameBuildInfo.Current.ProductVersion);
+            var characterSharing = new CharacterSharing(
+                personaSession.TryRun,
+                new SharingStateFile(PersonaSessionHost.PersonasDirectory(configDirectory)),
+                sharingConnection.Client,
+                AetherFrameBuildInfo.Current.ProductVersion,
+                () => DateTimeOffset.UtcNow,
+                ownedOperations.Stopping,
+                log.Information);
+            var sharingWindow = new SharingWindow(characterSharing, personaSession, () => characterIdentityService.CurrentCharacter, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
+            WindowSystem.AddWindow(sharingWindow);
+            plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
 #endif
 
             // Names the exact build in dalamud.log, so a stale dev DLL is obvious.
@@ -555,7 +577,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
     /// <summary>The Plate thumbnail service: a save or delete still running calls into it (via
     /// PlateSaved and PlateDeleted), so it's disposed only once every owned operation has ended.</summary>
-    private void DisposeUsedByOperations() => thumbnailService.Dispose();
+    private void DisposeUsedByOperations()
+    {
+        thumbnailService.Dispose();
+#if AETHERFRAME_NETWORK_PREVIEW
+        sharingConnection.Dispose();
+#endif
+    }
 
     private void OnLogin() => characterIdentityService.InvalidateCharacterInfo();
 

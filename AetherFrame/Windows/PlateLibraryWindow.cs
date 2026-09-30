@@ -169,6 +169,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     /// <summary>Opens the persona window, when this build has one; the header shows a Personas button only then.</summary>
     internal Action? OpenPersonas { get; set; }
 
+    /// <summary>Opens the sharing window, when this build has one; the header shows a Sharing button only then.</summary>
+    internal Action? OpenSharing { get; set; }
+
     /// <summary>Checks what sharing a Plate would send, when this build can; a Plate's menu shows the item only then.</summary>
     internal Action<Guid>? CheckSharing
     {
@@ -322,6 +325,15 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             if (AetherControls.SecondaryButton("Personas", tooltip: "The identities you share Plates under. None is tied to a character."))
             {
                 openPersonas();
+            }
+        }
+
+        if (OpenSharing is { } openSharing)
+        {
+            ImGui.SameLine();
+            if (AetherControls.SecondaryButton("Sharing", tooltip: "Turn sharing on or off for the logged-in character."))
+            {
+                openSharing();
             }
         }
 

@@ -69,6 +69,11 @@
          with the persona folder's written-through move, and sign through the persona library
          (referenced below), so the commit is tested with real signatures from throwaway keys. -->
     <Compile Include="..\AetherFrame\Services\Network\Personas\WrittenThroughMove.cs" Link="Linked\Services\Network\Personas\WrittenThroughMove.cs" />
+    <!-- Opting characters in and out of sharing (N2-9b), with the client it sends through (N2-9a).
+         Both are free of Dalamud and ImGui; the tests answer as the server would, in memory. -->
+    <Compile Include="..\AetherFrame\Services\Network\Sharing\**\*.cs" Link="Linked\Services\Network\Sharing\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\AetherFrame\Services\Network\Transport\SharingClient.cs" Link="Linked\Services\Network\Transport\SharingClient.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Transport\SharingDeployment.cs" Link="Linked\Services\Network\Transport\SharingDeployment.cs" />
   </ItemGroup>
 
   <ItemGroup>

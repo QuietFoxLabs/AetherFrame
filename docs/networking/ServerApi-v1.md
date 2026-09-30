@@ -34,8 +34,8 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 | Path | Kind | Body | Answer |
 |---|---|---|---|
 | `/v1/lodestone/code` | 2, a code | `{}` | `200` `{"code": "AF-…", "expiresInSeconds": 3600}` |
-| `/v1/lodestone/check` | 3, a check | `{"lodestoneId": "12345678", "code": "AF-…"}` | `200` `{"profileId": "prf_…", "name": "…", "world": "…"}`; `422` for every failure (C2) |
-| `/v1/lodestone/reread` | 4, a re-read | `{}` | `200` `{"name": "…", "world": "…"}`; `404` when the key is bound to no character; `410` when another key's check took it over |
+| `/v1/lodestone/check` | 3, a check | `{"lodestoneId": "12345678", "code": "AF-…", "name": "…", "world": "…"}` | `200` `{"profileId": "prf_…", "name": "…", "world": "…"}`; `422` for every failure (C2), including a page that doesn't show the name and World the body claims |
+| `/v1/lodestone/reread` | 4, a re-read | `{}` | `200` `{"name": "…", "world": "…"}`; `404` when the key is bound to no character, or its character is no longer on the allowlist (the binding is kept); `410` when another key's check took it over |
 | `/v1/opt-out` | 5, opting out or pausing | `{}` to opt out; `{"mode": "pause"}` to pause | `204`, whether or not anything was bound |
 | `/v1/lookup` | 6, a lookup | `{"name": "…", "world": "…"}` | `200` a served profile (section 8.6 of the specification); `404` for every cause (C5) |
 | `/v1/image` | 7, an image | `{"name": "…", "world": "…", "marker": "mrk_…", "index": 0}` | `200` the image; `404` for every cause |

@@ -1301,6 +1301,43 @@ N2-7b's security review examined these with the code (September 30, 2026). It as
 
 **Rationale.** A single small host, and as few moving parts as keep each decision's promise: no registry, no orchestrator, no remote log store. Each limit I2, S5 and D1 set is enforced where it can be seen, in `compose.yaml`, `aetherframe-worker.sh` and `host-setup.sh`, and checked by CI where CI can.
 
+### N2-9b's opt-in. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+Scope: how the plugin turns sharing on and off for a character (N2-9b). It **amends C3** on one point, the order of consent, and changes the server's check (C2) to name the character; nothing here changes an owner's decision or a signed byte.
+
+- **The order of consent (amends C3).** C3 asks for one consent per character that shows exactly what will be published at that moment. A snapshot carries its binding's profile id (C4), which only the Lodestone check issues, so the candidate that will be signed can't exist before the check. The plugin therefore asks in two steps, and sends no Plate before both:
+  1. At opt-in, it shows C3's statements, C5's on reports, C7's, K2's disclosure, K4's as C9 restates it, and C2's warning about the code, and asks the player to agree. Only then does it make the key, ask for a code, and run the check.
+  2. Before the first send (N2-9c), it shows the Active Plate exactly as it will be signed, under the profile id the check issued, as C3's first showing of a Plate never published before.
+
+  Two conditions hold it to C3: step 2 is never skipped, including for characters bound by N2-9b's builds, which published nothing; and declining at step 2 publishes nothing. What the player agrees to at step 1 is only binding the character, which shows nothing to anyone: every lookup of a binding without a Plate answers "not found".
+- **The consent's words** say what the server deletes at once, what its backups keep for up to 7 days (N2-8), and that reports are kept up to 30 days whether or not sharing is on (C5). With V4 the persona window no longer carries K2's disclosure, so the consent does.
+- **The character's key** is a persona made by the plugin, labelled "Character key", with nothing about the character in the registry (C1, P3). It is acknowledged (K4) when the player agrees. It is selected only for the operation that uses it, and the selection the operation found is put back after it. Every signature opens a lease and releases it at once, so no lease is held across a request (L10). A key that can't sign sends nothing at all, not even the status request or a challenge. Turning sharing on always makes a new key: one no character names may still be bound on the server (a sharing file moved aside, say), and a key left by a start whose save failed is harmless.
+- **The check names the character.** The check's body carries the name and World the game shows for the character the player is logged in as, and the server refuses (as C2's one "check failed") a page that doesn't show them, before it binds anything. A player logged in as one character who pastes another of their characters' page binds nothing and takes nothing over. The plugin compares the answer too, and undoes a binding to another character by opting out.
+- **What this PC keeps.** `sharing.afsh`, in the persona folder beside the registry, lists each character by the game's Content ID (the Active Plate's own local key), its key's slot and identity, its stage, and, once bound, the Lodestone id, profile id, name and World the check returned. It is read strictly and written as the registry is. A file that can't be read stops everything the plugin would send, is never written over, and the window says where it is and that a newer AetherFrame may have written it. The code is kept in memory only.
+- **Order of writes.** The key and the file are saved before a request that depends on them is sent, so a key the server may bind is always recorded.
+- **Turning sharing off** keeps the key, so turning it on again reuses it; the server deletes the binding (C4). Turning every character off goes on past one that fails and then says whether all were turned off. Opting out is never held back by the version check below: the server doesn't enforce the minimum version, so an older plugin can always leave.
+- **A key that can't be opened** (K2's words) is replaced by a new one at the player's choice: a new check moves the character to it (C1). Until that check passes, the binding stays recorded under the old key, beside the new one, so cancelling drops only the new key, and nothing claims a deletion that didn't happen.
+- **Versions.** Before its first request other than an opt-out in a session, the plugin reads `/v1/status` and stops, saying so, unless the protocol version is this build's, the API is 1, and the minimum plugin (exactly major.minor.build) is no newer than this one.
+- **Re-reads.** In N2-9b the plugin asks for a re-read when the sharing window shows a bound character under another name or World than its binding's, at most once a session for each character. A re-read the server answers "not found" is followed by an opt-out with the same key before sharing is recorded as off, since the server also answers "not found" for a character taken off the test's allowlist, whose binding it keeps. That opt-out is the one request R2's "traffic only on a player's action" doesn't cover beyond the re-read itself: it deletes, never shares, and the window says so (NoLongerBound). N2-9c adds C1's login trigger with publishing.
+- **Deferred to N2-9c:** pausing and resuming (C3), emptying a character's outbox when sharing is turned off (C4), and dropping the share check's signings (C3). Until N2-9c nothing is published, so no outbox entry can be sent. The persona window, which still lists every key in N2-9b, leaves My Plates in N2-9c (V4).
+
+**Rationale.** The two-step consent keeps D5's point (6), as C3 amends it: what is signed is exactly what the player saw. Recording the key before any request keeps a lost answer from leaving a binding no file knows about, and keeping the old binding beside a new key keeps the file true to what the server holds.
+
+**Independent review.** A security-focused reviewer examined `dbc2113` (September 30, 2026). It found nothing blocking and nine points to fix before merging, all applied above:
+- turning everything off stopped at the first failure;
+- the version check could block opting out;
+- a re-read's "not found" left an allowlist-removed binding on the server;
+- the check didn't compare the page with the character logged in;
+- the consent overstated deletion and left out reports and K2;
+- the consent's tick could come back ticked;
+- a new key forgot the old binding;
+- the selection stayed on the character's key;
+- an unreadable file's message didn't say where it was.
+
+It also found that a lost key still sent the status and a challenge; that is fixed too.
+
+Its recheck of `82f77da` found all nine resolved, and one new point, also applied: reusing a leftover "Character key" could pick up a key the server still binds to another character, so every start now makes a new key. It **concurred** once that was fixed.
+
 ## Gates
 
 | Gate | Must be decided before |

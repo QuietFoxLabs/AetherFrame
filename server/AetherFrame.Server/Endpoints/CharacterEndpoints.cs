@@ -21,7 +21,7 @@ namespace AetherFrame.Server.Endpoints;
 /// </summary>
 internal static class CharacterEndpoints
 {
-    private static readonly string[] CheckFields = ["lodestoneId", "code"];
+    private static readonly string[] CheckFields = ["lodestoneId", "code", "name", "world"];
     private static readonly string[] PauseFields = ["mode"];
 
     public static void Map(IEndpointRouteBuilder app)
@@ -125,6 +125,14 @@ internal static class CharacterEndpoints
                 if (character is null || !character.SelfIntroduction.Contains(code, StringComparison.Ordinal))
                 {
                     return await CheckFailedAsync("check:page");
+                }
+
+                // The page must be the character the plugin is logged in as (N2-9b): a player who
+                // pastes another of their characters' pages binds nothing, and takes nothing over.
+                if (CharacterNames.Key(body.String("name")) is not { } claimed || claimed != CharacterNames.Key(character.Name)
+                    || !string.Equals(body.String("world"), character.World, StringComparison.OrdinalIgnoreCase))
+                {
+                    return await CheckFailedAsync("check:other-character");
                 }
 
                 var bound = await bindings.BindCharacterAsync(call.Persona, lodestoneId, character, http.RequestAborted);
