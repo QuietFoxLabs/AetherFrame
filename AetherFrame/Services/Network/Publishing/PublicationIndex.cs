@@ -241,7 +241,8 @@ internal sealed class PublicationIndex
     /// <item>at most <see cref="MaxEntries"/>;</item>
     /// <item>each with a Plate id, a known state, and a last publish time from 0 to the protocol's
     /// latest; a pending entry names its outbox entry and has never been published; a published
-    /// entry has been;</item>
+    /// entry has been; a retracting entry names no outbox entry, since unpublishing drops the
+    /// profile's waiting revision (D1), and the outbox holds nothing else for it;</item>
     /// <item>no profile id twice, no outbox entry named twice, and at most one live entry for a
     /// Plate. A Plate may also have any number of retracting ones: unpublishing and publishing
     /// again, before the retraction is acknowledged, gives it a new profile.</item>
@@ -314,6 +315,7 @@ internal sealed class PublicationIndex
             PublicationState.Pending => null,
             PublicationState.Published when entry.LastPublishedAt == 0 => "A published entry has been published.",
             PublicationState.Published => null,
+            PublicationState.Retracting when !entry.PendingEntry.IsNone => "A retracting entry names no outbox entry: unpublishing drops its waiting revision (D1).",
             PublicationState.Retracting => null,
             _ => "An entry's state is pending, published or retracting.",
         };

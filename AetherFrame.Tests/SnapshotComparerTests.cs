@@ -136,6 +136,9 @@ public sealed class SnapshotComparerTests
         ProfileLayoutSnapshot Snapshot(ProfileId? id = null, RevisionId? rev = null, long createdAt = 1_790_000_000, string name = "Shared", int width = 128_000, int height = 72_000, LayoutBackground? background = null, LayoutItem[]? items = null, ImageReference[]? images = null) =>
             new(id ?? profile, rev ?? revision, createdAt, name, width, height, background ?? LayoutBackground.None, items ?? [text, image], images ?? [declared]);
 
+        // Every argument of the snapshot's constructor is varied below.
+        Assert.Equal(9, typeof(ProfileLayoutSnapshot).GetConstructors().Single().GetParameters().Length);
+
         var snapshot = Snapshot();
         Assert.True(SnapshotComparer.Same(snapshot, Snapshot()));
 

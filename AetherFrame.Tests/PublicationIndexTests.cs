@@ -109,6 +109,7 @@ public sealed class PublicationIndexTests
             ["a pending entry published before"] = With(good, b => BinaryPrimitives.WriteInt64BigEndian(b.AsSpan(Header + 49), 5)),
             ["a pending entry with no outbox entry"] = With(good, b => b.AsSpan(Header + 57, 16).Clear()),
             ["a published entry never published"] = With(good, b => b[Header + 48] = (byte)PublicationState.Published),
+            ["a retracting entry naming an outbox entry"] = With(good, b => b[Header + 48] = (byte)PublicationState.Retracting),
             ["a time before 1970"] = With(good, b => { b[Header + 48] = (byte)PublicationState.Retracting; BinaryPrimitives.WriteInt64BigEndian(b.AsSpan(Header + 49), -1); }),
             ["a time past the protocol's"] = With(good, b => { b[Header + 48] = (byte)PublicationState.Published; BinaryPrimitives.WriteInt64BigEndian(b.AsSpan(Header + 49), ProtocolLimits.MaxUnixSeconds + 1); }),
             ["a share code"] = With(good, b => b[Header + 73] = (byte)'A'),
@@ -132,7 +133,7 @@ public sealed class PublicationIndexTests
         var retracting = new[]
         {
             new PublicationEntry(plate, ProfileId.NewId(), RevisionId.NewId(), PublicationState.Retracting, 1_790_000_000, OutboxEntryName.None),
-            new PublicationEntry(plate, ProfileId.NewId(), RevisionId.NewId(), PublicationState.Retracting, 0, OutboxEntryName.NewName()),
+            new PublicationEntry(plate, ProfileId.NewId(), RevisionId.NewId(), PublicationState.Retracting, 0, OutboxEntryName.None),
         };
         var live = Pending(plate);
         var index = new PublicationIndex([.. retracting, live]);
@@ -174,7 +175,8 @@ public sealed class PublicationIndexTests
             [entry with { PendingEntry = OutboxEntryName.None }],
             [entry with { LastPublishedAt = 3 }],
             [entry with { State = PublicationState.Published }],
-            [entry with { State = PublicationState.Retracting, LastPublishedAt = -1 }],
+            [entry with { State = PublicationState.Retracting }],
+            [entry with { State = PublicationState.Retracting, PendingEntry = OutboxEntryName.None, LastPublishedAt = -1 }],
         ];
 
         foreach (var entries in broken)

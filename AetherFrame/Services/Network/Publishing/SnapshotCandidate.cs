@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Protocol.Identity;
@@ -245,6 +246,8 @@ internal readonly record struct PlateSnapshotProblem(PlateSnapshotRefusal Refusa
 /// </summary>
 internal sealed class SnapshotCandidate
 {
+    private int claimed;
+
     internal SnapshotCandidate(
         Guid plateId, string name, int canvasWidth, int canvasHeight, LayoutBackground background,
         IReadOnlyList<LayoutItem> items, IReadOnlyList<ProfileElementRole?> roles, IReadOnlyList<ImageReference> images,
@@ -292,6 +295,14 @@ internal sealed class SnapshotCandidate
     /// <summary>The snapshot this candidate is, under the given ids and time (the commit's own).</summary>
     internal ProfileLayoutSnapshot ToSnapshot(ProfileId profileId, RevisionId revisionId, long createdAtUnixSeconds) =>
         new(profileId, revisionId, createdAtUnixSeconds, Name, CanvasWidth, CanvasHeight, Background, Items, Images);
+
+    /// <summary>
+    /// Claims the candidate for its one signature: true the first time, false ever after. Its
+    /// prepared copies carry asset ids drawn for it alone, and a signed revision takes them for good
+    /// (N1), so no two revisions, and no two personas, ever share one: a candidate is signed at most
+    /// once, and anything after a signature builds a new candidate.
+    /// </summary>
+    internal bool TryClaimForSigning() => Interlocked.Exchange(ref claimed, 1) == 0;
 }
 
 /// <summary>A candidate built from a saved Plate, or the reasons it can't be built. Exactly one of the two.</summary>

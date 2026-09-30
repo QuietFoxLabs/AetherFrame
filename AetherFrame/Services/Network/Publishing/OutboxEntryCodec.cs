@@ -42,8 +42,9 @@ internal sealed class OutboxEntry
 /// image = length u32 (1..8,388,608) | bytes
 /// </code>
 /// The largest entry is 42,991,691 bytes (about 41 MiB). The checksum guards against corruption
-/// only. Decoding refuses anything but exactly this layout, and never repairs: the magic and the
-/// version first, then the length, the checksum, and the parts in order. The document must verify
+/// only. Decoding refuses anything but exactly this layout, and never repairs: the size first,
+/// then the magic and the version, so an entry a newer AetherFrame wrote is told apart from a
+/// damaged one, then the checksum, and the parts in order. The document must verify
 /// through the protocol library as signed by the persona whose outbox holds it, and be a layout
 /// snapshot: this build keeps nothing else in an outbox. Each image must be exactly the image it
 /// is declared to be, by section 13, rule 7 (its length, its digest, section 8.2.1's rules, its
@@ -227,6 +228,26 @@ internal static class OutboxEntryCodec
         }
 
         return verified.Document as ProfileLayoutSnapshot ?? throw Damaged("The entry's document isn't a layout snapshot.");
+    }
+
+    /// <summary>
+    /// Each of <paramref name="images"/> checked against its declaration in <paramref name="declared"/>,
+    /// in order, as a load checks an entry's: what the commit checks before it signs anything.
+    /// </summary>
+    /// <exception cref="PublicationFileException">The counts differ, or an image isn't exactly the image declared.</exception>
+    internal static void CheckImages(IReadOnlyList<ReadOnlyMemory<byte>> images, IReadOnlyList<ImageReference> declared)
+    {
+        ArgumentNullException.ThrowIfNull(images);
+        ArgumentNullException.ThrowIfNull(declared);
+        if (images.Count != declared.Count)
+        {
+            throw Damaged("Another number of images than the document declares.");
+        }
+
+        for (var index = 0; index < images.Count; index++)
+        {
+            CheckImage(images[index].ToArray(), declared[index]);
+        }
     }
 
     /// <summary>Section 13, rule 7's check of an image against its declaration, then preparation's inventory (D5): a copy holds nothing it would have removed.</summary>

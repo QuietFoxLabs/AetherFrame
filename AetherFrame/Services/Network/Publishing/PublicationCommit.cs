@@ -13,7 +13,8 @@ namespace AetherFrame.Services.Network.Publishing;
 /// <summary>
 /// What the consent screen showed, and the player approved: the candidate, and the persona it named
 /// (decision L10, and N2-6's design, section 1). The commit signs exactly this candidate, as exactly
-/// this persona, and reads nothing from the Plate again.
+/// this persona, and reads nothing from the Plate again. The candidate's Plate id is the local
+/// Plate's, as the Library names its file.
 /// </summary>
 internal sealed class PublishConsent
 {
@@ -21,6 +22,11 @@ internal sealed class PublishConsent
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(shownKey);
+        if (candidate.PlateId == Guid.Empty)
+        {
+            throw new ArgumentException("A candidate names the local Plate it was built from.", nameof(candidate));
+        }
+
         if (shownSlot.IsEmpty)
         {
             throw new ArgumentException("The consent screen names a persona's slot.", nameof(shownSlot));
@@ -56,6 +62,9 @@ internal enum PublishResult
     /// <summary>The persona's index holds as many profiles as it can (256), and this Plate has none of them.</summary>
     IndexFull,
 
+    /// <summary>The candidate was signed once already: anything after a signature builds a new candidate, so no two revisions share an asset id (N1).</summary>
+    CandidateUsed,
+
     /// <summary>The persona the consent screen named isn't the active one any more, or was switched away from while signing (L10). Nothing is signed; the player retries.</summary>
     ActivePersonaChanged,
 
@@ -65,24 +74,33 @@ internal enum PublishResult
     /// <summary>The player hasn't acknowledged what losing this persona's key means (K4).</summary>
     NotAcknowledged,
 
-    /// <summary>Signing failed; nothing was stored.</summary>
+    /// <summary>Signing failed, or the clock is outside what the protocol can say; nothing was stored.</summary>
     SigningFailed,
 
-    /// <summary>The signed bytes don't verify as the persona shown, or don't say what the consent screen showed; nothing was stored.</summary>
+    /// <summary>
+    /// What would be stored isn't what the consent screen showed: an image that isn't exactly the
+    /// image its declaration describes, found before signing, or signed bytes that don't verify as
+    /// the persona shown or don't say what was signed. Nothing was stored.
+    /// </summary>
     NotAsShown,
 
     /// <summary>The persona's outbox would hold more than 128 MiB of signed revisions waiting to be sent.</summary>
     OutboxFull,
 
     /// <summary>
-    /// The outbox entry or the index couldn't be saved. The index normally still names what it
-    /// named before; when <see cref="PublishOutcome.Indeterminate"/> is set, the save failed after
-    /// the new index may have reached the disk, and the next load shows which.
+    /// The outbox entry or the index couldn't be saved. Unless <see cref="PublishOutcome.Indeterminate"/>
+    /// is set, the index certainly still names what it named before, and the new entry was deleted
+    /// again. When it is set, the move of the new index failed after it may have reached the disk:
+    /// the new entry is kept, and the next load shows which index stands.
     /// </summary>
     NotSaved,
 }
 
-/// <summary>What a commit came to, and for a stored revision, the index to apply in memory now that it is saved.</summary>
+/// <summary>
+/// What a commit came to, and for a stored revision, the index to apply in memory now that it is
+/// saved. The profile and revision ids are for the index and for sending, and are never logged in
+/// the clear (P1).
+/// </summary>
 internal sealed class PublishOutcome
 {
     private PublishOutcome(PublishResult result, PublicationIndex? index, ProfileId profile, RevisionId revision, string? failure, bool indeterminate)
@@ -140,7 +158,7 @@ internal sealed class PublishOutcome
 /// <summary>
 /// The commit: one signed revision of a Plate's snapshot into the persona's outbox, with its
 /// publication index as the commit point (N2-6's design, section 2). It runs as one persona-session
-/// operation, off the framework thread, and in this order:
+/// operation, under the persona files' lock and off the framework thread, and in this order:
 /// <list type="number">
 /// <item>read the persona's index;</item>
 /// <item>reuse the Plate's live (pending or published) profile id, or draw a new one; a retracting
@@ -149,17 +167,26 @@ internal sealed class PublishOutcome
 /// time from the UTC clock;</item>
 /// <item>open a signer for the persona shown, and only while it is the active one (L10);</item>
 /// <item>refuse unless that persona has acknowledged what losing its key means (K4);</item>
-/// <item>sign;</item>
+/// <item>sign, once for the candidate's whole life (<see cref="SnapshotCandidate.TryClaimForSigning"/>);</item>
 /// <item>dispose the signer, before any file is touched;</item>
 /// <item>verify the signed bytes with the protocol library: the key must be the one shown, and the
 /// snapshot they decode to must be the one signed, field for field;</item>
 /// <item>write the outbox entry, checked as a load checks it, under a new random name;</item>
-/// <item>save the index naming it, checked by decoding it again; the caller then applies it in
-/// memory;</item>
+/// <item>save the index naming it, checked by decoding it again: staged, then moved into place,
+/// which is the commit point; the caller then applies it in memory;</item>
 /// <item>only then delete the entry it supersedes.</item>
 /// </list>
-/// No failure deletes an entry the index names. An entry the saved index doesn't name is never sent,
-/// and a later load deletes it. Every refusal that can be decided before signing is.
+/// Before signing, it also checks each image against its declaration and inventory, and builds
+/// and checks the index it will save, so every refusal about the index, the persona, the
+/// candidate and its images is decided before anything is signed. Only the outbox's bound needs
+/// the signed document's length, so it is checked after signing; a revision refused then is never
+/// stored or signed again.
+/// <para>
+/// No failure deletes an entry the index names. A failure to stage the new index leaves the old
+/// one certainly in place, and deletes the new entry again. A failed move may have reached the
+/// disk, so the new entry is kept; a later load deletes it if the index doesn't name it, once an
+/// index was read.
+/// </para>
 /// </summary>
 internal static class PublicationCommit
 {
@@ -214,10 +241,33 @@ internal static class PublicationCommit
             return PublishOutcome.Refused(PublishResult.SigningFailed, e);
         }
 
+        // Before anything is signed: the images, exactly as declared, and the index this will save.
         var images = ImagesInOrder(candidate, snapshot);
         if (images is null)
         {
             return PublishOutcome.Refused(PublishResult.NotAsShown);
+        }
+
+        try
+        {
+            OutboxEntryCodec.CheckImages(images, snapshot.Images);
+        }
+        catch (PublicationFileException e)
+        {
+            return PublishOutcome.Refused(PublishResult.NotAsShown, e);
+        }
+
+        var name = OutboxEntryName.NewName();
+        PublicationIndex next;
+        byte[] saved;
+        try
+        {
+            next = index.With(new PublicationEntry(candidate.PlateId, profile, revision, live?.State ?? PublicationState.Pending, live?.LastPublishedAt ?? 0, name));
+            saved = PublicationIndexCodec.Encode(slot, next);
+        }
+        catch (Exception e) when (e is ArgumentException or PublicationFileException)
+        {
+            return PublishOutcome.Refused(PublishResult.NotSaved, e);
         }
 
         // 4 to 7. One lease, one signature, disposed before any file is touched.
@@ -247,6 +297,11 @@ internal static class PublicationCommit
                 return PublishOutcome.Refused(PublishResult.NotAcknowledged);
             }
 
+            if (!candidate.TryClaimForSigning())
+            {
+                return PublishOutcome.Refused(PublishResult.CandidateUsed);
+            }
+
             signed = SignedDocumentCodec.Sign(snapshot, lease.Signer);
         }
         catch (PersonaException e) when (e.Error == PersonaError.LeaseRevoked)
@@ -262,7 +317,7 @@ internal static class PublicationCommit
             lease.Dispose();
         }
 
-        // 8. The bytes say what was shown, as the persona shown.
+        // 8. The bytes say what was signed, as the persona shown.
         try
         {
             var verified = SignedDocumentCodec.Verify(signed);
@@ -310,7 +365,6 @@ internal static class PublicationCommit
         }
 
         // 9. The entry, under a name of its own.
-        var name = OutboxEntryName.NewName();
         try
         {
             files.WriteEntry(slot, name, entry);
@@ -320,25 +374,25 @@ internal static class PublicationCommit
             return PublishOutcome.Refused(PublishResult.NotSaved, e);
         }
 
-        // 10. The index naming it: the commit point.
-        var next = index.With(new PublicationEntry(candidate.PlateId, profile, revision, live?.State ?? PublicationState.Pending, live?.LastPublishedAt ?? 0, name));
-        byte[] saved;
+        // 10. The index naming it: staged, then moved into place, the commit point.
         try
         {
-            saved = PublicationIndexCodec.Encode(slot, next);
+            files.StageIndex(slot, saved);
         }
-        catch (PublicationFileException e)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            // The old index certainly stands, and doesn't name the new entry: it goes again.
+            files.TryDeleteEntry(slot, name);
             return PublishOutcome.Refused(PublishResult.NotSaved, e);
         }
 
         try
         {
-            files.ReplaceIndex(slot, saved);
+            files.MoveStagedIndex(slot);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            // The new entry stays: the index on disk may name it. A load deletes it if it doesn't.
+            // The new index may have reached the disk, naming the new entry, so the entry stays.
             return PublishOutcome.Refused(PublishResult.NotSaved, e, indeterminate: true);
         }
 

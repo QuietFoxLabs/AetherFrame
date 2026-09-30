@@ -83,7 +83,9 @@ internal sealed class LoadedPublications
 /// touched.</item>
 /// </list>
 /// No index file is ever deleted here, even one whose slot no persona holds any more: restoring
-/// that persona's key as an orphan (L12) reunites them.
+/// that persona's key as an orphan (L12) reunites them. A load runs as one persona-session
+/// operation, under the persona files' lock, and never beside a commit: between a commit's entry
+/// and its index, the new entry is one the saved index doesn't name yet.
 /// </summary>
 internal static class PublicationLoad
 {

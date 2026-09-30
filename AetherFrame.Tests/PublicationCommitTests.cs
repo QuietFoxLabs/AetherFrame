@@ -145,9 +145,14 @@ public sealed class PublicationCommitTests : IDisposable
     public void APersonaWithoutTheAcknowledgement_NeverPublishes()
     {
         using var unacknowledged = new PublicationFixture(acknowledged: false);
+        var candidate = PublicationCandidates.Simple();
 
-        Assert.Equal(PublishResult.NotAcknowledged, unacknowledged.Commit(PublicationCandidates.Simple()).Result);
+        Assert.Equal(PublishResult.NotAcknowledged, unacknowledged.Commit(candidate).Result);
         Assert.Empty(unacknowledged.AllFiles());
+
+        // Nothing was signed, so the same candidate can be shared once the player acknowledges.
+        var acknowledged = unacknowledged.Personas.Acknowledge(unacknowledged.Persona.Slot);
+        Assert.Equal(PublishResult.Stored, unacknowledged.Commit(candidate, acknowledged).Result);
     }
 
     [Fact]
@@ -233,29 +238,124 @@ public sealed class PublicationCommitTests : IDisposable
     }
 
     [Fact]
-    public void AnIndexThatCantBeSaved_NeverLosesTheEntryItNames()
+    public void AnIndexThatCantBeStaged_LeavesTheOldOne_AndTakesTheNewEntryBack()
     {
         var plate = Guid.NewGuid();
         var first = fixture.Commit(PublicationCandidates.Simple(plate));
         var named = fixture.SavedIndex().Entries.Single().PendingEntry;
 
         // The index's temporary file can't be made: a folder stands in its place.
-        Directory.CreateDirectory(fixture.Files.IndexPath(fixture.Persona.Slot) + ".tmp");
+        var staged = fixture.Files.IndexPath(fixture.Persona.Slot) + ".tmp";
+        Directory.CreateDirectory(staged);
 
         var outcome = fixture.Commit(PublicationCandidates.Simple(plate));
 
         Assert.Equal(PublishResult.NotSaved, outcome.Result);
+        Assert.False(outcome.Indeterminate);
+        Assert.Equal(first.Revision, fixture.SavedIndex().Entries.Single().LatestRevision);
+        Assert.Equal(new[] { named }, fixture.OutboxEntries());
+
+        Directory.Delete(staged);
+        Assert.Equal(PublishResult.Stored, fixture.Commit(PublicationCandidates.Simple(plate)).Result);
+    }
+
+    [Fact]
+    public void AMoveThatFails_MayHaveReachedTheDisk_SoItsEntryStays_AndEveryAttemptDrawsItsOwnRevision()
+    {
+        // Windows refuses to replace a file another handle holds without delete sharing; a rename
+        // elsewhere succeeds, so the move can't be made to fail there this way.
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var plate = Guid.NewGuid();
+        var first = fixture.Commit(PublicationCandidates.Simple(plate));
+        var named = fixture.SavedIndex().Entries.Single().PendingEntry;
+
+        PublishOutcome outcome;
+        using (new FileStream(fixture.Files.IndexPath(fixture.Persona.Slot), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            outcome = fixture.Commit(PublicationCandidates.Simple(plate));
+        }
+
+        Assert.Equal(PublishResult.NotSaved, outcome.Result);
         Assert.True(outcome.Indeterminate);
         Assert.Equal(first.Revision, fixture.SavedIndex().Entries.Single().LatestRevision);
-        Assert.Contains(named, fixture.OutboxEntries());
-        Assert.Equal(2, fixture.OutboxEntries().Count);
+        var kept = Assert.Single(fixture.OutboxEntries(), name => name != named);
+        var keptRevision = OutboxEntryCodec.Decode(fixture.Files.ReadEntry(fixture.Persona.Slot, kept)!, fixture.Persona.PublicKey).Snapshot.RevisionId;
+        Assert.NotEqual(first.Revision, keptRevision);
 
-        // The next load keeps the entry the index names, and deletes the one it doesn't.
-        Directory.Delete(fixture.Files.IndexPath(fixture.Persona.Slot) + ".tmp");
+        // The failed attempt's revision is never signed again, and never sent: the next load
+        // deletes the entry the saved index doesn't name.
+        var third = fixture.Commit(PublicationCandidates.Simple(plate));
+        Assert.Equal(PublishResult.Stored, third.Result);
+        Assert.DoesNotContain(third.Revision, new[] { first.Revision, keptRevision });
+
         var loaded = PublicationLoad.Load(fixture.Files, fixture.Persona.Slot, fixture.Persona.PublicKey);
-        Assert.Equal(OutboxState.Waiting, loaded.Entries.Single().Outbox);
         Assert.Equal(1, loaded.Removed);
-        Assert.Equal(new[] { named }, fixture.OutboxEntries());
+        Assert.Equal(new[] { fixture.SavedIndex().Entries.Single().PendingEntry }, fixture.OutboxEntries());
+    }
+
+    [Fact]
+    public void ACandidate_IsSignedOnce()
+    {
+        var candidate = PublicationCandidates.Simple();
+        Assert.Equal(PublishResult.Stored, fixture.Commit(candidate).Result);
+        var files = fixture.AllFiles();
+        var index = File.ReadAllBytes(fixture.Files.IndexPath(fixture.Persona.Slot));
+
+        Assert.Equal(PublishResult.CandidateUsed, fixture.Commit(candidate).Result);
+        Assert.Equal(files, fixture.AllFiles());
+        Assert.Equal(index, File.ReadAllBytes(fixture.Files.IndexPath(fixture.Persona.Slot)));
+    }
+
+    [Fact]
+    public void AConsent_NamesALocalPlate()
+    {
+        var candidate = PublicationCandidates.Simple();
+        var nameless = new SnapshotCandidate(Guid.Empty, candidate.Name, candidate.CanvasWidth, candidate.CanvasHeight, candidate.Background, candidate.Items, candidate.Roles, candidate.Images, candidate.ImageBytes, candidate.LeftOut);
+
+        Assert.Throws<ArgumentException>(() => new PublishConsent(nameless, fixture.Persona.Slot, fixture.Persona.PublicKey));
+        Assert.Throws<ArgumentException>(() => new PublishConsent(candidate, default, fixture.Persona.PublicKey));
+    }
+
+    [Fact]
+    public void ImagesNotAsDeclared_AreRefusedBeforeAnythingIsSigned()
+    {
+        var plate = AetherFrame.Domain.Plates.PlateFactory.Create(AetherFrame.Domain.Plates.PlateStartingLayout.Blank, Guid.NewGuid(), "Shared", PublicationCandidates.Now);
+        plate.Elements.Add(new ImageProfileElement { AssetId = Guid.NewGuid(), Size = new Vector2(64f, 32f), ZIndex = 0 });
+        plate.Elements.Add(new ImageProfileElement { AssetId = Guid.NewGuid(), Position = new Vector2(100f, 0f), Size = new Vector2(64f, 32f), ZIndex = 1 });
+        var candidate = PublicationCandidates.Build(plate);
+        Assert.Equal(2, candidate.Images.Count);
+
+        SnapshotCandidate With(IReadOnlyList<ReadOnlyMemory<byte>> bytes) =>
+            new(candidate.PlateId, candidate.Name, candidate.CanvasWidth, candidate.CanvasHeight, candidate.Background, candidate.Items, candidate.Roles, candidate.Images, bytes, candidate.LeftOut);
+
+        // Two copies of one size, each under the other's declaration; and one missing.
+        var swapped = With([candidate.ImageBytes[1], candidate.ImageBytes[0]]);
+        var missing = With([candidate.ImageBytes[0]]);
+        Assert.Equal(PublishResult.NotAsShown, fixture.Commit(swapped).Result);
+        Assert.Equal(PublishResult.NotAsShown, fixture.Commit(missing).Result);
+        Assert.Empty(fixture.AllFiles());
+
+        // Refused before signing: neither was ever claimed for a signature.
+        Assert.True(swapped.TryClaimForSigning());
+        Assert.True(missing.TryClaimForSigning());
+        Assert.Equal(PublishResult.Stored, fixture.Commit(candidate).Result);
+    }
+
+    [Fact]
+    public void AClockTheProtocolCantState_SignsNothing()
+    {
+        var candidate = PublicationCandidates.Simple();
+        fixture.Now = DateTimeOffset.FromUnixTimeSeconds(-1);
+
+        Assert.Equal(PublishResult.SigningFailed, fixture.Commit(candidate).Result);
+        Assert.Empty(fixture.AllFiles());
+
+        fixture.Now = DateTimeOffset.FromUnixTimeSeconds(1_790_000_000);
+        Assert.Equal(PublishResult.Stored, fixture.Commit(candidate).Result);
     }
 
     [Fact]
@@ -267,6 +367,10 @@ public sealed class PublicationCommitTests : IDisposable
         var transparent = new ImageProfileElement { AssetId = Guid.NewGuid(), Opacity = 0f, ZIndex = 12 };
         var drawn = new ImageProfileElement { AssetId = Guid.NewGuid(), Position = new Vector2(30f, 30f), Size = new Vector2(64f, 32f), ZIndex = 13 };
         plate.Elements.AddRange([hidden, outside, transparent, drawn]);
+
+        // The heading over an emptied section isn't drawn: plant its text.
+        ((TextProfileElement)plate.Elements.Single(e => e.Role == ProfileElementRole.BasicWorldHeading)).Text = "CanaryHeadingText";
+        ((TextProfileElement)plate.Elements.Single(e => e.Role == ProfileElementRole.BasicWorld)).Text = string.Empty;
         var stale = Guid.NewGuid();
         plate.Background = new ProfileBackground { Mode = ProfileBackgroundMode.SolidColor, ImageAssetId = stale, ExtensionData = Canary("background") };
         plate.OwnerContentId = 0x1122334455667788UL;
@@ -290,7 +394,7 @@ public sealed class PublicationCommitTests : IDisposable
         var saved = File.ReadAllBytes(fixture.Files.IndexPath(fixture.Persona.Slot));
         var entry = File.ReadAllBytes(Directory.GetFiles(fixture.Files.OutboxPath(fixture.Persona.Slot)).Single());
 
-        var texts = new List<string> { "CanaryHiddenText", "CanaryOutsideText", "Tester" };
+        var texts = new List<string> { "CanaryHiddenText", "CanaryOutsideText", "CanaryHeadingText", "Tester" };
         texts.AddRange(plate.Elements.Select(e => e.Name));
         texts.AddRange(new[] { "background", "document", "identity", "basic", "component" }.Concat(Enumerable.Range(0, plate.Elements.Count).Select(i => "element" + i.ToString(CultureInfo.InvariantCulture))).Select(CanaryValue));
         foreach (var text in texts)
@@ -331,6 +435,8 @@ public sealed class PublicationCommitTests : IDisposable
             BitConverter.GetBytes(plate.UpdatedAtUtc.Ticks),
             BitConverter.GetBytes(0x6E6F7071u),
             BitConverter.GetBytes(0x10203040),
+            BitConverter.GetBytes(1234.5f),
+            BitConverter.GetBytes(1234.5d),
         })
         {
             foreach (var bytes in new[] { number, number.Reverse().ToArray() })
@@ -339,24 +445,6 @@ public sealed class PublicationCommitTests : IDisposable
                 Assert.False(Contains(entry, bytes));
             }
         }
-    }
-
-    [Fact]
-    public void EveryAttempt_DrawsItsOwnRevision_EvenAfterAFailure()
-    {
-        var plate = Guid.NewGuid();
-        Directory.CreateDirectory(fixture.Files.IndexPath(fixture.Persona.Slot) + ".tmp");
-        Assert.Equal(PublishResult.NotSaved, fixture.Commit(PublicationCandidates.Simple(plate)).Result);
-        Directory.Delete(fixture.Files.IndexPath(fixture.Persona.Slot) + ".tmp");
-
-        // The failed attempt's entry was never named: its revision is never sent, and never signed again.
-        var abandoned = fixture.OutboxEntries().Single();
-        var abandonedRevision = OutboxEntryCodec.Decode(fixture.Files.ReadEntry(fixture.Persona.Slot, abandoned)!, fixture.Persona.PublicKey).Snapshot.RevisionId;
-
-        var outcome = fixture.Commit(PublicationCandidates.Simple(plate));
-
-        Assert.Equal(PublishResult.Stored, outcome.Result);
-        Assert.NotEqual(abandonedRevision, outcome.Revision);
     }
 
     private byte[] Newer()

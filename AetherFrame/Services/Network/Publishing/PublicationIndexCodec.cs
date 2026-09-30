@@ -54,9 +54,10 @@ internal sealed class PublicationFileException : Exception
 /// <para>
 /// The checksum guards against corruption only, as the registry's does (P3). Decoding refuses
 /// anything but exactly this layout and <see cref="PublicationIndex.Problem"/>'s rules, and never
-/// repairs: the magic and the version first, so an index a newer AetherFrame wrote is told apart
-/// from a damaged one; then the length, the checksum, the slot, the count and every entry. Every
-/// index is encoded and decoded again before it is saved, as the registry is.
+/// repairs: the size first, then the magic and the version, so an index a newer AetherFrame wrote
+/// is told apart from a damaged one, as the registry's are (P3); then the length, the checksum,
+/// the slot, the count and every entry. Every index is encoded and decoded again before it is
+/// saved, as the registry is.
 /// </para>
 /// </summary>
 internal static class PublicationIndexCodec

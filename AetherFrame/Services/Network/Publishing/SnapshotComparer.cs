@@ -10,8 +10,9 @@ namespace AetherFrame.Services.Network.Publishing;
 /// the snapshot it signed with what the signed bytes decode to (N2-6's design, section 2, step 8),
 /// so a codec that lost or changed anything on the way can never store bytes that say other than
 /// what the player was shown. An item of a kind this build doesn't know is never the same as
-/// anything. The plugin suite checks that every public property is compared here, so a property
-/// the protocol gains fails a test until it is added.
+/// anything. The plugin suite builds each type again with one constructor argument changed at a
+/// time, and pins each constructor's number of parameters, so a field the protocol gains fails a
+/// test until it is compared here.
 /// </summary>
 internal static class SnapshotComparer
 {

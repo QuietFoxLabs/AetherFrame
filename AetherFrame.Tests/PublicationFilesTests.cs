@@ -112,16 +112,38 @@ public sealed class PublicationFilesTests : IDisposable
         var temporary = OutboxEntryName.NewName().FileName + ".tmp";
         File.WriteAllBytes(Path.Combine(outbox, temporary), [2]);
         File.WriteAllBytes(Path.Combine(outbox, "notes.txt"), [3]);
-        File.WriteAllBytes(Path.Combine(outbox, entry.FileName.ToUpperInvariant() + "x"), [4]);
+        File.WriteAllBytes(Path.Combine(outbox, "notes.afpo.tmp"), [4]);
+        File.WriteAllBytes(Path.Combine(outbox, entry.FileName.ToUpperInvariant() + "x"), [5]);
 
         var listing = files.ListOutbox(slot);
         Assert.Equal(new[] { entry }, listing.Entries);
         Assert.Equal(new[] { temporary }, listing.Temporaries);
-        Assert.Equal(2, listing.Others);
+        Assert.Equal(3, listing.Others);
 
         Assert.True(files.TryDeleteTemporary(slot, temporary));
         Assert.False(files.TryDeleteTemporary(slot, "notes.txt"));
-        Assert.False(files.TryDeleteTemporary(slot, ".." + Path.DirectorySeparatorChar + "x.afpo.tmp"));
+        Assert.False(files.TryDeleteTemporary(slot, "notes.afpo.tmp"));
+        Assert.False(files.TryDeleteTemporary(slot, ".." + Path.DirectorySeparatorChar + entry.FileName + ".tmp"));
         Assert.True(File.Exists(Path.Combine(outbox, "notes.txt")));
+        Assert.True(File.Exists(Path.Combine(outbox, "notes.afpo.tmp")));
+    }
+
+    [Fact]
+    public void AnIndexSave_IsStaged_ThenMovedIntoPlace()
+    {
+        files.ReplaceIndex(slot, [1, 2, 3]);
+
+        files.StageIndex(slot, [4, 5]);
+        Assert.Equal(new byte[] { 1, 2, 3 }, files.ReadIndex(slot));
+        Assert.Equal(new byte[] { 4, 5 }, File.ReadAllBytes(files.IndexPath(slot) + ".tmp"));
+
+        files.MoveStagedIndex(slot);
+        Assert.Equal(new byte[] { 4, 5 }, files.ReadIndex(slot));
+        Assert.False(File.Exists(files.IndexPath(slot) + ".tmp"));
+
+        // A stage that fails leaves the index as it was.
+        Directory.CreateDirectory(files.IndexPath(slot) + ".tmp");
+        Assert.ThrowsAny<Exception>(() => files.StageIndex(slot, [6]));
+        Assert.Equal(new byte[] { 4, 5 }, files.ReadIndex(slot));
     }
 }

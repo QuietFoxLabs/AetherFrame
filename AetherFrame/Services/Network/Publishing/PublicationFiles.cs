@@ -31,6 +31,11 @@ internal sealed record OutboxListing(IReadOnlyList<OutboxEntryName> Entries, IRe
 /// one byte past the largest file of its kind is refused, never read whole. Nothing here decides
 /// what the bytes mean; the codecs and the commit do.
 /// </para>
+/// <para>
+/// Every use runs under the persona files' lock (P3), as one persona-session operation, one at a
+/// time: a load run while a commit is between its entry and its index would take the new entry
+/// for one the index doesn't name, and delete it.
+/// </para>
 /// </summary>
 internal sealed class PublicationFiles
 {
@@ -68,19 +73,45 @@ internal sealed class PublicationFiles
     /// </summary>
     internal byte[]? ReadIndex(PersonaSlotId slot) => ReadBounded(IndexPath(slot), PublicationIndexCodec.MaxBytes, "publication index");
 
-    /// <summary>Puts <paramref name="bytes"/> in place of <paramref name="slot"/>'s index, durably and whole.</summary>
-    /// <exception cref="IOException">
-    /// The save failed. Normally the old index is left as it was; a failure reported after the move
-    /// took effect leaves the new one (P3's indeterminate save), which a later load reads.
-    /// </exception>
+    /// <summary>Puts <paramref name="bytes"/> in place of <paramref name="slot"/>'s index, durably and whole: <see cref="StageIndex"/>, then <see cref="MoveStagedIndex"/>.</summary>
+    /// <exception cref="IOException">The save failed, as either step says.</exception>
     internal void ReplaceIndex(PersonaSlotId slot, ReadOnlySpan<byte> bytes)
     {
-        var final = IndexPath(slot);
-        var temporary = final + TemporarySuffix;
+        StageIndex(slot, bytes);
+        MoveStagedIndex(slot);
+    }
+
+    /// <summary>
+    /// Writes <paramref name="bytes"/> to the index's temporary file, flushed to disk and read back:
+    /// the first step of a save. The index itself isn't touched.
+    /// </summary>
+    /// <exception cref="IOException">The temporary file couldn't be written; it is deleted, and the index is certainly as it was.</exception>
+    internal void StageIndex(PersonaSlotId slot, ReadOnlySpan<byte> bytes)
+    {
+        var temporary = IndexPath(slot) + TemporarySuffix;
         System.IO.Directory.CreateDirectory(directory);
         try
         {
             WriteChecked(temporary, bytes, "publication index");
+        }
+        catch
+        {
+            TryDelete(temporary);
+            throw;
+        }
+    }
+
+    /// <summary>Moves the staged temporary file over the index, written through: the second step of a save, and a commit's commit point.</summary>
+    /// <exception cref="IOException">
+    /// The move failed. Normally the old index is left as it was; a failure reported after the move
+    /// took effect leaves the new one (P3's indeterminate save), which a later load reads.
+    /// </exception>
+    internal void MoveStagedIndex(PersonaSlotId slot)
+    {
+        var final = IndexPath(slot);
+        var temporary = final + TemporarySuffix;
+        try
+        {
             WrittenThroughMove.Replace(temporary, final);
         }
         catch
@@ -135,17 +166,12 @@ internal sealed class PublicationFiles
     internal bool TryDeleteEntry(PersonaSlotId slot, OutboxEntryName name) =>
         !name.IsNone && TryDelete(Path.Combine(OutboxPath(slot), name.FileName));
 
-    /// <summary>Deletes a temporary file an interrupted write left in <paramref name="slot"/>'s outbox; true when it is gone.</summary>
-    internal bool TryDeleteTemporary(PersonaSlotId slot, string fileName)
-    {
-        if (string.IsNullOrEmpty(fileName) || !fileName.EndsWith(OutboxEntryName.Extension + TemporarySuffix, StringComparison.Ordinal)
-            || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        {
-            return false;
-        }
-
-        return TryDelete(Path.Combine(OutboxPath(slot), fileName));
-    }
+    /// <summary>
+    /// Deletes a temporary file an interrupted write of an entry left in <paramref name="slot"/>'s
+    /// outbox, named as this build names one (<see cref="IsTemporary"/>); true when it is gone.
+    /// </summary>
+    internal bool TryDeleteTemporary(PersonaSlotId slot, string fileName) =>
+        IsTemporary(fileName) && TryDelete(Path.Combine(OutboxPath(slot), fileName));
 
     /// <summary>
     /// What <paramref name="slot"/>'s outbox folder holds; empty when it doesn't exist. A folder that
@@ -169,7 +195,7 @@ internal sealed class PublicationFiles
             {
                 entries.Add(name);
             }
-            else if (fileName.EndsWith(OutboxEntryName.Extension + TemporarySuffix, StringComparison.Ordinal))
+            else if (IsTemporary(fileName))
             {
                 temporaries.Add(fileName);
             }
@@ -181,6 +207,11 @@ internal sealed class PublicationFiles
 
         return new OutboxListing(entries, temporaries, others);
     }
+
+    /// <summary>Whether <paramref name="fileName"/> is an entry's temporary file, exactly as this build names one: an entry's name and <see cref="TemporarySuffix"/>.</summary>
+    internal static bool IsTemporary(string? fileName) =>
+        fileName is not null && fileName.EndsWith(TemporarySuffix, StringComparison.Ordinal)
+        && OutboxEntryName.TryParseFileName(fileName[..^TemporarySuffix.Length], out _);
 
     /// <summary>The slot's text form: <c>slot_</c> and 32 hex digits, never the persona's identity.</summary>
     private static string SlotName(PersonaSlotId slot)
