@@ -79,6 +79,13 @@
     <None Update="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- What real encoders wrote (Windows' WIC, for image preparation's inventory), copied next to
+       the test binaries byte for byte. Kept apart from Fixtures, which holds only historical
+       documents. -->
+  <ItemGroup>
+    <None Update="ImageFixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The plugin's bundled artwork under the same manifest resource names, so the resource
        integrity tests read exactly what BuiltInArtCatalog names. -->
   <ItemGroup>
