@@ -617,7 +617,7 @@ The protocol binds the body's bytes, whatever they are: the server defines what 
 3. Its deployment name equals the server's own: otherwise `ProofMismatch`.
 4. The body is at most 4,096 bytes: otherwise `LimitExceeded`. Its SHA-256 equals the proof's `subjectDigest`: otherwise `ProofMismatch`.
 
-Step 4 comes after the signature, so a server bounds how much of a request it reads, the proof and the body, before step 1, and never buffers a body of unbounded size. Only then does the server consume the challenge (section 13, rule 10), and only after that does it parse the body and act, on the exact bytes it hashed. As for a submission, nothing outside the body and the proof may change what the server does. The vectors hold one valid request per action, with an example body, and requests refused at each step.
+Step 4 comes after the signature, so a server bounds how much of a request it reads, the proof and the body, before step 1, and never buffers a body of unbounded size. Only once steps 1 to 4 pass does the server consume the challenge (section 13, rule 10), and only after that does it parse the body and act, on the exact bytes it hashed. As for a submission, nothing outside the body and the proof may change what the server does. The vectors hold one valid request per action, with an example body, and requests refused at each step.
 
 ## Appendix A. Background patterns
 
