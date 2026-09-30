@@ -96,7 +96,7 @@ A second session audited the same code at `714cf5c` (at `beca12a` the plugin sou
 ### 7.1 How it was done
 
 - Five readers mapped My Plates, Templates, both editors, and the shell (the Plate Viewer, Import Plate, commands, Help and the tutorial) from code. A second reader checked every friction item. Three directions were drafted and two judges scored them. Eight more readers checked the draft's 403 claims, and a recount of every journey was checked by another reader. Nothing was built, run or seen in game. Dalamud's focus, Escape and sizing behaviour was read from a decompiled Dalamud 15.0.3.6, outside the repository.
-- Cites are `file:line`, relative to `AetherFrame/`. After its first mention, a file is named by its last part, for example Actions.cs for Windows/PlateLibraryWindow.Actions.cs.
+- Cites are `file:line`, relative to `AetherFrame/`, at `beca12a` unless a cite says otherwise. Later merges shift some lines. After its first mention, a file is named by its last part, for example Actions.cs for Windows/PlateLibraryWindow.Actions.cs.
 - **What a trip is:**
   - A **window switch** is each time the player's work moves to a different top-level window: My Plates, the Basic editor, the Advanced editor, the Plate Viewer, Import Plate, or a file dialog. Opening, raising or returning to one counts, whether the player does it or the plugin does it for them.
     - A slash command and the window it opens count as one switch.
@@ -206,7 +206,7 @@ Each difference is chosen, and recorded, in the pull request of the task named. 
 
 The second pass's direction is "the Plate in hand": wherever a Plate is (in the editor, on a card, in the viewer), one Plate menu offers every action on it, with the same words in the same order. Its target structure, which tasks 1 and 2 build towards:
 
-- **Windows:** My Plates, one AetherFrame Editor with Basic and Advanced as modes, the Plate Viewer, and Import Plate. The tutorial windows and file dialogs stay. Preview builds add one Sharing window.
+- **Windows:** My Plates, one AetherFrame Editor with Basic and Advanced as modes, the Plate Viewer, and Import Plate. The tutorial windows and file dialogs stay. Preview builds add the persona window, which N2-5c built, and one Sharing window.
 - **Plate menu:** one component, drawn by the editor's name button, by a card's right-click and by the viewer's right-click. Its items, in order:
   - Open in Basic or Advanced (cards only);
   - View;
@@ -401,7 +401,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
 
 ### 7.7 Sharing, in more detail
 
-This adds to section 5. Section 5's Share... and Unpublish in the Plate and card menus open the This Plate page below. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through task 16's hooks. No tutorial step anchors to them, and every local feature works without an account or a network. N2-5 has built the persona window; the rest is a proposal for N2-9 and N2-10 to weigh.
+This adds to section 5. Section 5's Share... and Unpublish in the Plate and card menus open the This Plate page below. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through hooks that the preview composition root fills: the persona window already does, through My Plates' `OpenPersonas` (Windows/PlateLibraryWindow.cs:144, 290-297, at `5d6e3e2`), and the others would use task 16's. No tutorial step anchors to them, and every local feature works without an account or a network. N2-5 has built the persona window; the rest is a proposal for N2-9 and N2-10 to weigh.
 
 | Planned screen | Home in the target structure |
 |---|---|
@@ -409,7 +409,7 @@ This adds to section 5. Section 5's Share... and Unpublish in the Plate and card
 | K4 acknowledgement | The persona window already asks for it whenever a persona is made or restored (N2-5c). Share checks it is recorded before a persona's first publish to a real server (K4). |
 | N2-9 consent and publish | The This Plate page, reached from Share in the Plate menu. It starts with the save-first question of task 1, because the builder reads only the saved Plate (NETWORK2.md, section 5). A name refused under D4 is fixed with the Plate menu's Rename. The share code comes with a Copy button. It is a page, not a modal, so it never blocks the tutorial card. |
 | Update and unpublish | The same page, which shows the consent content again each time. Unpublish is also in My Shares, the P1 index, which includes Plates that no longer exist. The Delete prompt says that deleting a Plate doesn't unpublish it. Its wording follows D1 (DecisionRegister.md). |
-| N2-10 viewer | Open Code in My Plates' header, kept apart from Import. The Plate floats in the viewer through ShowDocument, read-only and never saved (Windows/ProfileViewWindow.cs:114-118). A strip holds Refresh, notes, "no longer shared" and the outdated-client message. There is no author line. Stage 2's "save a copy" reuses Save a Copy, which never activates. |
+| N2-10 viewer | Open Code in My Plates' header, kept apart from Import. The Plate Viewer gains a read-only source that draws the served profile's paint list (specification, section 8.5; D6), which is task 16's "viewer source" hook. Nothing becomes a local Plate and nothing is saved: the paint list shares nothing with the local Plate model. A strip holds Refresh, notes, "no longer shared" and the outdated-client message. There is no author line. Stage 2's "save a copy" is left to stage 2 (NETWORK2.md, section 5). |
 
 These rules hold throughout ([DecisionRegister.md](networking/DecisionRegister.md)):
 - Remote text is never an ImGui label, window title or ID, and is drawn only by calls that don't format it (N7).
