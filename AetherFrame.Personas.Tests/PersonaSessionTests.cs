@@ -195,6 +195,43 @@ public sealed class PersonaSessionTests
     }
 
     [Fact]
+    public async Task ARunThatKeepsItsOwnResult_GoesOneAtATime_AndLeavesTheLastOutcomeAsItWas()
+    {
+        var session = await ReadySession();
+
+        // An operation the persona window started, and the outcome it waits to take.
+        Assert.True(session.TryStart("create", manager => PersonaOperationOutcome.Done(persona: manager.Create("Main"))));
+        await Settled(session);
+        var outcome = session.View.LastOutcome;
+        Assert.True(outcome!.Succeeded);
+
+        // A run for another window (publishing, say): one at a time with every other operation,
+        // off the calling thread, and it never replaces that outcome, even when it throws.
+        using var release = new ManualResetEventSlim(false);
+        var callingThread = Environment.CurrentManagedThreadId;
+        var ranOn = 0;
+        Assert.True(session.TryRun("publish", _ =>
+        {
+            ranOn = Environment.CurrentManagedThreadId;
+            release.Wait(Patience);
+        }));
+        Assert.True(session.View.Busy);
+        Assert.False(session.TryRun("publish", _ => { }));
+        Assert.False(session.TryStart("create", _ => PersonaOperationOutcome.Done()));
+        release.Set();
+        await Settled(session);
+        Assert.NotEqual(callingThread, ranOn);
+        Assert.Same(outcome, session.View.LastOutcome);
+
+        Assert.True(session.TryRun("publish", _ => throw new IOException("disk full at " + SecretPath)));
+        await Settled(session);
+        Assert.Same(outcome, session.View.LastOutcome);
+        Assert.Contains(log, line => line.StartsWith("Personas: publish failed: IOException 0x", StringComparison.Ordinal));
+        AssertLogIsClean();
+        Assert.Equal(0, leasesOpen);
+    }
+
+    [Fact]
     public async Task AFailedOperation_ReportsItsError_AndTheLogNamesKindsOnly()
     {
         var session = await ReadySession();

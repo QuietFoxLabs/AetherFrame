@@ -28,7 +28,9 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 #if AETHERFRAME_NETWORK_PREVIEW
 using AetherFrame.Hosting.Network;
+using AetherFrame.Hosting.Network.Publishing;
 using AetherFrame.Services.Network.Personas;
+using AetherFrame.Services.Network.Publishing;
 using AetherFrame.Windows.Network;
 #endif
 
@@ -49,6 +51,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     [PluginService] internal static IUnlockState UnlockState { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+#if AETHERFRAME_NETWORK_PREVIEW
+    [PluginService] internal static ITextureReadbackProvider TextureReadback { get; private set; } = null!;
+#endif
 
     public PluginConfiguration Configuration { get; }
 
@@ -97,6 +102,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // capability probe, the persona files' lock, the registry and the audit, all off the framework
     // thread. Its operations are owned operations too. Closed first when unloading.
     private readonly PersonaSession personaSession;
+
+    // The share check (N2-6c): a Plate's saved state as it would be shared, signed into the outbox
+    // on this PC. Its preparation is an owned operation; the window is disposed with the others.
+    private readonly ShareCheckWindow shareCheckWindow;
 #endif
 
     public Plugin()
@@ -297,6 +306,26 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             WindowSystem.AddWindow(personaWindow);
             plateLibraryWindow.OpenPersonas = () => personaWindow.IsOpen = true;
             personaSession.Start();
+
+            // The share check (N2-6c), reached from a Plate's menu in My Plates. Image preparation's
+            // known-answer check runs once a session, when the first check needs it (D5's N2-6 note).
+            var imageCodec = new DalamudImageCodec(TextureProvider, TextureReadback);
+            var managedImages = new ManagedImageFiles(assetStorageService);
+            var preparationCheck = new Lazy<Task<bool>>(() => ImagePreparationCheck.RunAsync(imageCodec, log));
+            var shareCheck = new ShareCheck(new ShareCheckSeams
+            {
+                OpenSavedPlate = plateLibrary.OpenDocumentForEditing,
+                Prewarm = fontService.EnsurePrewarmed,
+                Measurements = new RendererPlateMeasurements(renderResources, assetStorageService),
+                SelfTest = () => preparationCheck.Value,
+                Prepare = (requirements, cancellation) => ImagePreparer.PrepareAllAsync(requirements, managedImages, imageCodec, cancellation),
+                BeginOperation = () => ownedOperations.TryBegin(out var lease) ? lease : null,
+                Log = log.Information,
+            });
+            var publisher = new SharePublisher(personaSession.TryRun, new PublicationFiles(PersonaSessionHost.PersonasDirectory(configDirectory)), () => DateTimeOffset.UtcNow, log.Information);
+            shareCheckWindow = new ShareCheckWindow(shareCheck, publisher, personaSession, TextureProvider, id => plateLibrary.FindPlate(id)?.DisplayName);
+            WindowSystem.AddWindow(shareCheckWindow);
+            plateLibraryWindow.CheckSharing = shareCheckWindow.Open;
 #endif
 
             // Names the exact build in dalamud.log, so a stale dev DLL is obvious.
@@ -494,6 +523,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         profileEditorWindow.Dispose();
         profileViewWindow.Dispose();
         packageImportWindow.Dispose();
+#if AETHERFRAME_NETWORK_PREVIEW
+        shareCheckWindow.Dispose();
+#endif
         imageTextureCache.Clear();
         thumbnailTextures.Clear();
         templateThumbnailTextures.Clear();
