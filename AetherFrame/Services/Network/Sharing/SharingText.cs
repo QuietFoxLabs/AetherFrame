@@ -136,7 +136,7 @@ internal static class SharingText
         SharingNoticeKind.CheckFailed => "The check didn't pass. Make sure you're logged in as the character whose page you pasted, and that the code is saved in its Character Profile, then check again. It can take a minute for the Lodestone to show a change.",
         SharingNoticeKind.TurnedOff => "Sharing is off for this character. The server deleted what it held for it.",
         SharingNoticeKind.TurnedOffAll => "Sharing is off for every character on this PC. The server deleted what it held for them.",
-        SharingNoticeKind.TurnOffIncomplete => "Sharing couldn't be turned off for every character: some are still shared. Log in to each of them and open this window to see why, or try again later.",
+        SharingNoticeKind.TurnOffIncomplete => "Sharing couldn't be turned off for every character: some are still shared. Log in to each of them and turn sharing off in this window, where you'll see why if it still can't.",
         SharingNoticeKind.NewKeyDropped => "The new key was dropped. The server still shares this character under the key that can't be opened here.",
         SharingNoticeKind.TakenOver => "Another AetherFrame, on another PC or after a reinstall, checked this character, so it now shares from there. The server deleted what this PC shared. To share from here again, turn sharing on again.",
         SharingNoticeKind.NoLongerBound => "The server no longer shares this character: its Lodestone page no longer shows it, or it was taken out of the test or removed on request. Sharing is off for it here, and anything the server still held for it was deleted. You can turn sharing on again.",
