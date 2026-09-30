@@ -368,7 +368,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // time, and hands it to the sharing service.
             livePublisher = new LivePublisher(characterSharing, NewShareCheck(), () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId);
             plateLibrary.PlateSaved += livePublisher.PlateSaved;
-            sharingWindow = new SharingWindow(characterSharing, livePublisher, TextureProvider, personaSession, () => characterIdentityService.CurrentCharacter, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
+            sharingWindow = new SharingWindow(characterSharing, livePublisher, TextureProvider, personaSession, () => characterIdentityService.CurrentCharacter, profileViewWindow.ShowPlate, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
             plateLibraryWindow.IsShared = plateId => characterIdentityService.CurrentCharacter is { } shown

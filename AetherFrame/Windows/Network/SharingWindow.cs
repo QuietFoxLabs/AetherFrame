@@ -32,6 +32,7 @@ internal sealed class SharingWindow : Window, IDisposable
     private readonly CandidateView candidateView;
     private readonly PersonaSession session;
     private readonly Func<CharacterContext?> currentCharacter;
+    private readonly Action<Guid> viewPlate;
     private readonly string sharingFile;
     private readonly string applicationData;
     private readonly string userProfile;
@@ -45,7 +46,7 @@ internal sealed class SharingWindow : Window, IDisposable
     private ulong confirmingOff;
     private bool confirmingAll;
 
-    internal SharingWindow(CharacterSharing sharing, LivePublisher live, ITextureProvider textures, PersonaSession session, Func<CharacterContext?> currentCharacter, string sharingFile)
+    internal SharingWindow(CharacterSharing sharing, LivePublisher live, ITextureProvider textures, PersonaSession session, Func<CharacterContext?> currentCharacter, Action<Guid> viewPlate, string sharingFile)
         : base("Sharing##AetherFrameSharing", ImGuiWindowFlags.NoCollapse)
     {
         this.sharing = sharing;
@@ -53,6 +54,7 @@ internal sealed class SharingWindow : Window, IDisposable
         candidateView = new CandidateView(textures);
         this.session = session;
         this.currentCharacter = currentCharacter;
+        this.viewPlate = viewPlate;
         this.sharingFile = sharingFile;
         applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -428,6 +430,11 @@ internal sealed class SharingWindow : Window, IDisposable
         AetherControls.Divider();
         AetherControls.SectionHeader(SharingText.FirstShowingTitle);
         Wrapped(SharingText.FirstShowing);
+        if (AetherControls.SecondaryButton("View it as drawn"))
+        {
+            viewPlate(consent.Candidate.PlateId);
+        }
+
         var images = candidateView.Draw(consent.Candidate);
         if (images != CandidateImages.Shown)
         {

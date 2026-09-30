@@ -1338,6 +1338,22 @@ It also found that a lost key still sent the status and a challenge; that is fix
 
 Its recheck of `82f77da` found all nine resolved, and one new point, also applied: reusing a leftover "Character key" could pick up a key the server still binds to another character, so every start now makes a new key. It **concurred** once that was fixed.
 
+### N2-9c's live publishing. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+Scope: how the plugin publishes a sharing character's Active Plate (N2-9c), within batch C and N2-9b's opt-in. It applies C4's amendment of P1 to the publication index, and amends N2-9's note on old revisions (below). Nothing here changes an owner's decision or a signed byte.
+
+- **When it publishes (C3).** When the logged-in character shares and its Active Plate is saved, becomes another Plate, or sharing starts (the check passes) or resumes, the saved Plate is built into a candidate: a private copy of its saved JSON, resolved as the renderer draws it, its images prepared (N2-6's share check, a separate instance). Nothing is published on logging in or switching characters, only on a change after it.
+- **The first showing (C3, as N2-9b's opt-in amends it).** A candidate for a Plate other than the one this character's key last signed is shown before it is sent, with its name, every text in full (game-filled ones flagged), each prepared image, what was left out and why, and a button that opens the Plate Viewer on the saved Plate as drawn. It can be shared only once every image has been drawn there. Declining sends nothing. Going back to a Plate after another was signed shows it again, which is stricter than C3.
+- **Later saves** of the Plate this key last signed are signed and sent without a screen. A Plate that can't be shared as it is is not sent: the window lists why, and the version shared before stays up.
+- **The publication index (C4 amends P1).** A character key's index holds one live entry, under the binding's profile id, naming the Plate signed last. A commit for a character replaces it, and drops entries for other profiles (from an earlier binding) with their waiting revisions, after the commit point. The share check's personas keep P1's per-Plate profiles.
+- **Sending (N2).** The signed revision waits in the outbox until the server acknowledges it; the index records it as published before its outbox entry is deleted. A revision the server refuses is dropped, its reason shown in words; a busy or unreachable server keeps it for "Try sending again" or the next save, which supersedes it. **A revision signed more than a day ago is dropped unsent, never asked about.** This amends N2-9's note (N2: "asks before sending one signed more than a day ago"): with live publishing the next save signs the current Plate, so an old one is never needed, and not sending it is the conservative choice.
+- **Pausing and resuming (C3).** Pausing sends the opting-out kind with `{"mode": "pause"}`, then drops every waiting revision; the binding stays. Resuming publishes the Active Plate as a new revision, as the server requires.
+- **Turning off, and a takeover (C4, C1).** The character key's index is emptied and its waiting revisions deleted.
+- **What players see.** My Plates marks the logged-in character's Active Plate **Shared** while the character shares. Personas stay hidden (V4): the Personas window is gone, and the share check signs nothing (C3). What it signed and kept before, under a persona that is no character's key, is dropped when the sharing file is first read.
+- **Re-reads at login (C1).** When the game shows the logged-in character under another name or World than its binding's, the plugin asks for a re-read once, at login.
+
+**Rationale.** It keeps C3's promise with the fewest screens that still show every new Plate before it leaves the PC, and D5's point (6): what is signed is the candidate, never the Plate read again. One live entry per key matches the server, which keeps only the latest revision per binding (C4).
+
 ## Gates
 
 | Gate | Must be decided before |
