@@ -125,6 +125,11 @@ public class ServedProfileTests
 
         var served = ServedProfile.Build(LayoutSamples.Rich(), Marker);
         ProtocolAssert.Throws(ProtocolError.InvalidFraming, () => SignedDocumentCodec.Verify(served));
+
+        // A body short enough to pass a proof's size limit still isn't one.
+        var minimal = ServedProfile.Build(LayoutSamples.Minimal(), Marker);
+        Assert.True(minimal.Length <= ProtocolLimits.MaxRequestProofBytes);
+        ProtocolAssert.Throws(ProtocolError.InvalidFraming, () => RequestProofCodec.VerifyAction(minimal, "{}"u8, DeploymentName.Parse("plates.example.com"), RequestProofKind.Lookup));
     }
 
     [Fact]
@@ -140,12 +145,36 @@ public class ServedProfileTests
     }
 
     [Fact]
-    public void Read_ChecksTheImageIndexAsSoonAsItIsRead()
+    public void Read_WithTwoFaults_RefusesForTheEarlierInReadingOrder()
     {
-        // Index 8 in the background is refused before the items: an item kind of 0 after it would
-        // otherwise be the first fault.
-        var spec = new ReferenceServed.ServedSpec { BackgroundImage = 8, Items = [w => w.U8(0)] };
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => ServedProfile.Read(ReferenceServed.Write(spec)));
+        static ProtocolError Refusal(Action<ReferenceServed.ServedSpec> change)
+        {
+            var spec = new ReferenceServed.ServedSpec();
+            change(spec);
+            return Assert.Throws<ProtocolException>(() => ServedProfile.Read(ReferenceServed.Write(spec))).Error;
+        }
+
+        // An index is checked as soon as it is read, before the counts and the end that follow it.
+        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.BackgroundImage = 8; s.ItemCount = 2049; }));
+        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.BackgroundImage = 8; s.Trailing = [0]; }));
+
+        // The version before the marker, and the marker before the name.
+        Assert.Equal(ProtocolError.UnsupportedVersion, Refusal(s => { s.Version = 2; s.Marker = new byte[16]; }));
+        Assert.Equal(ProtocolError.InvalidValue, Refusal(s => { s.Marker = new byte[16]; s.Name = ""; }));
+
+        // Trailing bytes before the rules over the whole body, and those rules in their order.
+        Assert.Equal(ProtocolError.TrailingBytes, Refusal(s => { s.Items = RichItemsNaming(2); s.Trailing = [0]; }));
+        Assert.Equal(ProtocolError.LimitExceeded, Refusal(s =>
+        {
+            s.Items = [.. RichItemsNaming(2), .. Enumerable.Repeat<Action<ReferenceLayout.Bytes>>(w => ReferenceServed.Text(w, new string('a', 2048)), 16)];
+        }));
+        Assert.Equal(ProtocolError.LimitExceeded, Refusal(s =>
+        {
+            s.Items = [.. ReferenceServed.RichItems(imageIndex: 1, quadIndex: 2), .. Enumerable.Repeat<Action<ReferenceLayout.Bytes>>(w => ReferenceServed.Text(w, new string('a', 2048)), 16)];
+            s.Images = [(1, 8192, 2048), (2, 8192, 2048), (1, 8192, 2048)];
+        }));
+
+        static List<Action<ReferenceLayout.Bytes>> RichItemsNaming(byte index) => ReferenceServed.RichItems(imageIndex: index, quadIndex: 1);
     }
 
     [Fact]

@@ -67,9 +67,19 @@ internal static class ServedProfileVectorBuilder
         With("served-background-index-254", s => s.BackgroundImage = 254, ProtocolError.InvalidValue, "index 254, neither an index nor none (255)");
         With("served-background-image-mode-without-image", s => s.BackgroundImage = 255, ProtocolError.InvalidValue, "the image mode naming no image");
         With("served-background-image-without-image-mode", s => s.BackgroundMode = 1, ProtocolError.InvalidValue, "a solid colour naming image 0");
-        With("served-item-image-none", s => s.Items = RichItems(imageIndex: 255), ProtocolError.InvalidValue, "an image item naming no image: only a background may");
-        With("served-item-image-index-8", s => s.Items = RichItems(imageIndex: 8), ProtocolError.InvalidValue, "an image item naming index 8");
-        With("served-item-image-not-listed", s => s.Items = RichItems(imageIndex: 2), ProtocolError.InvalidValue, "an image item naming index 2 of a list of two, refused by the rule over the whole body");
+        // Each changes one index and keeps both images drawn (the image quad draws the JPEG), so only
+        // the rule named refuses it.
+        With("served-item-image-none", s => s.Items = RichItems(imageIndex: 255, quadIndex: 1), ProtocolError.InvalidValue, "an image item naming no image: only a background may");
+        With("served-item-image-index-8", s => s.Items = RichItems(imageIndex: 8, quadIndex: 1), ProtocolError.InvalidValue, "an image item naming index 8");
+        With("served-item-image-not-listed", s => s.Items = RichItems(imageIndex: 2, quadIndex: 1), ProtocolError.InvalidValue, "an image item naming index 2 of a list of two, refused by the rule over the whole body");
+        With("served-image-quad-none", s => s.Items = RichItems(quadIndex: 255), ProtocolError.InvalidValue, "an image quad naming no image");
+        With("served-image-quad-index-8", s => s.Items = RichItems(quadIndex: 8), ProtocolError.InvalidValue, "an image quad naming index 8");
+        With("served-background-not-listed", s =>
+        {
+            s.BackgroundImage = 1;
+            s.Items = RichItems(imageIndex: 0, quadIndex: 0);
+            s.Images = [(1, 640, 480)];
+        }, ProtocolError.InvalidValue, "a background naming index 1 of a list of one, refused by the rule over the whole body");
         With("served-image-never-drawn", s => s.Items = RichItems(imageIndex: 0), ProtocolError.InvalidValue, "the JPEG listed but drawn by nothing");
 
         // The image list.
@@ -77,6 +87,8 @@ internal static class ServedProfileVectorBuilder
         With("served-image-format-0", s => s.Images[1] = (0, 1920, 1080), ProtocolError.InvalidValue, "format 0");
         With("served-image-width-0", s => s.Images[1] = (2, 0, 1080), ProtocolError.InvalidValue, "a width of 0");
         With("served-image-width-8193", s => s.Images[1] = (2, 8193, 1080), ProtocolError.LimitExceeded, "a width one over the limit");
+        With("served-image-height-0", s => s.Images[1] = (2, 1920, 0), ProtocolError.InvalidValue, "a height of 0");
+        With("served-image-height-8193", s => s.Images[1] = (2, 1920, 8193), ProtocolError.LimitExceeded, "a height one over the limit");
         With("served-image-over-pixel-limit", s => s.Images[1] = (2, 8192, 2442), ProtocolError.LimitExceeded, "8192 x 2442, just over 20,000,000 pixels");
         With("served-images-over-total-pixels", s =>
         {

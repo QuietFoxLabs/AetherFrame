@@ -10,7 +10,8 @@ namespace AetherFrame.Protocol.Remote;
 /// id (docs/networking/ProtocolSpecification-v1.md, section 8.5); a served profile by its index in
 /// the served image list (section 8.6, decision D6), since it carries no asset id. The layout model
 /// holds an <see cref="AssetId"/> either way: for a served profile, the key
-/// <see cref="ServedProfile.ImageKey"/> gives each index.
+/// <see cref="ServedProfile.ImageKey"/> gives each index. Refusals name the field as the format
+/// does: <c>imageIndex</c> in a served profile.
 /// </summary>
 internal abstract class LayoutImageNaming
 {
@@ -83,6 +84,7 @@ internal abstract class LayoutImageNaming
 
         public override AssetId Read(ref CanonicalReader reader, string field)
         {
+            field = field.Replace("imageAssetId", "imageIndex", StringComparison.Ordinal).Replace("assetId", "imageIndex", StringComparison.Ordinal);
             var index = reader.ReadU8(field);
             if (index == NoImageIndex)
             {

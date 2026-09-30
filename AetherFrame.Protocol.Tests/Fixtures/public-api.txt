@@ -409,7 +409,6 @@ sealed class AetherFrame.Protocol.Remote.ServedImage
     Int64 Pixels { get; }
     new(ImageFormat format, Int32 width, Int32 height)
 sealed class AetherFrame.Protocol.Remote.ServedProfile
-    AssetId ImageKey(Int32 index)
     Byte[] Build(ProfileLayoutSnapshot snapshot, RevisionMarker marker)
     Int32 CanvasHeight { get; }
     Int32 CanvasWidth { get; }

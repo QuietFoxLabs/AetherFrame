@@ -17,9 +17,10 @@ namespace AetherFrame.Protocol.Remote;
 /// Immutable.
 /// </summary>
 /// <remarks>
-/// The layout model names images by <see cref="AssetId"/>. In a served profile each is the key
-/// <see cref="ImageKey"/> gives its index, never the publisher's asset id, which a served profile
-/// doesn't carry: <see cref="ImageIndexOf"/> turns one back into its index in <see cref="Images"/>.
+/// The layout model names images by <see cref="AssetId"/>. In a served profile each is a key that
+/// stands for its index, never the publisher's asset id, which a served profile doesn't carry:
+/// <see cref="ImageIndexOf"/> turns one back into its index in <see cref="Images"/>. A served
+/// profile's items and background never go into a snapshot.
 /// </remarks>
 public sealed class ServedProfile
 {
@@ -55,10 +56,10 @@ public sealed class ServedProfile
     /// <summary>The canvas height, in hundredths of a canvas unit.</summary>
     public int CanvasHeight { get; }
 
-    /// <summary>The background, drawn before the paint list. Its image, if any, is named by <see cref="ImageKey"/>.</summary>
+    /// <summary>The background, drawn before the paint list. Its image, if any, is named by a key (<see cref="ImageIndexOf"/>).</summary>
     public LayoutBackground Background { get; }
 
-    /// <summary>The paint list, in drawing order. Images are named by <see cref="ImageKey"/>. A read-only view.</summary>
+    /// <summary>The paint list, in drawing order. Images are named by keys (<see cref="ImageIndexOf"/>). A read-only view.</summary>
     public ReadOnlyCollection<LayoutItem> Items { get; }
 
     /// <summary>The images, by index. A read-only view.</summary>
@@ -69,10 +70,12 @@ public sealed class ServedProfile
 
     /// <summary>
     /// The key the layout model uses for the image at <paramref name="index"/> (0 to 7): fifteen zero
-    /// bytes, then the index plus one. It is an index in a model's clothing, never an asset id.
+    /// bytes, then the index plus one. It is an index in a model's clothing, never an asset id: a
+    /// served profile's items and background never go into a snapshot, which would sign these keys
+    /// as asset ids. A viewer turns a key back into its index with <see cref="ImageIndexOf"/>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">An index outside 0 to 7.</exception>
-    public static AssetId ImageKey(int index)
+    internal static AssetId ImageKey(int index)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, ProtocolLimits.MaxImagesPerProfile);
