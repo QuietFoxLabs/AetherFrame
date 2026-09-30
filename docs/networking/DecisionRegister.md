@@ -72,7 +72,7 @@ The remaining four came from Claude's questions in chat. The owner picked one op
 
 **V5: finding a Plate.** The owner chose "Right-click and name search": "Also a search box by character name and World. Easier to use, but anyone opted in can look anyone up by name." Claude's recommended option, "Right-click only", was declined. Both ways are open only to opted-in players.
 
-**What follows from V1 to V5** is Claude's, under the delegation: R5, below, retires share codes and "save a copy".
+**What follows from V1 to V5** is Claude's, under the delegation: R5 (in "Decisions approved under the delegation", after R1) retires share codes and "save a copy".
 
 **What V1 to V5 don't settle.** Decision batch C settles these under the delegation, each researched and reviewed by a security-focused reviewer:
 - the character's key form, and renames and World transfers;
@@ -84,22 +84,6 @@ The remaining four came from Claude's questions in chat. The owner picked one op
 - reporting and hiding a Plate, and the operator's takedown;
 - whether K4 and the D2 backup still matter now that a Lodestone check can hand a character to a new key;
 - exactly what a viewer receives (D6 and I2 carried over, or narrowed).
-
-### R5: share codes retired. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
-
-**Option and scope.** Following the owner's V1 and V5:
-- R1 (share codes) and R4 (their format) are **retired**: the server issues no share codes, and a Plate is found only by its owner's character, from the game's right-click menu or a name search, and only between opted-in players. No share-code code is built. Their reasoning about bearer codes stays on record.
-- "Save a copy" from the viewer, listed for stage 2, is **dropped**.
-- Stage 2's "target lookup with an opt-in character binding" becomes the first test (NETWORK2.md, section 2).
-
-**Rationale.**
-- V1 makes sharing opt-in and both ways. A bearer code lets anyone holding it view a Plate without opting in, and a forwarded code reaches players outside the opt-in.
-- A second way to find a Plate adds server surface (issuing codes, their rate limits and their redaction in logs) for a use the owner didn't describe.
-- "Save a copy" would hand a viewer the Plate's configuration, which V1 says other players don't get.
-
-**Not settled:** whether any direct link to a character's Plate, for use outside the game, ever comes back (batch C or later).
-
-**Review.** Checked in the independent review of this re-plan (#58). It narrows what the server exposes and adds nothing new, so no separate security concurrence was sought.
 
 ### D2: recovery from key loss. APPROVED IN PRINCIPLE (September 28, 2026)
 
@@ -596,6 +580,25 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 **Not settled:** the format, the length and the rate limits (batch B); expiring or replacing codes; target lookup (stage 2). `[updated 2026-09-30: the format, the length and the rate limits are R4's.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: a bearer code with no enumeration and no character binding fits rule 8, and at least 64 random bits with rate limits is an adequate floor. It asked for codes to stay out of URLs, for the fresh-proof rule and the prefixed form, and for the TAG departures to be recorded, all now above.
+
+### R5: share codes retired. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** Following the owner's V1 and V5:
+- R1 (share codes) and R4 (their format) are **retired**: the server issues no share codes, and a Plate is found only by its owner's character, from the game's right-click menu or a name search, and only between opted-in players. No share-code code is built. Their reasoning about bearer codes stays on record.
+- "Save a copy" from the viewer, listed for stage 2, is **dropped**.
+- Stage 2's "target lookup with an opt-in character binding" becomes the first test (NETWORK2.md, section 2).
+
+**Rationale.**
+- V1 makes sharing opt-in and both ways. A bearer code lets anyone holding it view a Plate without opting in, and a forwarded code reaches players outside the opt-in.
+- A second way to find a Plate adds server surface (issuing codes, their rate limits and their redaction in logs) for a use the owner didn't describe.
+- "Save a copy" would hand a viewer the Plate's configuration, which V1 says other players don't get.
+
+**Not settled:** whether any direct link to a character's Plate, for use outside the game, ever comes back (batch C or later).
+
+**Entries to restate in batch C,** because they assume share codes: D1 (unpublishing deletes "the share code"), D6 and I2 (content served under a share code), S1 (a publish returns a share code), and P1 (the publication index's share-code field, which N2-6c's first part already built).
+
+**Independent concurrence.** The independent reviewer of this re-plan (#58), with no shared context, **concurred** (September 30, 2026): a bearer code would let players who haven't opted in view a Plate, which defeats V1's opt-in in both directions, and dropping "save a copy" matches V1.
+
 
 ### R2: the transport. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
