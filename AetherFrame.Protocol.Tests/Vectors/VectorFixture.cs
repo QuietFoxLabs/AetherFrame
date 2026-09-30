@@ -55,6 +55,12 @@ internal sealed class VectorFixture
     /// <summary>Request proofs a server refuses when it checks them with the document and deployment named.</summary>
     public List<RejectedProofVector> RejectedProofs { get; set; } = [];
 
+    /// <summary>Valid action requests (section 14.5), one per action, each with an example body.</summary>
+    public List<ActionProofVector> ActionProofs { get; set; } = [];
+
+    /// <summary>Action requests a server refuses when it checks them as the action, with the body and deployment named.</summary>
+    public List<RejectedActionVector> RejectedActions { get; set; } = [];
+
     public static VectorFixture Load()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "vectors-v1.json");
@@ -223,6 +229,53 @@ internal sealed class RequestProofVector
     public string Signature { get; set; } = "";
 
     public string Proof { get; set; } = "";
+}
+
+internal sealed class ActionProofVector
+{
+    public string Name { get; set; } = "";
+
+    public string Persona { get; set; } = "";
+
+    /// <summary>The action, by its name in <c>RequestProofKind</c>.</summary>
+    public string Kind { get; set; } = "";
+
+    /// <summary>The body's exact bytes, in hex.</summary>
+    public string Body { get; set; } = "";
+
+    public string Deployment { get; set; } = "";
+
+    public string Challenge { get; set; } = "";
+
+    /// <summary>SHA-256 of the body.</summary>
+    public string SubjectDigest { get; set; } = "";
+
+    public string SigningInput { get; set; } = "";
+
+    public string Digest { get; set; } = "";
+
+    public string Signature { get; set; } = "";
+
+    public string Proof { get; set; } = "";
+}
+
+internal sealed class RejectedActionVector
+{
+    public string Name { get; set; } = "";
+
+    public string Proof { get; set; } = "";
+
+    /// <summary>The action the server expects at the endpoint, by its name in <c>RequestProofKind</c>.</summary>
+    public string CheckedAs { get; set; } = "";
+
+    /// <summary>The body sent with the proof, in hex.</summary>
+    public string Body { get; set; } = "";
+
+    public string Deployment { get; set; } = "";
+
+    public string Error { get; set; } = "";
+
+    public string Reason { get; set; } = "";
 }
 
 internal sealed class RejectedProofVector

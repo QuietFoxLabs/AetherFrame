@@ -38,6 +38,12 @@ public static class ProtocolLimits
     public const int MaxRequestProofBytes = RequestProofOverheadBytes + MaxDeploymentNameBytes;
 
     /// <summary>
+    /// The largest body an action request may carry, in bytes (section 14.5): an action names a
+    /// character, a code, a revision marker or a reason, never content.
+    /// </summary>
+    public const int MaxActionBodyBytes = 4096;
+
+    /// <summary>
     /// The most Unicode scalar values (code points) one text field may hold. Counted in scalar
     /// values, not UTF-16 code units or bytes, so the limit means the same in every language.
     /// </summary>

@@ -6,7 +6,8 @@ namespace AetherFrame.Protocol.Requests;
 /// <summary>
 /// A request proof whose framing, key and signature have been checked
 /// (docs/networking/ProtocolSpecification-v1.md, section 14.3). On its own it authorizes nothing:
-/// a server matches it with the request through <see cref="RequestProofCodec.VerifySubmission"/>.
+/// a server matches it with the request through <see cref="RequestProofCodec.VerifySubmission"/> or
+/// <see cref="RequestProofCodec.VerifyAction"/>, which also check its kind.
 /// Only this assembly creates one. Immutable.
 /// </summary>
 public sealed class VerifiedRequestProof
@@ -39,7 +40,8 @@ public sealed class VerifiedRequestProof
 
     /// <summary>
     /// The digest of what the proof authorizes, as its <see cref="Kind"/> defines it: for a
-    /// document submission, SHA-256 of the complete signed document.
+    /// document submission, SHA-256 of the complete signed document; for an action, SHA-256 of the
+    /// request's body (section 14.5).
     /// </summary>
     public ReadOnlySpan<byte> SubjectDigest => subjectDigest;
 }
