@@ -79,8 +79,9 @@ public class ConcurrentInputTests
             {
                 throw new XunitException("VerifySubmission accepted bytes that are not the genuine document.");
             }
-        }, required: ["accepted", nameof(ProtocolError.ProofMismatch)]);
-        Assert.Equal(["ProofMismatch", "accepted"], outcomes.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        }, RequiredOutcomes(ProtocolError.ProofMismatch));
+        Assert.True(outcomes.Keys.All(k => k is "accepted" or nameof(ProtocolError.ProofMismatch)), "VerifySubmission refused a rewritten document for another reason than its digest: " + string.Join(", ", outcomes.Keys));
+        AssertRaceWasExercised(outcomes, ProtocolError.ProofMismatch);
     }
 
     [Fact]

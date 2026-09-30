@@ -347,6 +347,39 @@ public class TestVectorTests
     }
 
     [Fact]
+    public void FreshlySignedProofVectors_HoldWhatTheirReasonsSay()
+    {
+        // Both expect SignatureMismatch, which any broken proof also produces at section 14.3, step
+        // 10. So what makes each one test its own rule is pinned here: a regeneration that broke
+        // either would otherwise still pass as a refusal.
+        var fixture = VectorFixture.Load();
+        var keyA = PersonaPublicKey.FromBytes(Hex.Parse(fixture.Personas.Single(p => p.Name == "A").PublicKey));
+
+        // The step-4 vector: a valid proof on its own, binding exactly the rejected document, whose
+        // own signature is what fails.
+        var step4 = fixture.RejectedProofs.Single(r => r.Name == "proof-of-a-document-that-does-not-verify");
+        var verified = RequestProofCodec.Verify(Hex.Parse(step4.Proof));
+        var broken = fixture.Rejected.Single(r => r.Name == step4.Document);
+        Assert.Equal("rejected", step4.DocumentSet);
+        Assert.Equal(keyA, verified.PublicKey);
+        Assert.Equal(SHA256.HashData(Hex.Parse(broken.Document)), verified.SubjectDigest.ToArray());
+        Assert.Equal(DeploymentName.Parse(step4.Deployment), verified.Deployment);
+        Assert.Equal(nameof(ProtocolError.SignatureMismatch), broken.Error);
+
+        // The cross-context vector: its signature is persona A's, valid in the document context over
+        // the proof's own fields.
+        var cross = Hex.Parse(fixture.RejectedProofs.Single(r => r.Name == "proof-signed-in-the-document-context").Proof);
+        var signatureOffset = cross.Length - 64;
+        Assert.True(SignatureVerifier.Verify(SigningInput.Create(DocumentType.ProfileSnapshot, keyA, cross.AsSpan(4, signatureOffset - 4)), ProtocolSignature.FromBytes(cross.AsSpan(signatureOffset))));
+
+        // The largest valid proof.
+        var longest = fixture.RequestProofs.Single(p => p.Name == "submit-at-the-longest-deployment-name");
+        Assert.Equal(ProtocolLimits.MaxRequestProofBytes, Hex.Parse(longest.Proof).Length);
+        Assert.Equal(ProtocolLimits.MaxDeploymentNameBytes, longest.Deployment.Length);
+        Assert.True(DeploymentName.Parse(longest.Deployment).IsReservedForTesting);
+    }
+
+    [Fact]
     public void KeptSignatures_AreOnlyForUnchangedConstructions()
     {
         var fresh = new string('a', 200) + new string('b', 128);
