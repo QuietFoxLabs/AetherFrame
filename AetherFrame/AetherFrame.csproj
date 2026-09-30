@@ -48,9 +48,10 @@
        preview build (dotnet build -p:AetherFrameNetworkPreview=true) compiles the canonical sources
        of AetherFrame.Protocol and AetherFrame.Personas into AetherFrame.dll, keeping the release
        package at the same three files whichever flavour is built, and defines
-       AETHERFRAME_NETWORK_PREVIEW for the composition root. The preview flavour opens no connection
-       and creates no persistent key; it exists so the networking increments have a place to be built
-       and checked, and so a tester can tell the flavours apart (/af version). -->
+       AETHERFRAME_NETWORK_PREVIEW for the composition root. The preview flavour carries the sharing
+       server's client (Services/Network/Transport, decision R3), HTTP only, through Dalamud's connect
+       callback; it exists so the networking increments have a place to be built and checked, and so
+       a tester can tell the flavours apart (/af version). -->
   <PropertyGroup Condition="'$(AetherFrameNetworkPreview)' == 'true'">
     <DefineConstants>$(DefineConstants);AETHERFRAME_NETWORK_PREVIEW</DefineConstants>
   </PropertyGroup>

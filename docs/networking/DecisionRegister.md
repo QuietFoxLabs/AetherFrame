@@ -651,6 +651,8 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 
 The boundary tests change in N2-9, the first change that brings network code, to enforce exactly this list, both by referenced types in the compiled flavour and by a source scan. Until then they keep refusing every networking API everywhere, which is NETWORK1.md's safeguard 1. The source scan's `Sockets` substring would match `SocketsHttpHandler`, so N2-9 makes it match whole names.
 
+`[updated 2026-09-30: applied by N2-9a, the plugin's transport. The boundary tests enforce this list in the preview flavour: its referenced assemblies, its referenced types (Dalamud's networking types included), and a source scan that matches Sockets as a whole name and also refuses each name for overriding certificate validation. R2 sets no TLS option, so System.Net.Security stays refused. The player flavour references no networking at all, as before.]`
+
 **Rationale.** It is the smallest surface R2 needs, found by compiling a minimal R2 transport against the installed Dalamud and reading the type references it produces. Dalamud's callback provides dual-stack connections without the plugin opening sockets itself.
 
 **Not settled:** nothing further.

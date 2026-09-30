@@ -44,8 +44,27 @@ public class PluginAssemblyBoundaryTests
     /// <summary>What a plugin source outside the networking folders may never name.</summary>
     private static readonly string[] NetworkingNames = ["AetherFrame.Protocol", "AetherFrame.Personas", "Services.Network", "Hosting.Network", "Windows.Network"];
 
-    /// <summary>Networking APIs no plugin source may use, in any flavour.</summary>
-    private static readonly string[] NetworkingApis = ["HttpClient", "WebRequest", "WebClient", "System.Net.", "Sockets", "OpenLink", "Dns."];
+    /// <summary>Networking APIs no plugin source outside <c>Services/Network</c> may use, in any flavour.</summary>
+    private static readonly string[] NetworkingApis = ["HttpClient", "HttpMessageHandler", "HappyEyeballs", "WebRequest", "WebClient", "System.Net.", "OpenLink", "Dns."];
+
+    /// <summary>
+    /// Networking APIs no plugin source may use at all, <c>Services/Network</c> included (decision
+    /// R3): raw sockets, TLS streams, WebSockets, QUIC, DNS, the old request types, a listener, mail,
+    /// and Dalamud's link opener. <c>Sockets</c> is matched as a whole name, so R3's
+    /// <c>SocketsHttpHandler</c> passes. Every way of overriding certificate validation is named
+    /// too: the type check refuses them already, as each references <c>SslPolicyErrors</c>.
+    /// </summary>
+    private static readonly string[] RefusedEverywhere = ["WebRequest", "WebClient", "OpenLink", "Dns.", "SslStream", "WebSocket", "System.Net.Quic", "QuicConnection", "QuicListener", "HttpListener", "System.Net.Mail", "System.Net.Security", "TcpClient", "UdpClient", "NetworkStream", "HappyHttpClient", "ServerCertificateCustomValidationCallback", "DangerousAcceptAnyServerCertificateValidator", "RemoteCertificateValidationCallback", "SslOptions"];
+
+    /// <summary>
+    /// The only assemblies of <c>System.Net</c> the preview flavour may reference (decision R3):
+    /// HTTP, and the primitives that hold <c>HttpStatusCode</c> and the connect callback's
+    /// <c>AddressFamily</c>. The player build references none.
+    /// </summary>
+    private static readonly string[] PreviewNetworkAssemblies = ["System.Net.Http", "System.Net.Primitives"];
+
+    /// <summary>The only <c>System.Net</c> types outside HTTP's namespaces the preview flavour may use (decision R3).</summary>
+    private static readonly string[] PreviewNetworkTypes = ["System.Net.HttpStatusCode", "System.Net.Sockets.AddressFamily"];
 
     /// <summary>The folders that will hold the networking code inside the plugin; nothing else may name it.</summary>
     private static readonly string[] NetworkingFolders =
@@ -75,6 +94,17 @@ public class PluginAssemblyBoundaryTests
 
         Assert.NotEmpty(references);
         var forbidden = references.Where(name => ForbiddenAssemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        // Decision R3: the preview flavour may reference HTTP and the network primitives, nothing else.
+        if (PreviewFlavour)
+        {
+            forbidden.RemoveAll(name => PreviewNetworkAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase));
+        }
+        else
+        {
+            forbidden.AddRange(references.Where(name => PreviewNetworkAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase) && !forbidden.Contains(name)));
+        }
+
         Assert.True(forbidden.Count == 0, "The plugin references: " + string.Join(", ", forbidden));
     }
 
@@ -97,8 +127,22 @@ public class PluginAssemblyBoundaryTests
         }
 
         var networking = typeReferences.Where(name => name.StartsWith("System.Net.", StringComparison.Ordinal)).ToList();
+        var dalamudNetworking = typeReferences.Where(name => name.StartsWith("Dalamud.Networking.", StringComparison.Ordinal)).ToList();
+        if (PreviewFlavour)
+        {
+            // Decision R3's exact allowlist: every type in System.Net.Http and its Headers, the two
+            // named types, and Dalamud's HappyEyeballsCallback.
+            networking.RemoveAll(name => IsInNamespace(name, "System.Net.Http") || IsInNamespace(name, "System.Net.Http.Headers") || PreviewNetworkTypes.Contains(name, StringComparer.Ordinal));
+            dalamudNetworking.RemoveAll(name => name == "Dalamud.Networking.Http.HappyEyeballsCallback");
+        }
+
         Assert.True(networking.Count == 0, "The plugin uses: " + string.Join(", ", networking));
+        Assert.True(dalamudNetworking.Count == 0, "The plugin uses Dalamud's networking: " + string.Join(", ", dalamudNetworking));
     }
+
+    /// <summary>Whether <paramref name="type"/> (namespace and name) is declared directly in <paramref name="ns"/>.</summary>
+    private static bool IsInNamespace(string type, string ns) =>
+        type.StartsWith(ns + ".", StringComparison.Ordinal) && type.IndexOf('.', ns.Length + 1) < 0;
 
     [Fact]
     public void ThePlayerBuild_HoldsNoProtocolOrPersonaCode_AndThePreviewFlavourDoes()
@@ -311,21 +355,27 @@ public class PluginAssemblyBoundaryTests
     [Fact]
     public void PluginSources_UseNoNetworkingApi()
     {
+        // Decision R3: networking only under Services/Network, the preview flavour's; and even there
+        // nothing but HTTP through Dalamud's connect callback.
+        var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
         var offending = new List<string>();
         var scanned = 0;
         foreach (var (file, relative) in PluginSources())
         {
             scanned++;
+            var inNetworkFolder = relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase);
             var lineNumber = 0;
             foreach (var line in File.ReadLines(file))
             {
                 lineNumber++;
-                if (line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                if (line.TrimStart().StartsWith("//", StringComparison.Ordinal) || line.TrimStart().StartsWith("///", StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                if (NetworkingApis.Any(api => line.Contains(api, StringComparison.Ordinal)))
+                var refused = RefusedEverywhere.Any(api => line.Contains(api, StringComparison.Ordinal)) || NamesSockets(line);
+                var outsideTheFolder = !inNetworkFolder && NetworkingApis.Any(api => line.Contains(api, StringComparison.Ordinal));
+                if (refused || outsideTheFolder)
                 {
                     offending.Add($"{relative}:{lineNumber}");
                 }
@@ -335,6 +385,13 @@ public class PluginAssemblyBoundaryTests
         Assert.True(scanned > 0, "no plugin source was scanned");
         Assert.True(offending.Count == 0, "Plugin sources use a networking API at: " + string.Join(", ", offending));
     }
+
+    /// <summary>
+    /// Whether <paramref name="line"/> names <c>Sockets</c> as a whole name (the namespace, a
+    /// <c>Socket</c> type), as opposed to part of R3's <c>SocketsHttpHandler</c> or
+    /// <c>SocketsHttpConnectionContext</c>.
+    /// </summary>
+    internal static bool NamesSockets(string line) => System.Text.RegularExpressions.Regex.IsMatch(line, @"\bSockets?\b");
 
     /// <summary>
     /// Calls no plugin source may make, in any flavour, each ruled out by a decision in
