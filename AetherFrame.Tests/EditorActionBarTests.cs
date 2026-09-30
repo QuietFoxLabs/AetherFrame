@@ -239,4 +239,40 @@ public class EditorActionBarTests
         Assert.True(rightX >= centerX + 60f + 10f);
         Assert.Equal(0f, nameWidth);
     }
+
+    [Fact]
+    public void ThePlateMenu_GetsTheRoomUpToTheHistoryGroup_ForTheName()
+    {
+        // The left group ends at 150, the control starts one gap later at its minimum width 40, and
+        // the history group is centered: the name may widen the control to one gap before it.
+        const float controlStart = 160f;
+        const float controlMinimum = 40f;
+        var (centerX, _, _) = EditorActionBarLayout.Arrange(0f, 1000f, controlStart + controlMinimum, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        var room = EditorActionBarLayout.NameRoom(controlStart, controlMinimum, centerX, spacing: 10f);
+
+        Assert.Equal(470f, centerX);
+        Assert.Equal(470f - 10f - 200f, room);
+        Assert.True(controlStart + controlMinimum + room <= centerX - 10f);
+    }
+
+    [Fact]
+    public void OnTheNarrowestRow_ThePlateMenuKeepsItsPlace_WithNoRoomForTheName()
+    {
+        // Narrower than everything together: the groups keep their order, the history group is
+        // pushed right after the control, and the control keeps its minimum width.
+        const float controlStart = 160f;
+        const float controlMinimum = 40f;
+        var (centerX, rightX, _) = EditorActionBarLayout.Arrange(0f, 300f, controlStart + controlMinimum, centerWidth: 60f, rightWidth: 300f, spacing: 10f);
+
+        Assert.Equal(0f, EditorActionBarLayout.NameRoom(controlStart, controlMinimum, centerX, spacing: 10f));
+        Assert.Equal(controlStart + controlMinimum + 10f, centerX);
+        Assert.True(rightX >= centerX + 60f + 10f);
+    }
+
+    [Fact]
+    public void TheNameRoom_IsNeverNegative()
+    {
+        Assert.Equal(0f, EditorActionBarLayout.NameRoom(controlStart: 100f, controlMinimum: 50f, centerX: 120f, spacing: 10f));
+    }
 }

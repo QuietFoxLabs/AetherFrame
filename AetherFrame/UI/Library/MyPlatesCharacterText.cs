@@ -21,6 +21,12 @@ internal static class MyPlatesCharacterText
     /// <summary>After Set Active.</summary>
     internal static string NowActive(string plateName) => $"\"{plateName}\" is now {CurrentCharacter}'s Active Plate.";
 
+    /// <summary>Why Set Active is unavailable with no character logged in.</summary>
+    internal const string SetActiveNeedsCharacter = "Log in to a character to choose its Active Plate.";
+
+    /// <summary>Why Set Active is unavailable for the Plate that already is Active.</summary>
+    internal const string AlreadyActive = $"This is already {CurrentCharacter}'s Active Plate.";
+
     /// <summary>After a character's first Plate was created (and so became its Active Plate).</summary>
     internal const string FirstPlateCreated = $"Created your first Plate. It's now {CurrentCharacter}'s Active Plate.";
 

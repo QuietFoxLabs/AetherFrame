@@ -16,11 +16,15 @@ namespace AetherFrame.Windows;
 /// one editor: the same actions, with the same words, in the same places.
 ///
 /// <code>
-/// [My Plates] [Basic|Advanced]  Plate name      [Undo][Redo]      Unsaved changes [Preview] [Revert] [Save]
+/// [My Plates] [Basic|Advanced] [Plate name v]   [Undo][Redo]      Unsaved changes [Preview] [Revert] [Save]
+///                                                                  Exported "Evening Look" to Evening Look.aetherframe.
 /// </code>
 ///
 /// It is drawn at the top of the window, outside every scrolling region, so it stays in view while
-/// the editor's content scrolls. Availability comes from <see cref="EditorDocumentCommands"/>: Save
+/// the editor's content scrolls. The Plate's name opens the Plate menu (<see cref="EditorPlateMenu"/>),
+/// whose control keeps its icon and caret at every width; the name shows in whatever room is left,
+/// and the menu's results and errors show on a line of their own under the save state.
+/// Availability comes from <see cref="EditorDocumentCommands"/>: Save
 /// and Revert only with unsaved changes, Undo and Redo only when there's something to undo or redo.
 /// Revert always asks first (and the revert itself can be undone). Everything an editor mode adds
 /// of its own (Advanced's + Text, Guides...) goes on its own row below this one.
@@ -39,6 +43,7 @@ internal sealed class EditorActionBar
     private readonly Action openMyPlates;
     private readonly Action switchMode;
     private readonly Func<HelpMenu?> help;
+    private readonly EditorPlateMenu plateMenu;
 
     // Requested from the bar, opened at window level (one id-stack scope, see ProfileEditorWindow).
     private bool pendingRevertPrompt;
@@ -48,19 +53,23 @@ internal sealed class EditorActionBar
     /// <param name="openMyPlates">Opens My Plates, or brings it forward when it's already open.</param>
     /// <param name="switchMode">Hands the open Plate to the other editor mode.</param>
     /// <param name="help">The Help menu, once the plugin has attached it to the window (null before that).</param>
-    internal EditorActionBar(EditorDocumentCommands commands, EditorSurfaceKind mode, Action openMyPlates, Action switchMode, Func<HelpMenu?> help)
+    /// <param name="plateMenu">The Plate menu both editors share.</param>
+    internal EditorActionBar(EditorDocumentCommands commands, EditorSurfaceKind mode, Action openMyPlates, Action switchMode, Func<HelpMenu?> help, EditorPlateMenu plateMenu)
     {
         this.commands = commands;
         this.mode = mode;
         this.openMyPlates = openMyPlates;
         this.switchMode = switchMode;
         this.help = help;
+        this.plateMenu = plateMenu;
     }
 
     /// <summary>The Help menu to draw at the bar's right edge, or null when the plugin hasn't attached one.</summary>
     private HelpMenu? Help => help();
 
     internal EditorDocumentCommands Commands => commands;
+
+    internal EditorPlateMenu PlateMenu => plateMenu;
 
     /// <summary>Asks to revert to the last saved version (confirmed by <see cref="DrawPopups"/>); ignored when there's nothing to revert.</summary>
     internal void RequestRevert()
@@ -72,7 +81,8 @@ internal sealed class EditorActionBar
     }
 
     /// <summary>
-    /// Draws the bar row, then <paramref name="errorMessage"/> (if any) on its own line.
+    /// Draws the bar row, then the Plate menu's last result (if any) and <paramref name="errorMessage"/>
+    /// (if any), each on its own line.
     /// </summary>
     /// <param name="profile">The open Plate.</param>
     /// <param name="previewActive">Whether this editor's Preview is showing (the Preview button is highlighted).</param>
@@ -99,7 +109,9 @@ internal sealed class EditorActionBar
         TutorialAnchorMarks.MarkRect(TutorialTarget.EditorModeSwitch, modeSwitchMin, ImGui.GetItemRectMax());
         var leftEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
 
-        // ---- measure the other two groups
+        // ---- measure the Plate menu's control and the other two groups
+        var controlStart = leftEnd + gap;
+        var controlMinimum = plateMenu.MinimumWidth();
         var frame = ImGui.GetFrameHeight();
         const float historyGap = 2f;
         var centerWidth = (frame * 2f) + historyGap;
@@ -110,21 +122,12 @@ internal sealed class EditorActionBar
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : frame + style.ItemSpacing.X);
 
-        var (centerX, rightX, nameWidth) = EditorActionBarLayout.Arrange(
-            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, leftEnd, centerWidth, rightWidth, gap);
+        var (centerX, rightX, _) = EditorActionBarLayout.Arrange(
+            ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart + controlMinimum, centerWidth, rightWidth, gap);
 
-        // ---- the Plate's name, in whatever room is left
-        if (nameWidth >= 24f * scale)
-        {
-            ImGui.SameLine(leftEnd + gap);
-            ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(FitText(profile.Name, nameWidth));
-            TutorialAnchorMarks.Mark(TutorialTarget.EditorPlateName);
-            if (ImGui.IsItemHovered() && ImGui.CalcTextSize(profile.Name).X > nameWidth)
-            {
-                ImGui.SetTooltip(profile.Name);
-            }
-        }
+        // ---- the Plate menu, always drawn, with the Plate's name in whatever room is left
+        ImGui.SameLine(controlStart);
+        plateMenu.DrawControl(profile, EditorActionBarLayout.NameRoom(controlStart, controlMinimum, centerX, gap));
 
         // ---- center: history
         ImGui.SameLine(centerX);
@@ -194,15 +197,19 @@ internal sealed class EditorActionBar
             help.DrawButton("EditorHelp");
         }
 
+        plateMenu.DrawResult(profile.ProfileId);
+
         if (errorMessage is { } error)
         {
             ImGui.TextColored(EditorWidgets.ErrorColor, error);
         }
     }
 
-    /// <summary>The bar's popups (Revert's confirmation). Call once per frame from the window's outermost scope.</summary>
+    /// <summary>The bar's popups: Revert's confirmation, and the Plate menu's prompts. Call once per frame from the window's outermost scope.</summary>
     internal void DrawPopups()
     {
+        plateMenu.DrawPopups();
+
         if (pendingRevertPrompt)
         {
             pendingRevertPrompt = false;
@@ -260,22 +267,4 @@ internal sealed class EditorActionBar
         : ("Saved", EditorWidgets.SuccessColor with { W = 0.75f });
 
     private static float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f);
-
-    /// <summary>The text, shortened with an ellipsis when it's wider than <paramref name="width"/>.</summary>
-    private static string FitText(string text, float width)
-    {
-        if (ImGui.CalcTextSize(text).X <= width)
-        {
-            return text;
-        }
-
-        const string ellipsis = "...";
-        var length = text.Length;
-        while (length > 0 && ImGui.CalcTextSize(string.Concat(text.AsSpan(0, length), ellipsis)).X > width)
-        {
-            length--;
-        }
-
-        return length == 0 ? string.Empty : string.Concat(text.AsSpan(0, length), ellipsis);
-    }
 }

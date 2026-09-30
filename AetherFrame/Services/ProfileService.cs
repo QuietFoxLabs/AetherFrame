@@ -140,6 +140,36 @@ internal sealed class ProfileService
     }
 
     /// <summary>
+    /// Saves the open Plate as it is now, unsaved changes included, as a new Plate after it (the
+    /// editors' Save as New Plate, see <see cref="PlateLibraryService.SaveCopyAsync"/>), and returns
+    /// the new Plate's id. The open document stays open and unchanged: the caller decides whether
+    /// to open the copy. As during a save, it can't be edited until the copy is written, so the
+    /// copy holds exactly what was on screen.
+    /// </summary>
+    internal async Task<Guid> SaveCopyOfCurrentAsync()
+    {
+        ProfileDocument snapshot;
+        lock (gate)
+        {
+            var profile = RequireEditableProfileLocked();
+            snapshot = CloneForSave(profile, profile.Revision, profile.UpdatedAtUtc);
+            isBusy = true;
+        }
+
+        try
+        {
+            return await library.SaveCopyAsync(snapshot).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (gate)
+            {
+                isBusy = false;
+            }
+        }
+    }
+
+    /// <summary>
     /// Adds a text element to the currently loaded profile. Synchronous UI mutation; safe to
     /// call directly from ImGui Draw. Returns the new element's id.
     /// </summary>

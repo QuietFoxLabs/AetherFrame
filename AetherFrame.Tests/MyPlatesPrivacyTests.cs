@@ -36,6 +36,8 @@ public class MyPlatesPrivacyTests
             {
                 MyPlatesCharacterText.CurrentCharacter,
                 MyPlatesCharacterText.NowActive("Evening Look"),
+                MyPlatesCharacterText.SetActiveNeedsCharacter,
+                MyPlatesCharacterText.AlreadyActive,
                 MyPlatesCharacterText.FirstPlateCreated,
                 MyPlatesCharacterText.NewPlateBelongsToCurrent,
             }
@@ -56,11 +58,15 @@ public class MyPlatesPrivacyTests
     [Fact]
     public void MyPlatesWindowSources_NeverFormatTheCharactersNameOrWorld()
     {
-        // The window is ImGui code (not built here), so this reads its source: no line of My Plates
-        // may read a CharacterContext's Name or HomeWorld, or bring back the "Playing as" line.
+        // The window is ImGui code (not built here), so this reads its source: no line of My Plates,
+        // nor of the Plate menus it shares with the editors, may read a CharacterContext's Name or
+        // HomeWorld, or bring back the "Playing as" line.
         var windows = Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows");
-        var files = Directory.GetFiles(windows, "PlateLibraryWindow*.cs");
-        Assert.NotEmpty(files);
+        var files = Directory.GetFiles(windows, "PlateLibraryWindow*.cs")
+            .Concat([Path.Combine(windows, "PlateMenu.cs"), Path.Combine(windows, "EditorPlateMenu.cs")])
+            .ToList();
+        Assert.True(files.Count > 2);
+        Assert.All(files, file => Assert.True(File.Exists(file), file));
 
         var identity = new Regex(@"\b(who|character|owner|CurrentCharacter)(\.Value)?\??\.(Name|HomeWorld)\b");
         foreach (var file in files)
