@@ -227,6 +227,64 @@ public sealed class ShareCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task Unloading_CancelsAPreparationUnderWay_SoUnloadingNeverWaitsOnIt()
+    {
+        var plate = Save(image: true);
+        using var stopping = new CancellationTokenSource();
+        var cancelled = false;
+        using var check = NewCheck(stopping: stopping.Token, prepare: async (requirements, cancellation) =>
+        {
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellation);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+                throw;
+            }
+
+            return await Prepare(requirements, cancellation);
+        });
+
+        check.Begin(plate.ProfileId);
+        check.OnFrame();
+        Assert.Equal(ShareCheckStage.Preparing, check.View.Stage);
+
+        stopping.Cancel();
+        await WaitFor(() => registrationsOpen == 0);
+        Assert.True(cancelled);
+        Assert.Equal(ShareCheckStage.Preparing, check.View.Stage);
+    }
+
+    [Fact]
+    public async Task EachImagesSize_IsReadOncePerCheck_WhileFontsLoad()
+    {
+        var plate = Save(image: true);
+        using var check = NewCheck(frames: 10);
+        measurements.Ready = false;
+
+        check.Begin(plate.ProfileId);
+        for (var frame = 0; frame < 5; frame++)
+        {
+            check.OnFrame();
+        }
+
+        measurements.Ready = true;
+        check.OnFrame();
+        await Settled(check);
+
+        Assert.Equal(ShareCheckStage.Ready, check.View.Stage);
+        Assert.Equal(1, measurements.SizeReads);
+
+        // A new check reads it again: the file may have changed since.
+        check.Begin(plate.ProfileId);
+        check.OnFrame();
+        await Settled(check);
+        Assert.Equal(2, measurements.SizeReads);
+    }
+
+    [Fact]
     public void NothingIsPrepared_OnceUnloadingHasBegun()
     {
         var plate = Save(image: true);
@@ -303,7 +361,8 @@ public sealed class ShareCheckTests : IDisposable
         Func<Task<bool>>? selfTest = null,
         Func<IReadOnlyList<ImageRequirement>, CancellationToken, Task<IReadOnlyDictionary<ImageRequirement, ImagePreparation>>>? prepare = null,
         Func<IDisposable?>? beginOperation = null,
-        int frames = 120) => new(new ShareCheckSeams
+        int frames = 120,
+        CancellationToken stopping = default) => new(new ShareCheckSeams
         {
             OpenSavedPlate = open ?? (id => saved.TryGetValue(id, out var plate) ? plate : null),
             Prewarm = _ => Interlocked.Increment(ref prewarmed),
@@ -315,6 +374,7 @@ public sealed class ShareCheckTests : IDisposable
                 Interlocked.Increment(ref registrationsOpen);
                 return new Registration(this);
             }),
+            Stopping = stopping,
             Log = log.Enqueue,
             ResolveFrames = frames,
         });
@@ -325,6 +385,10 @@ public sealed class ShareCheckTests : IDisposable
         private readonly FixedMeasurements inner = new();
 
         internal volatile bool Ready = true;
+
+        private int sizeReads;
+
+        internal int SizeReads => Volatile.Read(ref sizeReads);
 
         public bool TryMeasureNaturalWidth(TextProfileElement element, out float width)
         {
@@ -338,7 +402,11 @@ public sealed class ShareCheckTests : IDisposable
             return Ready;
         }
 
-        public bool TryGetImageSize(Guid image, out int width, out int height) => inner.TryGetImageSize(image, out width, out height);
+        public bool TryGetImageSize(Guid image, out int width, out int height)
+        {
+            Interlocked.Increment(ref sizeReads);
+            return inner.TryGetImageSize(image, out width, out height);
+        }
     }
 
     private sealed class Registration(ShareCheckTests owner) : IDisposable

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Personas;
+using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
 using AetherFrame.Services.Network.Personas;
 using AetherFrame.Services.Network.Publishing;
@@ -32,10 +33,10 @@ namespace AetherFrame.Windows.Network;
 internal sealed class ShareCheckWindow : Window, IDisposable
 {
     private const string Intro =
-        "What sharing this Plate would send, checked from its saved state, or why it can't be shared yet. " +
-        "Signing keeps the signed Plate on this PC. Nothing is sent: sharing with others comes in a later preview.";
+        "The name, texts and images sharing this Plate would send, checked from its saved state, or why it can't be shared yet. " +
+        "Signing keeps the signed Plate on this PC. Nothing is sent: sharing with others comes in a later preview, and shows you what you signed again before anything is sent.";
 
-    private const string NothingSent = "Nothing is sent: it waits on this PC until sharing arrives in a later preview.";
+    private const string NothingSent = "Nothing is sent. It waits on this PC, and will be shown to you again before anything is sent.";
 
     private readonly ShareCheck check;
     private readonly SharePublisher publisher;
@@ -46,6 +47,8 @@ internal sealed class ShareCheckWindow : Window, IDisposable
     private Thumbnails? thumbnails;
     private SnapshotCandidate? signed;
     private PersonaSlotId listRequested;
+    private PersonaSlotId shownSlot;
+    private PersonaPublicKey? shownKey;
 
     internal ShareCheckWindow(ShareCheck check, SharePublisher publisher, PersonaSession session, ITextureProvider textures, Func<Guid, string?> plateName)
         : base("Check what would be shared (preview)##AetherFrameShareCheck", ImGuiWindowFlags.NoCollapse)
@@ -95,6 +98,13 @@ internal sealed class ShareCheckWindow : Window, IDisposable
         var active = session.Active;
         var sessionView = session.View;
 
+        // The persona drawn this frame is the one a click signs as (L10). A persona that changed
+        // since the last frame is drawn once before Sign can be used, so a click never lands on a
+        // persona the player hasn't seen yet.
+        var personaChanged = active?.Slot != shownSlot || !Equals(active?.PublicKey, shownKey);
+        shownSlot = active?.Slot ?? default;
+        shownKey = active?.PublicKey;
+
         Wrapped(Intro, AetherPalette.TextMuted);
         AetherControls.Divider();
 
@@ -121,7 +131,7 @@ internal sealed class ShareCheckWindow : Window, IDisposable
                 break;
             case ShareCheckStage.Ready when view.Candidate is { } candidate:
                 DrawCandidate(candidate);
-                DrawSigning(view, candidate, active, sessionView);
+                DrawSigning(view, candidate, active, sessionView, personaChanged);
                 break;
         }
 
@@ -235,6 +245,9 @@ internal sealed class ShareCheckWindow : Window, IDisposable
             thumbnails = new Thumbnails(textures, candidate);
         }
 
+        AetherControls.SectionHeader("Its name, shared");
+        Wrapped(candidate.Name);
+
         AetherControls.SectionHeader("Its texts, shared in full");
         var any = false;
         for (var index = 0; index < candidate.Items.Count; index++)
@@ -301,11 +314,20 @@ internal sealed class ShareCheckWindow : Window, IDisposable
         AetherControls.Divider();
     }
 
-    private void DrawSigning(ShareCheckView view, SnapshotCandidate candidate, PersonaRecord? active, PersonaSessionView sessionView)
+    private void DrawSigning(ShareCheckView view, SnapshotCandidate candidate, PersonaRecord? active, PersonaSessionView sessionView, bool personaChanged)
     {
         var used = ReferenceEquals(signed, candidate);
         var publisherView = publisher.View;
-        var canSign = !used && active is { Acknowledged: true } && sessionView.State == PersonaSessionState.Ready && !sessionView.Busy && !publisherView.Busy;
+        var shown = thumbnails?.Shown ?? ThumbnailState.Loading;
+
+        // Every image is signed only once it has been drawn here.
+        var canSign = !used && !personaChanged && shown == ThumbnailState.Shown && active is { Acknowledged: true }
+            && sessionView.State == PersonaSessionState.Ready && !sessionView.Busy && !publisherView.Busy;
+        if (shown == ThumbnailState.Failed)
+        {
+            AetherControls.StatusLine(AetherTone.Warning, "An image couldn't be shown here, so this can't be signed. Check again.");
+        }
+
         using (ImRaii.Disabled(!canSign))
         {
             if (AetherControls.PrimaryButton("Sign and keep on this PC") && canSign && active is { } persona && publisher.TrySign(candidate, persona.Slot, persona.PublicKey))
@@ -384,10 +406,25 @@ internal sealed class ShareCheckWindow : Window, IDisposable
         thumbnails = null;
     }
 
+    /// <summary>Whether every prepared copy of a candidate has been drawn.</summary>
+    private enum ThumbnailState
+    {
+        /// <summary>A copy is still being decoded for display.</summary>
+        Loading,
+
+        /// <summary>Every copy is drawn (or there is none).</summary>
+        Shown,
+
+        /// <summary>A copy couldn't be decoded for display.</summary>
+        Failed,
+    }
+
     /// <summary>The prepared copies of a candidate, decoded for display; each is drawn once it has loaded, and none after <see cref="Dispose"/>.</summary>
     private sealed class Thumbnails : IDisposable
     {
         private readonly IDalamudTextureWrap?[] wraps;
+        private int loaded;
+        private bool failed;
         private bool disposed;
 
         internal Thumbnails(ITextureProvider textures, SnapshotCandidate candidate)
@@ -401,6 +438,18 @@ internal sealed class ShareCheckWindow : Window, IDisposable
         }
 
         internal SnapshotCandidate Candidate { get; }
+
+        /// <summary>Whether every copy is drawn, one is still loading, or one failed.</summary>
+        internal ThumbnailState Shown
+        {
+            get
+            {
+                lock (wraps)
+                {
+                    return failed ? ThumbnailState.Failed : loaded == wraps.Length ? ThumbnailState.Shown : ThumbnailState.Loading;
+                }
+            }
+        }
 
         internal IDalamudTextureWrap? this[int index]
         {
@@ -440,11 +489,16 @@ internal sealed class ShareCheckWindow : Window, IDisposable
                     }
 
                     wraps[index] = wrap;
+                    loaded++;
                 }
             }
             catch (Exception)
             {
-                // The copy was checked when it was prepared; a thumbnail that doesn't load is left blank.
+                // The copy was checked when it was prepared; one that can't be shown here can't be signed.
+                lock (wraps)
+                {
+                    failed = true;
+                }
             }
         }
     }

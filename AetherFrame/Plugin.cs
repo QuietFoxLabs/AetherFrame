@@ -320,6 +320,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 SelfTest = () => preparationCheck.Value,
                 Prepare = (requirements, cancellation) => ImagePreparer.PrepareAllAsync(requirements, managedImages, imageCodec, cancellation),
                 BeginOperation = () => ownedOperations.TryBegin(out var lease) ? lease : null,
+                Stopping = ownedOperations.Stopping,
                 Log = log.Information,
             });
             var publisher = new SharePublisher(personaSession.TryRun, new PublicationFiles(PersonaSessionHost.PersonasDirectory(configDirectory)), () => DateTimeOffset.UtcNow, log.Information);

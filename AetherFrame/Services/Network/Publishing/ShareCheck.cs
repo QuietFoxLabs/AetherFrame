@@ -108,6 +108,9 @@ internal sealed class ShareCheckSeams
     /// <summary>Registers the preparation with the plugin's unload tracking; null once unloading began, and then nothing starts.</summary>
     internal required Func<IDisposable?> BeginOperation { get; init; }
 
+    /// <summary>Signaled when unloading begins: a preparation under way is cancelled, so unloading never waits on it.</summary>
+    internal CancellationToken Stopping { get; init; }
+
     /// <summary>Where error kinds go; never a message, a path, an id or a Plate's text.</summary>
     internal required Action<string> Log { get; init; }
 
@@ -132,6 +135,7 @@ internal sealed class ShareCheck : IDisposable
     private readonly object gate = new();
     private volatile ShareCheckView view = ShareCheckView.Idle;
     private ProfileDocument? plate;
+    private CachedSizes? measurements;
     private int framesLeft;
     private int generation;
     private CancellationTokenSource? preparing;
@@ -167,6 +171,7 @@ internal sealed class ShareCheck : IDisposable
         }
 
         plate = copy;
+        measurements = new CachedSizes(seams.Measurements);
         framesLeft = seams.ResolveFrames;
         Show(new ShareCheckView(ShareCheckStage.Resolving, plateId, copy.Name, null, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None));
     }
@@ -174,17 +179,18 @@ internal sealed class ShareCheck : IDisposable
     /// <summary>Resolves the Plate when it waits to be, once a frame: framework thread only.</summary>
     internal void OnFrame()
     {
-        if (plate is not { } current || view.Stage != ShareCheckStage.Resolving)
+        if (plate is not { } current || measurements is not { } sizes || view.Stage != ShareCheckStage.Resolving)
         {
             return;
         }
 
         seams.Prewarm(current);
-        if (!PlateSnapshotBuilder.TryResolve(current, seams.Measurements, out var resolved))
+        if (!PlateSnapshotBuilder.TryResolve(current, sizes, out var resolved))
         {
             if (--framesLeft <= 0)
             {
                 plate = null;
+                measurements = null;
                 Show(Stage(ShareCheckStage.Failed, failure: ShareCheckFailure.FontsLoading));
             }
 
@@ -192,6 +198,7 @@ internal sealed class ShareCheck : IDisposable
         }
 
         plate = null;
+        measurements = null;
         var registration = seams.BeginOperation();
         if (registration is null)
         {
@@ -203,7 +210,8 @@ internal sealed class ShareCheck : IDisposable
         int mine;
         lock (gate)
         {
-            cancellation = new CancellationTokenSource();
+            // Cancelled by a new check, the window's disposal, or unloading, whichever comes first.
+            cancellation = CancellationTokenSource.CreateLinkedTokenSource(seams.Stopping);
             preparing = cancellation;
             mine = generation;
         }
@@ -304,12 +312,41 @@ internal sealed class ShareCheck : IDisposable
         }
 
         plate = null;
+        measurements = null;
         try
         {
             cancel?.Cancel();
         }
         catch (ObjectDisposedException)
         {
+        }
+    }
+
+    /// <summary>
+    /// The renderer's measurements, with each image's size read once for the check: while fonts
+    /// build, the Plate is resolved every frame, and its image files' headers aren't read again
+    /// each time on the framework thread.
+    /// </summary>
+    private sealed class CachedSizes(IPlateMeasurements inner) : IPlateMeasurements
+    {
+        private readonly Dictionary<Guid, (bool Known, int Width, int Height)> sizes = new();
+
+        public bool TryMeasureNaturalWidth(TextProfileElement element, out float width) => inner.TryMeasureNaturalWidth(element, out width);
+
+        public bool TryGetDisplayOverride(ProfileDocument plate, TextProfileElement element, out string? display) =>
+            inner.TryGetDisplayOverride(plate, element, out display);
+
+        public bool TryGetImageSize(Guid image, out int width, out int height)
+        {
+            if (!sizes.TryGetValue(image, out var size))
+            {
+                var known = inner.TryGetImageSize(image, out var w, out var h);
+                size = (known, w, h);
+                sizes[image] = size;
+            }
+
+            (width, height) = (size.Width, size.Height);
+            return size.Known;
         }
     }
 }

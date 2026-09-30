@@ -277,8 +277,8 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - at load the index decides: what it names is checked in full, and what fails reads as not stored, never as pending;
   - a canary test finds nothing of a Plate but its local id in the index, and nothing of it at all in the outbox, beyond what is shared.
 - NETWORK2 increment N2-6c, its second part, the share check: this change. In the preview flavour only:
-  - a Plate's menu in My Plates gains "Check what would be shared (preview)". Its window shows, from a private copy of the Plate's saved state, exactly what sharing would send: every text in full, flagging what came from the character, each prepared image, and what is left out and why. Or it shows why the Plate can't be shared;
-  - it signs that as the persona in use, and keeps it on this PC; nothing is sent. It lists what that persona has signed from here;
+  - a Plate's menu in My Plates gains "Check what would be shared (preview)". Its window shows, from a private copy of the Plate's saved state, the name, texts and images sharing would send: every text in full, flagging what came from the character, each prepared image, and what is left out and why. Or it shows why the Plate can't be shared;
+  - it signs that as the persona in use, once every image is drawn, and keeps it on this PC; nothing is sent. N2-9 shows each such signing on its own consent screen before its first send, or drops it (D5's N2-6 note). The window lists what that persona has signed from here;
   - the check reads the saved Plate through the Library, never an editor's document. It resolves on the framework thread while fonts build (about five seconds at most), and prepares images only after image preparation's known-answer check has passed that session;
   - every candidate declares its copies under asset ids of its own, and signing and listing run as persona-session operations that leave the persona window's outcomes alone.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
