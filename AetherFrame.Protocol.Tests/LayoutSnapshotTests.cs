@@ -67,9 +67,10 @@ public class LayoutSnapshotTests
     [Fact]
     public void Coordinates_ExtentsAndAngles_AreRangeChecked()
     {
-        new LayoutQuad(new LayoutPoint(-10_000_000, 10_000_000), default, default, default, default);
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutQuad(new LayoutPoint(-10_000_001, 0), default, default, default, default));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutTriangle(default, default, new LayoutPoint(0, 10_000_001), default));
+        new LayoutQuad(new LayoutPoint(-1_000_000_000, 1_000_000_000), default, default, default, default);
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutQuad(new LayoutPoint(-1_000_000_001, 0), default, default, default, default));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutTriangle(default, default, new LayoutPoint(0, 1_000_000_001), default));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutQuad(new LayoutPoint(int.MinValue, 0), default, default, default, default));
 
         LayoutSamples.Text(width: 0, height: 10_000_000);
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(width: -1));
@@ -110,9 +111,9 @@ public class LayoutSnapshotTests
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(outlineThickness: -1));
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(outlineThickness: 1_601));
 
-        LayoutSamples.Text(shadowX: -4_000, shadowY: 4_000);
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(shadowX: -4_001));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(shadowY: 4_001));
+        LayoutSamples.Text(shadowX: -1_000_000, shadowY: 1_000_000);
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(shadowX: -1_000_001));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(shadowY: 1_000_001));
 
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => LayoutSamples.Text(layout: (LayoutTextLayout)2));
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => new LayoutText(default, 1, 1, "t", LayoutSamples.Font, 1_000, default, (LayoutHorizontalAlign)3, LayoutVerticalAlign.Top, LayoutTextFlags.None, 0, 100, 800, default, 0, default, 0, 0, LayoutTextLayout.Current));
@@ -232,6 +233,10 @@ public class LayoutSnapshotTests
         Assert.Equal(2, LayoutSamples.Minimal(drawers.Take(2), tall).Images.Count);
         var over = ids.Take(2).Select(id => Samples.Image(id, width: 5_000, height: 4_000)).ToArray();
         ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Minimal(drawers.Take(2), over));
+
+        // Exactly at the cap is allowed; one pixel more is refused.
+        var oneMore = tall.Append(Samples.Image(ids[2], width: 1, height: 1)).ToArray();
+        ProtocolAssert.Throws(ProtocolError.LimitExceeded, () => LayoutSamples.Minimal(drawers.Take(3), oneMore));
     }
 
     private static ProfileLayoutSnapshot Build(int canvasWidth = 128_000, int canvasHeight = 72_000) =>

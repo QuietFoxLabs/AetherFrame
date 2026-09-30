@@ -102,8 +102,8 @@ public sealed class LayoutText : LayoutItem
     /// <summary>The thickest outline, in hundredths of a canvas unit.</summary>
     public const int MaxOutlineThickness = 1_600;
 
-    /// <summary>The largest shadow offset either way, in hundredths of a canvas unit.</summary>
-    public const int MaxShadowOffset = 4_000;
+    /// <summary>The largest shadow offset either way, in hundredths of a canvas unit (10,000 units, as a local Plate allows).</summary>
+    public const int MaxShadowOffset = 1_000_000;
 
     private readonly int textScalars;
 

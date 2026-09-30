@@ -44,7 +44,7 @@ public class LayoutPayloadTests
     {
         static void Image(ReferenceLayout.Bytes w, byte fill, ulong byteLength = 1234, uint width = 640, uint height = 480) => LayoutPayload.Image(w, fill, byteLength: byteLength, width: width, height: height);
         static void ImageItem(ReferenceLayout.Bytes w, byte fill) => LayoutPayload.ImageItem(w, fill);
-        static void TextItem(ReferenceLayout.Bytes w, string text) => LayoutPayload.TextItem(w, text: text);
+        static void TextItem(ReferenceLayout.Bytes w, string? text = null, int x = 4_000, int fontSize = 2_400) => LayoutPayload.TextItem(w, x: x, text: text, fontSize: fontSize);
 
         using var signer = TestPersonas.CreateA();
         ProtocolException Refuse(byte[] payload) => ProtocolAssert.Rejects(() => SignedDocumentCodec.Verify(PayloadBuilder.Signed(DocumentType.ProfileSnapshot, signer, payload)));
@@ -84,6 +84,14 @@ public class LayoutPayloadTests
         Assert.Contains("bytes in total", bytesFirst.Message, StringComparison.Ordinal);
         var pixelsFirst = Refuse(LayoutPayload.Build(items: w => DrawAll(w, 17), images: w => { w.U32(8); foreach (var fill in eight) { Image(w, fill, width: 5_000, height: 4_000); } }));
         Assert.Contains("pixels in total", pixelsFirst.Message, StringComparison.Ordinal);
+
+        // A field's own rule before a later truncation, for fields read in each part of the payload.
+        var coordinateFirst = Refuse(LayoutPayload.Build(items: w => { w.U32(1); TextItem(w, x: 1_000_000_001); })[..^6]);
+        Assert.Contains("text.position.x", coordinateFirst.Message, StringComparison.Ordinal);
+        var fontSizeFirst = Refuse(LayoutPayload.Build(items: w => { w.U32(1); TextItem(w, fontSize: 99); })[..^6]);
+        Assert.Contains("text.fontSize", fontSizeFirst.Message, StringComparison.Ordinal);
+        var backgroundFirst = Refuse(LayoutPayload.Build(background: w => LayoutPayload.Background(w, mode: 1, assetFill: 0xc3))[..^6]);
+        Assert.Contains("image mode", backgroundFirst.Message, StringComparison.Ordinal);
 
         // The format of an image before whether it is drawn.
         var webpFirst = Refuse(LayoutPayload.Build(images: w => { w.U32(1); LayoutPayload.Image(w, 0xc3, format: 3); }));
@@ -299,7 +307,7 @@ internal static class LayoutPayload
         "item kind 0" => Build(items: w => { w.U32(1); w.U8(0); }),
         "item kind 7" => Build(items: w => { w.U32(1); w.U8(7); }),
         "item kind 255" => Build(items: w => { w.U32(1); w.U8(255); }),
-        "text coordinate over max" => Build(items: w => { w.U32(1); TextItem(w, x: 10_000_001); }),
+        "text coordinate over max" => Build(items: w => { w.U32(1); TextItem(w, x: 1_000_000_001); }),
         "text width negative" => Build(items: w => { w.U32(1); TextItem(w, width: -1); }),
         "text length over max bytes" => Build(items: w => { w.U32(1); TextItem(w, textBytes: [0x61], textLength: 8_193); }),
         "text over max scalars" => Build(items: w => { w.U32(1); TextItem(w, text: new string('a', 2_049)); }),
@@ -315,7 +323,7 @@ internal static class LayoutPayload
         "line spacing over max" => Build(items: w => { w.U32(1); TextItem(w, lineSpacing: -1_000_001); }),
         "auto-fit minimum over max" => Build(items: w => { w.U32(1); TextItem(w, autoFit: 102_401); }),
         "outline thickness over max" => Build(items: w => { w.U32(1); TextItem(w, outline: 1_601); }),
-        "shadow x over max" => Build(items: w => { w.U32(1); TextItem(w, shadowX: 4_001); }),
+        "shadow x over max" => Build(items: w => { w.U32(1); TextItem(w, shadowX: 1_000_001); }),
         "text layout 2" => Build(items: w => { w.U32(1); TextItem(w, layout: 2); }),
         "image asset zero" => Build(items: w => { w.U32(1); ImageItem(w, assetFill: 0); }),
         "image rotation over max" => Build(items: w => { w.U32(1); ImageItem(w, rotation: 36_001); }, images: w => { w.U32(1); Png(w, 0xc3); }),

@@ -116,7 +116,7 @@ Enforced by the version 1 codecs (`ProtocolLimits`):
 |---|---|---|
 | Serialized document | 1 MiB | the input, before parsing |
 | Payload | 1 MiB − 140 B | the declared length |
-| Text field | 32,000 scalar values (at most 128,000 bytes) | every text, both directions `[updated 2026-09-29: NETWORK2's N2-2 applied decision D4: a name is 1 to 64 scalars in at most 256 bytes, refusing control, directional and invisible format characters (ProtocolSpecification-v1.md, section 8.1.1). The 32,000-scalar limit still applies to other texts, which a later schema carries.]` |
+| Text field | 32,000 scalar values (at most 128,000 bytes) | every text, both directions `[updated 2026-09-29: NETWORK2's N2-2 applied decision D4: a name is 1 to 64 scalars in at most 256 bytes, refusing control, directional and invisible format characters (ProtocolSpecification-v1.md, section 8.1.1). The 32,000-scalar limit still applies to other texts.]` `[updated 2026-09-29: schema 2 (N2-3a) allows 2,048 scalars an item text and 32,000 in all.]` |
 | Images per profile | 8 | the declared count, before any is read |
 | Source image bytes | 8 MiB | each declaration |
 | Source image dimension | 8,192 px | each declaration |

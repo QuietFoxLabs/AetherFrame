@@ -39,7 +39,8 @@ public static class ProtocolLimits
 
     /// <summary>
     /// The most items a schema 2 layout lists (docs/networking/ProtocolSpecification-v1.md, section
-    /// 8.5): above the most a local Plate draws (256 elements and 32 Vignettes of 32 quads).
+    /// 8.5): above what a typical local Plate draws (256 elements and 32 Vignettes of 32 quads); a
+    /// Plate that draws more is refused by its publisher with a message.
     /// </summary>
     public const int MaxLayoutItems = 2048;
 
@@ -52,8 +53,12 @@ public static class ProtocolLimits
     /// <summary>The most bytes of a layout identifier (a font or an art id).</summary>
     public const int MaxLayoutIdentBytes = 96;
 
-    /// <summary>The largest coordinate, in hundredths of a canvas unit (100,000 units, as a local Plate allows); the smallest is its negation.</summary>
-    public const int MaxLayoutCoordinate = 10_000_000;
+    /// <summary>
+    /// The largest coordinate, in hundredths of a canvas unit (10,000,000 units): room for a local
+    /// Plate's elements (100,000 units) and the Components placed and scaled from them. The
+    /// smallest is its negation.
+    /// </summary>
+    public const int MaxLayoutCoordinate = 1_000_000_000;
 
     /// <summary>The largest extent (a width or a height), in hundredths of a canvas unit.</summary>
     public const int MaxLayoutExtent = 10_000_000;
