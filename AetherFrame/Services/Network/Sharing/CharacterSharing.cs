@@ -434,7 +434,7 @@ internal sealed class CharacterSharing
 
             if (view.Find(contentId) is not { Stage: SharingStage.Shared, ReplacingKey: false, ProfileId: { } binding } entry || candidate.PlateId != activePlate)
             {
-                ClearConsent(contentId);
+                DropShowing(contentId);
                 if (approved)
                 {
                     Notify(contentId, SharingNoticeKind.PublishChanged);
@@ -448,7 +448,7 @@ internal sealed class CharacterSharing
                 if (view.Consent is not { } shown || shown.ContentId != contentId || !ReferenceEquals(shown.Candidate, candidate)
                     || shown.Slot != entry.Slot || !shown.Key.Equals(entry.Key) || shown.Binding != binding)
                 {
-                    ClearConsent(contentId);
+                    DropShowing(contentId);
                     Notify(contentId, SharingNoticeKind.PublishChanged);
                     return;
                 }
@@ -475,7 +475,7 @@ internal sealed class CharacterSharing
 
             var outcome = PublicationCommit.Commit(manager, publications, new PublishConsent(candidate, entry.Slot, key, binding), utcNow);
             log($"Sharing: signing the Active Plate came to {outcome.Result}.");
-            ClearConsent(contentId);
+            DropShowing(contentId);
             if (outcome.Result != PublishResult.Stored)
             {
                 Notify(contentId, outcome.Result == PublishResult.KeyUnavailable ? SharingNoticeKind.KeyUnavailable : SharingNoticeKind.PublishNotStored, outcome.Result.ToString());
@@ -524,6 +524,15 @@ internal sealed class CharacterSharing
             return showings.GetValueOrDefault(contentId);
         }
     }
+
+    /// <summary>
+    /// Clears the character's showing without moving its generation on: the service's own clean-up
+    /// once it acted on a candidate, which must never make a newer build, started meanwhile, look
+    /// out of date. Only a withdrawal (<see cref="ClearConsent"/>, <see cref="DeclineConsent"/>)
+    /// moves it on.
+    /// </summary>
+    private void DropShowing(ulong contentId) =>
+        Update(v => v.Consent?.ContentId == contentId ? v.With(clearConsent: true) : v);
 
     private void Withdraw(ulong contentId, SharingNoticeKind? notice)
     {

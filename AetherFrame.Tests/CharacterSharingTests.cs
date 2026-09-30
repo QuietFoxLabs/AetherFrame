@@ -575,7 +575,11 @@ public partial class CharacterSharingTests
             {
                 work(Personas);
                 return true;
-            }, File, Publications, Client, new Version(0, 1, 7), () => Now, CancellationToken.None, Log.Add);
+            }, File, Publications, Client, new Version(0, 1, 7), () =>
+            {
+                ClockHook?.Invoke();
+                return Now;
+            }, CancellationToken.None, Log.Add);
             if (load)
             {
                 Assert.True(Sharing.TryLoad());
@@ -606,13 +610,20 @@ public partial class CharacterSharingTests
             {
                 work(Personas);
                 return true;
-            }, File, Publications, Client, new Version(0, 1, 7), () => Now, CancellationToken.None, Log.Add);
+            }, File, Publications, Client, new Version(0, 1, 7), () =>
+            {
+                ClockHook?.Invoke();
+                return Now;
+            }, CancellationToken.None, Log.Add);
             Assert.True(Sharing.TryLoad());
         }
 
         internal List<string> Log { get; }
 
         internal DateTimeOffset Now { get; set; } = DateTimeOffset.FromUnixTimeSeconds(1_790_000_000);
+
+        /// <summary>Runs whenever the service reads the clock, as during a commit: a test's way to act in the middle of one.</summary>
+        internal Action? ClockHook { get; set; }
 
         /// <summary>Opts a character in and checks it, as a player would.</summary>
         internal SharingCharacter Bound(ulong contentId = Aria)

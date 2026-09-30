@@ -66,6 +66,33 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
+    public void ASaveThatLandsDuringAnotherSavesCommit_IsStillSent()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        var plate = Guid.NewGuid();
+        harness.Share(PublicationCandidates.Simple(plate));
+
+        // The second save's commit is under way when the third save's build starts, as the live
+        // publisher starts it: a withdrawal, then the generation it will hand its candidate over with.
+        long? third = null;
+        harness.ClockHook = () =>
+        {
+            if (third is null)
+            {
+                harness.Sharing.ClearConsent(Aria);
+                third = harness.Sharing.ShowingGeneration(Aria);
+            }
+        };
+        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Second words"), approved: false, plate, null, harness.Sharing.ShowingGeneration(Aria));
+        harness.ClockHook = null;
+        Assert.Equal(2, harness.Server.Publishes.Count);
+
+        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Third words"), approved: false, plate, null, third);
+        Assert.Equal(3, harness.Server.Publishes.Count);
+    }
+
+    [Fact]
     public void AnApprovalThatComesTooLate_SaysSo()
     {
         using var harness = new SharingHarness();
