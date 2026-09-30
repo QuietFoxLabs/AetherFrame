@@ -303,7 +303,7 @@ The rule governs `name` only. Other texts are schema 2's (N2-3), and N7 governs 
 - **What that drops.** Rebuilding the container drops every metadata block: EXIF, including GPS position; XMP; PNG text chunks; embedded ICC profiles; thumbnails.
 - **What the publisher never touches.** It reads only the managed copy. It never touches the player's original file, and never puts the original's bytes or digest into a document.
 
-The server verifies received bytes against the declaration before serving them (specification, section 13, rule 7). Whether it also processes them again is I2 (batch B).
+The server verifies received bytes against the declaration before serving them (specification, section 13, rule 7). Whether it also processes them again is I2 (batch B). `[updated 2026-09-30: it does: every image is re-processed by an isolated worker before it is served (I2).]`
 
 N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the source image bytes" to the prepared copy. That is wording only: there is no salt, and the layout doesn't change.
 
@@ -313,7 +313,7 @@ N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the sou
 - The consent screen shows the prepared copy, so the player sees what is sent.
 
 **Not settled:**
-- I2;
+- I2; `[updated 2026-09-30: settled by decision batch B (I2).]`
 - the encoder parameters, and whether colour is converted to sRGB before encoding (N2-6, with tests of the result). N2-6 also clears the colour under fully transparent pixels, which a straight-alpha round trip would otherwise keep, and the consent screen shows each whole prepared image, not only the part a Plate element crops.
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**. `GetRawImageAsync` and `SaveToStreamAsync` exist on `ITextureReadbackProvider` in the installed Dalamud; a round trip through a texture cannot carry container metadata; and decoding the player's own managed copies adds no surface beyond import. It asked for the narrower rationale and the two N2-6 points above.
@@ -381,7 +381,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - **Profile ids** are already scoped (specification, section 8.4).
 - **The client** picks every identifier from a cryptographically secure generator (specification, section 2.6) and never reuses one across personas.
 
-**Rationale.** Deduplicating across personas would let one persona probe whether another holds an image (upload a digest and see whether it is already stored), or reference or overwrite another's asset. Scoping costs only storage. N2-7 applies it. In N2-3, the specification's section 8.4 loses the N1 half of its "Open" paragraph; the N2 half (replay) stays until batch B.
+**Rationale.** Deduplicating across personas would let one persona probe whether another holds an image (upload a digest and see whether it is already stored), or reference or overwrite another's asset. Scoping costs only storage. N2-7 applies it. In N2-3, the specification's section 8.4 loses the N1 half of its "Open" paragraph; the N2 half (replay) stays until batch B. `[updated 2026-09-30: removed by decision batch B, which decides N2.]`
 
 **Not settled:** nothing further.
 
@@ -436,7 +436,7 @@ N2-3 writes this into the specification as a consumer obligation.
    - write and read the key file storage in a temporary directory.
 2. **The protector in use claims protection on this platform.** The DPAPI protector (N2-4) claims it only on native Windows. Under Wine, DPAPI is obfuscation only (NETWORK1_CryptoCompatibility.md, section 3), so it claims none there, and persona features stay off until K9 decides a store for that case.
 
-`[updated 2026-09-30: under D6 a viewer receives server-checked content and verifies no signature, so the probe's verification step protects nothing in viewing: TLS does. Viewing on other platforms therefore waits on TLS under Wine, not on K8. The step stays, since it costs nothing and becomes load-bearing if D6 ever changes (see D6).]`
+`[updated 2026-09-30: under D6 a viewer receives server-checked content and verifies no signature, so the probe's verification step protects nothing in viewing: TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined, it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays on native Windows, where it passes, and becomes load-bearing if D6 ever changes. (See D6.)]`
 
 **Deciding by capability, not by name.** Which operations work is decided by the probe, never by the operating system's name. The one platform fact used is the protector's own statement about protection, which no probe can measure.
 
@@ -574,7 +574,7 @@ A server refuses a submission whose proof fails section 14.4, resubmissions incl
 **Consequences, recorded.**
 - A retraction can no longer be signed in advance and submitted later, or by someone else. That matters for K4 and the D2 details, where a pre-signed "emergency unpublish" could have been one answer to a lost key.
 - A retraction needs the challenge endpoint, like any other submission.
-- N6 stays open for a retraction's own `issuedAt` (section 13, rule 6); proofs don't depend on the client's clock.
+- N6 stays open for a retraction's own `issuedAt` (section 13, rule 6); proofs don't depend on the client's clock. `[updated 2026-09-30: N6 exempts retractions from the future-skew check; their issuedAt is checked for form only and recorded nowhere (decision batch B).]`
 
 **Not settled:** the challenge lifetime beyond the 300-second baseline, the rate limits on issuing challenges, and the server's endpoints (N2-7); any later proof kind.
 
@@ -758,7 +758,7 @@ magic "AFSP" | version u16 = 1 | marker bytes[16] | the profile, in section 8.5'
 
 **Recorded consequences:**
 - NETWORK0.md's authenticity goal now ends at the server: what a viewer sees is attested by the server, not signed by the creator. NETWORK0.md and the specification's section 13, rule 3 say so.
-- Under D6 the capability probe's verification step protects nothing in viewing, since TLS does. Viewing on other platforms therefore waits on K3's question about TLS under Wine, not on K8. The step stays: it costs nothing, and becomes load-bearing if D6 ever changes.
+- Under D6 the capability probe's verification step protects nothing in viewing, since TLS does. Viewing on other platforms also needs K3's question about TLS under Wine answered; and while K3 gates viewing on the verification step, which fails under every Wine version examined, it needs K8 there too, unless a later decision drops that gate for server-checked content. The step stays on native Windows, where it passes, and becomes load-bearing if D6 ever changes.
 
 **Not settled:** the served profile's specification text and vectors (N2-7, beside section 8.5).
 
@@ -788,7 +788,7 @@ magic "AFSP" | version u16 = 1 | marker bytes[16] | the profile, in section 8.5'
   - the outbox sends only the newest pending snapshot of each profile;
   - N2-9 asks the player before sending an outbox entry signed more than a day ago.
 
-The specification's section 8.4 "Open (N2)" paragraph is removed, and section 13, rules 4 and 6 name the server's sequence.
+The specification's section 8.4 "Open (N2)" paragraph is removed; section 13's rule 4 keeps the revision records, and rule 6 names the server's sequence.
 
 **Rationale.** S1 limits replay to the key holder, so what remains is a stale outbox, a restored plugin folder or a second installation resubmitting an old revision. Keeping the ids makes all three harmless. Each row is under 100 bytes, holds no time, reveals only a count of revisions, and goes with its profile. A player who edits something out expects it gone, so fewer signed documents sit at rest.
 
@@ -867,7 +867,7 @@ The specification's section 8.4 "Open (N2)" paragraph is removed, and section 13
 - The server's queue of images is bounded at 16, refusing with a retryable error when full.
 - N2-8 checks at startup that the worker container has no network.
 
-**The limit, recorded.** In stage 1 the decoders run as the worker host's user. An exploit could therefore leave a process behind that outlives its job (a process can leave its group) and reads a later upload through `/proc`: another persona's image. It could also write a later job's output. The checks above see structure, not pixels, so the image could reach its thief in the pixels of the thief's own later upload. It has no network, database or key to reach. This is accepted for the two-player test on the owner's server only, where the allowlist confines uploads to the two testers' personas. **Removing the allowlist, to open a server to more than the two testers, requires per-job isolation,** and S3's decision on expiry: each decode runs as a user or in a namespace of its own, no process of it survives the job, and the host verifies that before the next one starts.
+**The limit, recorded.** In stage 1 the decoders run as the worker host's user. An exploit could therefore leave a process behind that outlives its job (a process can leave its group) and reads a later upload through `/proc`: another persona's image. It could also write a later job's output. The checks above see structure, not pixels, so the image could reach its thief in the pixels of the thief's own later upload. It has no network, database or key to reach. This is accepted for the two-player test on the owner's server only, where the allowlist confines uploads to the two testers' personas. **Removing the allowlist, to open a server to more than the two testers, requires S3's decision on expiry, and per-job isolation:** each decode runs as a user or in a namespace of its own, no process of it survives the job, and the host verifies that before the next one starts.
 
 **Rationale.** A hostile client can upload crafted bytes that match its own declaration, and every viewer decodes the result through Dalamud's native texture pipeline. ImageSharp is managed code, but not memory-safe in practice: CVE-2024-27929 was a use-after-free in its PNG decoder, CVE-2024-32036 left buffers uncleared, so output could carry another image's data, and more advisories came in September 2026.
 
@@ -913,7 +913,7 @@ The specification's section 8.4 "Open (N2)" paragraph is removed, and section 13
 **Option and scope.**
 - **No address is stored in stage 1:** only the rate limiter's memory holds addresses, for its window. Truncated addresses can still be personal data (GDPR Recital 26; CJEU C-582/14, *Breyer*), and a /48 can be one customer's whole allocation (RFC 6177).
 - **Logs hold** a request id, the route template, the status, the duration and the error kind. They never hold a document, a proof, a challenge (rule 10), a share code, a revision marker, a persona id or a profile id.
-- **Counters** are aggregate only, never per code or per persona.
+- **Metrics** are aggregate only, never per code or per persona. The rate limiter's own per-persona and per-address state stays in its memory, for its window.
 - **Keeping the defaults from leaking:**
   - `Microsoft.AspNetCore` logs at Warning, since its hosting diagnostics log each request's URL at Information;
   - the rate limiter logs no address, unlike Microsoft's sample;

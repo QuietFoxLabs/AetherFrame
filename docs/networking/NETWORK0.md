@@ -78,7 +78,7 @@ Every byte a client will one day receive from a server, and every byte a server 
 | A document applied to a profile its signer does not own | A profile is (persona, profileId); a document names the signing persona's profile and nobody else's (specification, sections 8.4 and 13), and `VerifiedDocument.Profile` exposes exactly that pair. |
 | Private key exposure through the protocol | No API exports, serializes, logs or formats private material; the signer signs only protocol-built signing inputs; a test asserts the public surface returns no platform key type. |
 
-Out of scope for NETWORK0, and named so nothing is assumed: transport security, server compromise, replay of a whole document and the ordering of snapshots and retractions (server obligations, specification section 13; the baseline is stated there and depends on decision D1), denial of service at the network layer, moderation, key loss and rotation, and the strength of the platform's ECDSA implementation.
+Out of scope for NETWORK0, and named so nothing is assumed: transport security, server compromise, replay of a whole document and the ordering of snapshots and retractions (server obligations, specification section 13; the baseline is stated there and depends on decision D1) `[updated 2026-09-30: decided in decision batch B; section 13's rules 3 to 7 name the decisions]`, denial of service at the network layer, moderation, key loss and rotation, and the strength of the platform's ECDSA implementation.
 
 ## 5. Privacy guarantees
 

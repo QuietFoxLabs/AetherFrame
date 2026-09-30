@@ -34,7 +34,7 @@ public sealed class PersonaWindowModelTests
 
         // Decision batch B: who can still remove what a lost key shared (S3), and what keeping the
         // persona folder does and doesn't do (P4).
-        Assert.Contains("only the server's operator can then remove it", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+        Assert.Contains("only the server's operator can then remove what it shared", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("Network\\Personas folder holds your keys and the list of what each persona shared", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("keeping it keeps that list, which you need to update or unpublish", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("It isn't a backup", PersonaWindowModel.K4Text, StringComparison.Ordinal);
