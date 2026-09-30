@@ -47,7 +47,8 @@ internal readonly record struct TutorialStepView(
     bool AllowInteraction,
     TutorialAction Action,
     bool CanGoBack,
-    bool IsLastStep);
+    bool IsLastStep,
+    bool NextHeld = false);
 
 /// <summary>
 /// The tutorial's progression: which chapter and step is showing, and how Next, Back, chapter
@@ -56,7 +57,9 @@ internal readonly record struct TutorialStepView(
 /// isn't met asks the player to meet it (or is skipped, when the author said so), a step whose
 /// "done when" condition is already true is passed over on the way forward, and a step's control
 /// that isn't on screen is reported as missing rather than pointed at. Nothing here can trap the
-/// player: Next, Back and Skip always work.
+/// player: Back, the chapter picker and Skip always work, and so does Next, except on a step that
+/// waits for the player to do something (<see cref="TutorialStep.WaitsForAction"/>), where it
+/// holds until they have.
 /// </summary>
 internal sealed class TutorialSession
 {
@@ -153,12 +156,27 @@ internal sealed class TutorialSession
         SettleForward(snapshot);
     }
 
-    /// <summary>The next step; past the last, the tutorial completes. Returns false when nothing is running afterwards.</summary>
+    /// <summary>
+    /// Whether Next is held on the current step: it waits for the player to do something
+    /// (<see cref="TutorialStep.WaitsForAction"/>) and they haven't yet.
+    /// </summary>
+    internal bool IsNextHeld(TutorialContextSnapshot snapshot) =>
+        CurrentStep is { WaitsForAction: true } step && !snapshot.Satisfies(step.AdvanceWhen);
+
+    /// <summary>
+    /// The next step; past the last, the tutorial completes. On a step whose Next is held
+    /// (<see cref="IsNextHeld"/>) nothing moves. Returns false when nothing is running afterwards.
+    /// </summary>
     internal bool Next(TutorialContextSnapshot snapshot)
     {
         if (!IsRunning)
         {
             return false;
+        }
+
+        if (IsNextHeld(snapshot))
+        {
+            return true;
         }
 
         if (!StepForward())
@@ -282,7 +300,7 @@ internal sealed class TutorialSession
 
         return new TutorialStepView(
             chapter, step, chapterIndex, chapters.Count, StepNumber, TotalSteps, presentation, step.Title, body, target, allowInteraction, action,
-            CanGoBack: !IsAtFirstStep, IsLastStep: IsAtLastStep);
+            CanGoBack: !IsAtFirstStep, IsLastStep: IsAtLastStep, NextHeld: IsNextHeld(snapshot));
     }
 
     /// <summary>The card's wording when a step's requirement isn't met and the author gave none.</summary>
@@ -297,6 +315,7 @@ internal sealed class TutorialSession
         TutorialCondition.LibraryHasPlates => "Create a Plate first: choose Create Plate in My Plates.",
         TutorialCondition.ElementSelected => "Select an element to continue: click one on the canvas or in Layers.",
         TutorialCondition.TextElementSelected => "Select a text element to continue: click one on the canvas or in Layers, or add one with + Text.",
+        TutorialCondition.CreatingOrEditingPlate => "Click Create Plate in My Plates to continue, or double-click a Plate you already have.",
         _ => "This step isn't available right now. Use Next to continue.",
     };
 
@@ -364,7 +383,10 @@ internal sealed class TutorialSession
         return IsRunning;
     }
 
+    // A step that waits for the player is done once its "done when" holds, whether or not its own
+    // window is showing: a player who reaches "Start a new Plate" with a Plate already open in an
+    // editor and My Plates closed has nothing left to do there.
     private static bool ShouldPassOver(TutorialStep step, TutorialContextSnapshot snapshot) =>
         (step.SkipIfUnmet && !snapshot.Satisfies(step.Requires))
-        || (step.AdvanceWhen != TutorialCondition.None && snapshot.Satisfies(step.Requires) && snapshot.Satisfies(step.AdvanceWhen));
+        || (step.AdvanceWhen != TutorialCondition.None && (snapshot.Satisfies(step.Requires) || step.WaitsForAction) && snapshot.Satisfies(step.AdvanceWhen));
 }

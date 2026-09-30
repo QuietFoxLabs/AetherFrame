@@ -8,21 +8,20 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 11:40 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 11:50 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
-  - a verdict on test build `01a14a5`, which gates the 0.1.7 release. The game runs it now: Dalamud's Dev Plugin Locations point at its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`;
-  - a one-time switch of those locations to `E:\AetherFrame Test Build\AetherFrame.dll`, so every new build reaches the game by itself ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54); [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), item 2);
-  - the checks for preview build `302af2f`, installed in `E:\AetherFrame Test Build\` on September 30 by `tools/Install-TestBuild.ps1`, in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25). It loads only after the switch;
+  - a verdict on test build `01a14a5`, which gates the 0.1.7 release. It is staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`; the game now runs the preview builds, so it goes back in the test folder when the owner asks;
+  - the checks for preview build `ae80c75`, which reached the game by itself on September 30 at 11:48 UTC, in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25): the tutorial fixes;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5).
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
 - **In progress:**
   - the re-plan of sharing around the owner's decisions V1 to V5 (this change): an opted-in player right-clicks another opted-in player's character, or searches their name and World, and views their Active Plate as a finished picture, like the game's Adventure Plates. Characters are proved by a Lodestone check, personas are hidden, and share codes are superseded;
-  - the tutorial card fixes from the owner's first run through it ([#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57));
-  - N2-6c's first part merged as [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55).
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin.
+  - the owner switched Dalamud's Dev Plugin Locations to the test folder, and preview build `ae80c75` reloaded in game by itself two minutes after its heads-up;
+  - the tutorial card fixes from the owner's first run through it ([#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), merged as `ae80c75`, in preview build `ae80c75`).
 - **Next, for the two-player test:**
   0. N2-C: decision batch C, viewing by character, before any sharing code beyond N2-6 (section 8);
   1. N2-6c's second part: the candidate built from a saved Plate, the commit run in the persona session, and a preview-only view of what would be shared;
@@ -51,9 +50,9 @@ Verified September 30, 2026, at 11:40 UTC. **For the live status, see [issue #52
 | Build | State |
 | --- | --- |
 | v0.1.6 | released to the testing channel |
-| Test build `01a14a5` (player) | waiting for the owner's verdict; the game runs it from its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\` |
-| Preview build `302af2f` (`master` after [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50)) | in `E:\AetherFrame Test Build\` since September 30, 09:31 UTC, with a copy in `E:\AetherFrame Test Builds\2026-09-30 302af2f preview\`; it loads only after the switch in Dev Plugin Locations. It supersedes preview build `7b35a31`, which never loaded. |
-| `master` | `e86190a` (after [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55)) |
+| Test build `01a14a5` (player) | waiting for the owner's verdict; staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\` |
+| Preview build `ae80c75` (`master` after [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57)) | in game since September 30, 11:48 UTC, reloaded from `E:\AetherFrame Test Build\` by itself; a copy is in `E:\AetherFrame Test Builds\2026-09-30 ae80c75 preview\`. It supersedes `302af2f`. |
+| `master` | `ae80c75` (after [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57)), CI green on both platforms |
 
 ## 1. Goal and scope
 
@@ -283,6 +282,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - the commit signs a candidate once only, as the persona the consent screen named and only while it is active (L10). It refuses without K4's acknowledgement, checks the images and builds the index before signing, disposes the signer before touching any file, and checks the signed bytes field for field against what was shown. The outbox entry is written first, the index naming it is the commit point, and the entry it supersedes goes last;
   - at load the index decides: what it names is checked in full, and what fails reads as not stored, never as pending;
   - a canary test finds nothing of a Plate but its local id in the index, and nothing of it at all in the outbox, beyond what is shared.
+- The tutorial card after the owner's first run through it: [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), merged as `ae80c75`. The close button no longer covers long chapter names, the footer is two rows so Skip tour and Back no longer overlap, Back is hidden on the first step, Next can't skip creating the first Plate (it says what to do instead), and the window a step explains is brought in front of AetherFrame's other windows with the dim and the card in front of it, so the Create Plate chooser no longer fades the card. The design guide asks every change a player sees to update the tutorial in the same pull request (the owner's request of September 30); a chapter on networking waits for the sharing re-plan.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**

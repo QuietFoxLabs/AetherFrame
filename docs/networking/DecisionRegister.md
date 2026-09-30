@@ -599,7 +599,6 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 
 **Independent concurrence.** The independent reviewer of this re-plan (#58), with no shared context, **concurred** (September 30, 2026): a bearer code would let players who haven't opted in view a Plate, which defeats V1's opt-in in both directions, and dropping "save a copy" matches V1.
 
-
 ### R2: the transport. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Applied by N2-9 and N2-7.

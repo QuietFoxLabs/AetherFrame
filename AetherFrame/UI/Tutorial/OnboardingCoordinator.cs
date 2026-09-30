@@ -170,10 +170,17 @@ internal sealed class OnboardingCoordinator
         Started?.Invoke();
     }
 
-    internal void Next(TutorialContextSnapshot snapshot)
+    /// <summary>The card's Next. Returns false when Next is held because the step waits for the player (nothing moved).</summary>
+    internal bool Next(TutorialContextSnapshot snapshot)
     {
+        if (Session.IsNextHeld(snapshot))
+        {
+            return false;
+        }
+
         Session.Next(snapshot);
         RememberPlaceOrFinish();
+        return true;
     }
 
     internal void Back(TutorialContextSnapshot snapshot)
