@@ -27,11 +27,14 @@
     <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
   </ItemGroup>
 
-  <!-- The plugin's Dalamud-free key blob storage (a directory of files), which the plugin compiles
-       only in its networking preview flavour, is compiled into this test assembly from its source
-       so it is tested on every build. It uses nothing but System.IO and the persona seams. -->
+  <!-- The plugin's Dalamud-free key custody code, which the plugin compiles only in its networking
+       preview flavour, is compiled into this test assembly from its source so it is tested on every
+       build: the key blob storage (a directory of files, System.IO only), the DPAPI protector
+       (crypt32 on Windows, refusing elsewhere) and the capability probe. -->
   <ItemGroup>
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaKeyFileStorage.cs" Link="Linked\PersonaKeyFileStorage.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\DpapiPersonaKeyProtector.cs" Link="Linked\DpapiPersonaKeyProtector.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaCapabilityProbe.cs" Link="Linked\PersonaCapabilityProbe.cs" />
   </ItemGroup>
 
   <!-- The approved public surface, copied next to the test binaries byte for byte
