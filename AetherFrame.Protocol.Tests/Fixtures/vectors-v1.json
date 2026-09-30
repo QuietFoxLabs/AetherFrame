@@ -1244,5 +1244,446 @@
       "owner": "A",
       "obligation": "Verifies as persona B and is a revision of (B, prf_a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1), unrelated to persona A's profile of the same id; it never becomes a revision of A's profile."
     }
+  ],
+  "requestProofDomainTag": "AetherFrame.Protocol.RequestProof.v1-draft",
+  "requestProofs": [
+    {
+      "name": "submit-profile-snapshot",
+      "persona": "A",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "challenge": "chl_d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7",
+      "subjectDigest": "df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c",
+      "signingInput": "2a4165746865724672616d652e50726f746f636f6c2e5265717565737450726f6f662e76312d64726166748001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c",
+      "digest": "f890ef2fd4a703844b3fdd572125b55feb80be2c48a9628277defcd32dab582e",
+      "signature": "c4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f"
+    },
+    {
+      "name": "submit-profile-layout-snapshot",
+      "persona": "A",
+      "document": "profile-layout-snapshot",
+      "deployment": "plates.example.com",
+      "challenge": "chl_e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8",
+      "subjectDigest": "a1b43249e18863199e631954cf0d5244f20b20c737a0c07269799232f7dbbd5d",
+      "signingInput": "2a4165746865724672616d652e50726f746f636f6c2e5265717565737450726f6f662e76312d64726166748001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6de8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8a1b43249e18863199e631954cf0d5244f20b20c737a0c07269799232f7dbbd5d",
+      "digest": "ff47008744164e05f06d9048137558cd7f9d3f7fed8514c291aef79387b19eda",
+      "signature": "e150201d17b314e0ab83158640659e6206192b4d8fe3ed8ad5d1668a207a9e196d034095e789f8a72631c562da8dc570614c6c83deac7619822cfe17979a76ac",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6de8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8a1b43249e18863199e631954cf0d5244f20b20c737a0c07269799232f7dbbd5de150201d17b314e0ab83158640659e6206192b4d8fe3ed8ad5d1668a207a9e196d034095e789f8a72631c562da8dc570614c6c83deac7619822cfe17979a76ac"
+    },
+    {
+      "name": "submit-profile-retraction",
+      "persona": "B",
+      "document": "profile-retraction",
+      "deployment": "plates.example.com",
+      "challenge": "chl_f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9",
+      "subjectDigest": "3a035c6b3729ffde54b751b0251bdc28da75862c89ecbc64ac1b5784f419feec",
+      "signingInput": "2a4165746865724672616d652e50726f746f636f6c2e5265717565737450726f6f662e76312d64726166748001010438d018ac1a9716c8df48cd8a18e5d8e3ead537251ebcbf45bd03a97fe874ba48d377ea36e04cc10fda8c2af676901d789528af53245bd958fa4f256067f67e8812706c617465732e6578616d706c652e636f6df9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f93a035c6b3729ffde54b751b0251bdc28da75862c89ecbc64ac1b5784f419feec",
+      "digest": "3c5d0c44955c175545ad4caac3e0d6e8bb72ed8da8bd319e20d2c8d4f3d795a1",
+      "signature": "279b8558f25d9b5b967ca8899344c8cce6d69c5a1737c0eeda141a101fca459b46c9c940f62c2391e3e7f44ea5ebd0f885da68d0deadd700a3236843dd1be099",
+      "proof": "414652518001010438d018ac1a9716c8df48cd8a18e5d8e3ead537251ebcbf45bd03a97fe874ba48d377ea36e04cc10fda8c2af676901d789528af53245bd958fa4f256067f67e8812706c617465732e6578616d706c652e636f6df9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f93a035c6b3729ffde54b751b0251bdc28da75862c89ecbc64ac1b5784f419feec279b8558f25d9b5b967ca8899344c8cce6d69c5a1737c0eeda141a101fca459b46c9c940f62c2391e3e7f44ea5ebd0f885da68d0deadd700a3236843dd1be099"
+    },
+    {
+      "name": "submit-at-the-longest-deployment-name",
+      "persona": "A",
+      "document": "profile-snapshot",
+      "deployment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddd.example.com",
+      "challenge": "chl_a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "subjectDigest": "df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c",
+      "signingInput": "2a4165746865724672616d652e50726f746f636f6c2e5265717565737450726f6f662e76312d64726166748001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91ffd6161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161612e6262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262622e6363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363632e646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464642e6578616d706c652e636f6da5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c",
+      "digest": "5c4ec2caf596be5849a052bdcb06c3e834f7f2208d9f5c84befd4d149b060b03",
+      "signature": "8800d461ec1353c158d962b833fec11f1bb081e9ee7d90e96b48c5d3c6b917293e9bdc516daf23a2663b82f8780e86be03831a96399df22c2bc046ad3f0ed6b9",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91ffd6161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161612e6262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262622e6363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363632e646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464642e6578616d706c652e636f6da5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c8800d461ec1353c158d962b833fec11f1bb081e9ee7d90e96b48c5d3c6b917293e9bdc516daf23a2663b82f8780e86be03831a96399df22c2bc046ad3f0ed6b9"
+    }
+  ],
+  "rejectedProofs": [
+    {
+      "name": "proof-bad-magic",
+      "proof": "414652588001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidFraming",
+      "reason": "magic AFRX",
+      "deterministic": true
+    },
+    {
+      "name": "proof-document-magic",
+      "proof": "414650448001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidFraming",
+      "reason": "a signed document's magic: a document is never read as a proof",
+      "deterministic": true
+    },
+    {
+      "name": "proof-over-size-limit",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "LimitExceeded",
+      "reason": "455 bytes, one over the largest proof",
+      "deterministic": true
+    },
+    {
+      "name": "proof-final-version",
+      "proof": "414652510001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "UnsupportedVersion",
+      "reason": "version 1, the final marker: a draft reader refuses it",
+      "deterministic": true
+    },
+    {
+      "name": "proof-version-2-draft",
+      "proof": "414652518002010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "UnsupportedVersion",
+      "reason": "version 0x8002, a draft of version 2",
+      "deterministic": true
+    },
+    {
+      "name": "proof-kind-0",
+      "proof": "414652518001000465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "proof kind 0",
+      "deterministic": true
+    },
+    {
+      "name": "proof-kind-2",
+      "proof": "414652518001020465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "proof kind 2, not defined in version 1",
+      "deterministic": true
+    },
+    {
+      "name": "proof-kind-255",
+      "proof": "414652518001ff0465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "proof kind 255",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-length-0",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f00706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidLength",
+      "reason": "an empty deployment name",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-length-254",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91ffe706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "LimitExceeded",
+      "reason": "a declared name one byte over the limit",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-length-253-short",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91ffd706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "Truncated",
+      "reason": "a declared name of 253 bytes with fewer remaining",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-uppercase",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12506c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "Plates.example.com: names are lowercase, never folded",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-trailing-dot",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f2ed7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "a name ending in a dot, an empty last label",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-ipv4",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f093132372e302e302e31d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "an IPv4 literal: the last label starts with a digit",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-hex-ipv4",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f0a30783766303030303031d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "127.0.0.1 in hex, which URL parsers accept: the last label starts with a digit",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-with-port",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f16706c617465732e6578616d706c652e636f6d3a343433d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "a port is not part of the name",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-underscore",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465735f6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "an underscore",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-label-64",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f44616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161612e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "a label of 64 bytes",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-leading-hyphen",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f132d706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "a label starting with a hyphen",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-trailing-hyphen",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f13706c617465732d2e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "a label ending with a hyphen",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-utf8-letter",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f13706cc3a47465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "U+00E4 in UTF-8: a byte outside ASCII; names carry A-labels only",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-ideographic-full-stop",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f14706c61746573e380826578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "U+3002, which IDNA mapping would turn into a dot: names are never mapped",
+      "deterministic": true
+    },
+    {
+      "name": "proof-challenge-all-zero",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6d0000000000000000000000000000000000000000000000000000000000000000df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidValue",
+      "reason": "the all-zero challenge",
+      "deterministic": true
+    },
+    {
+      "name": "proof-truncated-last-byte",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "Truncated",
+      "reason": "one byte short",
+      "deterministic": true
+    },
+    {
+      "name": "proof-truncated-in-deployment",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "Truncated",
+      "reason": "cut inside the deployment name",
+      "deterministic": true
+    },
+    {
+      "name": "proof-truncated-after-kind",
+      "proof": "41465251800101",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "Truncated",
+      "reason": "nothing after the kind",
+      "deterministic": true
+    },
+    {
+      "name": "proof-extra-trailing-byte",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f00",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "TrailingBytes",
+      "reason": "one byte after the signature",
+      "deterministic": true
+    },
+    {
+      "name": "proof-key-compressed",
+      "proof": "414652518001010265bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidKey",
+      "reason": "compressed point prefix 0x02",
+      "deterministic": true
+    },
+    {
+      "name": "proof-key-off-curve",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91e12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidKey",
+      "reason": "last bit of y changed",
+      "deterministic": true
+    },
+    {
+      "name": "proof-signature-high-s",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b189c177e2148eb38387a4b78a832c2e3ec45db7a7e75cd7b0ab99b734dff406af2",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidSignature",
+      "reason": "s replaced by n - s: valid ECDSA, not canonical",
+      "deterministic": true
+    },
+    {
+      "name": "proof-signature-r-zero",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c000000000000000000000000000000000000000000000000000000000000000063e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "InvalidSignature",
+      "reason": "r = 0",
+      "deterministic": true
+    },
+    {
+      "name": "proof-signature-bit-flipped",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5e",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "last signature bit changed",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-changed",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12716c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "qlates.example.com: a valid name, not the one signed",
+      "deterministic": true
+    },
+    {
+      "name": "proof-deployment-shortened",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f116c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "lates.example.com with the same signature: the name's length is signed too",
+      "deterministic": true
+    },
+    {
+      "name": "proof-challenge-bit-flipped",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd6d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "one challenge bit changed",
+      "deterministic": true
+    },
+    {
+      "name": "proof-subject-digest-bit-flipped",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7de8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "one digest bit changed",
+      "deterministic": true
+    },
+    {
+      "name": "proof-key-substituted-other-persona",
+      "proof": "414652518001010438d018ac1a9716c8df48cd8a18e5d8e3ead537251ebcbf45bd03a97fe874ba48d377ea36e04cc10fda8c2af676901d789528af53245bd958fa4f256067f67e8812706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "persona B's key under persona A's signature",
+      "deterministic": true
+    },
+    {
+      "name": "proof-with-the-documents-signature",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c3793f5e9e31a01a9ed5c3dbd764672a1f7e3a072d144436292915ec45a99a4c81c6d573a6ca6153ea21cf5a7529c4c58628b197576d8a7e0382e4c27f2ea4a16",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "the signature of the document the proof binds, which is persona A's but in the document context",
+      "deterministic": true
+    },
+    {
+      "name": "proof-signed-in-the-document-context",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233c69bf3f166dc76c5b6030958f25756fad6fb7b100ce313e08d9f0985aa47057a715be01560189b193c867fe29f48d26edc233a8c7870bdf2498e26d3c57833185",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "persona A's valid signature over the proof's fields as a document payload, under the document tag",
+      "deterministic": false
+    },
+    {
+      "name": "proof-for-another-deployment",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot",
+      "deployment": "staging.example.com",
+      "error": "ProofMismatch",
+      "reason": "a valid proof for plates.example.com checked by staging.example.com",
+      "deterministic": true
+    },
+    {
+      "name": "proof-for-another-document",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233cc4512bcb36a96e96d5acdaa9432461563228c9e696b293ba31df331b7a984b1863e881ddb714c7c885b48757cd3d1c13770b802f314a237a3a1e5774fd22ba5f",
+      "document": "profile-snapshot-minimal",
+      "deployment": "plates.example.com",
+      "error": "ProofMismatch",
+      "reason": "a valid proof of profile-snapshot submitted with profile-snapshot-minimal",
+      "deterministic": true
+    },
+    {
+      "name": "proof-by-another-persona",
+      "proof": "414652518001010438d018ac1a9716c8df48cd8a18e5d8e3ead537251ebcbf45bd03a97fe874ba48d377ea36e04cc10fda8c2af676901d789528af53245bd958fa4f256067f67e8812706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7df8943448726fe4d929d670154d4416d921864a2aa59c9ede9679093c6bf233ca1d28a4e1012c53c3798e63ec901dc007dec6e31cff45f68f882e50fe3dc4ae70afc9bb8d69e7caa38f6f116240502058a33be8aaa895e7a4b8fdc7b4838ea1c",
+      "document": "profile-snapshot",
+      "deployment": "plates.example.com",
+      "error": "ProofMismatch",
+      "reason": "persona B's valid proof over persona A's document: the proof and the document are signed by different keys",
+      "deterministic": false
+    },
+    {
+      "name": "proof-of-a-document-that-does-not-verify",
+      "proof": "414652518001010465bc2391c653055c253c4090935d989757e36f091aa623026409ed18183b4215015735a96c1401fa5c912fd03e45627aa38558e3c3e9829e63e014bb36c5b91f12706c617465732e6578616d706c652e636f6dd7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d70e26c0b6a809ad6e0a36b688f6c7507b0b54d8dae34806151f8dd1ee297093d4c3e196fda1bb803d11c790faf56084f9315a2c8ca27ac528f1a48f9a2fdd36c122302e265ba1721d67dd59d2206be6104b35ea0d9ceb26a28efaa4c158a46d49",
+      "document": "signature-bit-flipped",
+      "documentSet": "rejected",
+      "deployment": "plates.example.com",
+      "error": "SignatureMismatch",
+      "reason": "persona A's valid proof over the rejected document signature-bit-flipped: the digest matches, and the document's own signature fails (section 14.4, step 4)",
+      "deterministic": false
+    }
   ]
 }
