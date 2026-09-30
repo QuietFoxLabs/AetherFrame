@@ -26,7 +26,6 @@ internal sealed class TutorialOverlay
     internal TutorialOverlay(OnboardingCoordinator coordinator, ITutorialHost host, IReadOnlyList<Window> dimmedWindows)
     {
         this.coordinator = coordinator;
-        driver = new TutorialOverlayWindow(coordinator, host, frame, dimmedWindows);
         shades = new TutorialShadeWindow[TutorialShadeWindow.HoleCoverIndex + 1];
         for (var i = 0; i < shades.Length; i++)
         {
@@ -35,6 +34,12 @@ internal sealed class TutorialOverlay
 
         card = new TutorialCardWindow(coordinator, host, frame);
         offer = new FirstRunPromptWindow(coordinator, host);
+
+        // The driver keeps the shades, then the card, in front of whatever window a step points into.
+        var inFront = new List<Window>(shades.Length + 1);
+        inFront.AddRange(shades);
+        inFront.Add(card);
+        driver = new TutorialOverlayWindow(coordinator, host, frame, dimmedWindows, inFront);
     }
 
     /// <summary>The windows, in the order to add them.</summary>

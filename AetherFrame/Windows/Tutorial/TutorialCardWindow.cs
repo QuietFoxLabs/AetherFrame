@@ -40,6 +40,9 @@ internal sealed class TutorialCardWindow : Window
     private int framesOpen;
     private bool pendingChaptersPopup;
 
+    // The step whose Next was pressed before the player did what it waits for; its hint shows until the step moves on.
+    private TutorialStep? heldStep;
+
     internal TutorialCardWindow(OnboardingCoordinator coordinator, ITutorialHost host, TutorialOverlayFrame frame)
         : base("AetherFrame Tutorial Card##AetherFrameTutorialCard", CardFlags, forceMainWindow: true)
     {
@@ -112,25 +115,35 @@ internal sealed class TutorialCardWindow : Window
         var snapshot = host.Snapshot();
         var contentWidth = ImGui.GetContentRegionAvail().X;
 
-        // ---- header: the mark, the chapter, and the close
+        // ---- header: the mark, the chapter, and the close. The close is pinned to the top right
+        // first, and the chapter line wraps short of it, so a long chapter name never runs under it.
         var drawList = ImGui.GetWindowDrawList();
+        var start = ImGui.GetCursorPos();
         var origin = ImGui.GetCursorScreenPos();
         var markSize = AetherMetrics.BrandMarkSize * scale;
-        AetherBrand.DrawMark(drawList, origin + new Vector2(markSize / 2f, ImGui.GetFrameHeight() / 2f), markSize, AetherPalette.Aether, AetherPalette.Glow);
-        ImGui.SetCursorScreenPos(origin + new Vector2(markSize + (AetherMetrics.SpaceSm * scale), 0f));
+        var closeSize = ImGui.GetFrameHeight();
+        var gap = AetherMetrics.SpaceSm * scale;
+        AetherBrand.DrawMark(drawList, origin + new Vector2(markSize / 2f, closeSize / 2f), markSize, AetherPalette.Aether, AetherPalette.Glow);
+
+        ImGui.SetCursorPos(start + new Vector2(contentWidth - closeSize, 0f));
+        if (EditorWidgets.IconButton("CloseTutorial", FontAwesomeIcon.Times, CloseTooltip))
+        {
+            coordinator.Suspend();
+            return;
+        }
+
+        var belowClose = ImGui.GetCursorPosY();
+        ImGui.SetCursorPos(start + new Vector2(markSize + gap, 0f));
         ImGui.AlignTextToFramePadding();
+        ImGui.PushTextWrapPos(start.X + contentWidth - closeSize - gap);
         using (AetherFonts.Label())
         using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.Aether))
         {
             ImGui.TextUnformatted(chapterLines[view.ChapterIndex]);
         }
 
-        ImGui.SameLine(contentWidth - ImGui.GetFrameHeight());
-        if (EditorWidgets.IconButton("CloseTutorial", FontAwesomeIcon.Times, CloseTooltip))
-        {
-            coordinator.Suspend();
-            return;
-        }
+        ImGui.PopTextWrapPos();
+        ImGui.SetCursorPosY(Math.Max(ImGui.GetCursorPosY(), belowClose));
 
         // ---- title and body
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceXs * scale));
@@ -172,8 +185,21 @@ internal sealed class TutorialCardWindow : Window
                 break;
 
             case TutorialStepPresentation.MissingTarget:
-                Note(FontAwesomeIcon.EyeSlash, AetherPalette.Warning, "The control isn't in view; the interface stays usable, and Next continues anyway.");
+                Note(FontAwesomeIcon.EyeSlash, AetherPalette.Warning, view.NextHeld
+                    ? "The control isn't in view; the interface stays usable."
+                    : "The control isn't in view; the interface stays usable, and Next continues anyway.");
                 break;
+        }
+
+        // ---- Next was pressed on a step that waits for the player: say what it waits for
+        if (!view.NextHeld || !ReferenceEquals(heldStep, view.Step))
+        {
+            heldStep = null;
+        }
+        else if (view.Step.WaitHint is { } hint)
+        {
+            ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceXs * scale));
+            Note(FontAwesomeIcon.ExclamationCircle, AetherPalette.Warning, hint);
         }
 
         // ---- progress
@@ -185,19 +211,22 @@ internal sealed class TutorialCardWindow : Window
         drawList.AddRectFilled(barMin, barMin + new Vector2(contentWidth * fraction, barHeight), ImGui.GetColorU32(AetherPalette.Aether), barHeight / 2f);
         ImGui.Dummy(new Vector2(contentWidth, barHeight + (AetherMetrics.SpaceXs * scale)));
 
-        // ---- footer: progress, chapters, skip; back, next
+        // ---- footer, two rows so nothing overlaps at any step: the step count with Chapters at
+        // the right; then Skip tour, with Back (not on the first step) and Next at the right.
+        var style = ImGui.GetStyle();
         ImGui.AlignTextToFramePadding();
         ImGui.PushStyleColor(ImGuiCol.Text, AetherPalette.TextMuted);
         ImGui.Text($"Step {view.StepNumber} of {view.TotalSteps}");
         ImGui.PopStyleColor();
 
+        var chaptersWidth = ImGui.CalcTextSize("Chapters").X + (style.FramePadding.X * 2f);
         ImGui.SameLine();
-        if (AetherControls.GhostButton("Chapters", tooltip: "Jump to a chapter."))
+        AlignRight(chaptersWidth);
+        if (AetherControls.GhostButton("Chapters", new Vector2(chaptersWidth, 0f), "Jump to a chapter."))
         {
             pendingChaptersPopup = true;
         }
 
-        ImGui.SameLine();
         if (AetherControls.GhostButton("Skip tour", tooltip: "Leave the tutorial. You can start it again from Help."))
         {
             coordinator.SkipTutorial();
@@ -205,18 +234,20 @@ internal sealed class TutorialCardWindow : Window
         }
 
         var nextLabel = view.IsLastStep ? "Finish" : "Next";
-        var buttonWidth = Math.Max(ImGui.CalcTextSize(nextLabel).X, ImGui.CalcTextSize("Back").X) + (ImGui.GetStyle().FramePadding.X * 4f);
-        var rowWidth = (buttonWidth * 2f) + ImGui.GetStyle().ItemSpacing.X;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - rowWidth));
-        using (ImRaii.Disabled(!view.CanGoBack))
+        var buttonWidth = Math.Max(ImGui.CalcTextSize(nextLabel).X, ImGui.CalcTextSize("Back").X) + (style.FramePadding.X * 4f);
+        var rowWidth = view.CanGoBack ? (buttonWidth * 2f) + style.ItemSpacing.X : buttonWidth;
+        ImGui.SameLine();
+        AlignRight(rowWidth);
+        if (view.CanGoBack)
         {
             if (AetherControls.SecondaryButton("Back", new Vector2(buttonWidth, 0f)))
             {
                 coordinator.Back(snapshot);
             }
+
+            ImGui.SameLine();
         }
 
-        ImGui.SameLine();
         if (AetherControls.PrimaryButton(nextLabel, new Vector2(buttonWidth, 0f)))
         {
             Advance(view, snapshot);
@@ -241,9 +272,26 @@ internal sealed class TutorialCardWindow : Window
         DrawChaptersPopup(snapshot);
     }
 
+    /// <summary>After a SameLine: moves the cursor so an item <paramref name="width"/> wide ends at the right edge, unless that would overlap what is already on the line.</summary>
+    private static void AlignRight(float width)
+    {
+        var x = ImGui.GetWindowContentRegionMax().X - width;
+        if (x > ImGui.GetCursorPosX())
+        {
+            ImGui.SetCursorPosX(x);
+        }
+    }
+
     private void Advance(TutorialStepView view, TutorialContextSnapshot snapshot)
     {
-        coordinator.Next(snapshot);
+        if (!coordinator.Next(snapshot))
+        {
+            // The step waits for the player: say what to do instead of moving on.
+            heldStep = view.Step;
+            return;
+        }
+
+        heldStep = null;
         if (view.IsLastStep && !coordinator.IsTutorialActive)
         {
             // Finish: back to My Plates, as the last card promises.

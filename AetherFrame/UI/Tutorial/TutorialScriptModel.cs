@@ -32,6 +32,9 @@ internal enum TutorialCondition
     LibraryHasPlates,
     ElementSelected,
     TextElementSelected,
+
+    /// <summary>The Create Plate chooser is open, or a Plate is open in an editor (the player created one, or opened one they had).</summary>
+    CreatingOrEditingPlate,
 }
 
 /// <summary>
@@ -62,6 +65,12 @@ internal enum TutorialAction
 /// <param name="FallbackBody">What the card says while <paramref name="Requires"/> isn't met (a navigation hint).</param>
 /// <param name="FallbackTarget">The control to spotlight meanwhile (the way to meet the requirement).</param>
 /// <param name="FallbackAction">A button on the card that meets the requirement safely.</param>
+/// <param name="WaitsForAction">
+/// Next doesn't pass this step until <paramref name="AdvanceWhen"/> is met: the player has to do
+/// the thing (create their first Plate, say). Pressing Next meanwhile shows <paramref name="WaitHint"/>.
+/// Back, the chapter picker and Skip tour still work, so the player is never trapped.
+/// </param>
+/// <param name="WaitHint">What the card says when Next is pressed on a step that waits for the player.</param>
 internal sealed record TutorialStep(
     string Id,
     string Title,
@@ -73,7 +82,9 @@ internal sealed record TutorialStep(
     bool SkipIfUnmet = false,
     string? FallbackBody = null,
     TutorialTarget FallbackTarget = TutorialTarget.None,
-    TutorialAction FallbackAction = TutorialAction.None)
+    TutorialAction FallbackAction = TutorialAction.None,
+    bool WaitsForAction = false,
+    string? WaitHint = null)
 {
     /// <summary>Whether the step points at a control at all.</summary>
     internal bool HasTarget => Mode != TutorialStepMode.Narrative && Target != TutorialTarget.None;
@@ -157,6 +168,11 @@ internal static class TutorialScriptValidation
                 {
                     problems.Add($"Step '{step.Id}' is too long ({step.Body.Length} characters; at most {MaxBodyLength}).");
                 }
+
+                if (step.WaitsForAction && (step.Mode != TutorialStepMode.Interact || step.AdvanceWhen == TutorialCondition.None || string.IsNullOrWhiteSpace(step.WaitHint)))
+                {
+                    problems.Add($"Step '{step.Id}' waits for the player, so it must be Interact, say when it's done, and say what to do.");
+                }
             }
         }
 
@@ -198,6 +214,7 @@ internal readonly record struct TutorialContextSnapshot(
         TutorialCondition.LibraryHasPlates => PlateCount > 0,
         TutorialCondition.ElementSelected => ActiveEditor == EditorSurfaceKind.Advanced && PlateOpen && ElementSelected,
         TutorialCondition.TextElementSelected => ActiveEditor == EditorSurfaceKind.Advanced && PlateOpen && TextElementSelected,
+        TutorialCondition.CreatingOrEditingPlate => TemplateChooserOpen || (ActiveEditor is not null && PlateOpen),
         _ => false,
     };
 }

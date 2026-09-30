@@ -8,7 +8,7 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 10:48 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 11:40 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
   - a verdict on test build `01a14a5`, which gates the 0.1.7 release. The game runs it now: Dalamud's Dev Plugin Locations point at its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`;
@@ -16,7 +16,9 @@ Verified September 30, 2026, at 10:48 UTC. **For the live status, see [issue #52
   - the checks for preview build `302af2f`, installed in `E:\AetherFrame Test Build\` on September 30 by `tools/Install-TestBuild.ps1`, in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25). It loads only after the switch;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5).
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
-- **In progress:** N2-6c's first part, the publication index, the outbox and the commit (this change).
+- **In progress:**
+  - the tutorial card fixes from the owner's first run through it (this change);
+  - a re-plan of sharing around the owner's clarification of September 30: an opted-in player right-clicks another opted-in player and views their Plate as a finished picture, like the game's Adventure Plates, with no share codes (recorded in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25)). N2-9 and N2-10 wait for it. N2-6c's first part merged as [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55).
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin.
@@ -277,6 +279,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - the commit signs a candidate once only, as the persona the consent screen named and only while it is active (L10). It refuses without K4's acknowledgement, checks the images and builds the index before signing, disposes the signer before touching any file, and checks the signed bytes field for field against what was shown. The outbox entry is written first, the index naming it is the commit point, and the entry it supersedes goes last;
   - at load the index decides: what it names is checked in full, and what fails reads as not stored, never as pending;
   - a canary test finds nothing of a Plate but its local id in the index, and nothing of it at all in the outbox, beyond what is shared.
+- The tutorial card after the owner's first run through it: this change. The close button no longer covers long chapter names, the footer is two rows so Skip tour and Back no longer overlap, Back is hidden on the first step, Next can't skip creating the first Plate (it says what to do instead), and the window a step explains is brought in front of AetherFrame's other windows with the dim and the card in front of it, so the Create Plate chooser no longer fades the card. The design guide asks every change a player sees to update the tutorial in the same pull request (the owner's request of September 30); a chapter on networking waits for the sharing re-plan.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
