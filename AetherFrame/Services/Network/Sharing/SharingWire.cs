@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using AetherFrame.Protocol.Identity;
 
@@ -130,23 +131,29 @@ internal static class SharingWire
 
     internal static byte[] Pause() => Write(writer => writer.WriteString("mode", "pause"));
 
-    internal static byte[] Check(string lodestoneId, string code)
+    /// <summary>
+    /// A check's body: the Lodestone id, the code, and the name and World of the character the
+    /// player is logged in as, which the server requires the page to show (N2-9b).
+    /// </summary>
+    internal static byte[] Check(string lodestoneId, string code, string name, string world)
     {
-        if (!LodestoneAddress.IsId(lodestoneId) || !LodestoneCode.IsCode(code))
+        if (!LodestoneAddress.IsId(lodestoneId) || !LodestoneCode.IsCode(code) || !SharingStateCodec.IsText(name) || !SharingStateCodec.IsText(world))
         {
-            throw new ArgumentException("A check needs a Lodestone id and a code.");
+            throw new ArgumentException("A check needs a Lodestone id, a code, and the character's name and World.");
         }
 
         return Write(writer =>
         {
             writer.WriteString("lodestoneId", lodestoneId);
             writer.WriteString("code", code);
+            writer.WriteString("name", name);
+            writer.WriteString("world", world);
         });
     }
 
-    /// <summary>A code request's answer: the code.</summary>
+    /// <summary>A code request's answer: the code, and how many seconds it lasts.</summary>
     /// <exception cref="InvalidDataException">The answer isn't one.</exception>
-    internal static string ReadCode(byte[] body)
+    internal static (string Code, int Seconds) ReadCode(byte[] body)
     {
         using var document = Parse(body, ["code", "expiresInSeconds"]);
         var code = String(document.RootElement, "code");
@@ -156,7 +163,7 @@ internal static class SharingWire
             throw new InvalidDataException("The server's code isn't one.");
         }
 
-        return code;
+        return (code, seconds);
     }
 
     /// <summary>A check's answer.</summary>
@@ -181,19 +188,23 @@ internal static class SharingWire
         return (Text(document.RootElement, "name"), Text(document.RootElement, "world"));
     }
 
-    /// <summary>The server's status: the oldest plugin version it serves.</summary>
+    /// <summary>The server's status: its protocol version, its API version, and the oldest plugin it serves, exactly major.minor.build.</summary>
     /// <exception cref="InvalidDataException">The answer isn't one.</exception>
-    internal static Version ReadMinimumPlugin(byte[] body)
+    internal static (int Protocol, int Api, Version MinimumPlugin) ReadStatus(byte[] body)
     {
         using var document = Parse(body, ["protocolVersion", "api", "minimumPlugin"]);
         var root = document.RootElement;
-        if (root.GetProperty("protocolVersion").ValueKind != JsonValueKind.Number || root.GetProperty("api").ValueKind != JsonValueKind.Number
-            || !Version.TryParse(String(root, "minimumPlugin"), out var minimum))
+        var protocol = root.GetProperty("protocolVersion");
+        var api = root.GetProperty("api");
+        var parts = String(root, "minimumPlugin").Split('.');
+        if (protocol.ValueKind != JsonValueKind.Number || !protocol.TryGetInt32(out var protocolVersion) || api.ValueKind != JsonValueKind.Number || !api.TryGetInt32(out var apiVersion)
+            || parts.Length != 3 || !parts.All(part => part.Length is > 0 and <= 5 && part.All(c => c is >= '0' and <= '9')))
         {
             throw new InvalidDataException("The server's status isn't one.");
         }
 
-        return minimum;
+        var number = Array.ConvertAll(parts, part => int.Parse(part, System.Globalization.CultureInfo.InvariantCulture));
+        return (protocolVersion, apiVersion, new Version(number[0], number[1], number[2]));
     }
 
     private static byte[] Write(Action<Utf8JsonWriter> properties)

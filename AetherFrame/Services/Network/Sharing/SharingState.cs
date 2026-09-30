@@ -32,7 +32,9 @@ internal enum SharingStage
 /// One character's sharing on this PC: the game's Content ID (the local key, as for the Active
 /// Plate's binding), the persona that is its key (V4, C1; a slot named by nothing about the
 /// character), and, once bound, the Lodestone id, the profile id (C4), and the name and World the
-/// Lodestone showed.
+/// Lodestone showed. A bound character whose key can't be opened may also carry a new key being
+/// checked (<see cref="NewSlot"/>, <see cref="NewKey"/>): its binding stays recorded, under the old
+/// key, until a check with the new one passes (C1).
 /// </summary>
 internal sealed record SharingCharacter(
     ulong ContentId,
@@ -42,14 +44,28 @@ internal sealed record SharingCharacter(
     string? LodestoneId = null,
     ProfileId? ProfileId = null,
     string? Name = null,
-    string? World = null)
+    string? World = null,
+    PersonaSlotId NewSlot = default,
+    PersonaId? NewKey = null)
 {
     /// <summary>Whether the server binds the character (shared or paused).</summary>
     internal bool IsBound => Stage is SharingStage.Shared or SharingStage.Paused;
 
+    /// <summary>Whether a new key is being checked in place of one that can't be opened.</summary>
+    internal bool ReplacingKey => !NewSlot.IsEmpty;
+
+    /// <summary>Whether a Lodestone check is under way: a character not bound yet, or a new key.</summary>
+    internal bool Checking => Stage == SharingStage.Checking || ReplacingKey;
+
+    /// <summary>The key a code and a check are for: the new one while it replaces the old.</summary>
+    internal PersonaSlotId CheckingSlot => ReplacingKey ? NewSlot : Slot;
+
+    /// <summary>The identity of <see cref="CheckingSlot"/>'s key.</summary>
+    internal PersonaId CheckingKey => NewKey ?? Key;
+
     /// <summary>The same character with nothing bound, keeping its key.</summary>
     internal SharingCharacter Unbound(SharingStage stage) =>
-        this with { Stage = stage, LodestoneId = null, ProfileId = null, Name = null, World = null };
+        this with { Stage = stage, LodestoneId = null, ProfileId = null, Name = null, World = null, NewSlot = default, NewKey = null };
 }
 
 /// <summary>
@@ -71,7 +87,7 @@ internal static class SharingStateCodec
     private const int Version = 1;
 
     private static readonly string[] RootProperties = ["version", "characters"];
-    private static readonly string[] CharacterProperties = ["contentId", "slot", "key", "stage", "lodestoneId", "profileId", "name", "world"];
+    private static readonly string[] CharacterProperties = ["contentId", "slot", "key", "stage", "lodestoneId", "profileId", "name", "world", "newSlot", "newKey"];
 
     internal static byte[] Encode(IReadOnlyList<SharingCharacter> characters)
     {
@@ -94,6 +110,8 @@ internal static class SharingStateCodec
                 WriteOptional(writer, "profileId", character.ProfileId?.ToString());
                 WriteOptional(writer, "name", character.Name);
                 WriteOptional(writer, "world", character.World);
+                WriteOptional(writer, "newSlot", character.ReplacingKey ? character.NewSlot.ToString() : null);
+                WriteOptional(writer, "newKey", character.NewKey?.ToString());
                 writer.WriteEndObject();
             }
 
@@ -225,7 +243,24 @@ internal static class SharingStateCodec
             profileId = parsed;
         }
 
-        return new SharingCharacter(contentId, slot, key, stage, OptionalString(item, "lodestoneId"), profileId, OptionalString(item, "name"), OptionalString(item, "world"));
+        PersonaSlotId newSlot = default;
+        if (OptionalString(item, "newSlot") is { } newSlotText && (!PersonaSlotId.TryParse(newSlotText, out newSlot) || newSlot.IsEmpty))
+        {
+            throw new InvalidDataException("A character's new key slot isn't one.");
+        }
+
+        PersonaId? newKey = null;
+        if (OptionalString(item, "newKey") is { } newKeyText)
+        {
+            if (!PersonaId.TryParse(newKeyText, out var parsedKey))
+            {
+                throw new InvalidDataException("A character's new key isn't a persona identity.");
+            }
+
+            newKey = parsedKey;
+        }
+
+        return new SharingCharacter(contentId, slot, key, stage, OptionalString(item, "lodestoneId"), profileId, OptionalString(item, "name"), OptionalString(item, "world"), newSlot, newKey);
     }
 
     private static void Validate(IReadOnlyList<SharingCharacter> characters)
@@ -239,9 +274,15 @@ internal static class SharingStateCodec
         var slots = new HashSet<PersonaSlotId>();
         foreach (var character in characters)
         {
-            if (character.ContentId == 0 || character.Slot.IsEmpty || !contentIds.Add(character.ContentId) || !slots.Add(character.Slot))
+            if (character.ContentId == 0 || character.Slot.IsEmpty || !contentIds.Add(character.ContentId) || !slots.Add(character.Slot)
+                || (character.ReplacingKey && !slots.Add(character.NewSlot)))
             {
                 throw new InvalidDataException("The sharing file names a character or a key twice, or not at all.");
+            }
+
+            if (character.ReplacingKey != (character.NewKey is not null) || (character.ReplacingKey && !character.IsBound))
+            {
+                throw new InvalidDataException("A new key is named whole, and only for a bound character.");
             }
 
             var carries = character.LodestoneId is not null || character.ProfileId is not null || character.Name is not null || character.World is not null;
