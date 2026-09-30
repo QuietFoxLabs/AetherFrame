@@ -41,6 +41,43 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
+    public void ACandidateBuiltBeforeAShowingWasWithdrawn_IsNeitherShownNorSent()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        var first = PublicationCandidates.Simple();
+        harness.Share(first);
+
+        // A build starts under the generation now; a re-save withdraws, and moves it on, before
+        // the candidate reaches the service.
+        var built = harness.Sharing.ShowingGeneration(Aria);
+        harness.Sharing.ClearConsent(Aria);
+        var stale = PublicationCandidates.Simple();
+        harness.Sharing.TryPublish(Aria, stale, approved: false, stale.PlateId, null, built);
+        Assert.Null(harness.Sharing.View.Consent);
+
+        var staleSave = PublicationCandidates.Simple(first.PlateId, "Older words");
+        harness.Sharing.TryPublish(Aria, staleSave, approved: false, first.PlateId, null, built);
+        Assert.Single(harness.Server.Publishes);
+
+        // Under the generation now, it is shown as before.
+        harness.Sharing.TryPublish(Aria, stale, approved: false, stale.PlateId, null, harness.Sharing.ShowingGeneration(Aria));
+        Assert.Same(stale, harness.Sharing.View.Consent!.Candidate);
+    }
+
+    [Fact]
+    public void AnApprovalThatComesTooLate_SaysSo()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        var candidate = PublicationCandidates.Simple();
+        harness.Publish(candidate);
+        harness.Sharing.TryPublish(Aria, candidate, approved: true, Guid.NewGuid());
+        Assert.Equal(SharingNoticeKind.PublishChanged, harness.Sharing.View.Notice!.Kind);
+        Assert.Empty(harness.Server.Publishes);
+    }
+
+    [Fact]
     public void AnApproval_CountsOnlyUnderTheKeyItWasShownWith()
     {
         using var harness = new SharingHarness();

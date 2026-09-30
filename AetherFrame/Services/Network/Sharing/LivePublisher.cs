@@ -42,7 +42,7 @@ internal sealed class LivePublisher : IDisposable
     private PersonaId? watchedKey;
     private ProfileId? watchedBinding;
     private bool rereadDue;
-    private (ulong ContentId, Guid PlateId)? building;
+    private (ulong ContentId, Guid PlateId, long Generation)? building;
     private (SnapshotCandidate Candidate, ProfileDocument? Source)? ready;
     private volatile LiveView view = LiveView.Idle;
 
@@ -128,7 +128,7 @@ internal sealed class LivePublisher : IDisposable
             // A first showing still on screen is of an older candidate: it goes, and the new
             // candidate is shown instead when it needs to be.
             sharing.ClearConsent(character.ContentId);
-            building = (character.ContentId, active.Value);
+            building = (character.ContentId, active.Value, sharing.ShowingGeneration(character.ContentId));
             ready = null;
             view = new LiveView(character.ContentId, true, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None);
             check.Begin(active.Value);
@@ -172,7 +172,7 @@ internal sealed class LivePublisher : IDisposable
         }
 
         // A busy service is asked again next frame; the candidate waits.
-        if (ready is { } waiting && sharing.TryPublish(target.ContentId, waiting.Candidate, approved: false, active, waiting.Source))
+        if (ready is { } waiting && sharing.TryPublish(target.ContentId, waiting.Candidate, approved: false, active, waiting.Source, target.Generation))
         {
             view = LiveView.Idle;
             Finish();

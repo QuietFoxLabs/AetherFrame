@@ -432,7 +432,10 @@ internal sealed class SharingWindow : Window, IDisposable
             }
         }
 
-        if (view.Consent is not { } consent || consent.ContentId != entry.ContentId)
+        // Never beside a newer build of the Active Plate, whatever it came to: only its own showing.
+        var rebuilding = liveView.ContentId == entry.ContentId
+            && (liveView.Building || liveView.Problems.Count > 0 || liveView.Failure != Services.Network.Publishing.ShareCheckFailure.None);
+        if (view.Consent is not { } consent || consent.ContentId != entry.ContentId || rebuilding)
         {
             candidateView.Release();
             return;

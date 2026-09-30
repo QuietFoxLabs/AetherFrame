@@ -1350,7 +1350,7 @@ Scope: how the plugin publishes a sharing character's Active Plate (N2-9c), with
 - **Pausing and resuming (C3).** Pausing sends the opting-out kind with `{"mode": "pause"}`, then drops every waiting revision; the binding stays. Resuming publishes the Active Plate as a new revision, as the server requires.
 - **Turning off, a takeover, and a re-read the server answers "not found" (C4, C1).** The character key's index is emptied and its waiting revisions deleted. Emptying replaces the index even when it can't be read or was written by a newer AetherFrame, which amends P1's "never overwritten" for this case: the server holds none of what it named, and nothing it named may be sent.
 - **Loading.** Once the sharing file is read, each character key's outbox loses the files its index doesn't name (as a load always deleted them), and the share check's signings are dropped, each persona on its own: one that can't be read is logged and skipped, and never makes the sharing file read as unreadable.
-- **What players see.** My Plates marks **Shared** the Plate the server shows for the logged-in character, which the sharing file records once the server accepts it (its version 2; N2-9b's version 1 is still read), and **Not shared yet** its Active Plate while that is another. Pausing, turning off and a takeover forget it. Personas stay hidden (V4): the Personas window is gone, and the share check signs nothing (C3). What it signed and kept before, under a persona that is no character's key, is dropped when the sharing file is first read.
+- **What players see.** My Plates marks **Shared** the Plate the server shows for the logged-in character, which the sharing file records once the server accepts it (its version 2; N2-9b's version 1 is still read, but a build of N2-9b reads version 2 as unreadable, so going back to one stops sharing there until the file is moved aside), and **Not shared yet** its Active Plate while that is another. Pausing, turning off and a takeover forget it. Personas stay hidden (V4): the Personas window is gone, and the share check signs nothing (C3). What it signed and kept before, under a persona that is no character's key, is dropped when the sharing file is first read.
 - **Re-reads at login (C1).** When the game shows the logged-in character under another name or World than its binding's, the plugin asks for a re-read once, at login.
 
 **Rationale.** It keeps C3's promise with the fewest screens that still show every new Plate before it leaves the PC, and D5's point (6): what is signed is the candidate, never the Plate read again. One live entry per key matches the server, which keeps only the latest revision per binding (C4).
@@ -1373,6 +1373,8 @@ It also made six smaller points, all applied as well:
 - Share is never enabled before the last image is on screen;
 - emptying an index it can't read is recorded above;
 - a key being replaced publishes nothing.
+
+**Its recheck** of `d1605aa` found every point fixed, and one race left from the blocking point, also applied: a candidate handed over just before a re-save could be shown after its showing was withdrawn. Each character now has a showing generation that every withdrawal moves on; a candidate is shown or sent only under the generation its build started with, and the window never shows a showing beside a newer build. It also asked for notices when a send is stopped or an approval comes too late, and for an old persona's index to be emptied only once.
 
 ## Gates
 
