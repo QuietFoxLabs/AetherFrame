@@ -43,6 +43,42 @@ internal readonly record struct ImageRequirement(Guid Image, PixelWindow Window,
 /// <summary>A prepared copy (N2-6b): its declaration (a fresh asset id, its digest, format and size) and its exact bytes.</summary>
 internal sealed record PreparedImage(ImageReference Reference, ReadOnlyMemory<byte> Bytes);
 
+/// <summary>Why a required window of an image has no prepared copy.</summary>
+internal enum ImageUnavailableReason
+{
+    /// <summary>The managed file is missing or can't be decoded: the renderer draws nothing, or a placeholder, there.</summary>
+    Missing,
+
+    /// <summary>Over the limits a shared image has (decision I1: 8,192 pixels a side, 20,000,000 in all, 8 MiB prepared).</summary>
+    TooLarge,
+
+    /// <summary>Decoded at another size than its header gave, so the window drawn isn't the window computed.</summary>
+    SizeChanged,
+
+    /// <summary>The prepared copy failed a check every shared image passes (its container, section 8.2.1, or its own declaration).</summary>
+    Unshareable,
+}
+
+/// <summary>What preparing one required window produced: its copy, or why there is none. Every requirement has one.</summary>
+internal sealed class ImagePreparation
+{
+    private ImagePreparation(PreparedImage? copy, ImageUnavailableReason reason)
+    {
+        Copy = copy;
+        Reason = reason;
+    }
+
+    /// <summary>The prepared copy; null when there is none, and <see cref="Reason"/> says why.</summary>
+    internal PreparedImage? Copy { get; }
+
+    /// <summary>Why there is no copy; meaningless when <see cref="Copy"/> is set.</summary>
+    internal ImageUnavailableReason Reason { get; }
+
+    internal static ImagePreparation Prepared(PreparedImage copy) => new(copy ?? throw new ArgumentNullException(nameof(copy)), default);
+
+    internal static ImagePreparation Unavailable(ImageUnavailableReason reason) => new(null, reason);
+}
+
 /// <summary>One step of what the local renderer visibly draws for a saved Plate, in paint order.</summary>
 internal abstract record ResolvedStep;
 
@@ -57,13 +93,11 @@ internal sealed record ResolvedText(TextProfileElement Element, string Text, flo
 internal sealed record ResolvedImage(ImageProfileElement Element, ImageRequirement Image) : ResolvedStep;
 
 /// <summary>
-/// One primitive of a component placement: a filled quad or triangle, the component's image
-/// (<paramref name="Image"/>, the whole of it), or its bundled art (<paramref name="Art"/>, the art's id).
+/// One primitive of <paramref name="Component"/>'s placement: a filled quad or triangle, the
+/// component's image (<paramref name="Image"/>, the whole of it), or its bundled art
+/// (<paramref name="Art"/>, the art's id).
 /// </summary>
-internal sealed record ResolvedShape(ComponentPrimitive Primitive, ImageRequirement? Image, string? Art) : ResolvedStep;
-
-/// <summary>An element of a kind this build doesn't know.</summary>
-internal sealed record ResolvedUnknown(ProfileElement Element) : ResolvedStep;
+internal sealed record ResolvedShape(ComponentPrimitive Primitive, ImageRequirement? Image, string? Art, PlateComponent? Component = null) : ResolvedStep;
 
 /// <summary>
 /// The background as it draws: null when it draws nothing at all; <paramref name="NoBase"/> when
@@ -180,6 +214,15 @@ internal enum PlateSnapshotRefusal
 
     /// <summary>The background's image is missing.</summary>
     BackgroundImageMissing,
+
+    /// <summary>An image the Plate draws is over the limits a shared image has.</summary>
+    ImageTooLarge,
+
+    /// <summary>An image the Plate draws decoded at another size than its file says, so what is drawn can't be told.</summary>
+    ImageSizeChanged,
+
+    /// <summary>An image the Plate draws couldn't be prepared as every shared image must be.</summary>
+    ImageUnshareable,
 }
 
 /// <summary>One reason a Plate can't be shared, and the element it is about, when there is one.</summary>

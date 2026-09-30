@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Security.Cryptography;
 using System.Text;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Components;
@@ -43,8 +44,9 @@ internal static class PlateSnapshotBuilder
         var problems = new List<PlateSnapshotProblem>();
 
         // Something a newer AetherFrame made shows nothing here, so what this Plate shows isn't
-        // what its maker saw.
-        if (plate.UnrecognizedElements is { Count: > 0 } || plate.UnrecognizedComponents is { Count: > 0 })
+        // what its maker saw: an element or component this build can't read, or a visible
+        // component of a kind or definition it doesn't know.
+        if (plate.UnrecognizedElements is { Count: > 0 } || plate.UnrecognizedComponents is { Count: > 0 } || HasUnknownComponent(plate))
         {
             problems.Add(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null));
         }
@@ -66,7 +68,10 @@ internal static class PlateSnapshotBuilder
         var plan = new List<PaintStep>();
         ProfileVisualBounds.FillDrawnElements(plate, ProfileRenderOptions.Finished, paintOrder, drawn);
         ComponentPaintPlan.Build(plate, drawn, BuiltInComponentCatalog.Instance, plan, Measure);
-        var view = ProfileVisualBounds.Compute(plate, plan);
+
+        // What the Profile View shows is what its window is sized to: these bounds, from the plan
+        // without measured text, as every surface that fits a Plate computes them.
+        var view = ProfileVisualBounds.Compute(plate, ProfileRenderOptions.Finished);
 
         var resolver = new Resolver(plate, measurements, view, problems);
         var background = resolver.Background(plate.Background);
@@ -93,18 +98,34 @@ internal static class PlateSnapshotBuilder
     }
 
     /// <summary>
-    /// The candidate for <paramref name="plate"/>, given each required window's prepared copy
-    /// (<paramref name="prepared"/>: its fresh asset id, decision N1, its declaration and bytes,
-    /// decision D5), or every reason it can't be shared as it is. A component's image window that
-    /// wasn't prepared is left out, as the renderer draws nothing without its image; an image
-    /// element's or the background's is refused, as the renderer draws a placeholder there.
+    /// The candidate for <paramref name="plate"/>, given what preparing each required window
+    /// produced (<paramref name="preparations"/>, one for every requirement: its prepared copy,
+    /// with a fresh asset id, decision N1, its declaration and bytes, decision D5; or why there is
+    /// none), or every reason the Plate can't be shared as it is.
+    /// <list type="bullet">
+    /// <item>An image whose managed file is missing or undecodable is left out when a component
+    /// draws it, as the renderer draws nothing there, and refused when an element or the
+    /// background draws it, as the renderer draws a placeholder there.</item>
+    /// <item>An image preparation refused, or a copy that isn't its window's (its size, byte
+    /// length or digest), refuses the Plate, whichever item draws it: nothing is dropped
+    /// silently.</item>
+    /// </list>
+    /// The candidate holds its own copy of every image's bytes.
     /// </summary>
-    internal static SnapshotCandidateResult Map(ResolvedPlate plate, IReadOnlyDictionary<ImageRequirement, PreparedImage> prepared)
+    /// <exception cref="ArgumentException">A requirement of <paramref name="plate"/> has no preparation.</exception>
+    internal static SnapshotCandidateResult Map(ResolvedPlate plate, IReadOnlyDictionary<ImageRequirement, ImagePreparation> preparations)
     {
         ArgumentNullException.ThrowIfNull(plate);
-        ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(preparations);
+        foreach (var requirement in plate.Requirements)
+        {
+            if (!preparations.ContainsKey(requirement))
+            {
+                throw new ArgumentException("Every required window of an image has a preparation.", nameof(preparations));
+            }
+        }
 
-        var mapper = new Mapper(prepared, plate.Problems);
+        var mapper = new Mapper(preparations, plate.Problems);
         if (!ProfileLayoutSnapshot.IsValidName(plate.Name))
         {
             mapper.Refuse(PlateSnapshotRefusal.Name, null);
@@ -136,7 +157,16 @@ internal static class PlateSnapshotBuilder
             return SnapshotCandidateResult.Refused(mapper.Problems);
         }
 
-        var candidate = new SnapshotCandidate(plate.PlateId, plate.Name, canvasWidth, canvasHeight, background, items, roles, mapper.UsedImages, mapper.UsedBytes, plate.LeftOut);
+        var leftOut = new List<LeftOutItem>(plate.LeftOut);
+        foreach (var left in mapper.LeftOut)
+        {
+            if (!leftOut.Contains(left))
+            {
+                leftOut.Add(left);
+            }
+        }
+
+        var candidate = new SnapshotCandidate(plate.PlateId, plate.Name, canvasWidth, canvasHeight, background, items, roles, mapper.UsedImages, mapper.UsedBytes, leftOut);
         try
         {
             // The protocol's own check of every rule, with ids and a time of its own: a candidate
@@ -149,6 +179,26 @@ internal static class PlateSnapshotBuilder
         }
 
         return SnapshotCandidateResult.Built(candidate);
+    }
+
+    /// <summary>Whether a visible component is of a kind or definition this build doesn't know (a newer build's), and so draws nothing here.</summary>
+    private static bool HasUnknownComponent(ProfileDocument plate)
+    {
+        if (plate.Components is not { } components)
+        {
+            return false;
+        }
+
+        foreach (var component in components)
+        {
+            if (component is { Visible: true }
+                && ComponentPaintPlan.Resolve(component, BuiltInComponentCatalog.Instance, out _) is ComponentStatus.UnknownKind or ComponentStatus.MissingDefinition or ComponentStatus.KindMismatch)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -243,13 +293,14 @@ internal static class PlateSnapshotBuilder
                 return new ResolvedBackground(background, null, NoBase: false);
             }
 
-            // Image mode with no image draws no base, and still its pattern.
-            if (background.ImageAssetId is not { } image || image == Guid.Empty)
+            // Image mode with no image draws no base, and still its pattern. An empty image id is an
+            // image the renderer can't find: it draws its placeholder there.
+            if (background.ImageAssetId is not { } image)
             {
                 return new ResolvedBackground(background, null, NoBase: true);
             }
 
-            if (!measurements.TryGetImageSize(image, out var width, out var height))
+            if (image == Guid.Empty || !measurements.TryGetImageSize(image, out var width, out var height))
             {
                 problems.Add(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null));
                 return new ResolvedBackground(background, null, NoBase: false);
@@ -302,7 +353,7 @@ internal static class PlateSnapshotBuilder
                         // and samples the whole of it.
                         if (PaintVisibility.ComponentImage(component) is { } image && measurements.TryGetImageSize(image, out var width, out var height))
                         {
-                            steps.Add(new ResolvedShape(primitive, Require(image, PixelWindow.Whole(width, height), width, height), null));
+                            steps.Add(new ResolvedShape(primitive, Require(image, PixelWindow.Whole(width, height), width, height), null, component));
                         }
                         else
                         {
@@ -318,13 +369,13 @@ internal static class PlateSnapshotBuilder
                     case ComponentPrimitiveKind.Art:
                         if (definition.Art is { } art)
                         {
-                            steps.Add(new ResolvedShape(primitive, null, art.Id));
+                            steps.Add(new ResolvedShape(primitive, null, art.Id, component));
                         }
 
                         break;
 
                     default:
-                        steps.Add(new ResolvedShape(primitive, null, null));
+                        steps.Add(new ResolvedShape(primitive, null, null, component));
                         break;
                 }
             }
@@ -446,7 +497,7 @@ internal static class PlateSnapshotBuilder
     /// <summary>One mapping: the problems found so far, and the prepared images the items name, each once.</summary>
     private sealed class Mapper
     {
-        private readonly IReadOnlyDictionary<ImageRequirement, PreparedImage> prepared;
+        private readonly IReadOnlyDictionary<ImageRequirement, ImagePreparation> preparations;
         private readonly List<PlateSnapshotProblem> problems;
         private readonly List<ImageReference> used = new();
         private readonly List<ReadOnlyMemory<byte>> usedBytes = new();
@@ -454,13 +505,16 @@ internal static class PlateSnapshotBuilder
         private int textScalars;
         private int refusals;
 
-        internal Mapper(IReadOnlyDictionary<ImageRequirement, PreparedImage> prepared, IReadOnlyList<PlateSnapshotProblem> earlier)
+        internal Mapper(IReadOnlyDictionary<ImageRequirement, ImagePreparation> preparations, IReadOnlyList<PlateSnapshotProblem> earlier)
         {
-            this.prepared = prepared;
+            this.preparations = preparations;
             problems = new List<PlateSnapshotProblem>(earlier);
         }
 
         internal List<PlateSnapshotProblem> Problems => problems;
+
+        /// <summary>Components whose image turned out missing when it was prepared: they draw nothing, as in the renderer.</summary>
+        internal List<LeftOutItem> LeftOut { get; } = new();
 
         internal IReadOnlyList<ImageReference> UsedImages => used;
 
@@ -550,13 +604,13 @@ internal static class PlateSnapshotBuilder
             }
             else if (mode == LayoutBackgroundMode.Image)
             {
-                if (resolved.Image is { } requirement && Use(requirement) is { } asset)
-                {
-                    image = asset;
-                }
-                else
+                if (resolved.Image is not { } requirement)
                 {
                     Refuse(PlateSnapshotRefusal.BackgroundImageMissing, null);
+                }
+                else if (Use(requirement, null, null, isBackground: true) is { } asset)
+                {
+                    image = asset;
                 }
             }
 
@@ -708,9 +762,8 @@ internal static class PlateSnapshotBuilder
         private LayoutItem? Image(ResolvedImage resolved)
         {
             var image = resolved.Element;
-            if (Use(resolved.Image) is not { } asset)
+            if (Use(resolved.Image, image, null, isBackground: false) is not { } asset)
             {
-                Refuse(PlateSnapshotRefusal.ImageMissing, image);
                 return null;
             }
 
@@ -745,7 +798,7 @@ internal static class PlateSnapshotBuilder
 
                 case ComponentPrimitiveKind.Image:
                     // A component's image that wasn't prepared draws nothing, as in the renderer.
-                    return shape.Image is { } requirement && Use(requirement) is { } asset ? new LayoutImageQuad(asset, a, b, c, d, color) : null;
+                    return shape.Image is { } requirement && Use(requirement, null, shape.Component, isBackground: false) is { } asset ? new LayoutImageQuad(asset, a, b, c, d, color) : null;
 
                 case ComponentPrimitiveKind.Art when shape.Art is { } art:
                     return new LayoutArtQuad(art, a, b, c, d, color);
@@ -755,21 +808,76 @@ internal static class PlateSnapshotBuilder
             }
         }
 
-        /// <summary>The prepared copy of a drawn window, named in the snapshot once however often it is drawn; null when it wasn't prepared.</summary>
-        private AssetId? Use(ImageRequirement requirement)
+        /// <summary>
+        /// The prepared copy of a drawn window, named in the snapshot once however often it is drawn,
+        /// and held as a copy of its bytes. Null when there is none, after recording why: an image
+        /// whose file is missing is left out when a component draws it (the renderer draws
+        /// nothing there) and refused when an element or the background does (it draws a
+        /// placeholder); any other reason, or a copy that isn't its window's, refuses the Plate.
+        /// </summary>
+        private AssetId? Use(ImageRequirement requirement, ProfileElement? element, PlateComponent? component, bool isBackground)
         {
-            if (!prepared.TryGetValue(requirement, out var copy))
+            var preparation = preparations[requirement];
+            if (preparation.Copy is { } copy)
             {
-                return null;
+                if (!IsCopyOf(copy, requirement))
+                {
+                    Refuse(PlateSnapshotRefusal.ImageUnshareable, element);
+                    return null;
+                }
+
+                if (usedRequirements.Add(requirement))
+                {
+                    used.Add(copy.Reference);
+                    usedBytes.Add(copy.Bytes.ToArray());
+                }
+
+                return copy.Reference.AssetId;
             }
 
-            if (usedRequirements.Add(requirement))
+            switch (preparation.Reason)
             {
-                used.Add(copy.Reference);
-                usedBytes.Add(copy.Bytes);
+                case ImageUnavailableReason.Missing when component is not null:
+                    var missing = new LeftOutItem(null, component, LeftOutReason.ImageMissing);
+                    if (!LeftOut.Contains(missing))
+                    {
+                        LeftOut.Add(missing);
+                    }
+
+                    break;
+
+                case ImageUnavailableReason.Missing:
+                    Refuse(isBackground ? PlateSnapshotRefusal.BackgroundImageMissing : PlateSnapshotRefusal.ImageMissing, element);
+                    break;
+
+                case ImageUnavailableReason.TooLarge:
+                    Refuse(PlateSnapshotRefusal.ImageTooLarge, element);
+                    break;
+
+                case ImageUnavailableReason.SizeChanged:
+                    Refuse(PlateSnapshotRefusal.ImageSizeChanged, element);
+                    break;
+
+                default:
+                    Refuse(PlateSnapshotRefusal.ImageUnshareable, element);
+                    break;
             }
 
-            return copy.Reference.AssetId;
+            return null;
+        }
+
+        /// <summary>Whether a copy is its window's: that window's size, and the byte length and digest it declares.</summary>
+        private static bool IsCopyOf(PreparedImage copy, ImageRequirement requirement)
+        {
+            var reference = copy.Reference;
+            if (reference.Width != requirement.Window.Width || reference.Height != requirement.Window.Height || copy.Bytes.Length != reference.ByteLength)
+            {
+                return false;
+            }
+
+            Span<byte> digest = stackalloc byte[32];
+            SHA256.HashData(copy.Bytes.Span, digest);
+            return CryptographicOperations.FixedTimeEquals(digest, reference.Sha256);
         }
 
         private LayoutPoint Point(Vector2 point, ProfileElement? element) =>

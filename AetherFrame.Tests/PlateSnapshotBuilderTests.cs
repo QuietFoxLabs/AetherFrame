@@ -510,7 +510,7 @@ public sealed class PlateSnapshotBuilderTests
             Assert.Equal(LayoutFlips.Vertical, background.ImageFlips);
 
             // Only Image mode shares its image; any other mode never names the one it kept.
-            Assert.Equal(mode == ProfileBackgroundMode.Image ? prepared.Values.Single().Reference.AssetId : default, background.ImageAssetId);
+            Assert.Equal(mode == ProfileBackgroundMode.Image ? prepared.Values.Single().Copy!.Reference.AssetId : default, background.ImageAssetId);
             Assert.Equal(mode == ProfileBackgroundMode.Image ? 1 : 0, resolved.Requirements.Count);
         }
     }
@@ -547,6 +547,124 @@ public sealed class PlateSnapshotBuilderTests
     }
 
     [Fact]
+    public void EveryOutcomeOfPreparation_IsHonoured_AndNothingIsDroppedSilently()
+    {
+        var plate = ComponentDocuments.WithAnchors();
+        var overlay = ImageComponent();
+        plate.Components = [overlay];
+        plate.Background = new ProfileBackground { Mode = ProfileBackgroundMode.Image, ImageAssetId = Guid.NewGuid() };
+        var portrait = plate.Elements.OfType<ImageProfileElement>().Single();
+        var resolved = Resolve(plate);
+        var background = resolved.Requirements.Single(r => r.Image == plate.Background.ImageAssetId);
+        var drawn = resolved.Requirements.Single(r => r.Image == portrait.AssetId);
+        var component = resolved.Requirements.Single(r => r.Image == overlay.AssetId);
+
+        IReadOnlyList<PlateSnapshotProblem> With(ImageRequirement requirement, ImageUnavailableReason reason)
+        {
+            var preparations = Prepared(resolved);
+            preparations[requirement] = ImagePreparation.Unavailable(reason);
+            return Refusals(resolved, preparations);
+        }
+
+        // A missing image: refused where the renderer draws a placeholder, left out where it draws nothing.
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.ImageMissing, portrait), Assert.Single(With(drawn, ImageUnavailableReason.Missing)));
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null), Assert.Single(With(background, ImageUnavailableReason.Missing)));
+        var missingOverlay = Prepared(resolved);
+        missingOverlay[component] = ImagePreparation.Unavailable(ImageUnavailableReason.Missing);
+        var candidate = Candidate(resolved, missingOverlay);
+        Assert.Contains(new LeftOutItem(null, overlay, LeftOutReason.ImageMissing), candidate.LeftOut);
+        Assert.DoesNotContain(candidate.Items, item => item is LayoutImageQuad);
+
+        // Any other reason refuses the Plate, whichever item draws the image.
+        foreach (var (reason, refusal) in new[]
+        {
+            (ImageUnavailableReason.TooLarge, PlateSnapshotRefusal.ImageTooLarge),
+            (ImageUnavailableReason.SizeChanged, PlateSnapshotRefusal.ImageSizeChanged),
+            (ImageUnavailableReason.Unshareable, PlateSnapshotRefusal.ImageUnshareable),
+        })
+        {
+            Assert.Equal(new PlateSnapshotProblem(refusal, portrait), Assert.Single(With(drawn, reason)));
+            Assert.Equal(new PlateSnapshotProblem(refusal, null), Assert.Single(With(background, reason)));
+            Assert.Equal(new PlateSnapshotProblem(refusal, null), Assert.Single(With(component, reason)));
+        }
+
+        Assert.Throws<ArgumentException>(() => PlateSnapshotBuilder.Map(resolved, new Dictionary<ImageRequirement, ImagePreparation>()));
+    }
+
+    [Fact]
+    public void ACopyThatIsntItsWindows_IsRefused_AndTheCandidateOwnsItsBytes()
+    {
+        var plate = Blank();
+        var image = new ImageProfileElement { AssetId = Guid.NewGuid(), DisplayMode = ProfileImageFit.Fill, Size = new Vector2(100f, 100f) };
+        plate.Elements.Add(image);
+        var measurements = new Measurements();
+        measurements.Sizes[image.AssetId] = (1000, 400);
+        var resolved = Resolve(plate, measurements);
+        var requirement = Assert.Single(resolved.Requirements);
+        var right = Copy(requirement);
+
+        // The whole image offered for a 400 by 400 window, a wrong length, a wrong digest.
+        var wrong = new[]
+        {
+            new PreparedImage(new ImageReference(AssetId.NewId(), SHA256.HashData(right.Bytes.Span), ImageFormat.Png, right.Bytes.Length, 1000, 400), right.Bytes),
+            new PreparedImage(new ImageReference(AssetId.NewId(), SHA256.HashData(right.Bytes.Span), ImageFormat.Png, right.Bytes.Length + 1, requirement.Window.Width, requirement.Window.Height), right.Bytes),
+            new PreparedImage(new ImageReference(AssetId.NewId(), SHA256.HashData([1]), ImageFormat.Png, right.Bytes.Length, requirement.Window.Width, requirement.Window.Height), right.Bytes),
+        };
+        foreach (var copy in wrong)
+        {
+            var preparations = new Dictionary<ImageRequirement, ImagePreparation> { [requirement] = ImagePreparation.Prepared(copy) };
+            Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.ImageUnshareable, image), Assert.Single(Refusals(resolved, preparations)));
+        }
+
+        // Bytes the caller changes after mapping aren't the candidate's.
+        var buffer = right.Bytes.ToArray();
+        var shown = new PreparedImage(right.Reference, buffer);
+        var candidate = Candidate(resolved, new Dictionary<ImageRequirement, ImagePreparation> { [requirement] = ImagePreparation.Prepared(shown) });
+        buffer[0] ^= 0xFF;
+        Assert.Equal(right.Bytes.ToArray(), candidate.ImageBytes.Single().ToArray());
+    }
+
+    [Fact]
+    public void TheView_IsWhatTheProfileViewShows_FromItsOwnBounds()
+    {
+        // A Name Backing at twice its size, around the name's whole box, reaches far past the
+        // canvas in the Profile View's bounds, though the measured backing it draws is narrower:
+        // a text in that reach is shown there, and shared.
+        var plate = ComponentDocuments.WithAnchors();
+        ((TextProfileElement)plate.Elements.Single(e => e.Role == ProfileElementRole.BasicName)).Wrap = false;
+        var backing = ComponentDocuments.Of(BuiltInComponentCatalog.NameBackingBar);
+        backing.Scale = 2f;
+        plate.Components = [backing];
+        var beyond = new TextProfileElement { Text = "Beyond", Position = new Vector2(plate.CanvasWidth + 20f, 100f), Size = new Vector2(100f, 30f), ZIndex = 20 };
+        plate.Elements.Add(beyond);
+        Assert.True(ProfileVisualBounds.Compute(plate, ProfileRenderOptions.Finished).Max.X > beyond.Position.X + 10f);
+
+        var candidate = Candidate(Resolve(plate));
+
+        Assert.Contains(candidate.Items, item => item is LayoutText { Text: "Beyond" });
+        Assert.DoesNotContain(candidate.LeftOut, left => left.Element == beyond);
+    }
+
+    [Fact]
+    public void AVisibleComponentThisBuildDoesntKnow_IsRefused_AHiddenOneIsNot()
+    {
+        var plate = Blank();
+        plate.Components = [new PlateComponent { Kind = PlateComponentKind.PlateFrame, DefinitionId = "af.component.from-a-newer-build" }];
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.MadeByNewerVersion, null), Assert.Single(Refusals(Resolve(plate))));
+
+        plate.Components[0].Visible = false;
+        Assert.NotNull(Candidate(Resolve(plate)));
+    }
+
+    [Fact]
+    public void ABackgroundImageIdThatIsEmpty_IsAMissingImage_AsTheRendererDrawsItsPlaceholder()
+    {
+        var plate = Blank();
+        plate.Background = new ProfileBackground { Mode = ProfileBackgroundMode.Image, ImageAssetId = Guid.Empty };
+        Assert.Equal(new PlateSnapshotProblem(PlateSnapshotRefusal.BackgroundImageMissing, null), Assert.Single(Refusals(Resolve(plate))));
+    }
+
+    [Fact]
     public void ANameTheNameRuleRefuses_IsRefused_AskingForARename()
     {
         foreach (var name in new[] { string.Empty, "Line" + (char)0x2028 + "break", new string('a', ProtocolLimits.MaxNameScalars + 1) })
@@ -578,14 +696,28 @@ public sealed class PlateSnapshotBuilderTests
 
         Assert.Contains(Refusals(Resolve(plate)), p => p.Refusal == PlateSnapshotRefusal.TooManyImages);
 
-        var two = Blank();
-        two.Elements.Add(new ImageProfileElement { AssetId = Guid.NewGuid(), ZIndex = 0 });
-        two.Elements.Add(new ImageProfileElement { AssetId = Guid.NewGuid(), ZIndex = 1 });
-        var resolved = Resolve(two);
-
         // Two images of 8,192 by 2,049 hold 33,570,816 pixels, 16,384 over the limit; by 2,048, exactly at it.
-        Assert.Equal(PlateSnapshotRefusal.TooManyImagePixels, Assert.Single(Refusals(resolved, Prepared(resolved, width: 8192, height: 2049))).Refusal);
-        Assert.NotNull(Candidate(resolved, Prepared(resolved, width: 8192, height: 2048)));
+        foreach (var (rows, allowed) in new[] { (2049, false), (2048, true) })
+        {
+            var two = Blank();
+            var measurements = new Measurements();
+            for (var index = 0; index < 2; index++)
+            {
+                var image = new ImageProfileElement { AssetId = Guid.NewGuid(), ZIndex = index };
+                two.Elements.Add(image);
+                measurements.Sizes[image.AssetId] = (8192, rows);
+            }
+
+            var resolved = Resolve(two, measurements);
+            if (allowed)
+            {
+                Assert.NotNull(Candidate(resolved));
+            }
+            else
+            {
+                Assert.Equal(PlateSnapshotRefusal.TooManyImagePixels, Assert.Single(Refusals(resolved)).Refusal);
+            }
+        }
 
         // Five images of 8 MiB are 41,943,040 bytes, exactly the limit; six are over it.
         foreach (var (count, allowed) in new[] { (5, true), (6, false) })
@@ -619,6 +751,13 @@ public sealed class PlateSnapshotBuilderTests
         }
 
         Assert.Equal(PlateSnapshotRefusal.TooMuchText, Assert.Single(Refusals(Resolve(plate))).Refusal);
+
+        // 16 texts of 2,000 are 32,000 scalars, exactly the limit; and one text of 2,048 is at its own.
+        plate.Elements.RemoveAt(plate.Elements.Count - 1);
+        Assert.NotNull(Candidate(Resolve(plate)));
+        var atLimit = Blank();
+        atLimit.Elements.Add(new TextProfileElement { Role = ProfileElementRole.BasicJob, Text = "Paladin" });
+        Assert.NotNull(Candidate(Resolve(atLimit, new Measurements { Display = _ => (true, new string('a', ProtocolLimits.MaxLayoutItemTextScalars)) })));
 
         foreach (var unshareable in new[] { "a" + (char)0 + "b", "a" + (char)0xD800, (char)0xDC00 + "a" })
         {
@@ -732,17 +871,17 @@ public sealed class PlateSnapshotBuilderTests
     private static ResolvedPlate Synthetic(IReadOnlyList<ResolvedStep> steps) =>
         new(Guid.NewGuid(), "Many", 1280f, 720f, ResolvedBackground.Nothing, steps, [], [], []);
 
-    private static SnapshotCandidate Candidate(ResolvedPlate resolved, IReadOnlyDictionary<ImageRequirement, PreparedImage>? prepared = null)
+    private static SnapshotCandidate Candidate(ResolvedPlate resolved, IReadOnlyDictionary<ImageRequirement, ImagePreparation>? prepared = null)
     {
         var result = PlateSnapshotBuilder.Map(resolved, prepared ?? Prepared(resolved));
         Assert.Empty(result.Problems);
         return result.Candidate!;
     }
 
-    private ProfileLayoutSnapshot Build(ResolvedPlate resolved, IReadOnlyDictionary<ImageRequirement, PreparedImage>? prepared = null) =>
+    private ProfileLayoutSnapshot Build(ResolvedPlate resolved, IReadOnlyDictionary<ImageRequirement, ImagePreparation>? prepared = null) =>
         Candidate(resolved, prepared).ToSnapshot(profile, revision, CreatedAt);
 
-    private static IReadOnlyList<PlateSnapshotProblem> Refusals(ResolvedPlate resolved, IReadOnlyDictionary<ImageRequirement, PreparedImage>? prepared = null)
+    private static IReadOnlyList<PlateSnapshotProblem> Refusals(ResolvedPlate resolved, IReadOnlyDictionary<ImageRequirement, ImagePreparation>? prepared = null)
     {
         var result = PlateSnapshotBuilder.Map(resolved, prepared ?? Prepared(resolved));
         Assert.Null(result.Candidate);
@@ -750,18 +889,23 @@ public sealed class PlateSnapshotBuilderTests
         return result.Problems;
     }
 
-    /// <summary>A prepared copy of every required window, as N2-6b makes one: a fresh asset id, a digest, a size and some bytes.</summary>
-    private static Dictionary<ImageRequirement, PreparedImage> Prepared(ResolvedPlate resolved, int? width = null, int? height = null, long byteLength = 1_000)
+    /// <summary>A prepared copy of every required window, as N2-6b makes one: a fresh asset id, the window's size, and bytes of the declared length and digest.</summary>
+    private static Dictionary<ImageRequirement, ImagePreparation> Prepared(ResolvedPlate resolved, long byteLength = 64)
     {
-        var prepared = new Dictionary<ImageRequirement, PreparedImage>();
+        var prepared = new Dictionary<ImageRequirement, ImagePreparation>();
         foreach (var requirement in resolved.Requirements)
         {
-            var bytes = SHA256.HashData(requirement.Image.ToByteArray());
-            var reference = new ImageReference(AssetId.NewId(), SHA256.HashData(bytes), ImageFormat.Png, byteLength, width ?? requirement.Window.Width, height ?? requirement.Window.Height);
-            prepared[requirement] = new PreparedImage(reference, bytes);
+            prepared[requirement] = ImagePreparation.Prepared(Copy(requirement, byteLength));
         }
 
         return prepared;
+    }
+
+    private static PreparedImage Copy(ImageRequirement requirement, long byteLength = 64)
+    {
+        var bytes = new byte[byteLength];
+        requirement.Image.ToByteArray().CopyTo(bytes, 0);
+        return new PreparedImage(new ImageReference(AssetId.NewId(), SHA256.HashData(bytes), ImageFormat.Png, bytes.Length, requirement.Window.Width, requirement.Window.Height), bytes);
     }
 
     private static ProfileDocument Blank() => PlateFactory.Create(PlateStartingLayout.Blank, Guid.NewGuid(), "Shared", Now);
