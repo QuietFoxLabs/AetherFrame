@@ -294,6 +294,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - viewing: which game right-click menus offer "View AetherFrame Plate", the name search's limits, and that neither works without opting in;
 - what the server learns, keeps and logs about lookups and searches (S5 carried over), and rate limits against scraping who has opted in;
 - reporting and hiding a Plate, and the operator's takedown steps;
+- how consent works when saving updates what others see (V2). V2 conflicts with two consent rules already recorded: D5's N2-6 note, point 6 (a consent screen before each signing), and #56's rule that a Plate signed from the share check is shown on that screen before its first send, or dropped. Batch C amends both explicitly, with a security reviewer's concurrence (for example, one consent per character at opt-in that covers later saves), and never routes around them;
 - K4 and the D2 backup under V3, and what the persona window becomes (R5 has already retired R1 and R4), and exactly what a viewer receives;
 - NETWORK2.md's increments N2-7 to N2-11 restated to match. No code.
 
