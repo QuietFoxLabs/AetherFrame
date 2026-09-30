@@ -31,6 +31,14 @@ public sealed class PersonaWindowModelTests
 
         Assert.Contains("never update or unpublish", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("no account can recover it", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+
+        // Decision batch B: who can still remove what a lost key shared (S3), and what keeping the
+        // persona folder does and doesn't do (P4).
+        Assert.Contains("only the server's operator can then remove what it shared", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+        Assert.Contains("Network\\Personas folder holds your keys and the list of what each persona shared", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+        Assert.Contains("keeping it keeps that list, which you need to update or unpublish", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+        Assert.Contains("It isn't a backup", PersonaWindowModel.K4Text, StringComparison.Ordinal);
+        Assert.Contains("normally won't open", PersonaWindowModel.K4Text, StringComparison.Ordinal);
         Assert.Contains("Any program running as you, other Dalamud plugins included, can use it", PersonaWindowModel.K2Disclosure, StringComparison.Ordinal);
         Assert.Contains("wherever your Windows password is known", PersonaWindowModel.K2Disclosure, StringComparison.Ordinal);
         Assert.Contains("your organisation may be able to recover it", PersonaWindowModel.K2Disclosure, StringComparison.Ordinal);
