@@ -65,8 +65,8 @@ public enum PersonaError
     /// <summary>
     /// The persona registry's header names a later registry version: a newer AetherFrame wrote it,
     /// or, when AetherFrame is already up to date, damage hit its version bytes. It is left exactly
-    /// as it was, never overwritten, and no manager is made from it; updating AetherFrame reads it
-    /// again (P3 in the decision register).
+    /// as it was, never overwritten, and no manager is made from it. When a newer AetherFrame wrote
+    /// it, updating reads it again (P3 in the decision register).
     /// </summary>
     RegistryNewerVersion,
 

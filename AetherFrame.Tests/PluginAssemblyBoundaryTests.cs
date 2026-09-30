@@ -204,11 +204,12 @@ public class PluginAssemblyBoundaryTests
         roots.Any(root => ns == root || ns.StartsWith(root + ".", StringComparison.Ordinal));
 
     [Fact]
-    public void DeclaredNativeCalls_AreDpapisAlone_AndOnlyInThePreviewFlavour()
+    public void DeclaredNativeCalls_AreDpapisAndTheWrittenThroughMove_AndOnlyInThePreviewFlavour()
     {
         // The player build declares no P/Invoke of its own (it reaches native code only through
         // Dalamud and ImGui, like every plugin). The preview flavour declares exactly the three DPAPI
-        // needs (docs/networking/DecisionRegister.md, K2), all in the DPAPI protector. This reads the
+        // needs, all in the DPAPI protector (docs/networking/DecisionRegister.md, K2), and the
+        // written-through move the persona files need, in its own class (P3). This reads the
         // P/Invoke declarations, which LibraryImport's generated stubs also make.
         var path = RepositoryPaths.PluginAssembly();
         if (path is null)
@@ -246,6 +247,7 @@ public class PluginAssemblyBoundaryTests
                     "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptProtectData",
                     "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptUnprotectData",
                     "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: kernel32.dll!LocalFree",
+                    "AetherFrame.Services.Network.Personas.WrittenThroughMove: kernel32.dll!MoveFileExW",
                 ],
                 imports);
         }
@@ -332,6 +334,107 @@ public class PluginAssemblyBoundaryTests
 
         Assert.True(scanned > 0, "no plugin source was scanned");
         Assert.True(offending.Count == 0, "Plugin sources use a networking API at: " + string.Join(", ", offending));
+    }
+
+    /// <summary>
+    /// Calls no plugin source may make, in any flavour, each ruled out by a decision in
+    /// docs/networking/DecisionRegister.md: the call, the one file allowed to name it (where it is
+    /// defined), and the rule.
+    /// </summary>
+    public static TheoryData<string, string, string> CallsTheDecisionsRuleOut => new()
+    {
+        { "TryOpenActiveSigner", "", "L10: every signer the plugin opens is bound to the persona an operation showed, through TryOpenSigner" },
+        { "RunWithDpapiClaim", "PersonaCapabilityProbe.cs", "K3: the plugin calls only the probe's public entry point, which binds the protection claim" },
+        { "new PersonaManager(", "", "P3: the plugin makes its manager with PersonaManager.Load, never without its registry" },
+    };
+
+    [Theory]
+    [MemberData(nameof(CallsTheDecisionsRuleOut))]
+    public void PluginSources_NeverMakeACallTheDecisionsRuleOut(string call, string definedIn, string rule)
+    {
+        var offending = new List<string>();
+        var scanned = 0;
+        foreach (var (file, relative) in PluginSources())
+        {
+            scanned++;
+            if (definedIn.Length > 0 && string.Equals(Path.GetFileName(file), definedIn, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var lineNumber = 0;
+            foreach (var line in File.ReadLines(file))
+            {
+                lineNumber++;
+                if (!line.TrimStart().StartsWith("//", StringComparison.Ordinal) && line.Contains(call, StringComparison.Ordinal))
+                {
+                    offending.Add($"{relative}:{lineNumber}");
+                }
+            }
+        }
+
+        Assert.True(scanned > 0, "no plugin source was scanned");
+        Assert.True(offending.Count == 0, rule + ". Found at: " + string.Join(", ", offending));
+    }
+
+    [Fact]
+    public void ThePreviewFlavour_MakesItsPersonaManagerOnlyWithItsRegistry()
+    {
+        // P3: the plugin makes its manager with PersonaManager.Load and never falls back to the
+        // registry-less public constructor, which is for tests. A source scan can't see every way
+        // C# writes a constructor call (a target-typed new, a field initializer), so this reads the
+        // compiled IL: nothing outside PersonaManager itself constructs one through that
+        // constructor. A player build holds no PersonaManager, so there is nothing to check there.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var metadata = pe.GetMetadataReader();
+        var manager = metadata.TypeDefinitions
+            .Select(handle => (Handle: handle, Type: metadata.GetTypeDefinition(handle)))
+            .Where(t => metadata.GetString(t.Type.Namespace) == "AetherFrame.Personas" && metadata.GetString(t.Type.Name) == "PersonaManager")
+            .Select(t => (TypeDefinitionHandle?)t.Handle)
+            .SingleOrDefault();
+        if (manager is null)
+        {
+            Assert.False(PreviewFlavour, "The preview flavour holds no PersonaManager.");
+            return;
+        }
+
+        var publicConstructors = metadata.GetTypeDefinition(manager.Value).GetMethods()
+            .Where(handle =>
+            {
+                var method = metadata.GetMethodDefinition(handle);
+                return metadata.GetString(method.Name) == ".ctor" && (method.Attributes & System.Reflection.MethodAttributes.MemberAccessMask) == System.Reflection.MethodAttributes.Public;
+            })
+            .Select(handle => MetadataTokens.GetToken(handle))
+            .ToHashSet();
+        Assert.NotEmpty(publicConstructors);
+
+        var offending = new List<string>();
+        foreach (var handle in metadata.MethodDefinitions)
+        {
+            var method = metadata.GetMethodDefinition(handle);
+            if (method.RelativeVirtualAddress == 0 || method.GetDeclaringType() == manager.Value)
+            {
+                continue;
+            }
+
+            var body = pe.GetMethodBody(method.RelativeVirtualAddress);
+            foreach (var (opCode, token) in IlScan.TokenOperands(body.GetILReader()))
+            {
+                if (opCode == ILOpCode.Newobj && publicConstructors.Contains(token))
+                {
+                    var type = metadata.GetTypeDefinition(method.GetDeclaringType());
+                    offending.Add(metadata.GetString(type.Namespace) + "." + metadata.GetString(type.Name) + "." + metadata.GetString(method.Name));
+                }
+            }
+        }
+
+        Assert.True(offending.Count == 0, "P3: the plugin makes its PersonaManager with PersonaManager.Load, never without its registry. Constructed in: " + string.Join(", ", offending));
     }
 
     /// <summary>Every C# source of the plugin project, with its path relative to the project folder.</summary>
