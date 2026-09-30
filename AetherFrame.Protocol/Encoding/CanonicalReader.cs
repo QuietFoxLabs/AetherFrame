@@ -36,6 +36,9 @@ internal ref struct CanonicalReader
 
     public ulong ReadU64(string field) => BinaryPrimitives.ReadUInt64BigEndian(Take(8, field));
 
+    /// <summary>Reads a signed four-byte integer (two's complement, big-endian): the one signed type, used only by schema 2's layout.</summary>
+    public int ReadI32(string field) => BinaryPrimitives.ReadInt32BigEndian(Take(4, field));
+
     /// <summary>Reads bytes whose length the schema fixes.</summary>
     public ReadOnlySpan<byte> ReadFixed(int length, string field) => Take(length, field);
 
@@ -57,6 +60,9 @@ internal ref struct CanonicalReader
 
     /// <summary>Reads a text field (see <see cref="ProtocolText"/>).</summary>
     public string ReadText(string field) => ProtocolText.Decode(ReadLengthPrefixed(ProtocolLimits.MaxTextBytes, field), field);
+
+    /// <summary>Reads a text field whose own limit is <paramref name="maxScalars"/> scalars, and so at most four times that in bytes.</summary>
+    public string ReadText(string field, int maxScalars) => ProtocolText.Decode(ReadLengthPrefixed(maxScalars * 4, field), field, maxScalars);
 
     /// <summary>
     /// Reads a name field (see <see cref="ProtocolName"/>): its byte length is checked against the

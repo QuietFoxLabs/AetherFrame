@@ -38,6 +38,21 @@ public readonly struct AssetId : IEquatable<AssetId>, IComparable<AssetId>
         return new AssetId(h, l);
     }
 
+    /// <summary>
+    /// Reads 16 wire bytes where the all-zero value means "none" (a layout background with no
+    /// image): the empty id for all zeros, the id otherwise.
+    /// </summary>
+    internal static AssetId FromBytesOrEmpty(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length != ProtocolConstants.OpaqueIdLength)
+        {
+            throw new ProtocolException(ProtocolError.InvalidValue, $"An asset id is {ProtocolConstants.OpaqueIdLength} bytes.");
+        }
+
+        var (h, l) = Id128.Read(bytes);
+        return new AssetId(h, l);
+    }
+
     /// <summary>Parses the text form strictly.</summary>
     /// <exception cref="ProtocolException"><see cref="ProtocolError.InvalidValue"/>.</exception>
     public static AssetId Parse(string text) =>

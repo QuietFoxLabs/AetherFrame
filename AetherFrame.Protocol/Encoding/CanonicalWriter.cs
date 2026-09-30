@@ -47,6 +47,12 @@ internal sealed class CanonicalWriter
         buffer.Advance(8);
     }
 
+    public void WriteI32(int value)
+    {
+        BinaryPrimitives.WriteInt32BigEndian(buffer.GetSpan(4), value);
+        buffer.Advance(4);
+    }
+
     /// <summary>Writes bytes whose length the reader knows from the schema (a key, an identifier, a digest).</summary>
     public void WriteFixed(ReadOnlySpan<byte> bytes)
     {
@@ -64,6 +70,12 @@ internal sealed class CanonicalWriter
     public void WriteText(string text, string field)
     {
         WriteLengthPrefixed(ProtocolText.Encode(text, field));
+    }
+
+    /// <summary>Writes a text field whose own limit is <paramref name="maxScalars"/> scalars.</summary>
+    public void WriteText(string text, string field, int maxScalars)
+    {
+        WriteLengthPrefixed(ProtocolText.Encode(text, field, maxScalars));
     }
 
     /// <summary>Writes a name field: a four-byte UTF-8 byte length followed by the UTF-8 bytes (see <see cref="ProtocolName"/>).</summary>

@@ -75,6 +75,12 @@ The owner chose "Approve both now", whose stated terms were:
 
 Only the owner can change this approval.
 
+**How N2-3 is delivered.** APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026. N2-3 is delivered as two increments, each with the conditions above applied on its own:
+- **N2-3a**, the layout schema: its decisions are D5, D8, D9a, I1, N1 and N7, all recorded in decision batch A.
+- **N2-3b**, the request proof: its decisions are S1, D7 and L8, recorded in N2-3b before it merges.
+
+The signed-byte changes the owner approved are unchanged: the layout schema and the request proof, nothing more. Rationale: two smaller pull requests are reviewed more thoroughly than one, and the layout does not depend on the request proof. This note records how the approval is applied; it does not change the approval, which only the owner can.
+
 ## Decisions approved under the delegation
 
 These are Claude's decisions under the owner's delegation of September 29, 2026, not the owner's own. The owner can overrule any of them in the Owner inbox, and the reversal is recorded here.
@@ -288,7 +294,7 @@ N2-3 changes the specification's wording in section 8.2 from "SHA-256 of the sou
 
 ### D8: no metadata-only snapshot reaches players. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
-**Option and scope.** Schema 1 of `ProfileSnapshot` (a name and image references) stays a test schema:
+**Option and scope.** Applied by N2-3a (specification, section 8.5). Schema 1 of `ProfileSnapshot` (a name and image references) stays a test schema:
 - the plugin never builds one to publish;
 - the server (N2-7) refuses to publish one;
 - the library keeps reading it, and its vectors stay, changed only as N3's marker and D4's name rule require (N2-2). Three of them hold names D4 refuses: an empty name, one with CR LF, TAB and U+FEFF, and a 32,000-scalar name; N2-2 turns them into rejected vectors and says where the general 32,000-scalar text limit stays tested (L2).
@@ -334,7 +340,7 @@ The per-Plate image count is schema 2's limit (N2-3). **An image over a limit is
 - Showing the prepared copy makes the player's consent informed.
 - One rule for all animations is simpler than one per format.
 
-**Not settled:** I2, and schema 2's count limit.
+**Not settled:** I2. `[updated 2026-09-29: schema 2's limits are settled by N2-3a (specification, section 8.5): at most 8 images, whose pixels total at most 33,554,432. The publisher refuses a Plate over them with a message, never dropping or downscaling an image. The security-focused reviewer of N2-3a recommended a cap on the images' total pixels, which bounds what a viewer decodes, and found it sound as implemented at `a388099`, with its exact boundary tested from `3528363`.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026). It did **not concur** with the first wording, which relied on the publisher preparing images honestly, and asked for the receive-side rule, now above. It **concurred** with the amended entry on its recheck of `779e873`, adding that the sniff runs before any decoding and allows only frame types SOF0 to SOF2, also above.
 

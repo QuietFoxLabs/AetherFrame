@@ -66,13 +66,17 @@ public class AssemblyBoundaryTests
     public void RemoteDocumentHierarchy_IsClosed()
     {
         var subtypes = Protocol.GetExportedTypes().Where(t => t.IsSubclassOf(typeof(RemoteDocument))).ToArray();
-        Assert.Equal(["ProfileRetraction", "ProfileSnapshot"], subtypes.Where(t => !t.IsAbstract).Select(t => t.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(["ProfileLayoutSnapshot", "ProfileRetraction", "ProfileSnapshot"], subtypes.Where(t => !t.IsAbstract).Select(t => t.Name).Order(StringComparer.Ordinal));
         Assert.All(subtypes.Where(t => !t.IsAbstract), t => Assert.True(t.IsSealed));
         Assert.Equal(["RemoteProfileDocument"], subtypes.Where(t => t.IsAbstract).Select(t => t.Name));
 
         // Nothing outside the assembly can derive a document type: every constructor of the abstract
         // types is private protected (or narrower), never public, protected or protected internal.
-        foreach (var type in new[] { typeof(RemoteDocument) }.Concat(subtypes.Where(t => t.IsAbstract)))
+        // The same holds for the layout items of schema 2 (section 8.5): a closed set of kinds.
+        var items = Protocol.GetExportedTypes().Where(t => t.IsSubclassOf(typeof(AetherFrame.Protocol.Remote.LayoutItem))).Select(t => t.Name).Order(StringComparer.Ordinal);
+        Assert.Equal(["LayoutArtQuad", "LayoutImage", "LayoutImageQuad", "LayoutQuad", "LayoutText", "LayoutTriangle"], items);
+
+        foreach (var type in new[] { typeof(RemoteDocument), typeof(AetherFrame.Protocol.Remote.LayoutItem) }.Concat(subtypes.Where(t => t.IsAbstract)))
         {
             var constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             Assert.NotEmpty(constructors);

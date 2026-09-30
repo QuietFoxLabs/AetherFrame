@@ -90,7 +90,13 @@ public sealed class ImageReference
     /// order (docs/networking/ProtocolSpecification-v1.md, "Errors"). <paramref name="previous"/> is
     /// the asset id of the reference before this one in the set, or null for the first.
     /// </summary>
-    internal static ImageReference Read(ref CanonicalReader reader, AssetId? previous)
+    internal static ImageReference Read(ref CanonicalReader reader, AssetId? previous) => Read(ref reader, previous, webPAllowed: true);
+
+    /// <summary>
+    /// As <see cref="Read(ref CanonicalReader, AssetId?)"/>, and when <paramref name="webPAllowed"/> is
+    /// false (schema 2, decision I1) a WebP format is refused as soon as the format is read.
+    /// </summary>
+    internal static ImageReference Read(ref CanonicalReader reader, AssetId? previous, bool webPAllowed)
     {
         var assetId = AssetId.FromBytes(reader.ReadFixed(ProtocolConstants.OpaqueIdLength, "image.assetId"));
         if (previous is { } last && last.CompareTo(assetId) >= 0)
@@ -102,6 +108,11 @@ public sealed class ImageReference
         CheckDigest(digest);
         var format = (ImageFormat)reader.ReadU8("image.format");
         CheckFormat(format);
+        if (!webPAllowed && format == ImageFormat.WebP)
+        {
+            throw new ProtocolException(ProtocolError.InvalidValue, "A layout snapshot carries only PNG and JPEG images.");
+        }
+
         var byteLength = reader.ReadU64("image.byteLength");
         if (byteLength == 0)
         {

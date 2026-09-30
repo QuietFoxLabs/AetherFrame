@@ -25,6 +25,7 @@ internal static class VectorBuilder
         new("profile-snapshot-unicode", "A", new ProfileSnapshot(Samples.Profile, Samples.RevisionUnicode, 1_726_000_000, SnapshotUnicodeName, [Samples.Image(Samples.Asset2, 0x7f, ImageFormat.WebP, ProtocolLimits.MaxImageBytes, 8192, 2441)]), null),
         new("profile-snapshot-minimal", "A", new ProfileSnapshot(Samples.Profile, Samples.RevisionEmpty, 0, "A", []), null),
         new("profile-snapshot-maximal", "A", PayloadBuilder.MaximalSnapshot(), "name = U+1F600 repeated 64 times (256 UTF-8 bytes, the name's limits); createdAt = 253402300799; images = eight references with asset ids ast_ + 31 zeros + 1..8, digest bytes all equal to the index, format png (1), 5242880 bytes each (40 MiB in total), 5000 x 4000 pixels; profile id as in profile-snapshot and revision id rev_ + b5 repeated 16 times. Payload, signing input and document are omitted for size; digest and signature are over exactly that construction."),
+        new("profile-layout-snapshot", "A", LayoutSamples.Rich(), null),
         new("profile-retraction", "B", new ProfileRetraction(Samples.ProfileB, Samples.IssuedAt), null),
     ];
 

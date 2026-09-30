@@ -9,6 +9,7 @@ Version 1 is the NETWORK0 foundation: signed, identity-bearing documents. It has
 ## 1. Notation
 
 - `u8`, `u16`, `u32`, `u64`: unsigned integers of 1, 2, 4 and 8 bytes, **big-endian** (most significant byte first), fixed width, never variable-length.
+- `i32`: a signed integer of 4 bytes, two's complement, big-endian. Only schema 2's layout (section 8.5) uses it.
 - `bytes[n]`: exactly `n` bytes whose length the schema fixes.
 - `bytes`: a `u32` byte length followed by that many bytes.
 - `text`: `bytes` holding UTF-8 (section 2.3).
@@ -21,7 +22,7 @@ Every structure is a plain concatenation of its fields in the order listed: ther
 
 ### 2.1 Integers
 
-Fixed width, big-endian, no sign. A value is read exactly as its width says; a value outside the range its field allows is refused (`InvalidValue` or `LimitExceeded`, section 8), never clamped or wrapped.
+Fixed width, big-endian, no sign except `i32` (two's complement). A value is read exactly as its width says; a value outside the range its field allows is refused (`InvalidValue` or `LimitExceeded`, section 8), never clamped or wrapped.
 
 ### 2.2 Byte strings and counts
 
@@ -167,7 +168,7 @@ The overhead is 140 bytes, so the payload is at most 1,048,436 bytes. The docume
 
 | Value | Type | Payload |
 |---|---|---|
-| 1 | ProfileSnapshot | section 8.1 |
+| 1 | ProfileSnapshot | section 8.1 (schema 1) or 8.5 (schema 2) |
 | 2 | ProfileRetraction | section 8.3 |
 
 Any other value is `UnknownDocumentType`.
@@ -198,11 +199,11 @@ A writer encodes the payload (section 8), builds the signing input (section 5) w
 
 ## 8. Payloads
 
-Each payload starts with its own `u16` schema version, independent of the protocol version: a later schema of the same document type can be introduced while the envelope stays at protocol version 1. A reader refuses any schema version it does not implement (`UnsupportedVersion`). Version 1 defines schema 1 of each type.
+Each payload starts with its own `u16` schema version, independent of the protocol version: a later schema of the same document type can be introduced while the envelope stays at protocol version 1. A reader refuses any schema version it does not implement (`UnsupportedVersion`). Version 1 defines schema 1 of each type, and schema 2 of `ProfileSnapshot` (section 8.5).
 
 ### 8.1 ProfileSnapshot, schema 1
 
-One immutable published revision of a remote profile.
+One immutable published revision of a remote profile, without its layout. Schema 1 is a test schema (decision D8): no client publishes it and no server accepts it for publication; players publish schema 2 (section 8.5).
 
 | Field | Type | Rules |
 |---|---|---|
@@ -244,14 +245,14 @@ A writer refuses the same names, and an unpaired surrogate as `InvalidText`.
 | Field | Type | Rules |
 |---|---|---|
 | assetId | `bytes[16]` | not all zero |
-| sha256 | `bytes[32]` | SHA-256 of the source image bytes; not all zero |
+| sha256 | `bytes[32]` | SHA-256 of the **prepared copy** the client uploads (decision D5), never of the player's original file; not all zero |
 | format | `u8` | 1 = PNG, 2 = JPEG, 3 = WebP; anything else `InvalidValue` |
 | byteLength | `u64` | 1 to 8,388,608 (8 MiB); 0 is `InvalidValue`, more is `LimitExceeded` |
 | width | `u32` | 1 to 8192; 0 is `InvalidValue`, more is `LimitExceeded` |
 | height | `u32` | 1 to 8192, as width |
 | | | `width × height ≤ 20,000,000`: `LimitExceeded` |
 
-The format is what the client sniffed from the image bytes, never a file extension. No file name, path or local identifier is carried.
+The format is what the client sniffed from the image bytes, never a file extension. No file name, path or local identifier is carried. Every field describes the prepared copy: the client decodes the image and encodes the pixels again, which drops every metadata block, and never puts the original's bytes or digest into a document (decision D5). In schema 2 the format is PNG or JPEG only (decision I1).
 
 ### 8.3 ProfileRetraction, schema 1
 
@@ -276,7 +277,105 @@ Only the owner of a profile can therefore publish to it or retract it, because o
 
 This rule is normative for what a document *means*; it is not something the library can enforce. The library has no record of who owns which profile id, so it can only report the pair. Refusing to apply a valid document to another persona's profile is the backend's obligation (section 13, rule 1) and needs the backend's own owner records; the test fixture models such a record (its `profiles` table) only to check that the vectors are labelled consistently. A valid signature proves who signed; it never proves that the signer owns a profile id somebody else uses.
 
-**Open (review findings N1 and N2, not decided):** the same scoping is not yet stated for revision ids and asset ids. A revision id or an asset id carried in one persona's document says nothing about another persona's use of the same bytes, and a backend that keyed images or revisions by id or digest alone would let one persona reference, probe or overwrite another's (N1). Rule 4 below compares a resubmitted revision only against a stored one, and rule 6 orders by receipt time, so a replayed revision the server no longer holds could become "latest" (N2). Both are backend-gating decisions for the owner (NETWORK0.md, "Open product decisions") and change no bytes.
+**Identifier scope (decision N1).** The same scoping holds for revision ids and asset ids. A revision id is scoped to (persona, profileId), and an asset id and an image digest to the persona: a revision id or an asset id carried in one persona's document says nothing about another persona's use of the same bytes. A backend stores and serves an asset under (persona, assetId), never deduplicates or compares digests across personas, and never answers whether another persona holds an asset or a digest (section 13, rule 1).
+
+**Open (review finding N2, not decided):** rule 4 below compares a resubmitted revision only against a stored one, and rule 6 orders by receipt time, so a replayed revision the server no longer holds could become "latest" (N2). It is a backend-gating decision (decision batch B, with the server) and changes no bytes.
+
+### 8.5 ProfileSnapshot, schema 2
+
+One immutable published revision of a remote profile **with its layout**: what a viewer draws, already resolved. It is the first schema players publish (decision D8); schema 1 stays a test schema. It is document type 1, like schema 1, told apart by its `schemaVersion`.
+
+The layout is a **paint list**. The publishing client resolves everything its editor derives, and lists what is drawn, in the order it is drawn:
+- which elements are hidden or empty;
+- the display text of each text, affixes included;
+- where each Component's pieces go.
+
+A viewer draws the list and nothing else. It never needs the publisher's editor logic, and nothing in a document selects behaviour beyond what is listed here. The model shares nothing with the local Plate model. Its value ranges cover every value a local Plate can hold (the package limits), so a publisher never clamps a value. A Plate over a whole-snapshot limit below (items, texts, images) is refused by its publisher with a message, and so is a value no layout field can express (a text holding U+0000, say, or a gradient endpoint with a colour component outside 0 to 1, which the local renderer blends before resolving); any other value the local renderer itself resolves (a colour component outside 0 to 1, an unknown font) is carried as the renderer resolves it.
+
+**Units.** Every value is a fixed-point integer:
+
+| Unit | Encoding | Meaning |
+|---|---|---|
+| coordinate | `i32`, two's complement, big-endian | hundredths of a canvas unit; -1,000,000,000 to 1,000,000,000 (10,000,000 units, room for a Plate's elements and the Components scaled from them) |
+| extent | `i32` | hundredths of a canvas unit; 0 to 10,000,000 |
+| angle | `i32` | hundredths of a degree; -36,000 to 36,000 |
+| colour | `bytes[4]` | red, green, blue, alpha, each 0 to 255 (straight alpha) |
+| opacity | `u8` | 0 to 255 |
+| ident | `u8` length, then ASCII | 1 to 96 bytes of `a` to `z`, `0` to `9`, `.` and `-`, starting with a letter. A length of 0 is `InvalidLength` and over 96 `LimitExceeded`, before the bytes are looked at; any other character is `InvalidValue` |
+
+A value outside its range is `InvalidValue`. A canvas unit is what the local Plate calls a pixel of its canvas. A publisher rounds each value to the nearest hundredth, except that an outline thickness above 0 is never rounded down to 0.
+
+**The payload:**
+
+| Field | Type | Rules |
+|---|---|---|
+| schemaVersion | `u16` | 2 |
+| profileId | `bytes[16]` | not all zero |
+| revisionId | `bytes[16]` | not all zero |
+| createdAt | `u64` | timestamp, section 2.5 |
+| name | `text` | the name rule, section 8.1.1 |
+| canvasWidth | extent | 100 to 819,200 (1 to 8,192 units) |
+| canvasHeight | extent | 100 to 819,200 |
+| background | Background | below |
+| items | `list<Item>` | at most 2,048, in paint order; a count over 2,048 is `LimitExceeded` before any item is read |
+| images | `list<ImageReference>` | a **set** keyed by `assetId` (section 2.7); at most 8; `format` 1 (PNG) or 2 (JPEG) only, anything else `InvalidValue` |
+
+After `images` the payload ends; a byte more is `TrailingBytes`. The rules over the whole payload, checked after the last field in this order:
+1. The images' `byteLength` sum is at most 41,943,040 bytes, as in schema 1: `LimitExceeded`.
+2. The images' `width` × `height` sum is at most 33,554,432 pixels, so a viewer's decoding stays bounded however well the images compress: `LimitExceeded`.
+3. The items' texts hold at most 32,000 scalar values in all: `LimitExceeded`.
+4. Every asset id the background or an item names is in `images`, and every entry of `images` is named at least once: `InvalidValue`. A snapshot therefore carries no image nobody draws.
+
+**Background:**
+
+| Field | Type | Rules |
+|---|---|---|
+| mode | `u8` | 0 none, 1 solid colour, 2 linear gradient, 3 textured fill, 4 image |
+| primary | colour | |
+| secondary | colour | |
+| gradientAngle | angle | |
+| opacity | opacity | |
+| texture | `u8` | 0 none, 1 to 20 the patterns of Appendix A |
+| textureIntensity | opacity | |
+| textureScale | extent | 400 to 12,800 |
+| textureRotation | angle | |
+| imageAssetId | `bytes[16]` | all zero for no image; otherwise an asset id of `images`. Not all zero exactly when `mode` is 4 |
+| imageFit | `u8` | 0 stretch, 1 fit, 2 fill |
+| imageFlips | `u8` | bit 0 horizontal, bit 1 vertical; other bits 0 |
+
+**Item.** A `u8` kind, then the fields of that kind:
+
+| Kind | Name | Fields |
+|---|---|---|
+| 1 | Text | `x`, `y` coordinates; `width`, `height` extents; `text` (section 2.3, at most 2,048 scalars, may be empty); `font` ident; `fontSize` `i32` (100 to 102,400, hundredths of a canvas unit); `color` colour; `align` `u8` (0 left, 1 centre, 2 right); `verticalAlign` `u8` (0 top, 1 middle, 2 bottom); `flags` `u8` (bit 0 wrap, 1 bold, 2 italic, 3 underline, 4 strikethrough, 5 auto-fit, 6 outline, 7 shadow); `letterSpacing` `i32` (-1,000,000 to 1,000,000, hundredths of a canvas unit); `lineSpacing` `i32` (-1,000,000 to 1,000,000, hundredths of the font size: 100 is single spacing); `autoFitMinimum` `i32` (100 to 102,400); `outlineColor` colour; `outlineThickness` `u16` (0 to 1,600, hundredths of a canvas unit); `shadowColor` colour; `shadowX`, `shadowY` `i32` (-1,000,000 to 1,000,000, hundredths of a canvas unit); `layout` `u8` (0 legacy, 1 current) |
+| 2 | Image | `assetId` `bytes[16]` (in `images`); `x`, `y` coordinates; `width`, `height` extents; `rotation` angle; `fit` `u8` (0 stretch, 1 fit, 2 fill); `flips` `u8` (as the background's); `opacity` opacity |
+| 3 | Quad | four points, each `x`, `y` coordinates, clockwise from the top left; `color` colour |
+| 4 | Triangle | three points; `color` colour |
+| 5 | Image quad | `assetId` `bytes[16]` (in `images`); four points; `tint` colour |
+| 6 | Art quad | `art` ident; four points; `tint` colour |
+
+Any other kind is `InvalidValue`. Each field is checked as soon as it is read, in the order of the tables, including an item's kind before its fields (section 9.1). An item text follows section 2.3 with a limit of 2,048 scalars: its declared byte length over 8,192 is `LimitExceeded` before the bytes are looked at. Line breaks and format characters are allowed in an item text; only the name refuses them.
+
+**Drawing.** How a viewer draws each part, so that every viewer draws a document the same way:
+- **The canvas** is the rectangle from (0, 0) to (`canvasWidth`, `canvasHeight`). A viewer may draw its own backdrop under it; the backdrop is not part of the Plate. Items are not clipped to the canvas, but a viewer clips everything a document draws to the region it gives the Plate, so no document can draw over the viewer's own interface. A viewer computes positions in floating point or 64-bit integers, since products of the ranges above exceed 32 bits, and rasterises glyphs at a bounded size.
+- **The background.** Mode 0 draws nothing at all, pattern included. Every other mode draws its base, then the pattern over it when `texture` is not 0, and the whole is multiplied by `opacity`:
+  - mode 1 and mode 3 fill with `primary`, its alpha multiplied by `opacity`;
+  - mode 2 is a linear gradient from `primary` to `secondary` at `gradientAngle`, with both endpoints drawn opaque and only `opacity` applied;
+  - mode 4 draws the image with `imageFit` and `imageFlips`, multiplied by `opacity`;
+  - the pattern is drawn in `secondary` made opaque, at an alpha of `secondary`'s alpha × `textureIntensity` × `opacity`, at `textureScale`, anchored at the canvas centre, rotated about it by `textureRotation` only for the patterns that rotate (Appendix A), and clipped to the canvas.
+
+  A field a mode does not use is carried as the publisher set it and ignored.
+- **A text** is drawn in its box with its font, its colour and its switches. An outline is drawn when flags bit 6 is set and `outlineThickness` is above 0, at least one screen pixel thick; a shadow is drawn when flags bit 7 is set. The text is clipped to its box grown on every side by the thickness of the outline drawn plus the larger absolute value of the two offsets of the shadow drawn; an outline or shadow not drawn adds nothing. Its outline and its shadow each take their own colour, with that colour's alpha further multiplied by the text colour's alpha. With auto-fit, the size shrinks from `fontSize` to no less than the smaller of `autoFitMinimum` and `fontSize`, until the text fits.
+- **Layout 1 (current)** wraps words at the box's width when wrap is set, pads by 4 canvas units (identical at every zoom), and aligns each line. **Layout 0 (legacy)** is how Plates saved before text layout versions render: no wrapping and no auto-fit (both are carried but not applied), a fixed four-pixel padding on screen, and the whole block aligned as one unit.
+- **An image** fills its box with `fit` and `flips`, is rotated about the box's centre by `rotation`, and is multiplied by `opacity`.
+- **A quad or triangle** is filled with its colour.
+- **An image quad or art quad** maps the image's corners onto the four points and multiplies it by `tint`.
+
+A font or art ident is looked up by exact match in a table the viewer bundles. It is never used to build a file path, a URL or anything else. An ident the viewer does not bundle is drawn as a placeholder and named in a note, never fetched.
+
+**Consumers treat every text as plain text** (decision N7): never markup, a format string, a game text payload, a path, a URL or a command.
+
+**A viewer accepts only the images I1 allows**, whoever published: it sniffs each image's bytes before decoding anything, and refuses anything but a non-animated 8-bit PNG, or an 8-bit JPEG with frame type SOF0 to SOF2 and 1 or 3 components, within section 8.2's limits.
 
 ## 9. Errors
 
@@ -310,7 +409,7 @@ A reader checks each rule at the earliest point in reading order at which it can
 - a text's byte limit, then its UTF-8 validity, then U+0000, then its scalar limit; a name's emptiness, byte limit, UTF-8 validity, refused code points and scalar limit, in the order of section 8.1.1;
 - a set's ordering rule as soon as an item's key has been read, before the rest of the item;
 - a rule over several fields of one item (the pixel product) when the last of them has been read;
-- after the last field: trailing bytes, then the rules over the whole payload (the total of the image byte lengths).
+- after the last field: trailing bytes, then the rules over the whole payload: in schema 1 the total of the image byte lengths; in schema 2 that total, then the images' total pixels, then the total of the item texts, then the image references (section 8.5).
 
 The rejected test vectors each contain one fault. The library's adversarial tests cover the order for inputs with two.
 
@@ -329,8 +428,8 @@ The rejected test vectors each contain one fault. The library's adversarial test
 `AetherFrame.Protocol.Tests/Fixtures/vectors-v1.json` holds:
 
 - `personas`: two synthetic identities, A and B. Each private scalar is `SHA-256(label) mod n` for the label given, so an implementation can derive the private key, the public key (`d·G`) and the persona identity and compare all three. These keys exist only for testing and must never be used for anything else.
-- `documents`: for each sample, the canonical payload, the signing input, the digest, one valid signature and the complete document as hex, with the decoded field values expected from it. `profile-snapshot-maximal` is at the limits (a 256-byte name of 64 four-byte scalars, eight images totalling 40 MiB); its bytes are omitted for size and its `construction` says how to rebuild them, with the digest and signature over exactly that. `profile-snapshot-minimal` has a one-character name, the earliest timestamp and no images. Every document carries the draft marker. Each snapshot vector has its own revision id (`rev_b2b2…`, `rev_b3b3…`, `rev_b4b4…`, `rev_b5b5…`): within one profile a revision id names exactly one document (section 13, rule 4), so vectors with different content never share one.
-- `rejected`: documents that must be refused, each with the error code expected, derived from `profile-snapshot` by one change (a flipped bit, an extreme length, a substituted key, a high-S signature, and so on) or validly signed over a payload that breaks one schema rule. Every rule of the name (section 8.1.1) has an entry: its limits, a declared length over the byte limit with few bytes present, and at least one code point from every refused range. So do the three names the rule turned from valid samples into rejected ones (an empty name, a name with line breaks and invisible characters, and a 32,000-scalar name). Two entries carry the final version 1 marker instead of the draft one: a final document (`UnsupportedVersion`), and the same document with its version changed to the draft's (`SignatureMismatch`). The general 32,000-scalar text limit of section 2.3, which no version 1 field reaches any more, is covered by the library's unit tests, not by a vector.
+- `documents`: for each sample, the canonical payload, the signing input, the digest, one valid signature and the complete document as hex, with the decoded field values expected from it. `profile-snapshot-maximal` is at the limits (a 256-byte name of 64 four-byte scalars, eight images totalling 40 MiB); its bytes are omitted for size and its `construction` says how to rebuild them, with the digest and signature over exactly that. `profile-snapshot-minimal` has a one-character name, the earliest timestamp and no images. `profile-layout-snapshot` is schema 2 (section 8.5) with every item kind once, an image background, a PNG and a JPEG. Every document carries the draft marker. Each snapshot vector has its own revision id (`rev_b2b2…`, `rev_b3b3…`, `rev_b4b4…`, `rev_b5b5…`, and `rev_b6b6…` for the layout): within one profile a revision id names exactly one document (section 13, rule 4), so vectors with different content never share one.
+- `rejected`: documents that must be refused, each with the error code expected, derived from `profile-snapshot` by one change (a flipped bit, an extreme length, a substituted key, a high-S signature, and so on) or validly signed over a payload that breaks one schema rule. Every rule of the name (section 8.1.1) has an entry: its limits, a declared length over the byte limit with few bytes present, and at least one code point from every refused range. So do the three names the rule turned from valid samples into rejected ones (an empty name, a name with line breaks and invisible characters, and a 32,000-scalar name). Every fault of schema 2 the library's tests exercise has an entry (`signed-layout-...`): each range, each closed code, the identifiers, the item text limits, the image formats and order, and the four rules over the whole payload. Two entries carry the final version 1 marker instead of the draft one: a final document (`UnsupportedVersion`), and the same document with its version changed to the draft's (`SignatureMismatch`). The general 32,000-scalar text limit of section 2.3, which no version 1 field reaches any more, is covered by the library's unit tests, not by a vector.
 - `profiles`: the owner of each profile id the vectors use, as the record a backend would hold. The protocol cannot know owners; this table lets the tests check that every valid document is signed by the recorded owner of its profile id and that every `serverObligations` document is not.
 - `serverObligations`: valid documents that verify, each with the persona it verifies as, the profile id it carries, the recorded owner of that id (always another persona) and what a server is obliged to do with it (section 13). Both are signed by persona B and carry the profile id of persona A's snapshots: they are about (B, that id) and touch nothing of A's. Signature validity and authorization are different things: these verify, and a backend holding the `profiles` record refuses to treat them as A's acts.
 
@@ -342,13 +441,13 @@ Worked example, persona A: label `AetherFrame.Protocol test persona A`; the publ
 
 ## 12. Not in version 1
 
-Deliberately absent, so that nothing has to be removed later: any transport (HTTP or otherwise), request and response messages, request authentication, encryption, key rotation or revocation statements, share grants or capability tokens, the profile layout (elements, Components, canvas, fonts, colours), image bytes themselves, persona display names, timestamps with sub-second precision, floating-point values, optional fields, and any form of unknown-field passthrough.
+Deliberately absent, so that nothing has to be removed later: any transport (HTTP or otherwise), request and response messages, request authentication, encryption, key rotation or revocation statements, share grants or capability tokens, image bytes themselves, persona display names, timestamps with sub-second precision, floating-point values (schema 2 carries fixed-point integers), optional fields, and any form of unknown-field passthrough.
 
 ## 13. Server obligations
 
-The protocol verifies bytes; this section says what a server that accepts version 1 documents must do with a verified document. A valid document is an authorization by its signer for exactly what this section allows, and a server that applies it any other way lets a signature authorize something its signer never signed for. Rules 1, 2 and 8, and the storage half of rule 3, follow from the byte format and are settled. Rules 4 to 7 and the serving half of rule 3 are the **baseline** a backend implements unless the owner decides otherwise (NETWORK0.md, "Open product decisions"); they are policy, can change without a new protocol version, and are marked with the decision they depend on. Nothing in this section is enforced by the library: it holds no server state, and a backend that skips a rule is not caught by any test here.
+The protocol verifies bytes; this section says what a server that accepts version 1 documents must do with a verified document. A valid document is an authorization by its signer for exactly what this section allows, and a server that applies it any other way lets a signature authorize something its signer never signed for. Rules 1, 2 and 8, and the storage half of rule 3, follow from the byte format and are settled; rule 9 is settled by decision N7. Rules 4 to 7 and the serving half of rule 3 are the **baseline** a backend implements unless the owner decides otherwise (NETWORK0.md, "Open product decisions"); they are policy, can change without a new protocol version, and are marked with the decision they depend on. Nothing in this section is enforced by the library: it holds no server state, and a backend that skips a rule is not caught by any test here.
 
-1. **Scope by owner.** A server keys every profile by (persona, profileId) (section 8.4). A snapshot is applied to the signing persona's profile of that id, creating the profile if it does not exist; a retraction is applied to the signing persona's profile of that id. Neither is ever looked up, matched or applied by profile id alone. The `serverObligations` vectors are the conformance cases.
+1. **Scope by owner.** A server keys every profile by (persona, profileId) (section 8.4). A snapshot is applied to the signing persona's profile of that id, creating the profile if it does not exist; a retraction is applied to the signing persona's profile of that id. Neither is ever looked up, matched or applied by profile id alone. Revision ids are scoped the same way, and assets and image digests by persona (section 8.4, decision N1). The `serverObligations` vectors are the conformance cases.
 2. **Identity comes from the key.** The persona of a document is the identity of the key that verified it (section 7.2). Persona ids carried in requests, sessions, URLs or headers never attribute a document; at most they are compared with the verified persona and the request refused when they differ.
 3. **Nothing is repaired or rewritten.** A server stores the exact bytes it verified, or nothing; it never re-encodes, trims, normalizes or fills in a document, and whatever it derives from one (a listing, a rendered view) is derived from those bytes. Whether viewers receive those signed bytes themselves or server-attested content derived from them is decision D6 (NETWORK0.md), not settled here; either way the stored record is the verified bytes.
 4. **Revision uniqueness** (decision D1). Within one profile, a revision id names exactly one document. Resubmitting a document whose bytes equal the stored one is idempotent: accepted, nothing changes. A document that carries a stored revision id with different bytes is refused.
@@ -356,3 +455,22 @@ The protocol verifies bytes; this section says what a server that accepts versio
 6. **Timestamps** (decisions D1 and D7). `createdAt` and `issuedAt` are the client's claims. A server records its own receipt time and uses that for ordering and retention; it refuses a document whose timestamp is more than a bounded skew ahead of its receipt time (baseline: 300 seconds) and keeps, but does not trust, timestamps in the past.
 7. **Image declarations** (decision D5). An `ImageReference` is a claim about bytes the server has yet to receive. Before serving an asset the server verifies the received bytes against the declared digest, sniffed format, byte length and dimensions, and serves nothing that fails. What it serves after processing (downscaling) is attested by the server, not signed by the creator.
 8. **Limits a document cannot carry** (NETWORK0.md, section 7: profiles per persona, storage per persona, active shares) are enforced by the server with a server-side refusal, never by altering or dropping part of a document.
+9. **Texts are plain text** (decision N7). A server, like every consumer, never interprets a text as markup, a format string, a path, a URL or a command, never puts one into HTML unescaped, and passes texts to a database only as query parameters.
+
+## Appendix A. Background patterns
+
+The `texture` codes of a schema 2 background (section 8.5). How each is drawn is the viewer's; the code names the pattern. `textureRotation` applies only to the patterns marked as rotating.
+
+| Code | Pattern | Rotates | Code | Pattern | Rotates |
+|---|---|---|---|---|---|
+| 0 | none | | 11 | honeycomb | yes |
+| 1 | fine noise | no | 12 | scales | yes |
+| 2 | dots | yes | 13 | speckle | no |
+| 3 | grid | yes | 14 | diamonds | yes |
+| 4 | diagonal lines | yes | 15 | chevron | yes |
+| 5 | crosshatch | yes | 16 | sparkle | yes |
+| 6 | subtle paper | no | 17 | linen | yes |
+| 7 | checkerboard | yes | 18 | ripples | no |
+| 8 | stripes | yes | 19 | quatrefoil | yes |
+| 9 | waves | yes | 20 | brick | yes |
+| 10 | herringbone | yes | | | |

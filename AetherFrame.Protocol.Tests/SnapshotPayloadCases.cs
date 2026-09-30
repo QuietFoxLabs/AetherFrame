@@ -17,7 +17,8 @@ internal static class SnapshotPayloadCases
         return name switch
         {
             "schema 0" => PayloadBuilder.Snapshot(schema: 0),
-            "schema 2" => PayloadBuilder.Snapshot(schema: 2),
+            "schema 3" => PayloadBuilder.Snapshot(schema: 3),
+            "schema 2 over schema 1 fields" => PayloadBuilder.Snapshot(schema: 2),
             "zero profile id" => PayloadBuilder.Snapshot(profileId: new byte[16]),
             "zero revision id" => PayloadBuilder.Snapshot(revisionId: new byte[16]),
             "createdAt over max" => PayloadBuilder.Snapshot(createdAt: (ulong)ProtocolLimits.MaxUnixSeconds + 1),
