@@ -353,6 +353,40 @@ public class TestVectorTests
     }
 
     [Fact]
+    public void ServedProfiles_ReadAndFollowFromTheirSnapshotsAndTheReference()
+    {
+        var fixture = VectorFixture.Load();
+        byte[] DocumentNamed(string name) => Hex.Parse(fixture.Documents.Single(d => d.Name == name).Document!);
+        var rebuilt = ServedProfileVectorBuilder.BuildValid(DocumentNamed);
+        Assert.Equal(rebuilt.Select(v => (v.Name, v.Document, v.Construction, v.Marker, v.Body)), fixture.ServedProfiles.Select(v => (v.Name, v.Document, v.Construction, v.Marker, v.Body)));
+        foreach (var vector in fixture.ServedProfiles)
+        {
+            var body = Hex.Parse(vector.Body);
+            var served = ServedProfile.Read(body);
+            Assert.Equal(RevisionMarker.Parse(vector.Marker), served.Marker);
+            Assert.Equal(body, served.Encode());
+        }
+
+        // The layout snapshot's served form, written from section 8.6's tables with no call into the library.
+        Assert.Equal(Hex.Of(ReferenceServed.Write(new ReferenceServed.ServedSpec())), fixture.ServedProfiles.Single(v => v.Document == "profile-layout-snapshot").Body);
+    }
+
+    [Fact]
+    public void RejectedServedProfiles_AreRefusedWithTheirError_AndFollowFromTheReference()
+    {
+        var fixture = VectorFixture.Load();
+        foreach (var vector in fixture.RejectedServedProfiles)
+        {
+            var expected = Enum.Parse<ProtocolError>(vector.Error);
+            var actual = ProtocolAssert.Rejects(() => ServedProfile.Read(Hex.Parse(vector.Body))).Error;
+            Assert.True(expected == actual, $"{vector.Name}: expected {expected}, got {actual}");
+        }
+
+        var rebuilt = ServedProfileVectorBuilder.BuildRejected();
+        Assert.Equal(rebuilt.Select(r => (r.Name, r.Body, r.Error)), fixture.RejectedServedProfiles.Select(r => (r.Name, r.Body, r.Error)));
+    }
+
+    [Fact]
     public void RejectedProofs_AreRefusedWithTheirError()
     {
         var fixture = VectorFixture.Load();

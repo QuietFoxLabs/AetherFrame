@@ -106,6 +106,8 @@ internal static class VectorBuilder
             }
         }
 
+        fixture.ServedProfiles = ServedProfileVectorBuilder.BuildValid(DocumentNamed);
+        fixture.RejectedServedProfiles = ServedProfileVectorBuilder.BuildRejected();
         fixture.RejectedActions = RequestProofVectorBuilder.BuildRejectedActions(fixture.ActionProofs.Single(p => p.Name == "action-lookup"), Hex.Parse(fixture.RequestProofs[0].Proof), DocumentNamed(fixture.RequestProofs[0].Document));
         return fixture;
     }

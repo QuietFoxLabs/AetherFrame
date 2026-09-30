@@ -77,11 +77,25 @@ struct AetherFrame.Protocol.Identity.RevisionId
     String ToString()
     Void WriteBytes(Span<Byte> destination)
     const String Prefix
+struct AetherFrame.Protocol.Identity.RevisionMarker
+    Boolean Equals(Object obj)
+    Boolean Equals(RevisionMarker other)
+    Boolean IsEmpty { get; }
+    Boolean TryParse(String text, ref RevisionMarker marker)
+    Byte[] ToArray()
+    Int32 GetHashCode()
+    RevisionMarker FromBytes(ReadOnlySpan<Byte> bytes)
+    RevisionMarker NewMarker()
+    RevisionMarker Parse(String text)
+    String ToString()
+    Void WriteBytes(Span<Byte> destination)
+    const String Prefix
 static class AetherFrame.Protocol.ProtocolConstants
     ReadOnlySpan<Byte> DocumentMagic { get; }
     ReadOnlySpan<Byte> PersonaIdDomainTag { get; }
     ReadOnlySpan<Byte> RequestProofDomainTag { get; }
     ReadOnlySpan<Byte> RequestProofMagic { get; }
+    ReadOnlySpan<Byte> ServedProfileMagic { get; }
     ReadOnlySpan<Byte> SignatureDomainTag { get; }
     const Byte PersonaKeyFormatUncompressedP256
     const Int32 ChallengeLength
@@ -130,6 +144,7 @@ static class AetherFrame.Protocol.ProtocolLimits
     const Int32 MaxNameScalars
     const Int32 MaxPayloadBytes
     const Int32 MaxRequestProofBytes
+    const Int32 MaxServedProfileBytes
     const Int32 MaxTextBytes
     const Int32 MaxTextScalars
     const Int32 MinLayoutCanvasExtent
@@ -387,6 +402,26 @@ struct AetherFrame.Protocol.Remote.RemoteProfileKey
     ProfileId ProfileId { get; }
     String ToString()
     new(PersonaId persona, ProfileId profileId)
+sealed class AetherFrame.Protocol.Remote.ServedImage
+    ImageFormat Format { get; }
+    Int32 Height { get; }
+    Int32 Width { get; }
+    Int64 Pixels { get; }
+    new(ImageFormat format, Int32 width, Int32 height)
+sealed class AetherFrame.Protocol.Remote.ServedProfile
+    AssetId ImageKey(Int32 index)
+    Byte[] Build(ProfileLayoutSnapshot snapshot, RevisionMarker marker)
+    Int32 CanvasHeight { get; }
+    Int32 CanvasWidth { get; }
+    Int32 ImageIndexOf(AssetId key)
+    Int32 TotalTextScalars { get; }
+    LayoutBackground Background { get; }
+    ReadOnlyCollection<LayoutItem> Items { get; }
+    ReadOnlyCollection<ServedImage> Images { get; }
+    RevisionMarker Marker { get; }
+    ServedProfile Read(ReadOnlySpan<Byte> input)
+    String Name { get; }
+    const UInt16 FormatVersion
 struct AetherFrame.Protocol.Remote.SniffedImage
     Boolean Equals(Object obj)
     Boolean Equals(SniffedImage other)

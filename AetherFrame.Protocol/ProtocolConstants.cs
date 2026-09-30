@@ -31,6 +31,12 @@ public static class ProtocolConstants
     public static ReadOnlySpan<byte> RequestProofMagic => "AFRQ"u8;
 
     /// <summary>
+    /// The first four bytes of every served profile: ASCII "AFSP" (AetherFrame Served Profile). A
+    /// served profile is not signed, has no draft marker and is versioned on its own (section 8.6).
+    /// </summary>
+    public static ReadOnlySpan<byte> ServedProfileMagic => "AFSP"u8;
+
+    /// <summary>
     /// The domain separation tag that starts every document's signing input, so a signature over a
     /// document can never be a valid signature over anything else AetherFrame signs
     /// (docs/networking/ProtocolSpecification-v1.md, sections 5 and 5.1). Written as a one-byte length followed by these ASCII bytes. The "-draft"
