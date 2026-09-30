@@ -12,7 +12,7 @@
 - **L10**, **L12** and the new **P3** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The persona registry's decisions (N2-5a)".
 - **D1**, **D6**, **N2**, **N6**, **S2**, **S3**, **S4**, **I2**, and the new **R4**, **S5** and **P4**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, and **K5** moves to the "D2 details" gate, where it stays UNRESOLVED. See "Decision batch B for the server (N2-7)".
 - **R5** is **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, September 30, 2026. It retires R1's share codes and R4's format, following the owner's V1 and V5. See "R5".
-- **C1** to **C9**, decision batch C (viewing by character), are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, September 30, 2026, with a security reviewer's concurrence. C3 amends D5's N2-6 note, point 6, for opted-in characters; C4 retires S2 for stage 1. See "Decision batch C".
+- **C1** to **C9**, decision batch C (viewing by character), are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, September 30, 2026, with a security reviewer's concurrence. C3 amends D5's N2-6 note, point 6, for opted-in characters; C4 amends P1 and retires S2 for stage 1. The owner **approved in advance, with conditions,** the one signed-byte change it needs, a new request kind (C9). See "Decision batch C".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
 
 **Every other product and architecture decision below is UNRESOLVED.**
@@ -127,6 +127,14 @@ Only the owner can change this approval.
 - **N2-3b**, the request proof: its decisions are S1, D7 and L8, recorded in N2-3b before it merges.
 
 The signed-byte changes the owner approved are unchanged: the layout schema and the request proof, nothing more. Rationale: two smaller pull requests are reviewed more thoroughly than one, and the layout does not depend on the request proof. This note records how the approval is applied; it does not change the approval, which only the owner can.
+
+### Signed-byte change for batch C. APPROVED IN ADVANCE by the owner, with conditions (September 30, 2026)
+
+Claude asked the owner in chat: "Sharing needs one addition to the signed network protocol: a second kind of signed request, for the server's other actions (Lodestone code, check, opt-out, look up, search, report). Project rules say signed-byte changes need your approval. Approve it, on the same conditions as last time (decision recorded, clean independent and security review, green CI)?"
+
+The owner chose "Approve", whose stated terms were: "One new request kind that binds the action and its content to your key, so only you can opt your character out, and only opted-in players can look Plates up. The protocol stays a draft."
+
+It approves that one request kind (C9), on those conditions. It approves no other signed-byte change and no freeze. Only the owner can change it.
 
 ## Decisions approved under the delegation
 
@@ -1043,95 +1051,160 @@ The publication index (P1) lives in that directory, beside the registry and outs
 
 ### Decision batch C: viewing by character (N2-C), September 30, 2026
 
-Batch C turns the owner's V1 to V5 into decisions that N2-7 to N2-10 can build. Each is APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026. None changes an owner's decision; where one amends an earlier delegated decision, it says so. The whole batch was reviewed by a security-focused reviewer with no shared context (below).
+Batch C turns the owner's V1 to V5 into decisions that N2-7 to N2-10 can build. Each is APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026. None changes an owner's decision. Where one amends an earlier delegated decision, it says so. The whole batch was reviewed by a security-focused reviewer with no shared context (below). Its one signed-byte change, the new request kind (C9), has the owner's approval in advance ("Signed-byte change for batch C", above).
 
 #### C1: the character, and its key
 
-- **A character is its Lodestone character id**, a number the Lodestone gives each character and keeps across renames and World transfers. The server also stores the name and Home World the Lodestone showed at the last check, which is how players find it.
-- **A name is matched in one canonical form:** Unicode NFC, then invariant lower case, with runs of spaces folded to one. A World is its name, matched without regard to case: the Lodestone shows World names, and they are the same in every client language.
-- **One key per opted-in character** (V4), made by the plugin when the player opts that character in. It is a persona under the hood: the existing key store, protector, registry and outbox hold it, and its slot is named by nothing about the character. The Personas window leaves My Plates (N2-9).
-- **A key's characters** can be several, but each character is bound to exactly one key at a time. A later Lodestone check of the same character by another key moves the binding to the new key and deletes everything the old key published for it (C2). That is also the recovery when a key is lost (a new PC, a reinstalled Windows).
-- **Renames and World transfers:** the binding follows the Lodestone id. The player runs the check again (no new code needed if the key is unchanged) to update the name and World players search by; until then, the old name and World still find the Plate.
+- **A character is its Lodestone character id:** a number the Lodestone gives each character and keeps across renames and World transfers. The server also stores the name and Home World the Lodestone last showed. Players find the character by those.
+- **A name is matched in one canonical form:** Unicode NFC, then invariant lower case, with runs of spaces folded to one. **A World** is its name, matched without regard to case. The Lodestone shows World names, and they are the same in every client language.
+- **One key, one character** (V4). The plugin makes a key when the player opts a character in. It is a persona under the hood: the existing key store, protector, registry and outbox hold it, and its slot is named by nothing about the character. The server refuses to bind a second character to a key, so it holds no link between a player's characters. The Personas window leaves My Plates (N2-9).
+- **A name and World belong to one binding at a time.** (Canonical name, World) is unique among bindings. A newer check that reads the same name and World displaces the older binding, and deletes everything the older one published (C4).
+- **Moving a character to a new key.** A later check of the same Lodestone id by another key moves the binding to the new key, and deletes everything the old key published for it. That is also the recovery when a key is lost (a new PC, a reinstalled Windows). The old key's plugin learns it at its next request, when the server says the character is no longer bound to it, and it tells the player that another AetherFrame took the character over.
+- **Keeping names current:**
+  - The server re-reads each binding's Lodestone page at least once a day, within C2's fetch budget, and updates the name and World players search by. A page that no longer exists (404) removes the binding, as opting out does.
+  - The plugin also asks for a re-read at login when the logged-in character's name or World differs from its binding's.
+  - A renamed or transferred character is therefore found by its old name for at most about a day. After a re-read, the old name answers "not found".
 
 #### C2: the Lodestone check
 
-1. The plugin asks the server for a code, with a request proof (S1) under the character's key. The code is `AF-` and 10 Crockford Base32 symbols (50 random bits), bound to that key, valid for one hour, and usable once. A new request replaces the key's earlier code.
-2. The player pastes the code anywhere in their character's Lodestone profile ("Character Profile", editable only by the account that owns the character), then tells the plugin the character's Lodestone page. The plugin reads the id from the address the player pastes. It fetches nothing from the Lodestone itself.
-3. The plugin asks the server to check: a request proof, the code, and the Lodestone id. The server fetches that character's public page once, from the region-neutral address `https://na.finalfantasyxiv.com/lodestone/character/<id>/`. It reads the name, the Home World and the profile text, and succeeds only when the profile text holds the code exactly. Then it binds the character to the key (C1).
-4. The player may then delete the code from their profile.
+1. **The code.** The plugin asks the server for one, with a signed request (C9) under the character's key. The code is `AF-` and 10 Crockford Base32 symbols (50 random bits), bound to that key, valid for one hour and usable once. A new request replaces the key's earlier code. The plugin says: **paste only a code your own AetherFrame shows you.**
+2. **Pasting it.** The player pastes the code into their character's Lodestone profile, "Character Profile", which is edited in the Lodestone's settings while signed in. Then they give the plugin the character's Lodestone page. The plugin reads the id from the address the player pastes, and fetches nothing from the Lodestone itself.
+3. **The check.** The plugin sends a signed check request with the code and the Lodestone id. The server fetches that character's public page once, from `https://na.finalfantasyxiv.com/lodestone/character/<id>/`. That address serves every region's characters. Then:
+   - **The id** is digits only, with no leading zero, and at most 10 digits.
+   - **The code is looked for in one place only:** the text of the page's single `div.character__selfintroduction` element. Zero or several such elements fail the check. Nothing else on the page is searched: not the name, the title, the Free Company, or the "Recent Activity" sidebar, which shows other players' blog titles.
+   - **The name and World** must each come from their one element and pass the game's rules. A name is two words, each starting with a capital letter, and holding only letters, an apostrophe or a hyphen, within the game's lengths. A World must be on the server's fixed list of Worlds. Anything else fails.
+   - **A match** means the profile text holds the code exactly. The server then binds the character to the key (C1), and returns the binding's profile id (C4).
+4. **Afterwards,** the plugin prompts the player to delete the code from their profile. While it is there, it publicly marks them as an AetherFrame user.
 
 **Fetching the Lodestone:**
-- at most one fetch per check request, and at most 60 fetches an hour for the whole server, queued;
-- a fixed `User-Agent` naming AetherFrame and the server's hostname, a 10-second timeout, and at most 1 MiB read;
-- redirects only to `finalfantasyxiv.com` hosts, over HTTPS;
-- the page is parsed for three fields and then discarded, never stored or logged.
+- The allowlist (C8) is checked before any fetch.
+- At most one fetch per check request, and at most 60 fetches an hour for the whole server. The queue holds at most 20; beyond that, the server answers "try again later".
+- A fixed `User-Agent` naming AetherFrame and the server's hostname, a 10-second timeout, and at most 1 MiB read.
+- **No redirect is followed:** a redirect fails the check. Only `https://na.finalfantasyxiv.com` is ever fetched.
+- The page is parsed for its three fields, then discarded. It is never stored or logged.
+
+**Answers.** Every failure answers the same "check failed", whatever the cause: no code, a wrong or used code, the allowlist, the page, or the parse.
 
 The server keeps the Lodestone id, the name and World it read, and the key it bound. It keeps no copy of the page and no time.
 
-**Rationale.** The Lodestone profile can be edited only while signed in to the account that owns the character, which is the proof the owner chose (V3). A fixed hostname and a bounded fetch keep the server from being turned into a proxy. 50 bits in a one-hour, single-use code bound to one key is far past guessing, since a check also needs the key's proof.
+**Rationale:**
+- **Ownership.** The profile is edited in the Lodestone's settings. That page answers 403 without signing in, so only the owning account can place the code. Community tools that verify characters, such as Teamcraft and Savage Aim, rely on the same property. No Square Enix page states it outright, and N2-8's runbook says what to do if that ever changes.
+- **Hijacking.** Reading one element only closes the hijack in which someone puts their code where every character page shows it.
+- **Proxy abuse.** A fixed host, no redirects and a bounded fetch keep the server from being used as a proxy.
+- **Guessing.** 50 bits in a single-use, one-hour code, bound to one key, is far beyond guessing, since a check also needs that key's signature.
 
-**Not settled:** a change to the Lodestone's page layout breaks checks until the parser is updated; N2-8's runbook covers it.
+**Not settled:** a change to the Lodestone's page layout breaks checks, and re-reads, until the parser is updated. They fail closed, and N2-8's runbook covers it.
 
 #### C3: consent, and publishing the Active Plate live
 
-This **amends D5's N2-6 note, point 6** (a consent screen before each signing), and **settles the share check's rule** from #56 (a signing shown on the consent screen before its first send, or dropped), for opted-in characters only:
-- **One consent per character,** when the player opts it in. It shows exactly what will be published at that moment: the rendering, every text in full with game-filled text flagged, and each prepared image. It states plainly that from then on, **saving that character's Active Plate, or making another Plate Active, publishes it without asking again**, until sharing is turned off.
-- **Afterwards,** each save of the Active Plate builds a candidate, signs it, and sends it. No screen is shown, and the candidate is the saved Plate and nothing read later (D5's (6) still holds for what is signed). A Plate that can't be shared as it is (N2-6's refusals) is not sent; the plugin tells the player why, and keeps the last published version live.
-- **Always visible:** My Plates marks the Active Plate of an opted-in character as **Shared**. A character's sharing can be paused or turned off in one click, and turning it off deletes what the server holds for that character (C4).
+This **amends D5's N2-6 note, point 6** (a consent screen before each signing). It also **settles the share check's proposed rule** from #56 (a signing is shown on the consent screen before its first send, or dropped). Both apply to opted-in characters only:
+- **One consent per character,** when the player opts it in. It shows exactly what will be published at that moment: the rendering, every text in full with game-filled text flagged, and each prepared image. It also states plainly:
+  - from then on, **saving that character's Active Plate publishes it without asking again**, until sharing is turned off;
+  - any opted-in player can learn, from the character's name, that its player uses AetherFrame, and so Dalamud;
+  - the server briefly sees who looks up whom, and never stores it (C7).
+- **A Plate never published before** is shown once, the same way, the first time it becomes the character's Active Plate, before it is sent.
+- **After that,** each save of the Active Plate builds a candidate, signs it and sends it. No screen is shown. The candidate is the saved Plate and nothing read later, so D5's point (6) still holds for what is signed. A Plate that can't be shared as it is (N2-6's refusals) is not sent: the plugin tells the player why, and keeps the last published version live.
+- **Always visible:** My Plates marks the Active Plate of an opted-in character as **Shared**. A character's sharing can be paused or turned off in one click. Turning it off deletes what the server holds for that character (C4).
 - **The share check** (#56) stays a preview: what it signs is never sent. N2-9 drops its locally kept signings.
 
-**Rationale.** The owner chose live updates (V2), like the game's Adventure Plate. Per-save screens would defeat that. A single informed consent, a permanent visible marker and a one-click stop keep publishing deliberate.
+**Rationale.** The owner chose live updates (V2), like the game's Adventure Plate, and a screen before every save would defeat that. What keeps publishing deliberate:
+- an informed consent per character;
+- a first showing of each new Plate;
+- a permanent visible marker;
+- a one-click stop.
 
-#### C4: opting in and out, and what is deleted
+#### C4: opting in and out, the profile id, and what is deleted
 
-- **Off by default** (V1). The plugin sends nothing, adds no menu item and no search, and looks nothing up until the player opts in.
+- **Off by default** (V1). Until the player opts in, the plugin sends nothing, adds no menu item or search, and looks nothing up.
 - **Opting in** needs at least one character that passes the Lodestone check. Only then can the player publish or view (C5).
-- **Turning a character's sharing off** sends a signed request, and the server deletes at once everything published for that character: every revision, every image and the revision records (N2). It also deletes the binding. D1's `secure_delete` and truncating checkpoint apply, and the backups' stated retention (N2-8) bounds every copy.
-- **No tombstones** (this retires S2 for stage 1). A snapshot is accepted only for a character currently bound to the signing key. After opting out there is no binding, so a stale outbox entry can't bring the Plate back. Coming back needs a new Lodestone check, and each binding gets a new profile id, so an older entry's profile id is refused too. The plugin also empties that character's outbox on opting out.
+- **One profile id per binding.** The server issues it when the check binds the character, and returns it in the check's answer. It accepts a snapshot only when:
+  - it is signed by the character's bound key;
+  - it carries that binding's profile id.
+
+  Every Plate the character publishes goes out under that one id, so the latest revision is the Active Plate. This **amends P1**: the publication index records the binding's profile id, not one per Plate. A new binding, after opting out or after a takeover (C1), gets a fresh id. So an older outbox entry, from another installation or a restored plugin folder, is refused.
+- **Turning a character's sharing off** sends a signed request (C9). The server deletes at once everything published for that character: every revision, every image and the revision records (N2), and the binding itself. D1's `secure_delete` and truncating checkpoint apply, and the backups' stated retention (N2-8) bounds every copy. The plugin also empties that character's outbox.
+- **No tombstones.** This retires S2 for stage 1. Nothing can revive a deleted Plate: the binding and its profile id are gone, and coming back needs a new check and a new id.
 - **Turning sharing off entirely** does this for every opted-in character.
 
 #### C5: viewing and searching
 
-- **Only opted-in players can view.** Every lookup carries a request proof by a key that has at least one character bound. So viewing is both ways (V1), and the rate limits below bind to real characters.
-- **The right-click menu:** the plugin adds **View AetherFrame Plate** through Dalamud's `IContextMenu` to the game's menus on a player character (the world, the party list, the friend list, and names in chat), when the player has opted in. It looks the character up by name and World.
+- **Only opted-in players can view.** Every lookup carries a signed request (C9) by a key with a bound character. So viewing is both ways (V1), and the rate limits below apply to real characters.
+- **The right-click menu.** When the player has opted in, the plugin adds **View AetherFrame Plate** to the game's menus on a player character, through Dalamud's `IContextMenu`: in the world, the party list, the friend list, and names in chat. It looks the character up by name and World **only when the item is chosen**, never when the menu opens.
 - **Name search** (V5): a window where the player types a full name and picks a World. Only an exact match is answered: no prefix, partial or fuzzy search, and no listing.
-- **What a viewer receives** stays D6's served profile and I2's re-processed images, fetched by character (name and World) instead of a share code, with the revision marker. "Not found" is one answer for every cause: no Plate, not opted in, or paused.
+- **What a viewer receives** stays D6's served profile and I2's re-processed images. They are fetched by character, name and World in the request body, instead of by share code, with the revision marker. "Not found" is one answer for every cause: no Plate, not opted in, or paused.
 - **Hide:** a viewer can hide one player's Plate on their own PC. It is stored locally and never sent.
-- **Report:** a viewer can report a Plate with one of a few reasons. The server keeps the report (the reported character, the reason, the reporting key) for the operator, until the operator acts on it or 30 days have passed.
+- **Report:** a viewer can report a Plate with one of a few reasons. The server keeps the report, meaning the reported character, the reason and the reporting key, for the operator, until the operator acts on it or 30 days have passed.
 
 #### C6: rate limits against scraping
 
-- **Lookups and searches,** per key: 120 an hour and 600 a day. Per address (IPv4 /32; IPv6 /64, /56 and /48, as R4 described), 300 an hour. A "not found" counts the same as a find.
-- **Checks and code requests** (C2), per key: 10 an hour.
-- **Publishing,** per character: 60 an hour. Only the newest pending snapshot is sent anyway (N2).
-- **Reports,** per key: 20 a day.
-- The limiter's state lives only in memory, for its window (S5). Exceeding a limit gets HTTP 429 with no body.
+Keys cost nothing, so every limit on checks is also per address and per Lodestone id. Addresses are grouped by IPv4 /32 and by IPv6 /64, /56 and /48, as R4 described.
+
+| What | Per key | Per address | Other |
+| --- | --- | --- | --- |
+| Lookups and searches | 120 an hour, 600 a day | 300 an hour | A "not found" counts the same as a find. |
+| Code requests and checks (C2) | 10 an hour | 10 an hour | 10 a day per Lodestone id. |
+| Publishing | | | 60 an hour per character. Only the newest pending snapshot is sent anyway (N2). |
+| Reports | 20 a day | | |
+
+The limiter's state lives only in memory, for its window (S5). Going over a limit gets HTTP 429 with no body.
 
 #### C7: what the server learns, keeps and logs
 
-S5 applies unchanged: no address is stored, logs hold no identifier, and logs are kept 14 days. In addition:
-- **The server keeps**, for each bound character: the Lodestone id, name, World, the key's public identity, the profile id, and the latest revision's served content and images, plus N2's revision records. It keeps reports as C5 says.
+S5 applies. Its list of what is never logged grows by: Lodestone ids, character names, Worlds, codes and search text. The log test covers them too. All of these travel only in request bodies, never in a path or query, since ASP.NET Core's log scopes carry the request path.
+- **The server keeps**, for each binding:
+  - the Lodestone id, the name and the World;
+  - the key's public identity and the profile id;
+  - the latest revision's served content and images, and N2's revision records.
+
+  It also keeps reports, as C5 says.
 - **It keeps no lookup log:** who viewed whom is never written anywhere. The rate limiter's memory holds keys and addresses only for its window.
-- **The consent text** says all of this, including that the server sees the viewer's and publisher's network address and doesn't store it.
+- **The consent text** says all of this, including that the server sees the viewer's and the publisher's network address and doesn't store it.
 
 #### C8: the stage 1 allowlist, by Lodestone id
 
-I2's allowlist of the testers' personas becomes an allowlist of the testers' Lodestone ids: only allowlisted characters can pass the check. Viewing needs a bound character, so the test stays between the testers. The operator adds ids from the testers out of band (N2-8's runbook). I2's limits on removing the allowlist stand.
+I2's allowlist of the testers' personas becomes an allowlist of the testers' Lodestone ids.
+- **Where it applies:** before any Lodestone fetch, and again on every publish and every lookup. Removing an id takes effect at once.
+- **Who can view:** viewing needs a bound character, so the test stays between the testers.
+- **How ids are added:** the operator adds them from the testers out of band (N2-8's runbook).
 
-#### C9: K4, D2, R1, R4, S1, S2, S3, P1 and P4, restated
+I2's limits on removing the allowlist stand.
 
-- **K4:** the acknowledgement no longer warns that a lost key means never unpublishing. A new Lodestone check recovers the character (C1). It says instead that the keys stay on this PC, and that another PC takes over the character by checking it again.
-- **D2** (the backup) is not needed for stage 1, since a Lodestone check recovers a character. The D2 details stay open for later.
+#### C9: the new request kind, and the decisions batch C restates
+
+- **The signed request** (the owner's approval, above). It is one new request-proof kind. A proof signs over the deployment, a fresh challenge (S1), an action label, and the SHA-256 of the request body. The actions are:
+  - a code request, the check and the re-read (C1, C2);
+  - opting out (C4);
+  - a lookup, a search and a report (C5).
+
+  Each action has its own label, and the specification's section 14 is extended with vectors. A publish still uses the existing submission proof, and returns no share code.
+- **K4:** the acknowledgement no longer warns that a lost key means never unpublishing, since a new Lodestone check recovers the character (C1). It says instead that the keys stay on this PC, and that another PC takes the character over by checking it again.
+- **D2** (the backup) isn't needed for stage 1, since a Lodestone check recovers a character. The D2 details stay open for later.
 - **R1 and R4:** retired by R5.
-- **S1:** a publish returns no share code. Proofs gain the new request kinds (the code request, the check, opting out, lookup, search and report), each with its own label, as section 14 does.
 - **S2:** retired for stage 1 (C4).
 - **S3:** the operator removes a character on request, verified by a Lodestone check or out of band.
-- **P1:** the publication index's share-code field is unused.
-- **P4:** listing a key's characters is the plugin's own records; no listing request.
+- **P1:** amended by C4, one profile id per binding. Its share-code field is unused.
+- **P4:** listing is the plugin's own record; there is no listing request.
 
 #### Independent concurrence
 
-(to be filled in by the security review)
+A security-focused reviewer with no shared context examined the batch (September 30, 2026). Its checks:
+- It read the batch from git objects.
+- It checked the Lodestone live: a Japanese data centre's character is served at the na address; the profile settings page answers 403 without signing in; and ids with leading zeros alias.
+- It concurred with C3, C5, C6, C7, C8 and C9 as first written.
+
+It asked for three fixes before concurring with C1, C2 and C4:
+- read the code from the single self-introduction element only, since the "Recent Activity" sidebar carries other players' blog titles;
+- make (name, World) unique, re-read names daily, and treat a 404 as an opt-out;
+- fix one server-issued profile id per binding, so a stale outbox entry can't revive a deleted Plate.
+
+It also made five notes:
+- warnings to the player when a code is pasted, and prompts to delete it;
+- per-address and per-id limits and a bounded queue;
+- one key, one character;
+- more fields never logged;
+- more consent text.
+
+All of these are now above. Its recheck is recorded below.
 
 ## Gates
 
