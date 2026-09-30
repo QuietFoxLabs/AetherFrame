@@ -91,6 +91,30 @@ public class ImageWorkerTests
         Assert.True(ProcessedImages.Check(output, Images.Declared(ImageFormat.Png, 900, 700, output)));
     }
 
+    [Theory]
+    [InlineData(72, 72, 1)]
+    [InlineData(300, 300, 1)]
+    [InlineData(1, 1, 0)]
+    [InlineData(118, 118, 2)]
+    public void AJpegOfAnyDensity_ComesBackAt96Dpi_AndPasses(double horizontal, double vertical, int units)
+    {
+        using var image = new Image<Rgba32>(64, 48, new Rgba32(9, 90, 180, 255));
+        image.Metadata.ResolutionUnits = (SixLabors.ImageSharp.Metadata.PixelResolutionUnit)units;
+        image.Metadata.HorizontalResolution = horizontal;
+        image.Metadata.VerticalResolution = vertical;
+        using var input = new MemoryStream();
+        image.Save(input, new JpegEncoder { Quality = 80 });
+        var bytes = input.ToArray();
+
+        // The input really carries its own density: JFIF's units at byte 13, then the two densities.
+        Assert.Equal((byte)units, bytes[13]);
+        Assert.Equal((int)horizontal, (bytes[14] << 8) | bytes[15]);
+
+        var output = ImageRecoder.Recode(JobFormat.Jpeg, 64, 48, bytes);
+        Assert.NotNull(output);
+        Assert.True(ProcessedImages.Check(output, Images.Declared(ImageFormat.Jpeg, 64, 48, output)));
+    }
+
     [Fact]
     public void AnExifOrientation_IsNotApplied()
     {

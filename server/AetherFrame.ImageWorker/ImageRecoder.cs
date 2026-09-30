@@ -5,6 +5,7 @@ using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Memory;
+using SixLabors.ImageSharp.Metadata;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace AetherFrame.ImageWorker;
@@ -68,6 +69,12 @@ public static class ImageRecoder
             {
                 return null;
             }
+
+            // The decoder keeps the input's JFIF density even without metadata, and the encoder would
+            // write it back: every output says 96 dpi, as the server's check requires.
+            image.Metadata.ResolutionUnits = PixelResolutionUnit.PixelsPerInch;
+            image.Metadata.HorizontalResolution = 96;
+            image.Metadata.VerticalResolution = 96;
 
             using var output = new MemoryStream();
             if (format == JobFormat.Png)

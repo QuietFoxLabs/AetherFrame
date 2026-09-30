@@ -317,7 +317,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - NETWORK2 increment N2-7c, the image worker: this change. `server/AetherFrame.ImageWorker` re-encodes each image with ImageSharp 3.1.12, one job per run, over a Unix socket the server owns.
   - The server checks each answer against section 8.2.1, the declared format and size, and the exact chunks or segments the worker writes.
   - A publish's images are now re-encoded rather than refused. With no worker socket configured, the server still refuses them.
-  - The details are in ServerApi-v1.md, section 8, and in the register. CI runs the server's 118 tests, one of which publishes through a real worker run.
+  - The details are in ServerApi-v1.md, section 8, and in the register. CI runs the server's 122 tests, one of which publishes through a real worker run.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
