@@ -1,8 +1,9 @@
 # Networking decision register
 
-**Status (2026-09-30): two decisions are the owner's approvals, and thirty-nine more are approved under the owner's delegation.**
-- **D3** is **APPROVED** by the owner.
+**Status (2026-09-30): seven decisions are the owner's approvals (D3, amended by V4; D2 in principle; V1 to V5), and forty more are approved under the owner's delegation, two of them (R1 and R4) since retired by a third (R5).**
+- **D3** is **APPROVED** by the owner, and amended by the owner's V4 (September 30, 2026).
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
+- **V1** to **V5** are **APPROVED** by the owner (September 30, 2026): viewing Plates by character, opt-in and both ways. See "V1 to V5".
 - **N5** and **L6** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **D9b** and **P2** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
 - **K1**, **K2**, **K6** and **K7** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "Decisions approved under the delegation".
@@ -10,13 +11,14 @@
 - **S1**, **D7** and **L8** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The request proof's decisions (N2-3b)".
 - **L10**, **L12** and the new **P3** are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**. See "The persona registry's decisions (N2-5a)".
 - **D1**, **D6**, **N2**, **N6**, **S2**, **S3**, **S4**, **I2**, and the new **R4**, **S5** and **P4**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, and **K5** moves to the "D2 details" gate, where it stays UNRESOLVED. See "Decision batch B for the server (N2-7)".
+- **R5** is **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, September 30, 2026. It retires R1's share codes and R4's format, following the owner's V1 and V5. See "R5".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
 
 **Every other product and architecture decision below is UNRESOLVED.**
 
 This file is the one place a networking decision is recorded as approved. Nothing is approved by appearing in NETWORK0.md, NETWORK1.md, a handoff, a review report, a baseline in the code, or a recommendation. An entry changes to APPROVED only when the owner approves it, with the date and the approved option written here.
 
-**Delegation (September 29, 2026).** The owner delegated the UNRESOLVED decisions to Claude (ROADMAP.md, section 5, quoted there in the owner's words). A decision Claude makes under that delegation is written here as "APPROVED (Claude, under the owner's delegation of September 29, 2026)". Each such entry gives the date, the exact option and scope, the rationale, and what it doesn't settle. Security, cryptography, privacy and data-loss decisions also need an independent reviewer's concurrence, recorded in the entry. D3 and D2 stay the owner's own approvals, and only the owner can change them. The owner can overrule any delegated entry, and the reversal is recorded here.
+**Delegation (September 29, 2026).** The owner delegated the UNRESOLVED decisions to Claude (ROADMAP.md, section 5, quoted there in the owner's words). A decision Claude makes under that delegation is written here as "APPROVED (Claude, under the owner's delegation of September 29, 2026)". Each such entry gives the date, the exact option and scope, the rationale, and what it doesn't settle. Security, cryptography, privacy and data-loss decisions also need an independent reviewer's concurrence, recorded in the entry. D3 (as amended by V4), D2 and V1 to V5 stay the owner's own approvals, and only the owner can change them. The owner can overrule any delegated entry, and the reversal is recorded here.
 
 - Protocol Specification v1 remains a **DRAFT**.
 - The NETWORK0 baselines (NETWORK0.md, section 11) describe what the merged code does today. They are not decisions.
@@ -35,6 +37,8 @@ Approved by the owner, in these words:
 > Personas are never automatically bound to characters, Content IDs, accounts or other game identifiers.
 > Switching personas must not alter saved local Plates or trigger publishing.
 
+`[updated 2026-09-30: amended by the owner, V4 below. An opted-in character is bound to a key of its own by the player's opt-in, and players no longer see or switch personas. The text above is left as first approved; V4 is the owner's later decision.]`
+
 **Wording the approved text does not quote.** The owner's instruction to the persona foundation (#23) also said that distinct personas remain independent unless the user deliberately associates them. `AetherFrame.Personas` enforces it: no operation associates two personas. The approved text above is left exactly as approved. Adding the clause changes the owner's own approval, so only the owner can do it.
 
 **What the approval does not settle:**
@@ -42,6 +46,45 @@ Approved by the owner, in these words:
 - which platforms can create them (K3);
 - whether they carry a display name (D9a);
 - any user interface.
+
+### V1 to V5: viewing Plates by character. APPROVED by the owner (September 30, 2026)
+
+On September 30, 2026 the owner redefined what sharing is for. These are the owner's own decisions, not delegated ones. Only the owner can change them.
+
+**V1: what sharing means.** In the owner's words, in chat:
+
+> when i've been talking about sharing in the past, it was not so much about making a plate and sharing that plate settings/layout with people but more when people want to look at the plate i have created, they can right click and view my plate, a very similar scenario to how adventure plates work in the base ffxiv game, a player makes an adventure plate and saves it, other people do not have access to the adventure plate configuration but they get to see what the other player has made, almost like a piece of art. what is implemented is good but i want to focus now more on how i've explained it.
+
+> additionally, this would be something that players have to opt into. i do not want this enabled by default. ... i do not want to put users of the plugin at risk in any way shape or form. my thought now is that a user opts into the networking side of it, so they can create their plates and others can view what they've made and vice versa, they would also be opting into being able to see other's plates. when i say plates, im refering to aetherframe made plates.
+
+Claude's reading of V1, which the plan delivers and batch C details:
+- sharing is **viewing**: another player sees a Plate as a finished picture, a render-only snapshot (the layout as drawn, and prepared copies of its images under D6 and I2), and never the editable Plate, its Template or the original image files;
+- it is **opt-in and off by default**;
+- it is **both ways**: opting in publishes your Plates and lets you view others'. A player who hasn't opted in sends nothing and can look nothing up.
+
+The remaining four came from Claude's questions in chat. The owner picked one option each. Each is quoted as the owner saw it.
+
+**V2: what is shown.** The owner chose "Active Plate, live": "That character's Active Plate. Saving it updates what others see, like the game's Adventure Plate. Turning sharing off removes it from the server."
+
+**V3: proving a character is yours.** The owner chose "Lodestone check": "Once per character: paste a short code into your Lodestone profile, the server checks it, then you can delete it. Nobody can attach a Plate to a character they don't own."
+
+**V4: personas.** The owner chose "Hide them": "Opting a character in creates its key behind the scenes, and players never see a Personas window. This changes D3, which only you can do." This amends D3 (above): an opted-in character is bound to a key of its own, by the player's opt-in, and personas are no longer something players see or switch.
+
+**V5: finding a Plate.** The owner chose "Right-click and name search": "Also a search box by character name and World. Easier to use, but anyone opted in can look anyone up by name." Claude's recommended option, "Right-click only", was declined. Both ways are open only to opted-in players.
+
+**What follows from V1 to V5** is Claude's, under the delegation: R5 (in "Decisions approved under the delegation", after R1) retires share codes and "save a copy".
+
+**What V1 to V5 don't settle.** Decision batch C settles these under the delegation, each researched and reviewed by a security-focused reviewer:
+- the character's key form, and renames and World transfers;
+- the Lodestone check's exact flow;
+- when publishing happens, and what opting out deletes;
+- which game menus offer "View Plate", and the search's limits;
+- what the server learns, keeps and logs about lookups and searches;
+- rate limits against scraping who has opted in;
+- reporting and hiding a Plate, and the operator's takedown;
+- whether K4 and the D2 backup still matter now that a Lodestone check can hand a character to a new key;
+- exactly what a viewer receives (D6 and I2 carried over, or narrowed);
+- how consent works when saving updates what others see (V2). V2 conflicts with D5's N2-6 note, point 6 (a consent screen before each signing), which is recorded, and with #56's proposed rule (#56 is open) that a Plate signed from the share check is shown on that screen before its first send, or dropped. Batch C amends both explicitly, with a security reviewer's concurrence (for example, one consent per character at opt-in that covers later saves), and never routes around them.
 
 ### D2: recovery from key loss. APPROVED IN PRINCIPLE (September 28, 2026)
 
@@ -519,6 +562,8 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 
 ### R1: how a viewer finds a Plate in the first test. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
+`[updated 2026-09-30: SUPERSEDED by R5 (Claude, under the delegation), which follows the owner's V1 and V5: a viewer finds a Plate by right-clicking its owner's character in game or searching their name and World, and only between opted-in players. No share codes are built. The reasoning below stays on record.]`
+
 **Option and scope.** **Share codes.**
 - The server issues one random code per published profile (persona, profile id) and returns it only to the publisher.
 - Anyone holding the code can view that profile's latest revision until it is unpublished.
@@ -536,6 +581,24 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 **Not settled:** the format, the length and the rate limits (batch B); expiring or replacing codes; target lookup (stage 2). `[updated 2026-09-30: the format, the length and the rate limits are R4's.]`
 
 **Independent concurrence.** A security-focused reviewer with no shared context examined `4a19eca` (September 29, 2026) and **concurred**: a bearer code with no enumeration and no character binding fits rule 8, and at least 64 random bits with rate limits is an adequate floor. It asked for codes to stay out of URLs, for the fresh-proof rule and the prefixed form, and for the TAG departures to be recorded, all now above.
+
+### R5: share codes retired. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
+
+**Option and scope.** Following the owner's V1 and V5:
+- R1 (share codes) and R4 (their format) are **retired**: the server issues no share codes, and a Plate is found only by its owner's character, from the game's right-click menu or a name search, and only between opted-in players. No share-code code is built. Their reasoning about bearer codes stays on record.
+- "Save a copy" from the viewer, listed for stage 2, is **dropped**.
+- Stage 2's "target lookup with an opt-in character binding" becomes the first test (NETWORK2.md, section 2).
+
+**Rationale.**
+- V1 makes sharing opt-in and both ways. A bearer code lets anyone holding it view a Plate without opting in, and a forwarded code reaches players outside the opt-in.
+- A second way to find a Plate adds server surface (issuing codes, their rate limits and their redaction in logs) for a use the owner didn't describe.
+- "Save a copy" would hand a viewer the Plate's configuration, which V1 says other players don't get.
+
+**Not settled:** whether any direct link to a character's Plate, for use outside the game, ever comes back (batch C or later).
+
+**Entries to restate in batch C,** because they assume share codes: D1 (unpublishing deletes "the share code"), D6 and I2 (content served under a share code), S1 (a publish returns a share code), and P1 (the publication index's share-code field, which N2-6c's first part already built).
+
+**Independent concurrence.** The independent reviewer of this re-plan (#58), with no shared context, **concurred** (September 30, 2026): a bearer code would let players who haven't opted in view a Plate, which defeats V1's opt-in in both directions, and dropping "save a copy" matches V1.
 
 ### R2: the transport. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
@@ -909,6 +972,8 @@ The specification's section 8.4 "Open (N2)" paragraph is removed; section 13's r
 
 ### R4: the share-code format. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 30, 2026
 
+`[updated 2026-09-30: SUPERSEDED by R5: no share codes are issued. The reasoning below stays on record.]`
+
 **Option and scope.** This settles what R1 left to batch B.
 
 **The form** is `AF-XXXX-XXXX-XXXX-XXXX`: the fixed prefix `AF-`, then 16 Crockford Base32 symbols in groups of four (crockford.com/base32.html).
@@ -1042,7 +1107,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | K4 | Whether a backup is required before the first real publish | Undefined | Approved: a backup, or (while none exists) an explicit per-persona acknowledgement that a lost key means never updating or unpublishing, before the first real publish (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | N1 | Scope of revision and asset ids | Profile scoping only | Approved: revisions per (persona, profile); assets and digests per persona, never deduplicated or compared across personas (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | N7 | Whether consumers must escape names before display or logging | Nothing obliges them | Approved: every consumer treats every text as plain text: no markup, format strings, game text payloads, paths, URLs or commands; never auto-linked; escaped in any HTML (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
-| R1 | How a viewer finds a Plate in the first test | None | Approved: share codes issued per published profile, the only way to reach one in stage 1; no directory, search or lookup; target lookup is stage 2 (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
+| R1 | How a viewer finds a Plate in the first test | None | Approved: share codes issued per published profile, the only way to reach one in stage 1; no directory, search or lookup; target lookup is stage 2 (see "Decision batch A"). Superseded on 2026-09-30 by R5, after the owner's V1 and V5 | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | R2 | The transport | None | Approved: HTTPS to one fixed DNS hostname, `HttpClient` with Dalamud's dual-stack callback, traffic only on a player's action, signed bytes as bodies, strict small JSON responses except D6's served profile and I2's images, version checks, no cookies or accounts (see "Decision batch A" and "Decision batch B") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 | R3 | Where network code may live | Nowhere (NETWORK1.md, safeguard 1) | Approved: an exact allowlist in the preview flavour under `Services/Network` only: `System.Net.Http` (with `.Headers`), `HttpStatusCode`, Dalamud's dual-stack callback and its `AddressFamily` parameter, `System.Net.Security` only for a TLS option; every other networking type refused; nothing in the player flavour (see "Decision batch A") | no | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-29** |
 
@@ -1059,7 +1124,7 @@ Only if persona features are pursued under Wine, Proton or macOS. These must be 
 | S3 | Profiles whose key is lost | Approved for stage 1: no automatic expiry; the operator removes a profile on a request verified out of band, exactly as a retraction (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | S4 | A persona-level revocation document | Approved: deferred; the runbook covers a stolen key (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | I2 | Server image processing | Approved: every image re-processed by an isolated worker whose output is checked before storing, and served by index with fixed types; uploads only from an allowlist of the two testers' personas in stage 1, and per-job isolation before the allowlist is removed (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
-| R4 | The share-code format | Approved: `AF-` and 16 Crockford Base32 symbols, 75 random bits and a Damm check symbol; only in request bodies; lookups rate-limited per IPv4 /32 and per IPv6 /64, /56 and /48 (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
+| R4 | The share-code format | Superseded on 2026-09-30 by R5. Approved: `AF-` and 16 Crockford Base32 symbols, 75 random bits and a Damm check symbol; only in request bodies; lookups rate-limited per IPv4 /32 and per IPv6 /64, /56 and /48 (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | S5 | Server logging | Approved: no address stored in stage 1; logs hold no document, proof, challenge, share code or identifier, and are kept 14 days (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 | P4 | A signed request that lists a persona's profiles | Approved: none in stage 1; the operator path (S3) covers a lost publication index (see "Decision batch B") | **APPROVED (Claude, under the owner's delegation of September 29, 2026), 2026-09-30** |
 

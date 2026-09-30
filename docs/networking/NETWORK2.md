@@ -1,6 +1,6 @@
 # NETWORK2: from local preparation to a two-player test
 
-**Status (2026-09-30): a plan. N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`), N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) and N2-4 (the DPAPI key protector and the capability probe, [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), `2d98245`) are merged. N2-5a, the persona registry in the library ([#44](https://github.com/QuietFoxLabs/AetherFrame/pull/44), `836c6ef`), N2-5b, the plugin's persona storage and session ([#45](https://github.com/QuietFoxLabs/AetherFrame/pull/45), `5ca0c07`), and N2-5c, the persona window ([#46](https://github.com/QuietFoxLabs/AetherFrame/pull/46), `04e3976`), are merged. Decision batch B, for the server, is recorded ([#47](https://github.com/QuietFoxLabs/AetherFrame/pull/47), `7b99eb6`). N2-6a, the snapshot builder, is merged ([#48](https://github.com/QuietFoxLabs/AetherFrame/pull/48), `b510250`). N2-6b's first part, the image rule, is merged ([#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), `7b35a31`), and its second part, image preparation, is merged too ([#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), `302af2f`). N2-6c's first part, the publication index, the outbox and the commit, is merged ([#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), `e86190a`), and its second part, the share check, is this change. Nothing reaches a player: all of it is in the preview flavour only.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
+**Status (2026-09-30): a plan, re-aimed the same day by the owner's decisions V1 to V5 (DecisionRegister.md): sharing is viewing an opted-in player's Active Plate by right-clicking their character or searching their name, like the game's Adventure Plates, and the test in section 2 is rewritten for it. Decision batch C (N2-C) comes before any sharing code beyond N2-6. N2-6 is complete: its last part, the share check, merged as [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56); nothing it builds is sent before N2-9. Claude's working assumption, which batch C settles, is that a character's key is a persona under the hood (V4). N2-0 (this plan) is merged. N2-1, decision batch A, is recorded in [DecisionRegister.md](DecisionRegister.md). N2-2 (the draft marker and the name rule), N2-3a (the layout schema, [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), `e385b81`), N2-3b (the request proof, [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40), `3371d08`) and N2-4 (the DPAPI key protector and the capability probe, [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42), `2d98245`) are merged. N2-5a, the persona registry in the library ([#44](https://github.com/QuietFoxLabs/AetherFrame/pull/44), `836c6ef`), N2-5b, the plugin's persona storage and session ([#45](https://github.com/QuietFoxLabs/AetherFrame/pull/45), `5ca0c07`), and N2-5c, the persona window ([#46](https://github.com/QuietFoxLabs/AetherFrame/pull/46), `04e3976`), are merged. Decision batch B, for the server, is recorded ([#47](https://github.com/QuietFoxLabs/AetherFrame/pull/47), `7b99eb6`). N2-6a, the snapshot builder, is merged ([#48](https://github.com/QuietFoxLabs/AetherFrame/pull/48), `b510250`). N2-6b's first part, the image rule, is merged ([#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), `7b35a31`), and its second part, image preparation, is merged too ([#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), `302af2f`). N2-6c's first part, the publication index, the outbox and the commit, is merged ([#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55)), and so is its second part, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)). Nothing reaches a player: all of it is in the preview flavour only.** It turns the owner's request of September 29, 2026 into increments. Each increment is one reviewed pull request, and needs the decisions named for it recorded in [DecisionRegister.md](DecisionRegister.md) before it merges. Nothing here approves a decision. Where this plan names an option, it is the recommendation that the decision will weigh, not a choice already made.
 
 **Safeguards.** Safeguards 2 to 8 of [NETWORK1.md](NETWORK1.md), section 4, hold throughout NETWORK2:
 - no persistent key before G1 is complete;
@@ -27,24 +27,32 @@ The owner will buy and set up a domain and a server when needed. Putting network
 
 ## 2. The test this plan ends in
 
+`[updated 2026-09-30: rewritten after the owner's decisions V1 to V5 (DecisionRegister.md). Sharing is viewing a Plate by character, opt-in and both ways, like the game's Adventure Plates. The share-code test this section described before is superseded, and so is its "stage 2" target lookup, which is now the test.]`
+
 Two players on native Windows, each running a **networking preview build**, and one server the owner hosts. How a preview build reaches the second player is a decision of its own (the tester kit, N2-11), because P2 keeps preview builds out of releases and test builds.
 
-1. **Identity.** Player A creates a persona in AetherFrame and selects it. Before the first publish, A meets whatever K4 decides. The recommendation is an acknowledgement that losing the key means the Plate can never be unpublished. The encrypted backup comes later (the D2 details).
-2. **Publish.** A picks a saved Plate and chooses Share. A consent screen shows what leaves the computer and what the server learns:
-   - **The actual content to be published:** every text as it will appear, and the prepared copies of the images.
-   - **Game-filled text, flagged.** Adventure Plate Classic fills itself from the logged-in character (name, Home World, Data Center, job, Free Company tag). Publishing adds no name, World or Content ID of its own, but a Plate may already contain them, and the screen says which texts came from the game.
-   - **The persona's public key.** Every Plate one persona publishes can be tied together by anyone holding their codes, so a persona used for several characters links those characters. `[updated 2026-09-30: under D6 viewers receive no persona id or key, so code holders can't tie a persona's Plates together by it, only by what the Plates themselves show, such as the same image or text. The server, which sees the key with every submission, can, so a persona used for several characters links those characters for the server.]`
-   - **What the server sees:** the player's network address and when they publish, as well as the profile, revision and asset identifiers. `[updated 2026-09-30: and what it keeps (decision batch B): the address is seen and not stored (S5); content and identifiers are kept until unpublishing, plus the backup window (D1); logs are kept 14 days, without identifiers (S5). The screen also says that the plugin's Network\Personas folder holds the keys and the list of what each persona published, which keeping it keeps and which updating or unpublishing needs, but that it is no backup of the identity (P4).]`
+1. **Nothing until you opt in.** A preview build that hasn't opted in adds no menu item and no search box, sends nothing, and looks nothing up.
+2. **Opt in (V1).** Player A turns on sharing, which is off by default. A consent screen says:
+   - what others will see: A's Active Plate for each character A opts in, as a finished picture, updated whenever A saves it (V2);
+   - who can see it: other players who have opted in, from the game's right-click menu on A's character or by searching A's name and World (V5);
+   - what the server learns and keeps (decision batch C);
+   - how to stop: turning sharing off removes A's Plates from the server.
 
-   A confirms and gets a **share code**.
-3. **View.** A sends the code to B by any means (game chat, Discord). B enters it in AetherFrame. The Plate opens in a read-only viewer and looks as it does for A, as long as both run the same build. It is never added to B's Library unless B explicitly saves a copy (a later increment).
-4. **Update.** A edits the Plate and publishes again. B refreshes and sees the new revision under the same code.
-5. **Unpublish.** A unpublishes. B's refresh says the Plate is no longer shared, and the server serves nothing for it.
-6. **Nothing else changed.** A's and B's Libraries, Plates, Templates and bindings are as before, and everything local works with the network off or the server down.
-
-**Target lookup** (seeing a Plate by targeting its owner's character in game) is the natural next stage, and **not** part of this first test. It needs an opt-in binding of a Plate to a character name and World, which is a privacy decision that deserves its own review (section 5, stage 2). A share code is sharing the publisher starts deliberately and the viewer opens explicitly, and it binds nothing to a character. The lookup model is decided in N2-1.
+   Opting in also lets A view other opted-in players' Plates.
+3. **Prove the character (V3).** For each character A opts in:
+   - a key for that character is made behind the scenes, and A never sees a persona (V4);
+   - AetherFrame shows a one-time code, and A pastes it into that character's Lodestone profile;
+   - the server checks it on the Lodestone, which binds the character to that key;
+   - A can then delete the code.
+4. **Published.** A's Active Plate for that character is published. Before anything is sent, AetherFrame shows the actual content: the rendering, every text as it will appear with game-filled text flagged, and the prepared copies of the images (as the D5 and N2-9 notes require).
+5. **View.** Player B, also opted in, right-clicks A's character in game and chooses **View AetherFrame Plate**, or searches A's name and World. The Plate opens in a read-only viewer and looks as it does for A, as long as both run the same build. Nothing is added to B's Library.
+6. **Update.** A edits the Active Plate and saves. B opens it again and sees the new version. A makes another Plate Active; B then sees that one.
+7. **Opt out.** A turns sharing off. B is told A has no AetherFrame Plate, and the server serves nothing for A.
+8. **Nothing else changed.** A's and B's Libraries, Plates, Templates and bindings are as before, and everything local works with the network off or the server down.
 
 ## 3. Architecture (recommended)
+
+`[updated 2026-09-30: under V1 to V5 the server looks Plates up by Lodestone-checked character and by name search, only for opted-in players, instead of issuing share codes; the viewer opens from the game's right-click menu or a search; and a key per opted-in character replaces personas the player sees. Mentions of share codes below are superseded; decision batch C settles the rest.]`
 
 ```
 Player A's plugin (preview)                          Owner's server                         Player B's plugin (preview)
@@ -111,11 +119,12 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 | N2-5b | Plugin: the registry file and the key file's written-through move, the single-writer lock, and the persona session (the capability probe, the lock, the registry and the audit, off the framework thread); preview test builds | G1 complete (with N3, K3 and P1 from batch A), L10, L12, P3 | N2-2 (the draft marker exists before any persistent key signs), N2-4, N2-5a |
 | N2-5c | Plugin: the persona window: personas, K4's step with K2's disclosure, L12's orphans; the Personas button in My Plates | K2, K4, L10, L12 | N2-5b |
 | N2-6 | Plugin: the snapshot builder for schema 2, image preparation, the publication index and the outbox (NETWORK1 increments 4 and 8) | P1, D4, D5, D8, I1 | N2-3a, N2-5 |
-| N2-7 | Server: verify, store and serve; share codes; retraction; quotas and rate limits; version checks; its own test suite in CI | Decision batch B, recorded: D1, D6, N2, N6, S2, S3, S4, I2, R4 (the share-code format), S5 (server logging) and P4; K5 moved to the "D2 details" gate | N2-3a, N2-3b |
-| N2-8 | Deployment kit: container, Caddy, the deploy workflow with owner approval, the runbook | G3 complete (D1, D6, D7, K4, N1, N7, R1 to R3; complete since batch B) before the two-player test's server accepts documents signed by real keys, and then only from the testers' personas (I2's allowlist); the backups' retention (D1); the owner's hosting (section 4) | N2-7 |
-| N2-9 | Plugin: the transport, publish and unpublish, the consent screen, share codes | The boundary amendment and the transport (batch A) | N2-5, N2-6, N2-7 |
-| N2-10 | Plugin: the viewer (open by code, read the served profile (D6), render read-only, refresh) | N7, I1, K3 (viewing), D6, I2 | N2-3a, N2-7, N2-9 |
-| N2-11 | The preview test kit and the two-player checklist | The tester kit (P2's unsettled item) and the matching AUTOPILOT.md procedure; G3 complete | everything above, and the owner's server |
+| N2-C | Decision batch C: viewing by character (V1 to V5), researched and reviewed. It covers the character's key and its form; the Lodestone check; when publishing happens and what opting out deletes; the game menus and the search; what the server learns, keeps and logs; rate limits against scraping; reporting, hiding and takedown; K4 and D2 under V3; and the consent model for live updates (V2 against D5's N2-6 note, point 6, and the share check's proposed rule in #56, both amended explicitly). R1 and R4 are marked superseded | V1 to V5 (the owner's) | N2-0 |
+| N2-7 | Server: verify, store and serve; the Lodestone check; lookup by verified character and name search; removal on opting out; quotas and rate limits; version checks; its own test suite in CI | Batch B as far as V1 to V5 leave it (D1, D6, N2, N6, S2, S3, S4, I2, S5, P4); batch C | N2-3a, N2-3b, N2-C |
+| N2-8 | Deployment kit: container, Caddy, the deploy workflow with owner approval, the runbook (with the takedown steps from batch C) | G3 complete before the server accepts documents signed by real keys, and then only from the testers' keys (I2's allowlist); the backups' retention (D1); the owner's hosting (section 4) | N2-7 |
+| N2-9 | Plugin: opting in and out, the consent screen, the Lodestone check, publishing the Active Plate when it is saved or changed, the transport; the Personas window leaves My Plates (V4); the tutorial gains a chapter on sharing | The boundary amendment and the transport (batch A); batch C | N2-5, N2-6, N2-7 |
+| N2-10 | Plugin: the viewer, opened from the game's right-click menu on a character or by a name search, reading the served profile (D6) and rendering it read-only; hide a player's Plate, and report one; the tutorial's chapter covers viewing | N7, I1, K3 (viewing), D6, I2; batch C | N2-3a, N2-7, N2-9 |
+| N2-11 | The preview test kit and the two-player checklist (section 2) | The tester kit (P2's unsettled item) and the matching AUTOPILOT.md procedure; G3 complete | everything above, and the owner's server |
 
 `[updated 2026-09-30: N2-6 is delivered in three parts too: N2-6a (the snapshot builder), N2-6b (image preparation) and N2-6c (the publication index, the outbox and the commit). Its design, with a security reviewer's concurrence, is recorded under D5 in DecisionRegister.md.]` `[updated 2026-09-30: N2-6c is delivered in two parts. The first is the publication index, the outbox and the commit, with the index and outbox checked at load. The second builds the candidate from a saved Plate, runs the commit in the persona session once image preparation's known-answer check has passed, and adds a preview-only view of what would be shared.]`
 
@@ -123,7 +132,7 @@ Each increment is one pull request, with the checks and reviews AUTOPILOT.md req
 
 N2-7's server runs locally in its own tests and in the plugin's integration tests, so everything up to N2-10 can be built and tested before the owner's server exists. Only the real test needs it.
 
-**Acceptance carried into the increments:**
+**Acceptance carried into the increments:** `[updated 2026-09-30: where these name share codes, R4, /tell or "opening a code", read them under V1 to V5: lookup by character or name search, and "opening a Plate". N2-5's D3 acceptance is amended by V4. Batch C restates what changes.]`
 - **N2-5** keeps D3 as approved: several personas, selected and switched only by the player, one active for identity operations, never bound to a character, Content ID or account, and switching never alters Plates or publishes.
 - **N2-6** refuses a Plate over a whole-snapshot limit of the specification's section 8.5 (2,048 items, 8 images, 33,554,432 image pixels, 32,000 text scalars), or holding a value no layout field can express (a text with U+0000, a gradient endpoint with a colour component outside 0 to 1), with a message naming it, never clamping or trimming it. Any other value the renderer itself resolves (a colour component outside 0 to 1, an unknown font) is carried as the renderer resolves it. It keeps NETWORK1 increment 4's acceptance:
   - the builder reads only the saved Plate;
@@ -145,10 +154,8 @@ N2-7's server runs locally in its own tests and in the plugin's integration test
 - 6 (the backup codec) and 10 (Wine, Proton and macOS) come in stage 2.
 - 11 (acceptance and independent review) happens at N2-11 for what NETWORK2 builds, and again after stage 2.
 
-**Stage 2, after the test:**
-- target lookup with an opt-in character binding;
+**Stage 2, after the test:** `[updated 2026-09-30: target lookup is now the test (section 2), and "save a copy" from the viewer is dropped by R5.]`
 - the encrypted backup (NETWORK1 increment 6, the D2 details);
-- "save a copy" from the viewer;
 - a preview channel, or networking in player builds;
 - Wine, Proton and macOS (NETWORK1 increment 10);
 - the external beta checklist.
