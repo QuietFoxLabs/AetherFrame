@@ -157,9 +157,9 @@ function Get-OptionalProperty($Object, [string] $Name) {
 
 # What Dalamud's saved configuration says about loading AetherFrame from $DllPath. Dalamud saves
 # it whenever a setting changes, so it reflects the last change made in game. Each dev plugin
-# location is a DLL's path: Dalamud reads it as a file and skips a folder (PluginManager). At boot
-# it loads one plugin per internal name, the highest version, so a second enabled AetherFrame
-# location makes it uncertain which build runs.
+# location is a DLL's path: Dalamud reads it as a file and skips a folder (PluginManager). It
+# doesn't deduplicate dev plugins by name, so with a second enabled AetherFrame location both
+# builds may load at once and share the plugin's data.
 function Get-DalamudLoadState([string] $ConfigPath, [string] $DllPath) {
     $state = [ordered]@{
         Readable       = $false
@@ -306,10 +306,11 @@ foreach ($name in $PluginFiles) {
 
 # A reload closes AetherFrame's windows, and an editor's unsaved changes go with them. When one is
 # about to happen, give the owner the time AUTOPILOT.md's heads-up promised before touching anything.
-$reloads = (-not $alreadyInstalled) -and $gameRunning -and $dalamud.ListsDll -and $dalamud.AutoReload
+# Settings that can't be read count as a reload, since the script can't rule one out.
+$reloads = (-not $alreadyInstalled) -and $gameRunning -and ((-not $dalamud.Readable) -or ($dalamud.ListsDll -and $dalamud.AutoReload))
 $waited = 0
 if ($reloads -and $GraceSeconds -gt 0) {
-    Write-Host "The game is running and will reload AetherFrame: waiting $GraceSeconds seconds before installing."
+    Write-Host "The game is running and may reload AetherFrame: waiting $GraceSeconds seconds before installing."
     Start-Sleep -Seconds $GraceSeconds
     $waited = $GraceSeconds
 }
@@ -376,7 +377,7 @@ elseif (-not $dalamud.ListsDll) {
     Write-Warning "The game won't load this build. $fix"
 }
 elseif ($dalamud.OtherLocations.Count -gt 0) {
-    $inGame = 'conflict: another enabled dev plugin location is an AetherFrame too, so which build the game runs is uncertain.'
+    $inGame = 'conflict: another enabled dev plugin location is an AetherFrame too, so both builds may run at once and share the plugin''s data.'
     foreach ($other in $dalamud.OtherLocations) {
         Write-Warning "Another enabled dev plugin location is AetherFrame: $other. $fix"
     }
