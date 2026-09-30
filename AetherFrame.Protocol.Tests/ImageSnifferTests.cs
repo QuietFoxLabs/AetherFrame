@@ -204,7 +204,9 @@ public class ImageSnifferTests
     public void TheVectors_AreWhatTheSnifferSays()
     {
         var vectors = VectorCases();
-        var actual = JsonSerializer.Serialize(vectors.Select(v => new ImageVector(v.Name, Convert.ToHexString(v.Bytes).ToLowerInvariant(), Outcome(v.Bytes))).ToList(), new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        // One newline on every platform: the fixture is compared byte for byte, on Windows and Linux alike.
+        var options = new JsonSerializerOptions { WriteIndented = true, NewLine = "\n" };
+        var actual = JsonSerializer.Serialize(vectors.Select(v => new ImageVector(v.Name, Convert.ToHexString(v.Bytes).ToLowerInvariant(), Outcome(v.Bytes))).ToList(), options) + "\n";
         var name = "image-vectors-v1.json";
         if (Environment.GetEnvironmentVariable("AETHERFRAME_PROTOCOL_REGENERATE_IMAGE_VECTORS") is { Length: > 0 })
         {
