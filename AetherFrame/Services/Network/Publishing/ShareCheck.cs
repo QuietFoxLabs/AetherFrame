@@ -46,6 +46,9 @@ internal enum ShareCheckFailure
     /// <summary>Preparing its images failed in an unexpected way; the log names the kind.</summary>
     PreparationFailed,
 
+    /// <summary>Resolving it failed in an unexpected way (a file it reads, say); the log names the kind.</summary>
+    ResolveFailed,
+
     /// <summary>The plugin is unloading, so nothing new starts.</summary>
     Unloading,
 }
@@ -184,8 +187,24 @@ internal sealed class ShareCheck : IDisposable
             return;
         }
 
-        seams.Prewarm(current);
-        if (!PlateSnapshotBuilder.TryResolve(current, sizes, out var resolved))
+        bool ready;
+        ResolvedPlate resolved;
+        try
+        {
+            seams.Prewarm(current);
+            ready = PlateSnapshotBuilder.TryResolve(current, sizes, out resolved);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            // Once, not every frame: the check ends here.
+            seams.Log("Sharing: resolving a Plate failed: " + PublishOutcome.Describe(e));
+            plate = null;
+            measurements = null;
+            Show(Stage(ShareCheckStage.Failed, failure: ShareCheckFailure.ResolveFailed));
+            return;
+        }
+
+        if (!ready)
         {
             if (--framesLeft <= 0)
             {

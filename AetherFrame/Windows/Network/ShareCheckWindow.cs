@@ -161,11 +161,12 @@ internal sealed class ShareCheckWindow : Window, IDisposable
         }
     }
 
+    /// <summary>What a problem or a left-out item is about: the element's name as the editors show it (its own, a Basic role's label, or its kind), or the part of the Plate.</summary>
     private static string Describe(ProfileElement? element, PlateComponent? component, bool background)
     {
-        if (background)
+        if (element is not null)
         {
-            return "The background";
+            return ProfileElementNames.GetDisplayName(element);
         }
 
         if (component is not null)
@@ -173,13 +174,7 @@ internal sealed class ShareCheckWindow : Window, IDisposable
             return "A component";
         }
 
-        return element switch
-        {
-            TextProfileElement => "A text",
-            ImageProfileElement => "An image",
-            null => "The Plate",
-            _ => "An element",
-        };
+        return background ? "The background" : "The Plate";
     }
 
     private static string ByteSize(long bytes) =>
@@ -216,16 +211,15 @@ internal sealed class ShareCheckWindow : Window, IDisposable
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var problem in view.Problems)
         {
-            var subject = Describe(problem.Element, problem.Component, problem.Background);
-            var message = ShareMessages.For(problem.Refusal);
-            if (!seen.Add(subject + "\n" + message + "\n" + problem.Element?.Name))
+            var line = Describe(problem.Element, problem.Component, problem.Background) + ": " + ShareMessages.For(problem.Refusal);
+            if (!seen.Add(line))
             {
                 continue;
             }
 
             ImGui.Bullet();
             ImGui.SameLine();
-            Wrapped(problem.Element is { Name.Length: > 0 } named ? subject + " (" + named.Name + "): " + message : subject + ": " + message);
+            Wrapped(line);
         }
     }
 
@@ -304,10 +298,7 @@ internal sealed class ShareCheckWindow : Window, IDisposable
             {
                 ImGui.Bullet();
                 ImGui.SameLine();
-                var subject = Describe(left.Element, left.Component, false);
-                Wrapped(left.Element is { Name.Length: > 0 } named
-                    ? subject + " (" + named.Name + ") " + ShareMessages.For(left.Reason)
-                    : subject + " " + ShareMessages.For(left.Reason));
+                Wrapped(Describe(left.Element, left.Component, false) + ": " + ShareMessages.For(left.Reason));
             }
         }
 

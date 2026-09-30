@@ -285,6 +285,21 @@ public sealed class ShareCheckTests : IDisposable
     }
 
     [Fact]
+    public void AResolveThatThrows_FailsTheCheckOnce_AndTheLogNamesItsKindOnly()
+    {
+        var plate = Save(image: false);
+        using var check = NewCheck();
+        measurements.Throw = true;
+
+        check.Begin(plate.ProfileId);
+        check.OnFrame();
+
+        Assert.Equal((ShareCheckStage.Failed, ShareCheckFailure.ResolveFailed), (check.View.Stage, check.View.Failure));
+        check.OnFrame();
+        Assert.Single(log, line => line.StartsWith("Sharing: resolving a Plate failed: IOException 0x", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void NothingIsPrepared_OnceUnloadingHasBegun()
     {
         var plate = Save(image: true);
@@ -386,6 +401,8 @@ public sealed class ShareCheckTests : IDisposable
 
         internal volatile bool Ready = true;
 
+        internal volatile bool Throw;
+
         private int sizeReads;
 
         internal int SizeReads => Volatile.Read(ref sizeReads);
@@ -398,6 +415,11 @@ public sealed class ShareCheckTests : IDisposable
 
         public bool TryGetDisplayOverride(ProfileDocument plate, TextProfileElement element, out string? display)
         {
+            if (Throw)
+            {
+                throw new System.IO.IOException("Canary at a path");
+            }
+
             inner.TryGetDisplayOverride(plate, element, out display);
             return Ready;
         }

@@ -34,14 +34,14 @@ internal static class ShareMessages
         _ => "It holds something that can't be shared.",
     };
 
-    /// <summary>Why something the Plate holds isn't in what would be shared.</summary>
+    /// <summary>Why something the Plate holds isn't in what would be shared, after its name and a colon.</summary>
     internal static string For(LeftOutReason reason) => reason switch
     {
-        LeftOutReason.Empty => "has nothing to show",
-        LeftOutReason.Transparent => "is fully transparent",
-        LeftOutReason.OutsideView => "is outside what the Plate shows",
-        LeftOutReason.ImageMissing => "has no image file, so nothing is drawn there",
-        _ => "isn't drawn",
+        LeftOutReason.Empty => "nothing to show",
+        LeftOutReason.Transparent => "fully transparent",
+        LeftOutReason.OutsideView => "outside what the Plate shows",
+        LeftOutReason.ImageMissing => "its image file is missing, so nothing is drawn there",
+        _ => "not drawn",
     };
 
     /// <summary>Why a check couldn't finish; nothing is wrong with the Plate itself.</summary>
@@ -51,6 +51,7 @@ internal static class ShareMessages
         ShareCheckFailure.FontsLoading => "Its fonts are still loading. Try again in a moment.",
         ShareCheckFailure.PreparationOff => "Image preparation didn't pass its check in this session, so sharing is off until AetherFrame starts again. AetherFrame's log says what failed.",
         ShareCheckFailure.PreparationFailed => "Its images couldn't be prepared. Try again; if it happens again, AetherFrame's log says what failed.",
+        ShareCheckFailure.ResolveFailed => "It couldn't be checked. Try again; if it happens again, AetherFrame's log says what failed.",
         ShareCheckFailure.Unloading => "AetherFrame is unloading.",
         _ => "The check couldn't finish.",
     };
