@@ -68,6 +68,13 @@ A scheduled task starts one run every two hours. Runs never overlap. Each run:
 - **Waiting:** don't wait for or poll CI. The next run reads the result.
 - **Roadmap:** update ROADMAP.md (status, section 8) in the same PR.
 
+## Live status
+
+The owner asked on September 30, 2026 for GitHub to show realtime status. So:
+- **[Issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52) is the live status.** Edit its body in place, never with a comment, whenever a pull request opens, changes state, gets a review verdict or merges. Do the same when a build is made or installed, and when what waits on the owner changes. Put the time of the change at its top.
+- **ROADMAP.md's "Status at a glance"** opens the roadmap. Every pull request that changes the status updates it, with its own time, and so do the NETWORK2 table and the builds.
+- A session that sees another session's pull request records it there too, and touches nothing of it.
+
 ## Merge gate
 
 Merge only when all of these hold:

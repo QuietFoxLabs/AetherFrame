@@ -6,6 +6,46 @@ Repository: [QuietFoxLabs/AetherFrame](https://github.com/QuietFoxLabs/AetherFra
 
 Product requirements below preserve the September 2026 Product and Technical Specification and the owner's later statements in AetherFrame Dev. Repository and PR state take precedence over older status reports. The [networking decision register](https://github.com/QuietFoxLabs/AetherFrame/blob/3920aed702b3049508de5117b0ae68b9859ad4ec/docs/networking/DecisionRegister.md) is authoritative for networking approvals: D3 is approved; D2 is approved in principle; the other listed decisions remain OPEN. Code, research, and recommendations do not approve them. Under the September 29 delegation, Claude decides OPEN items. Each one stays OPEN until the register (or section 5, for items outside networking) records it as approved under that delegation, with its date, exact scope and rationale.
 
+## Status at a glance
+
+Updated September 30, 2026, at 09:00 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+
+- **Waiting on the owner:**
+  - a verdict on test build `01a14a5`, which gates the 0.1.7 release;
+  - the checks for preview build `7b35a31`, installed on September 30 at the owner's request, in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25);
+  - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
+- **In progress:**
+  - N2-6b's second part, image preparation ([#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), in review);
+  - the interface audit's second pass ([#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), by a second Claude session).
+- **Next, for the two-player test:**
+  1. N2-6c: the publication record, the outbox and the commit;
+  2. N2-7: the server;
+  3. N2-8: deployment;
+  4. N2-9: the sharing flow in the plugin;
+  5. N2-10: the viewer;
+  6. N2-11: the test kit and the two-player checklist.
+
+| NETWORK2 increment | State |
+| --- | --- |
+| N2-0 and N2-1: the plan and decision batch A | done: [#36](https://github.com/QuietFoxLabs/AetherFrame/pull/36), [#37](https://github.com/QuietFoxLabs/AetherFrame/pull/37) |
+| N2-2, N2-3a and N2-3b: the draft marker and name rule, the layout schema, the request proof | done: [#38](https://github.com/QuietFoxLabs/AetherFrame/pull/38), [#39](https://github.com/QuietFoxLabs/AetherFrame/pull/39), [#40](https://github.com/QuietFoxLabs/AetherFrame/pull/40) |
+| N2-4: the Windows key protector and the capability probe | done: [#42](https://github.com/QuietFoxLabs/AetherFrame/pull/42) |
+| N2-5a to N2-5c: the persona registry, storage and window | done: [#44](https://github.com/QuietFoxLabs/AetherFrame/pull/44), [#45](https://github.com/QuietFoxLabs/AetherFrame/pull/45), [#46](https://github.com/QuietFoxLabs/AetherFrame/pull/46) |
+| Decision batch B: the server's decisions | done: [#47](https://github.com/QuietFoxLabs/AetherFrame/pull/47) |
+| N2-6a: the snapshot builder | done: [#48](https://github.com/QuietFoxLabs/AetherFrame/pull/48) |
+| N2-6b: the image rule, then image preparation | the rule done: [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49); preparation in review: [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50) |
+| N2-6c: the publication record, the outbox and the commit | next |
+| N2-7: the server | planned |
+| N2-8: deployment | planned; needs the owner's domain and server |
+| N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
+
+| Build | State |
+| --- | --- |
+| v0.1.6 | released to the testing channel |
+| Test build `01a14a5` (player) | installed September 29; waiting for the owner's verdict |
+| Preview build `7b35a31` | installed September 30; its checks are in the Owner inbox |
+| `master` | `7b35a31`, CI green on both platforms |
+
 ## 1. Goal and scope
 
 AetherFrame is a Final Fantasy XIV Dalamud plugin for creating, preserving, organizing, duplicating, and intentionally sharing complete character Plates.
@@ -24,17 +64,25 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
+| Item | Verified state (September 30, 2026, 08:51 UTC) |
+| --- | --- |
+| Default branch | `master` at `7b35a31`, after [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49) merged at 08:19 UTC. CI passed on both platforms. Locally, while preview build `7b35a31` was built: 0 build warnings, and every suite passed (3224 plugin, 407 protocol, 482 persona, 468 release tooling). |
+| Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |
+| Custom repository | `plugin-repository` exists at `e85692416ec20151fbda9b76788c4e2ef83db763`. Its [manifest](https://github.com/QuietFoxLabs/AetherFrame/blob/e85692416ec20151fbda9b76788c4e2ef83db763/pluginmaster.json) serves v0.1.6 with `IsTestingExclusive: true`. |
+| Test builds | `01a14a5` (player; #21 and #33), installed September 29, is waiting for the owner's in-game verdict, which gates 0.1.7. Preview `7b35a31` (every merged networking increment; it sends nothing) was installed September 30 at the owner's request. |
+| Open pull requests | [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50), N2-6b's second part (draft, in review). [#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), the interface audit's second pass (draft, a second Claude session). |
+| Checkouts | The control checkout `E:\AetherFrameWork` is clean on `master`, with one worktree per task under `.claude\worktrees\`. `E:\Plugin development` is off limits ([CLAUDE.md](CLAUDE.md)). |
+
+CI results belong to the recorded commit, not automatically to later commits. Check live CI, and [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), for anything newer.
+
+**Earlier snapshot rows (September 29, 2026, kept as history):**
+
 | Item | Verified state |
 | --- | --- |
-| Default branch | `master` after #33, September 29, 2026 (`01a14a5`): 0 build warnings and every suite passing locally (3151 plugin, 466 release tooling, 153 protocol, 252 persona), installed as test build `01a14a5` the same day and waiting for the owner's in-game verdict. It supersedes test build `1024490` (`master` after #30), which was never checked. `master` then gained #34 (`b80127b`, 19:42 UTC the same day), which is in no test build yet. Earlier: At `45f32e3` (the autopilot setup, #24) Ubuntu passed and Windows failed one protocol test that depended on thread scheduling (known bug 5, fixed by #26); `3920aed` passed both. Check live CI for the current head. |
-| Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |
-| Custom repository | `plugin-repository` exists at `e85692416ec20151fbda9b76788c4e2ef83db763`. Its [manifest](https://github.com/QuietFoxLabs/AetherFrame/blob/e85692416ec20151fbda9b76788c4e2ef83db763/pluginmaster.json) serves v0.1.6 with `IsTestingExclusive: true`. Older statements that it has never been published are stale. |
 | PR #21 | [Plate Library reliability and data preservation](https://github.com/QuietFoxLabs/AetherFrame/pull/21): MERGED September 29, 2026 at 15:29 UTC as `8077689`, head `e1e3c7f` green on both platforms. In test build `01a14a5` (September 29, 2026, superseding `1024490`), which waits for the owner's in-game verdict; not released. Taken over by the autopilot on September 29, 2026, on the owner's inbox instruction; `master` (`45f32e3`) merged in as `6684a74`, which builds with 0 warnings and passes 3032 plugin, 153 protocol and 439 release tooling tests locally on Windows. The #21 reconciliation (section 8, done list) reconciled its report and description on the same branch. |
 | PR #22 | [NETWORK1 Increment 0 documentation](https://github.com/QuietFoxLabs/AetherFrame/pull/22): MERGED September 29 at 00:24:47 UTC as `3920aed`. PR head `24e9edd1b3c9a2a07cfc63f1f2b9337e0f25a242` passed both platforms. Six networking documents changed; no implementation or protocol bytes changed. |
 | PR #23 | [Persona management foundation](https://github.com/QuietFoxLabs/AetherFrame/pull/23): MERGED September 29, 2026 at 15:47 UTC as `1a82bd4`, head `1e7853b` green on both platforms. Taken over by the autopilot on September 29, 2026; `master` (`45f32e3`) merged in as `7669d1d`, which passed 2739 plugin, 439 release tooling, 153 protocol and 252 persona tests on both platforms. The #23 reconciliation (section 8, done list) reconciled its decisions and review evidence on the same branch, and `master` after #21 is merged in; the PR names its tested head. |
 | Primary local checkout | `E:\Plugin development`, branch `claude/celestial-dream-v1`, commit `4749b9ac8bbc3f6d6374337bf7209b54915175b9`, with 19 dirty entries. It is not the current remote master. Treat its artwork, component work, untracked files, backups, and stashes as protected work. |
-
-PR #21 was receiving commits during verification. Recheck its head before continuing. CI results belong to the recorded commit, not automatically to later commits. This handoff did not run a new build, execute game tests, or perform a fresh independent security audit.
 
 ### Done
 
@@ -128,6 +176,7 @@ Current verified build context is .NET 10, Dalamud SDK/API 15, and an x64 plugin
 | APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026. Scope: the release tooling accepts the pre-move address `richhiiee/AetherFrame` only as recorded history (`previous*` fields in `distribution/repository.json`, last version 0.1.6): in the published file it reads before a publication, and as the `RepoUrl` of packages up to 0.1.6. Everything generated and every later package must use the current address. Not settled: nothing about the permanent `pluginMasterUrl`, which stays as recorded above. | The narrowest change that unblocks publishing without trusting the old address for anything new: the alternatives were rewriting the live file by hand (forbidden: only the workflow writes it) or accepting any address for old files (would let a foreign file through). An independent security review of the release tooling change agreed. |
 | APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026. Scope: the plugin's `IconUrl` is `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/8b716efece4a3077ed3345dfcf491ddcfcab52db/AetherFrame/images/icon.png`, the approved image (the owner confirmed it) pinned to the commit that added it, instead of restoring a separate assets repository or pointing at `master`. Changing the icon means changing that line in a reviewed pull request and releasing; the file stays in the repository, and its history is never rewritten. Not settled: a hand-made replacement icon (docs/Releasing.md recommends one before official submission), which is the owner's choice. | Every released package keeps its `IconUrl` for good. A branch address would let a later edit, move or rename change or remove the icon of every released version without a release or an in-game pass; a commit address can't change. No second repository to keep public. |
 | Claude runs the project end to end and decides OPEN items; the owner does the in-game testing (September 29, 2026). | Removes the owner as a message relay between a project manager chat and Claude. |
+| The owner asked for the roadmap on GitHub to show realtime status (September 30, 2026, in the owner's words: "please update the roadmap in the github to show realtime status"). | ROADMAP.md opens with a status block that every pull request keeps current, and [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52) is edited in place as work moves, between merges (AUTOPILOT.md, "Live status"). |
 | The owner's priorities (September 29, 2026, in the owner's words): "i want you to take a look at the overall UI interface and see if you can modernize it a little, make it more intuitive to use, right now there's a little bit of having to go back and forth between menus and i want the process to be as fluid as possible. second of all, maybe even higher priority is, i want the networking side of it done, implemented and ready for me to test with someone. i understand that i will have to buy and set up some backend domain and server, that's okay i will do  that when necessary." | The owner's request, recorded as said. |
 | The owner approved in advance NETWORK2's two changes to signed bytes, N2-2 (the draft marker and the name rule) and N2-3 (the layout schema and the request proof), which NETWORK1.md's safeguard 3 reserves for the owner (September 29, 2026). The owner chose, from Claude's question in chat, "Approve both now": "You approve N2-2 and N2-3 in advance, as long as each has its decisions recorded, a clean independent and security review, and green CI." It approves none of the decisions themselves, no other signed-byte change and no freeze ([docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md)). | Keeps the owner's gate on signed bytes while letting the two increments merge once their evidence is complete. Only the owner can change it. |
 | APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026. Scope: the order of work after the owner's request above. NETWORK2's increments toward a two-player test come first ([docs/networking/NETWORK2.md](docs/networking/NETWORK2.md)). The interface work comes second, interleaved wherever networking waits on the owner or on a review, and it starts with an audit of the flows. The 0.1.7 release still comes before both as soon as the owner passes its test build (AUTOPILOT.md, "One run", step 4). Not settled: the order within the interface work, and anything after the two-player test. The owner can reorder at any time. | The owner called networking "maybe even higher priority", and the beta gate (section 1) needs working sharing. Networking also waits on the owner's hosting at N2-8, which leaves room for interface work without delaying either. |
