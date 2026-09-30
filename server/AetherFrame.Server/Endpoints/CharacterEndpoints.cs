@@ -22,6 +22,7 @@ namespace AetherFrame.Server.Endpoints;
 internal static class CharacterEndpoints
 {
     private static readonly string[] CheckFields = ["lodestoneId", "code"];
+    private static readonly string[] PauseFields = ["mode"];
 
     public static void Map(IEndpointRouteBuilder app)
     {
@@ -149,6 +150,11 @@ internal static class CharacterEndpoints
                 }
 
                 var binding = await bindings.FindByPersonaAsync(call.Persona, http.RequestAborted);
+                if (binding is null && await bindings.WasTakenOverAsync(call.Persona, http.RequestAborted))
+                {
+                    return SignedRequests.Fail(http, StatusCodes.Status410Gone, "reread:taken-over");
+                }
+
                 if (binding is null || !allowlist.Allows(binding.LodestoneId))
                 {
                     return SignedRequests.Fail(http, StatusCodes.Status404NotFound, "reread:not-bound");
@@ -172,10 +178,13 @@ internal static class CharacterEndpoints
                     : Results.Json(new RereadAnswer(current.Name, current.World), ServerJson.Options);
             }));
 
-        app.MapPost("/v1/opt-out", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings) =>
+        // Opting out (C4) is {}; pausing (C3) is {"mode":"pause"}: the Plate is deleted and the
+        // binding kept, so the next publish shares again without a new check.
+        app.MapPost("/v1/opt-out", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings, ContentStore content) =>
             requests.RunActionAsync(http, RequestProofKind.OptOut, ServerLimits.OptOutsPerAddress, async call =>
             {
-                if (ActionBody.Read(call.Action.Body, []) is null)
+                var pause = ActionBody.Read(call.Action.Body, PauseFields);
+                if (ActionBody.Read(call.Action.Body, []) is null && pause?.String("mode") != "pause")
                 {
                     return SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:json");
                 }
@@ -185,7 +194,15 @@ internal static class CharacterEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:opt-out/key");
                 }
 
-                await bindings.OptOutAsync(call.Persona, http.RequestAborted);
+                if (pause is not null)
+                {
+                    await content.PauseAsync(call.Persona, http.RequestAborted);
+                }
+                else
+                {
+                    await bindings.OptOutAsync(call.Persona, http.RequestAborted);
+                }
+
                 return Results.NoContent();
             }));
     }

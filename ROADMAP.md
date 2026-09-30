@@ -16,7 +16,7 @@ Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52
   - the 10 checks for preview build `febf0cb`, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)), in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5910883556). The game loaded it at 12:02 UTC. It supersedes `ae80c75`, whose 10 tutorial checks, posted by a second Claude session, still apply to it, as do the earlier preview posts' networking checks;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
-- **In progress:** N2-7, the server. The protocol's part is done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)). The server's first part is this change: the Lodestone check, re-reads and opting out. Publishing and viewing come next, then the image worker (section 8, task 3).
+- **In progress:** N2-7, the server. The protocol's part is done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)), and so is the server's first part, the Lodestone check ([#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65)). Publishing and viewing are this change; the image worker comes next (section 8, task 3).
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
@@ -45,7 +45,7 @@ Verified September 30, 2026, at 17:41 UTC. **For the live status, see [issue #52
 | N2-6b: the image rule, then image preparation | done: [#49](https://github.com/QuietFoxLabs/AetherFrame/pull/49), [#50](https://github.com/QuietFoxLabs/AetherFrame/pull/50) |
 | N2-6c: the publication index, the outbox and the commit | done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) |
 | N2-C: decision batch C, viewing by character (V1 to V5) | done: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61) |
-| N2-7: the server | in progress: N2-7a is done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)); N2-7b's first part is this change |
+| N2-7: the server | in progress: N2-7a is done ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)), and N2-7b's first part ([#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65)); its second part is this change |
 | N2-8: deployment | planned; needs the owner's domain and server |
 | N2-9 to N2-11: the sharing flow, the viewer, the test kit | planned |
 
@@ -297,12 +297,22 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - NETWORK2 increment N2-C, decision batch C, viewing by character: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61), merged as `f467032`. C1 to C9 in the register settle the character and its key (the Lodestone id, one key per character), the Lodestone check (the self-introduction element only), one consent per character with live publishing (amending D5's N2-6 note, point 6), one server-issued profile id per binding and opting out without tombstones, viewing from the right-click menu and exact name search by opted-in players only, rate limits, what the server keeps (no lookup log), the stage 1 allowlist by Lodestone id, and the new signed request kind, which the owner approved in advance. A security reviewer concurred after three fixes.
 - NETWORK2 increment N2-7a, part 1, signed action requests: [#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), merged as `32dc641`. Request proof kinds 2 to 8, one per action of section 14.5 (the Lodestone code, check and re-read, opting out, a lookup, an image, a report), bind a body of at most 4,096 bytes to the character's key; `RequestProofCodec` gains `SignAction` and `VerifyAction`, and kinds never cross. Vectors cover every step, and each cross-kind vector is refused by the kind check alone. The owner approved this signed-byte change in advance; C9 as built is recorded in the register, and a security reviewer concurred.
 - NETWORK2 increment N2-7a, part 2, the served profile: [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), merged as `369c9af`. What a viewer receives (D6) is specified in the specification's section 8.6: magic `AFSP`, version 1, a 128-bit revision marker, then the name, canvas, background and paint list, with each image named by an index into a list of format, width and height. It carries no signature, id, time, digest or byte length. `ServedProfile.Build` makes one from a verified snapshot and reads it back, and `ServedProfile.Read` is the viewer's strict reader, a type of its own. The layout codec's image names became a seam, so both formats share one reader, and no existing vector changed. Vectors, a reference writer from the specification's tables, and seeded mutations cover it.
-- NETWORK2 increment N2-7b, part 1, the server and the Lodestone check: this change. `server/AetherFrame.Server` (ASP.NET Core on .NET 10, SQLite) answers `status` and `challenge`, and the four signed actions about the player's own character: a code, a check, a re-read and opting out. Its interface is [docs/networking/ServerApi-v1.md](docs/networking/ServerApi-v1.md).
+- NETWORK2 increment N2-7b, part 1, the server and the Lodestone check: [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), merged as `c8b0b94`. `server/AetherFrame.Server` (ASP.NET Core on .NET 10, SQLite) answers `status` and `challenge`, and the four signed actions about the player's own character: a code, a check, a re-read and opting out. Its interface is [docs/networking/ServerApi-v1.md](docs/networking/ServerApi-v1.md).
   - Each endpoint takes its proof's kind from its path, and bounds the body before reading it. Challenges are used once, within 300 seconds.
   - The check reads the Lodestone page's one self-introduction element, behind the Lodestone-id allowlist, within the fetch budget, following no redirect.
   - Binding follows C1: one key, one character; a takeover by another key deletes what the old one published; the newest read of a name and World hides an older binding. A daily re-read follows renames and removes a binding only after two "not found" pages a day apart.
   - Opting out deletes at once, with `secure_delete` and a truncating checkpoint retried past readers. Limits follow C6. The log holds a route, a status and a failure's kind, and a test checks that no identifier, code, name or World reaches it.
   - The details batch C left open are recorded as "N2-7b's server details". CI runs the server's 78 tests.
+- NETWORK2 increment N2-7b, part 2, publishing and viewing: this change.
+  - `/v1/publish` checks the proof and the challenge, then:
+    - the binding and the allowlist, and C6's limit;
+    - that the document is a schema 2 snapshot under the binding's profile id, no more than 300 seconds ahead of the server's clock (N6);
+    - rule 4's revision records;
+    - that each image matches its declaration and passes the image worker, whose output is checked again.
+    The revision becomes the latest, with its served profile under a fresh marker, and the previous one is pruned at once.
+  - `/v1/lookup` answers the served profile of an exact name and World. `/v1/image` serves an image by marker and index. `/v1/report` keeps a report for 30 days. All three are for opted-in, allowlisted players only, and every other case is one "not found".
+  - Pausing is the opting-out kind with `{"mode": "pause"}`: the Plate goes, the binding stays. A key whose character was taken over gets `410`.
+  - Until the image worker (N2-7c), every image is refused. CI runs the server's 98 tests.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
@@ -331,7 +341,7 @@ N2-C, decision batch C, is done ([#61](https://github.com/QuietFoxLabs/AetherFra
 
 3. **N2-7: the server** (`server/AetherFrame.Server`, ASP.NET Core on .NET 10), in parts, each its own reviewed pull request, following decision batch B as batch C restates it:
    - **N2-7a, the protocol's part:** signed action requests ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62)), then D6's served profile ([#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64)): section 8.6, a builder, a strict reader that is never a `VerifiedDocument`, and vectors;
-   - **N2-7b, the server** (part 1, this change: challenges, the check, bindings, re-reads, opting out, limits and logging; part 2: publishing, lookups, images and reports):
+   - **N2-7b, the server** (part 1, [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65): challenges, the check, bindings, re-reads, opting out, limits and logging; part 2, this change: publishing, lookups, images, reports and pausing):
      - challenges as section 13, rule 10 says;
      - the Lodestone code and check (C2), behind the Lodestone-id allowlist (C8), with the Lodestone faked in tests;
      - bindings, one per key, each with one profile id (C1, C4), and the daily re-read;

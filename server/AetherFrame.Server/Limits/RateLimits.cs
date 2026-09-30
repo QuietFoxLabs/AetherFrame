@@ -40,6 +40,8 @@ internal static class ServerLimits
 
     public static readonly Limit PublishesPerCharacter = new("publish/character", 60, TimeSpan.FromHours(1));
 
+    public static readonly Limit PublishesPerAddress = new("publish/address", 120, TimeSpan.FromHours(1));
+
     public static readonly Limit ReportsPerKey = new("report/key", 20, TimeSpan.FromDays(1));
 }
 

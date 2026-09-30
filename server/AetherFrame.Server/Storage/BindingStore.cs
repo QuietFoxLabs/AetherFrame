@@ -143,6 +143,11 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
         if (holder is not null && holder.Persona != persona)
         {
             deleted = await DeleteAsync(connection, transaction, holder.Persona, cancellation);
+            await using var mark = connection.CreateCommand();
+            mark.Transaction = transaction;
+            mark.CommandText = "INSERT OR IGNORE INTO taken_over (persona) VALUES ($persona);";
+            mark.Parameters.AddWithValue("$persona", holder.Persona.ToString());
+            await mark.ExecuteNonQueryAsync(cancellation);
         }
 
         await HideOthersAsync(connection, transaction, nameKey, character.World, lodestoneId, cancellation);
@@ -156,6 +161,7 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
                 VALUES ($persona, $id, $name, $key, $world, $profile, 0, NULL)
                 ON CONFLICT (persona) DO UPDATE SET name = excluded.name, name_key = excluded.name_key, world = excluded.world, hidden = 0, not_found_day = NULL;
                 DELETE FROM codes WHERE persona = $persona;
+                DELETE FROM taken_over WHERE persona = $persona;
                 """;
             command.Parameters.AddWithValue("$persona", persona.ToString());
             command.Parameters.AddWithValue("$id", lodestoneId);
@@ -242,6 +248,19 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
     }
 
     /// <summary>
+    /// Whether another key's check took <paramref name="persona"/>'s character (decision C1), so its
+    /// plugin can say so. Kept only until the key binds again or opts out.
+    /// </summary>
+    public async Task<bool> WasTakenOverAsync(PersonaId persona, CancellationToken cancellation)
+    {
+        await using var connection = await database.OpenAsync(cancellation);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM taken_over WHERE persona = $persona;";
+        command.Parameters.AddWithValue("$persona", persona.ToString());
+        return await command.ExecuteScalarAsync(cancellation) is not null;
+    }
+
+    /// <summary>
     /// Opting out (decision C4): deletes the key's binding, code, latest revision, images and
     /// revision records at once, then checkpoints. True when anything was bound.
     /// </summary>
@@ -268,6 +287,7 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
             DELETE FROM latest WHERE persona = $persona;
             DELETE FROM revisions WHERE persona = $persona;
             DELETE FROM codes WHERE persona = $persona;
+            DELETE FROM taken_over WHERE persona = $persona;
             DELETE FROM bindings WHERE persona = $persona;
             """;
         command.Parameters.AddWithValue("$persona", persona.ToString());

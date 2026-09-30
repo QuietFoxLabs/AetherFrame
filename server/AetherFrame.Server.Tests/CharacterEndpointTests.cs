@@ -238,8 +238,9 @@ public class CharacterEndpointTests
 
         var store = server.Services.GetRequiredService<BindingStore>();
         Assert.Null(await store.FindByPersonaAsync(oldPc.Key.PublicKey.Id, default));
+        // The old key is told another AetherFrame took the character over (C1).
         using var reread = await oldPc.SendAsync("/v1/lodestone/reread", RequestProofKind.LodestoneReread, "{}");
-        Assert.Equal(HttpStatusCode.NotFound, reread.StatusCode);
+        Assert.Equal(HttpStatusCode.Gone, reread.StatusCode);
     }
 
     [Fact]
@@ -581,15 +582,11 @@ public class CharacterEndpointTests
         var valid = new ServerOptions { DeploymentName = "plates.aetherframe.net", DatabasePath = "x.db", AllowedLodestoneIds = ["12345678"], KnownProxies = ["172.18.0.2"] };
         valid.Validate();
 
-        // ASP.NET Core's forwarded-headers switch would clear the trusted proxies.
-        Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true");
-        try
-        {
-            Assert.Throws<InvalidOperationException>(valid.Validate);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", null);
-        }
+        // ASP.NET Core's forwarded-headers switch would clear the trusted proxies, whatever its source.
+        static Microsoft.Extensions.Configuration.IConfiguration With(string key, string value) =>
+            Microsoft.Extensions.Configuration.MemoryConfigurationBuilderExtensions.AddInMemoryCollection(new Microsoft.Extensions.Configuration.ConfigurationBuilder(), [new(key, value)]).Build();
+        Assert.Throws<InvalidOperationException>(() => ServerOptions.RefuseForwardedHeadersSwitch(With("ForwardedHeaders_Enabled", "true")));
+        Assert.Throws<InvalidOperationException>(() => ServerOptions.RefuseForwardedHeadersSwitch(With("FORWARDEDHEADERS_ENABLED", "True")));
+        ServerOptions.RefuseForwardedHeadersSwitch(With("ForwardedHeaders_Enabled", "false"));
     }
 }

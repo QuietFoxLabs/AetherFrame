@@ -46,6 +46,19 @@ internal sealed class TestServer : WebApplicationFactory<Program>
 
     public CapturedLog Log { get; } = new();
 
+    /// <summary>The image worker: by default, it returns what it's given.</summary>
+    public FakeImages Images { get; } = new();
+
+    /// <summary>Runs a query that answers one number, on the server's database.</summary>
+    public async Task<long> CountAsync(string sql)
+    {
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + DatabasePath);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
     /// <summary>The failed check's floor: none, unless a test sets one before the server starts.</summary>
     public TimeSpan CheckFailureFloor { get; set; } = TimeSpan.Zero;
 
@@ -73,6 +86,8 @@ internal sealed class TestServer : WebApplicationFactory<Program>
             // The real Lodestone client, logging and all, with only its connection replaced.
             services.AddHttpClient(LodestoneHttpPages.ClientName).ConfigurePrimaryHttpMessageHandler(() => new FakeLodestoneHandler(Lodestone));
             services.PostConfigure<ServerOptions>(options => options.CheckFailureFloor = CheckFailureFloor);
+            services.RemoveAll<AetherFrame.Server.Images.IImageProcessor>();
+            services.AddSingleton<AetherFrame.Server.Images.IImageProcessor>(Images);
         });
     }
 
@@ -153,6 +168,18 @@ internal sealed class Player(TestServer server, HttpClient client) : IDisposable
         return (await response.Content.ReadFromJsonElementAsync()).GetProperty("code").GetString()!;
     }
 
+    /// <summary>Signs <paramref name="snapshot"/> and publishes it with <paramref name="images"/>.</summary>
+    public Task<HttpResponseMessage> PublishAsync(AetherFrame.Protocol.Remote.ProfileLayoutSnapshot snapshot, params byte[][] images) =>
+        PublishDocumentAsync(AetherFrame.Protocol.Documents.SignedDocumentCodec.Sign(snapshot, Key), images);
+
+    /// <summary>Publishes a signed document with a fresh proof of it (ServerApi-v1.md, section 2.2).</summary>
+    public async Task<HttpResponseMessage> PublishDocumentAsync(byte[] document, params byte[][] images)
+    {
+        var challenge = await ChallengeAsync();
+        var proof = RequestProofCodec.Sign(document, DeploymentName.Parse(TestServer.Deployment), challenge, Key);
+        return await PostRawAsync("/v1/publish", Envelope(proof, Plates.PublishPayload(document, images)));
+    }
+
     public Task<HttpResponseMessage> CheckAsync(long lodestoneId, string code) =>
         SendAsync("/v1/lodestone/check", RequestProofKind.LodestoneCheck, $"{{\"lodestoneId\":\"{lodestoneId}\",\"code\":\"{code}\"}}");
 
@@ -170,6 +197,15 @@ internal static class HttpContentJson
         using var document = JsonDocument.Parse(await content.ReadAsByteArrayAsync());
         return document.RootElement.Clone();
     }
+}
+
+/// <summary>An image worker whose answer the test chooses: by default, the bytes it was given.</summary>
+internal sealed class FakeImages : AetherFrame.Server.Images.IImageProcessor
+{
+    public Func<byte[], byte[]?> Answer { get; set; } = bytes => bytes;
+
+    public Task<byte[]?> ProcessAsync(AetherFrame.Protocol.Remote.ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation) =>
+        Task.FromResult(Answer(bytes.ToArray()));
 }
 
 /// <summary>A clock the tests move by hand.</summary>
