@@ -258,7 +258,9 @@ public class PluginAssemblyBoundaryTests
     {
         // R2: a client or handler with the defaults can also be made without naming a constructor:
         // by reflection, or by a generic new(). So nothing references HttpClientHandler (R2's
-        // handler is SocketsHttpHandler) or Activator, and no HTTP object is a generic type argument.
+        // handler is SocketsHttpHandler), nothing in the network namespace references Activator
+        // (elsewhere a generic new() compiles to it, and no HTTP type reaches that code), and no
+        // HTTP object is a generic type argument anywhere: no Lazy, Task or list of one either.
         var path = RepositoryPaths.PluginAssembly();
         if (path is null)
         {
@@ -273,7 +275,8 @@ public class PluginAssemblyBoundaryTests
             foreach (var name in references)
             {
                 var argument = name.StartsWith(NetworkTypeUse.TypeArgumentPrefix, StringComparison.Ordinal) ? name[NetworkTypeUse.TypeArgumentPrefix.Length..] : null;
-                if (name is "System.Net.Http.HttpClientHandler" or "System.Activator" || (argument is not null && httpObjects.Any(http => argument.StartsWith(http, StringComparison.Ordinal))))
+                var network = type.StartsWith("AetherFrame.Services.Network.", StringComparison.Ordinal);
+                if (name == "System.Net.Http.HttpClientHandler" || (network && name == "System.Activator") || (argument is not null && httpObjects.Any(http => argument.StartsWith(http, StringComparison.Ordinal))))
                 {
                     offending.Add(type + " names " + name);
                 }
@@ -392,7 +395,7 @@ public class PluginAssemblyBoundaryTests
         var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
         var offending = new List<string>();
         var types = 0;
-        foreach (var (file, relative) in PluginSources())
+        foreach (var (file, relative) in PluginSources().Concat(LinkedSources()))
         {
             var inside = relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase);
             var text = File.ReadAllText(file);
@@ -852,6 +855,31 @@ public class PluginAssemblyBoundaryTests
         }
 
         Assert.True(offending.Count == 0, "P3: the plugin makes its PersonaManager with PersonaManager.Load, never without its registry. Constructed in: " + string.Join(", ", offending));
+    }
+
+    /// <summary>
+    /// The sources the preview flavour links in from the protocol and persona libraries, with their
+    /// paths relative to the repository: they never declare the plugin's network namespace.
+    /// </summary>
+    private static IEnumerable<(string File, string Relative)> LinkedSources()
+    {
+        var root = RepositoryPaths.Root().FullName;
+        foreach (var library in new[] { "AetherFrame.Protocol", "AetherFrame.Personas" })
+        {
+            var folder = Path.Combine(root, library);
+            Assert.True(Directory.Exists(folder), folder);
+            foreach (var file in Directory.EnumerateFiles(folder, "*.cs", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(root, file);
+                var inside = Path.GetRelativePath(folder, file).Split(Path.DirectorySeparatorChar, 2)[0];
+                if (inside is "obj" or "bin")
+                {
+                    continue;
+                }
+
+                yield return (file, relative);
+            }
+        }
     }
 
     /// <summary>Every C# source of the plugin project, with its path relative to the project folder.</summary>
