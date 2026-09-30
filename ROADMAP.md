@@ -8,7 +8,7 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 11:30 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 11:43 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
   - a verdict on test build `01a14a5`, which gates the 0.1.7 release. The game runs it now: Dalamud's Dev Plugin Locations point at its staged copy in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`;
@@ -18,17 +18,18 @@ Verified September 30, 2026, at 11:30 UTC. **For the live status, see [issue #52
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
 - **In progress:**
   - N2-6c's second part, the share check (this change). Its merge completes N2-6, and brings the first preview build with it (section 5);
-  - the tutorial card's fixes ([#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), draft, by a second Claude session).
+  - the tutorial card's fixes ([#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), by a second Claude session);
+  - the re-plan of sharing below ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), draft, by a second Claude session).
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin.
 - **Sharing, redefined by the owner on September 30** ([Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25), Claude's records of the owner's chat at 11:07 and 11:21 UTC):
   - other players right-click a character in game, or search a name and World, and view that character's Active Plate as a finished picture;
   - it is opt-in, off by default, and works both ways;
-  - a Lodestone check proves a character is yours, and personas are hidden;
+  - a Lodestone check proves a character is yours, and personas are hidden, which amends the owner's approval D3;
   - share codes are no longer the goal.
 
-  A re-plan of NETWORK2 around this is being written by a second Claude session. Networking work beyond N2-6 waits for it. What N2-6 made (the signed snapshot, the publication index, the outbox, and this change's view of what others would see) carries over.
+  The re-plan of NETWORK2 around this is [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), by a second Claude session. The records say networking work waits for it. This change reads that as covering what comes after N2-6: the records name the signed snapshot, the publication index and the outbox as what still fits, and this change builds nothing on share codes.
 - **Next, for the interface:** section 8's task 1, a Plate menu in the editors, then tasks 2 to 6, then the second pass's tasks 7 to 16 ([#51](https://github.com/QuietFoxLabs/AetherFrame/pull/51), merged). Those include one editor window with Basic and Advanced as modes (task 8, the owner's decision, section 5).
 
 | NETWORK2 increment | State |
@@ -70,13 +71,13 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
-| Item | Verified state (September 30, 2026, 11:30 UTC) |
+| Item | Verified state (September 30, 2026, 11:43 UTC) |
 | --- | --- |
 | Default branch | `master` at `e86190a`, after [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55) merged at 10:53 UTC; CI passed on both platforms by 10:56 UTC. Its tree is #55's tested head `fa051d7`'s, checked locally before the merge: 0 build warnings, with every suite passing (3293 plugin, 407 protocol, 482 persona, 468 release tooling). |
 | Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |
 | Custom repository | `plugin-repository` exists at `e85692416ec20151fbda9b76788c4e2ef83db763`. Its [manifest](https://github.com/QuietFoxLabs/AetherFrame/blob/e85692416ec20151fbda9b76788c4e2ef83db763/pluginmaster.json) serves v0.1.6 with `IsTestingExclusive: true`. |
 | Test builds | Player `01a14a5` (#21 and #33) waits for the owner's in-game verdict, which gates 0.1.7. The game runs it: Dalamud's only Dev Plugin Location is its staged copy, `E:\AetherFrame Test Builds\2026-09-29 01a14a5\AetherFrame.dll` (checked in `dalamudConfig.json`, read only). Preview `302af2f` (`master` after #50: every merged networking increment through N2-6b; it sends nothing) was installed in `E:\AetherFrame Test Build\` at 09:31 UTC by `tools/Install-TestBuild.ps1`, superseding preview `7b35a31`, which never loaded. The game loads that folder only after the owner's one-time switch ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54)). |
-| Open pull requests | This change, N2-6c's second part (N2-6c's first part, [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), is merged), and [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), the tutorial card's fixes (draft, a second Claude session). Both edit ROADMAP.md, so whichever merges second merges the other in first. |
+| Open pull requests | This change, N2-6c's second part (N2-6c's first part, [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), is merged); [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), the tutorial card's fixes; and [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), the re-plan of sharing (draft). #57 and #58 are a second Claude session's. All three edit ROADMAP.md, and #58 also the register and NETWORK2.md, so each merges in the ones merged before it. |
 | Checkouts | The control checkout `E:\AetherFrameWork` is clean on `master`, with one worktree per task under `.claude\worktrees\`. `E:\Plugin development` is off limits ([CLAUDE.md](CLAUDE.md)). |
 
 CI results belong to the recorded commit, not automatically to later commits. Check live CI, and [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), for anything newer.
@@ -287,6 +288,8 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
+
+The owner redefined sharing on September 30 (the status block above). Tasks 3 and 4 below (N2-7 and N2-8), and N2-9 to N2-11 after them, wait for the re-plan ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58)), which rewrites them. Nothing starts on them until it merges.
 
 1. **N2-6: the snapshot builder for schema 2, image preparation, the publication index and the outbox** (NETWORK1 increments 4 and 8), in three parts, following its reviewed design (D5's N2-6 note): N2-6a, the builder, and N2-6b, image preparation (its first part, the image rule in the specification, and its second, the preparation itself), are done (above); N2-6c's first part, the publication index, the outbox and the commit, is done ([#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55)), and its second part, the share check, is this change: with it, N2-6 is complete. Prerequisites: P1, D4, D5, D8 and I1 (approved); N2-3a and N2-5b merged first. Acceptance:
    - the builder reads only the saved Plate and builds a schema 2 snapshot; a name the name rule refuses is not altered but refused with a message asking to rename;
