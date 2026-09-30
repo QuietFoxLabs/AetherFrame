@@ -416,8 +416,22 @@ public class TutorialSessionTests
                 var view = session.Evaluate(snapshot, NoneAvailable);
                 Assert.False(string.IsNullOrWhiteSpace(view.Body));
                 Assert.NotEqual(TutorialStepPresentation.Spotlight, view.Presentation);
-                session.Next(snapshot);
                 Assert.True(++guard < 200, "the tutorial never ends");
+                if (session.IsNextHeld(snapshot))
+                {
+                    // A step that waits for the player holds Next, and says what it waits for; the
+                    // chapter picker still moves on, so it is never a trap.
+                    Assert.True(view.NextHeld);
+                    Assert.True(session.CurrentStep!.WaitsForAction);
+                    Assert.False(string.IsNullOrWhiteSpace(session.CurrentStep.WaitHint));
+                    var held = session.CurrentStep;
+                    Assert.True(session.Next(snapshot));
+                    Assert.Same(held, session.CurrentStep);
+                    session.JumpToChapter(snapshot, session.ChapterIndex + 1);
+                    continue;
+                }
+
+                session.Next(snapshot);
             }
 
             Assert.Equal(TutorialSessionStatus.Completed, session.Status);
@@ -455,5 +469,112 @@ public class TutorialSessionTests
         Assert.True(session.TryAutoAdvance(Basic));
         Assert.Equal("first.workspace", session.CurrentStep!.Id);
         Assert.Equal(TutorialStepPresentation.Spotlight, session.Evaluate(Basic, AllAvailable).Presentation);
+    }
+
+    [Fact]
+    public void RealScript_CreatingTheFirstPlate_CannotBeSkippedWithNext()
+    {
+        var session = new TutorialSession(TutorialScript.Chapters);
+        session.JumpToChapter(Library, 2);
+        Assert.Equal("first.create", session.CurrentStep!.Id);
+
+        // Next on "Start a new Plate" waits for Create Plate.
+        Assert.True(session.IsNextHeld(Library));
+        Assert.True(session.Evaluate(Library, AllAvailable).NextHeld);
+        session.Next(Library);
+        Assert.Equal("first.create", session.CurrentStep!.Id);
+
+        // Next on "Choose a Template" waits for the new Plate, with the chooser open or closed again.
+        var chooser = Library with { TemplateChooserOpen = true };
+        Assert.False(session.TryAutoAdvance(Library));
+        Assert.True(session.TryAutoAdvance(chooser));
+        Assert.Equal("first.template", session.CurrentStep!.Id);
+        session.Next(chooser);
+        Assert.Equal("first.template", session.CurrentStep!.Id);
+        var closedAgain = session.Evaluate(Library, AllAvailable);
+        Assert.Equal(TutorialStepPresentation.Prerequisite, closedAgain.Presentation);
+        Assert.True(closedAgain.NextHeld);
+        Assert.DoesNotContain("Next", closedAgain.Body, StringComparison.Ordinal);
+        session.Next(Library);
+        Assert.Equal("first.template", session.CurrentStep!.Id);
+
+        // Back still works from a held step, and so does leaving the tour.
+        Assert.True(session.Back(Library));
+        Assert.Equal("first.create", session.CurrentStep!.Id);
+        session.Skip();
+        Assert.Equal(TutorialSessionStatus.Skipped, session.Status);
+    }
+
+    [Fact]
+    public void RealScript_OpeningAnExistingPlate_AlsoPassesTheFirstPlateSteps()
+    {
+        var session = new TutorialSession(TutorialScript.Chapters);
+        session.JumpToChapter(Library, 2);
+        Assert.Equal("first.create", session.CurrentStep!.Id);
+
+        // Double-clicking a card opens it in an editor: that counts, and the chooser step doesn't apply.
+        Assert.False(session.TryAutoAdvance(Library));
+        Assert.True(session.TryAutoAdvance(Basic));
+        Assert.Equal("first.workspace", session.CurrentStep!.Id);
+        Assert.False(session.IsNextHeld(Basic));
+
+        // Entering the chapter with a Plate already open starts at the editor.
+        var again = new TutorialSession(TutorialScript.Chapters);
+        again.JumpToChapter(Basic, 2);
+        Assert.Equal("first.workspace", again.CurrentStep!.Id);
+    }
+
+    [Fact]
+    public void AStepThatWaitsForThePlayer_HoldsNextUntilDone_AndMustSayWhatItWaitsFor()
+    {
+        IReadOnlyList<TutorialChapter> script =
+        [
+            new TutorialChapter("a", "A", "First.",
+            [
+                new TutorialStep("a1", "Intro", "Hello.", Mode: TutorialStepMode.Narrative),
+                new TutorialStep("a2", "Create", "Click it.", TutorialTarget.LibraryCreatePlate, TutorialStepMode.Interact,
+                    Requires: TutorialCondition.MyPlatesOpen, AdvanceWhen: TutorialCondition.TemplateChooserOpen, FallbackBody: "Open My Plates.",
+                    WaitsForAction: true, WaitHint: "Click Create Plate to continue."),
+                new TutorialStep("a3", "Done", "Bye.", Mode: TutorialStepMode.Narrative),
+            ]),
+        ];
+        var session = new TutorialSession(script);
+        session.Start(Library);
+        Assert.False(session.IsNextHeld(Library));
+        session.Next(Library);
+        Assert.Equal("a2", session.CurrentStep!.Id);
+
+        Assert.True(session.IsNextHeld(Library));
+        Assert.True(session.Next(Library));
+        Assert.Equal("a2", session.CurrentStep!.Id);
+
+        var chooser = Library with { TemplateChooserOpen = true };
+        Assert.False(session.IsNextHeld(chooser));
+        Assert.False(session.Evaluate(chooser, AllAvailable).NextHeld);
+        session.Next(chooser);
+        Assert.Equal("a3", session.CurrentStep!.Id);
+
+        var problems = TutorialScriptValidation.Validate(
+        [
+            new TutorialChapter("c", "C", "x",
+            [
+                new TutorialStep("w1", "T", "x", TutorialTarget.LibraryImport, TutorialStepMode.Interact, AdvanceWhen: TutorialCondition.TemplateChooserOpen, WaitsForAction: true),
+                new TutorialStep("w2", "T", "x", TutorialTarget.LibraryImport, TutorialStepMode.Interact, WaitsForAction: true, WaitHint: "Do it."),
+                new TutorialStep("w3", "T", "x", TutorialTarget.LibraryImport, AdvanceWhen: TutorialCondition.TemplateChooserOpen, WaitsForAction: true, WaitHint: "Do it."),
+            ]),
+        ]);
+        Assert.Contains(problems, p => p.Contains("w1") && p.Contains("waits for the player"));
+        Assert.Contains(problems, p => p.Contains("w2") && p.Contains("waits for the player"));
+        Assert.Contains(problems, p => p.Contains("w3") && p.Contains("waits for the player"));
+    }
+
+    [Fact]
+    public void Snapshot_CreatingOrEditingPlate_MeansTheChooserOrAnOpenPlate()
+    {
+        Assert.False(Library.Satisfies(TutorialCondition.CreatingOrEditingPlate));
+        Assert.True((Library with { TemplateChooserOpen = true }).Satisfies(TutorialCondition.CreatingOrEditingPlate));
+        Assert.True(Basic.Satisfies(TutorialCondition.CreatingOrEditingPlate));
+        Assert.True(Advanced.Satisfies(TutorialCondition.CreatingOrEditingPlate));
+        Assert.False(new TutorialContextSnapshot(ActiveEditor: EditorSurfaceKind.Basic, PlateOpen: false).Satisfies(TutorialCondition.CreatingOrEditingPlate));
     }
 }

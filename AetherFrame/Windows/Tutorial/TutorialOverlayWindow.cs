@@ -33,21 +33,29 @@ internal sealed class TutorialOverlayWindow : Window
     private readonly ITutorialHost host;
     private readonly TutorialOverlayFrame frame;
     private readonly IReadOnlyList<Window> dimmedWindows;
+    private readonly IReadOnlyList<Window> tutorialWindows;
     private readonly Func<TutorialTarget, bool> isAvailable;
     private int currentFrame;
     private int missingSince = -1;
+
+    // What was last brought to the front: the step, how it showed, and the window it pointed into.
+    private TutorialStep? raisedStep;
+    private TutorialStepPresentation raisedPresentation;
+    private uint raisedOwner;
 
     /// <param name="coordinator">The tutorial's state.</param>
     /// <param name="host">What the tutorial may see and do.</param>
     /// <param name="frame">The state shared with the shades and the card.</param>
     /// <param name="dimmedWindows">AetherFrame's own windows: what the dim covers.</param>
-    internal TutorialOverlayWindow(OnboardingCoordinator coordinator, ITutorialHost host, TutorialOverlayFrame frame, IReadOnlyList<Window> dimmedWindows)
+    /// <param name="tutorialWindows">The shades, then the card: kept in front of the window a step points into, in this order.</param>
+    internal TutorialOverlayWindow(OnboardingCoordinator coordinator, ITutorialHost host, TutorialOverlayFrame frame, IReadOnlyList<Window> dimmedWindows, IReadOnlyList<Window> tutorialWindows)
         : base("AetherFrame Tutorial##AetherFrameTutorialDriver", DriverFlags, forceMainWindow: true)
     {
         this.coordinator = coordinator;
         this.host = host;
         this.frame = frame;
         this.dimmedWindows = dimmedWindows;
+        this.tutorialWindows = tutorialWindows;
         isAvailable = target => TutorialOverlayState.Registry.IsAvailable(target, currentFrame);
         IsOpen = true;
         RespectCloseHotkey = false;
@@ -91,6 +99,8 @@ internal sealed class TutorialOverlayWindow : Window
         TutorialOverlayState.IsSpotlightActive = false;
         TutorialOverlayState.WantedTarget = TutorialTarget.None;
         missingSince = -1;
+        raisedStep = null;
+        raisedOwner = 0;
     }
 
     private void Compute(int frameCount, ScreenRect work)
@@ -106,10 +116,14 @@ internal sealed class TutorialOverlayWindow : Window
 
         var scale = ImGuiHelpers.GlobalScale;
         var visible = ScreenRect.Empty;
+        var owner = 0u;
         if (step.Target != TutorialTarget.None && registry.TryGet(step.Target, frameCount, out var anchor))
         {
             visible = anchor.VisibleBounds;
+            owner = anchor.OwnerWindowId;
         }
+
+        KeepInFront(step, owner);
 
         if (frame.CardSize.X <= 0f)
         {
@@ -142,6 +156,59 @@ internal sealed class TutorialOverlayWindow : Window
         {
             missingSince = -1;
         }
+    }
+
+    /// <summary>
+    /// Keeps what the step explains visible: when the step changes, the window its control is in
+    /// comes in front of AetherFrame's other windows (My Plates never hides the editor a step
+    /// points into), and the shades and then the card come in front of that. Only the display
+    /// order changes, never focus, so an open popup such as the Create Plate chooser stays open.
+    /// It happens again whenever that window rises above the card (a popup opened later comes to
+    /// the front by itself, and a modal popup would dim the card behind it); it doesn't happen
+    /// every frame, so a menu the player opens afterwards still shows in front.
+    /// </summary>
+    private void KeepInFront(TutorialStepView step, uint owner)
+    {
+        var changed = !ReferenceEquals(step.Step, raisedStep) || step.Presentation != raisedPresentation || owner != raisedOwner;
+        if (!changed && !IsAboveCard(owner))
+        {
+            return;
+        }
+
+        raisedStep = step.Step;
+        raisedPresentation = step.Presentation;
+        raisedOwner = owner;
+
+        if (owner != 0)
+        {
+            var window = ImGuiP.FindWindowByID(owner);
+            if (!window.IsNull)
+            {
+                ImGuiP.BringWindowToDisplayFront(window);
+            }
+        }
+
+        foreach (var tutorialWindow in tutorialWindows)
+        {
+            var window = ImGuiP.FindWindowByName(tutorialWindow.WindowName);
+            if (!window.IsNull)
+            {
+                ImGuiP.BringWindowToDisplayFront(window);
+            }
+        }
+    }
+
+    /// <summary>Whether the window <paramref name="owner"/> is drawn in front of the card.</summary>
+    private bool IsAboveCard(uint owner)
+    {
+        if (owner == 0 || tutorialWindows.Count == 0)
+        {
+            return false;
+        }
+
+        var window = ImGuiP.FindWindowByID(owner);
+        var card = ImGuiP.FindWindowByName(tutorialWindows[^1].WindowName);
+        return !window.IsNull && !card.IsNull && ImGuiP.FindWindowDisplayIndex(window) > ImGuiP.FindWindowDisplayIndex(card);
     }
 
     /// <summary>

@@ -389,6 +389,23 @@ public class OnboardingCoordinatorTests
     }
 
     [Fact]
+    public void Next_OnAStepThatWaitsForThePlayer_ReportsItWasHeld_AndMovesNothing()
+    {
+        var store = new MemoryStore();
+        var coordinator = Create(store);
+        coordinator.StartChapter(Library, 2);
+        Assert.Equal("first.create", coordinator.Session.CurrentStep!.Id);
+        var saves = store.Saves;
+
+        Assert.False(coordinator.Next(Library));
+        Assert.Equal("first.create", coordinator.Session.CurrentStep!.Id);
+        Assert.Equal(saves, store.Saves);
+
+        Assert.True(coordinator.Next(Library with { TemplateChooserOpen = true }));
+        Assert.Equal("first.template", coordinator.Session.CurrentStep!.Id);
+    }
+
+    [Fact]
     public void Tick_AutoAdvancesAndReportsTheView_AndStopsAtCompletion()
     {
         var store = new MemoryStore();

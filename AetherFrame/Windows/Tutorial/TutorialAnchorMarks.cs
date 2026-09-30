@@ -51,7 +51,20 @@ internal static class TutorialAnchorMarks
 
         var drawList = ImGui.GetWindowDrawList();
         var clip = new ScreenRect(ImGui.GetClipRectMin(drawList), ImGui.GetClipRectMax(drawList));
-        TutorialOverlayState.Registry.Record(target, new ScreenRect(min, max), clip, ImGui.GetFrameCount());
+        TutorialOverlayState.Registry.Record(target, new ScreenRect(min, max), clip, ImGui.GetFrameCount(), CurrentTopLevelWindowId());
+    }
+
+    /// <summary>The id of the top-level window being drawn (the root of a child region; a popup is its own root), or 0.</summary>
+    private static uint CurrentTopLevelWindowId()
+    {
+        var window = ImGuiP.GetCurrentWindow();
+        if (window.IsNull)
+        {
+            return 0;
+        }
+
+        var root = window.RootWindow;
+        return root.IsNull ? window.ID : root.ID;
     }
 
     /// <summary>Records the current window (a child region, say) as <paramref name="target"/>.</summary>
