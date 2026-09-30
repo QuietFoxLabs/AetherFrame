@@ -8,6 +8,9 @@ using System.Reflection.PortableExecutable;
 
 namespace AetherFrame.Tests;
 
+/// <summary>One use of a member reference in IL: see <see cref="NetworkTypeUse.MemberUses"/>.</summary>
+internal sealed record IlMemberUse(string Type, ILOpCode OpCode, string Parent, string Name, int Parameters, ILOpCode Previous);
+
 /// <summary>
 /// Which types each of an assembly's own types names, read from its compiled metadata (decision
 /// R3's "only under Services/Network", checked on the DLL rather than on the sources): its base
@@ -61,6 +64,11 @@ internal static class NetworkTypeUse
 
                 var body = pe.GetMethodBody(method.RelativeVirtualAddress);
                 names.Entity(body.LocalSignature);
+                foreach (var region in body.ExceptionRegions)
+                {
+                    names.Entity(region.CatchType);
+                }
+
                 foreach (var (_, token) in IlScan.TokenOperands(body.GetILReader()))
                 {
                     names.Token(token);
@@ -89,6 +97,53 @@ internal static class NetworkTypeUse
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// Every instruction in the assembly's method bodies whose operand is a member reference: the
+    /// outermost type whose method holds it, the opcode, the member's parent type and name, its
+    /// parameter count (a field's is -1), and the opcode just before it.
+    /// </summary>
+    internal static List<IlMemberUse> MemberUses(PEReader pe)
+    {
+        var reader = pe.GetMetadataReader();
+        var names = new TypeNames(reader);
+        var uses = new List<IlMemberUse>();
+        foreach (var handle in reader.TypeDefinitions)
+        {
+            var outer = names.NameOf(Outermost(reader, handle));
+            foreach (var methodHandle in reader.GetTypeDefinition(handle).GetMethods())
+            {
+                var method = reader.GetMethodDefinition(methodHandle);
+                if (method.RelativeVirtualAddress == 0)
+                {
+                    continue;
+                }
+
+                var instructions = IlScan.Instructions(pe.GetMethodBody(method.RelativeVirtualAddress).GetILReader());
+                for (var index = 0; index < instructions.Count; index++)
+                {
+                    var (opCode, token) = instructions[index];
+                    if (token == 0 || MetadataTokens.Handle(token).Kind != HandleKind.MemberReference)
+                    {
+                        continue;
+                    }
+
+                    var member = reader.GetMemberReference((MemberReferenceHandle)MetadataTokens.Handle(token));
+                    var parent = member.Parent.Kind switch
+                    {
+                        HandleKind.TypeReference => names.NameOf((TypeReferenceHandle)member.Parent),
+                        HandleKind.TypeSpecification => reader.GetTypeSpecification((TypeSpecificationHandle)member.Parent).DecodeSignature(names, null),
+                        HandleKind.TypeDefinition => names.NameOf((TypeDefinitionHandle)member.Parent),
+                        _ => "",
+                    };
+                    var parameters = member.GetKind() == MemberReferenceKind.Method ? member.DecodeMethodSignature(names, null).ParameterTypes.Length : -1;
+                    uses.Add(new IlMemberUse(outer, opCode, parent, reader.GetString(member.Name), parameters, index > 0 ? instructions[index - 1].OpCode : ILOpCode.Nop));
+                }
+            }
+        }
+
+        return uses;
     }
 
     /// <summary>Every member reference in the assembly: its parent type's full name and its own name.</summary>

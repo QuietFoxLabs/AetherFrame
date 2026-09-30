@@ -118,6 +118,8 @@ public class SharingClientTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.ActionAsync(RequestProofKind.Report, new byte[4097], key, default));
         await Assert.ThrowsAsync<ArgumentException>(() => client.PublishAsync(new byte[ProtocolLimits.MaxDocumentBytes + 1], [], key, default));
         await Assert.ThrowsAsync<ArgumentException>(() => client.PublishAsync([1], new byte[9][], key, default));
+        var tooMuch = Enumerable.Range(0, 6).Select(_ => new byte[SharingClient.MaxImageBytes]).ToArray();
+        await Assert.ThrowsAsync<ArgumentException>(() => client.PublishAsync([1], tooMuch, key, default));
         Assert.Single(server.Paths);
     }
 
@@ -131,8 +133,13 @@ public class SharingClientTests
 
         Assert.Equal(2 + 3 + 4 + 2 + 1 + (4 + 1) + (4 + 3), content.Headers.ContentLength);
         byte[] expected = [0, 3, 1, 2, 3, 0, 0, 0, 2, 4, 5, 2, 0, 0, 0, 1, 6, 0, 0, 0, 3, 7, 8, 9];
-        Assert.Equal(expected, await content.ReadAsByteArrayAsync());
-        Assert.Equal(expected, await content.ReadAsByteArrayAsync());
+        // Copied twice, unbuffered, as a retried send would: the stream seeks back to its start.
+        for (var copy = 0; copy < 2; copy++)
+        {
+            using var sent = new System.IO.MemoryStream();
+            await content.CopyToAsync(sent);
+            Assert.Equal(expected, sent.ToArray());
+        }
     }
 
     [Fact]
