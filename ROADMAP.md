@@ -8,7 +8,7 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified September 30, 2026, at 13:16 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified September 30, 2026, at 13:23 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
   - a verdict on test build `01a14a5`, which gates the 0.1.7 release. It is staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`; the game now runs the preview builds, so it goes back in the test folder when the owner asks;
@@ -16,7 +16,8 @@ Verified September 30, 2026, at 13:16 UTC. **For the live status, see [issue #52
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
   - later, for N2-8, a domain and a small Linux server (section 4 of [NETWORK2.md](docs/networking/NETWORK2.md)).
 - **In progress:**
-  - interface task 1, a Plate menu in the editors (this change, [#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)).
+  - interface task 1, a Plate menu in the editors (this change, [#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59));
+  - the tutorial card beside tall, narrow controls ([#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60), by a second Claude session).
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
@@ -73,13 +74,13 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
-| Item | Verified state (September 30, 2026, 13:16 UTC) |
+| Item | Verified state (September 30, 2026, 13:23 UTC) |
 | --- | --- |
 | Default branch | `master` at `b75deba`, after [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58) merged at 13:10 UTC, which changed documents only (ROADMAP.md, the decision register and NETWORK2.md); CI passed on both platforms by 13:14 UTC. Its plugin code is `febf0cb`'s, after [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) merged at 11:58 UTC, whose tested head `dbddf7b` has that tree and was checked locally before the merge: 0 build warnings, with every suite passing (3322 plugin, 407 protocol, 483 persona, 468 release tooling), Package OK, and the preview flavour's 12 boundary tests. |
 | Published version | [v0.1.6](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.6), published September 27, 2026, marked prerelease; product documentation calls it Alpha. A separate v0.1.5 release remains a draft. |
 | Custom repository | `plugin-repository` exists at `e85692416ec20151fbda9b76788c4e2ef83db763`. Its [manifest](https://github.com/QuietFoxLabs/AetherFrame/blob/e85692416ec20151fbda9b76788c4e2ef83db763/pluginmaster.json) serves v0.1.6 with `IsTestingExclusive: true`. |
 | Test builds | Player `01a14a5` (#21 and #33) waits for the owner's in-game verdict, which gates 0.1.7; it stays staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\`. Dalamud's only Dev Plugin Location is now `E:\AetherFrame Test Build\AetherFrame.dll` (checked in `dalamudConfig.json` at 11:51 UTC, read only): the owner made the one-time switch ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54)), so each new test build reaches the game by itself. Preview `febf0cb` (`master` after #56: every merged networking increment through N2-6, the share check included, and the tutorial card's fixes; it sends nothing) was installed there at 12:02 UTC, after a two-minute notice, superseding preview `ae80c75`, which a second Claude session installed at 11:48 UTC. Dalamud's log shows the game loaded `302af2f` at 09:45 UTC, `ae80c75` at 11:48 UTC and `febf0cb` at 12:02 UTC. |
-| Open pull requests | This change, interface task 1 ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)). [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), the sharing re-plan, merged at 13:10 UTC, and this change merged it in; #53 to #58 are merged. |
+| Open pull requests | This change, interface task 1 ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)), and [#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60), the tutorial card beside tall, narrow controls, a second Claude session's, opened at 13:12 UTC. Both edit ROADMAP.md and CHANGELOG.md, so whichever merges second merges the other in first. [#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), the sharing re-plan, merged at 13:10 UTC, and this change merged it in; #53 to #58 are merged. |
 | Checkouts | The control checkout `E:\AetherFrameWork` is clean on `master`, with one worktree per task under `.claude\worktrees\`. `E:\Plugin development` is off limits ([CLAUDE.md](CLAUDE.md)). |
 
 CI results belong to the recorded commit, not automatically to later commits. Check live CI, and [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), for anything newer.
