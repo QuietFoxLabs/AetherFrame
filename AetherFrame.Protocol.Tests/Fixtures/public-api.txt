@@ -337,6 +337,7 @@ enum AetherFrame.Protocol.Remote.LayoutVerticalAlign
     const LayoutVerticalAlign Middle
     const LayoutVerticalAlign Top
 sealed class AetherFrame.Protocol.Remote.ProfileLayoutSnapshot
+    Boolean IsValidName(String name)
     DateTimeOffset CreatedAt { get; }
     DocumentType DocumentType { get; }
     IReadOnlyList<ImageReference> Images { get; }

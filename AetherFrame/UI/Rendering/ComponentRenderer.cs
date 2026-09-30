@@ -49,7 +49,7 @@ internal static class ComponentRenderer
                 case ComponentPrimitiveKind.Image:
                     // Missing, still loading, or undecodable: nothing — a Component is decoration,
                     // and the Plate stays fully readable without it.
-                    if (component.AssetId is { } assetId && resources.Images.GetWrapOrNull(assetId) is { } wrap)
+                    if (PaintVisibility.ComponentImage(component) is { } assetId && resources.Images.GetWrapOrNull(assetId) is { } wrap)
                     {
                         drawList.AddImageQuad(wrap.Handle, a, b, c, d, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f), color);
                     }

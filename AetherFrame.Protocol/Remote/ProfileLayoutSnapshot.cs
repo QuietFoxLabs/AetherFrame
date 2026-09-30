@@ -113,6 +113,25 @@ public sealed class ProfileLayoutSnapshot : RemoteProfileDocument
         TotalTextScalars = totalText;
     }
 
+    /// <summary>
+    /// Whether <paramref name="name"/> meets the name rule a snapshot's name follows (section 8.1.1,
+    /// decision D4), exactly as the constructor and every reader check it, so a publisher can refuse
+    /// a Plate's name before building anything.
+    /// </summary>
+    public static bool IsValidName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        try
+        {
+            ProtocolName.Encode(name, "name");
+            return true;
+        }
+        catch (ProtocolException)
+        {
+            return false;
+        }
+    }
+
     /// <inheritdoc />
     public override DocumentType DocumentType => DocumentType.ProfileSnapshot;
 

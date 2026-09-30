@@ -100,6 +100,25 @@ public class NameRuleTests
         Assert.Equal(RefusedRanges.Sum(r => r.Last - r.First + 1), refused);
     }
 
+    [Fact]
+    public void IsValidName_AgreesWithTheCodec_ForEveryScalarValue_AndTheLimits()
+    {
+        for (var scalar = 0; scalar <= 0x10FFFF; scalar++)
+        {
+            if (!IsSurrogate(scalar))
+            {
+                Assert.True(ProfileLayoutSnapshot.IsValidName("a" + S(scalar)) != InTable(scalar), $"U+{scalar:X4}");
+            }
+        }
+
+        Assert.False(ProfileLayoutSnapshot.IsValidName(string.Empty));
+        Assert.True(ProfileLayoutSnapshot.IsValidName(new string('a', ProtocolLimits.MaxNameScalars)));
+        Assert.False(ProfileLayoutSnapshot.IsValidName(new string('a', ProtocolLimits.MaxNameScalars + 1)));
+        Assert.False(ProfileLayoutSnapshot.IsValidName(string.Concat(Enumerable.Repeat(S(0x65E5), 86))));
+        Assert.False(ProfileLayoutSnapshot.IsValidName("a" + (char)0xD800));
+        Assert.True(ProfileLayoutSnapshot.IsValidName(" a "));
+    }
+
     [Theory]
     [MemberData(nameof(RefusedEdges))]
     public void EveryRefusedRange_IsRefusedAtBothEdges_ThroughTheSnapshot(int scalar)
