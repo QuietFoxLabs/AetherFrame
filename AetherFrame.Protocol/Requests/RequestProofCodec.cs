@@ -141,18 +141,7 @@ public static class RequestProofCodec
     /// <exception cref="ProtocolException">The first rule the submission breaks, in the order of section 14.4.</exception>
     public static VerifiedSubmission VerifySubmission(ReadOnlySpan<byte> proof, ReadOnlySpan<byte> document, DeploymentName deployment)
     {
-        ArgumentNullException.ThrowIfNull(deployment);
-
-        var verifiedProof = Verify(proof);
-        if (verifiedProof.Kind != RequestProofKind.DocumentSubmission)
-        {
-            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof authorizes an action, not a document submission.");
-        }
-
-        if (!verifiedProof.Deployment.Equals(deployment))
-        {
-            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof was made for another deployment.");
-        }
+        var verifiedProof = CheckSubmissionProof(proof, deployment);
 
         // One private copy of the document, hashed and verified alike.
         var documentBytes = CopyDocument(document);
@@ -168,6 +157,32 @@ public static class RequestProofCodec
         }
 
         return new VerifiedSubmission(verifiedDocument, verifiedProof, documentBytes);
+    }
+
+    /// <summary>
+    /// Section 14.4's first two steps alone, for a server that checks a submission's proof as soon as
+    /// it arrives, before it reads the document that follows: the proof as section 14.3 reads it,
+    /// its kind (a document submission), and its deployment. It authorizes nothing: it names the
+    /// signer and the challenge, so a server can refuse early, but only <see cref="VerifySubmission"/>,
+    /// with the document, lets it act (section 14.4).
+    /// </summary>
+    /// <exception cref="ProtocolException">The first rule the proof breaks, in the order of section 14.4, steps 1 and 2.</exception>
+    public static VerifiedRequestProof CheckSubmissionProof(ReadOnlySpan<byte> proof, DeploymentName deployment)
+    {
+        ArgumentNullException.ThrowIfNull(deployment);
+
+        var verifiedProof = Verify(proof);
+        if (verifiedProof.Kind != RequestProofKind.DocumentSubmission)
+        {
+            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof authorizes an action, not a document submission.");
+        }
+
+        if (!verifiedProof.Deployment.Equals(deployment))
+        {
+            throw new ProtocolException(ProtocolError.ProofMismatch, "The request proof was made for another deployment.");
+        }
+
+        return verifiedProof;
     }
 
     /// <summary>Whether <paramref name="kind"/> is an action (section 14.5): every known kind but a document submission.</summary>

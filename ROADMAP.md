@@ -312,7 +312,8 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
     The revision becomes the latest, with its served profile under a fresh marker, and the previous one is pruned at once.
   - `/v1/lookup` answers the served profile of an exact name and World. `/v1/image` serves an image by marker and index. `/v1/report` keeps a report for 30 days. All three are for opted-in, allowlisted players only, and every other case is one "not found".
   - Pausing is the opting-out kind with `{"mode": "pause"}`: the Plate goes, the binding stays. A key whose character was taken over gets `410`.
-  - Until the image worker (N2-7c), every image is refused. CI runs the server's 98 tests.
+  - A publish is authenticated (its proof, a live challenge, a bound and allowed signer) before it takes one of two publish slots or reads its body; the protocol library gains `CheckSubmissionProof` for section 14.4's first two steps, with no signed-byte change.
+  - Until the image worker (N2-7c), every image is refused. CI runs the server's 103 tests.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**

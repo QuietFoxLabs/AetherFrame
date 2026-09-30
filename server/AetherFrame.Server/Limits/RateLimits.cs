@@ -43,6 +43,8 @@ internal static class ServerLimits
     public static readonly Limit PublishesPerAddress = new("publish/address", 120, TimeSpan.FromHours(1));
 
     public static readonly Limit ReportsPerKey = new("report/key", 20, TimeSpan.FromDays(1));
+
+    public static readonly Limit ReportsPerAddress = new("report/address", 60, TimeSpan.FromDays(1));
 }
 
 /// <summary>

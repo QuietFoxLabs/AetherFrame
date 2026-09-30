@@ -189,7 +189,143 @@ public class PlateEndpointTests
     {
         var processor = new NoImageProcessor();
         var png = Plates.Png(4, 3);
-        Assert.Null(await processor.ProcessAsync(Plates.Snapshot(ProfileId.NewId(), "Plate", png).Images[0], png, CancellationToken.None));
+        var processed = await processor.ProcessAsync(Plates.Snapshot(ProfileId.NewId(), "Plate", png).Images[0], png, CancellationToken.None);
+        Assert.Null(processed.Bytes);
+        Assert.False(processed.IsBusy);
+    }
+
+    [Fact]
+    public async Task ABusyWorker_IsTryAgainLater()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        var profile = ProfileId.Parse((await aria.BindAsync(Aria)).GetProperty("profileId").GetString()!);
+        var png = Plates.Png(2, 2);
+        server.Images.Busy = true;
+        using var response = await aria.PublishAsync(Plates.Snapshot(profile, "Plate", png), png);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task APublishIsAuthenticated_BeforeItWaitsForASlot()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using var stranger = server.NewPlayer();
+        var profile = ProfileId.Parse((await aria.BindAsync(Aria)).GetProperty("profileId").GetString()!);
+        var slots = server.Services.GetRequiredService<PublishSlots>();
+
+        // Both slots held, as two slow uploads would hold them.
+        Assert.True(slots.Gate.Wait(0));
+        Assert.True(slots.Gate.Wait(0));
+        try
+        {
+            // A stranger is refused at its proof and signer, whatever the slots: it can never hold one.
+            using (var strangerPublish = await stranger.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(ProfileId.NewId(), "Plate"), stranger.Key)))
+            {
+                Assert.Equal(HttpStatusCode.UnprocessableEntity, strangerPublish.StatusCode);
+                Assert.Equal("not-bound", await strangerPublish.Content.ReadAsStringAsync());
+            }
+
+            // A proof with a challenge the server never issued doesn't reach the slots either.
+            var document = SignedDocumentCodec.Sign(Plates.Snapshot(profile, "Plate"), aria.Key);
+            var unissued = RequestProofCodec.Sign(document, DeploymentName.Parse(TestServer.Deployment), RequestChallenge.NewRandom(), aria.Key);
+            using (var stale = await aria.PostRawAsync("/v1/publish", Player.Envelope(unissued, Plates.PublishPayload(document))))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+            }
+
+            // The tester, authenticated, is told to retry.
+            using var tester = await aria.PublishDocumentAsync(document);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, tester.StatusCode);
+        }
+        finally
+        {
+            slots.Gate.Release(2);
+        }
+
+        using var afterwards = await aria.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(profile, "Plate"), aria.Key));
+        Assert.Equal(HttpStatusCode.NoContent, afterwards.StatusCode);
+    }
+
+    [Fact]
+    public async Task ThePublishStore_RechecksTheBindingAndTheRevisionInItsTransaction()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        var profile = ProfileId.Parse((await aria.BindAsync(Aria)).GetProperty("profileId").GetString()!);
+        var content = server.Services.GetRequiredService<AetherFrame.Server.Storage.ContentStore>();
+        var persona = aria.Key.PublicKey.Id;
+        var revision = RevisionId.NewId();
+        var sha = new byte[32];
+        sha[0] = 1;
+        var marker = RevisionMarker.NewMarker();
+
+        // A binding that changed while the revision was checked: nothing is stored.
+        Assert.Equal(AetherFrame.Server.Storage.PublishResult.NotBound, await content.PublishAsync(persona, ProfileId.NewId(), revision, [1], sha, [1], marker, [], default));
+        Assert.Equal(AetherFrame.Server.Storage.PublishResult.Published, await content.PublishAsync(persona, profile, revision, [1], sha, [1], marker, [], default));
+
+        // A revision that turned up meanwhile: the same bytes are known, other bytes conflict.
+        Assert.Equal(AetherFrame.Server.Storage.PublishResult.AlreadyKnown, await content.PublishAsync(persona, profile, revision, [1], sha, [1], marker, [], default));
+        var other = (byte[])sha.Clone();
+        other[1] = 2;
+        Assert.Equal(AetherFrame.Server.Storage.PublishResult.Conflict, await content.PublishAsync(persona, profile, revision, [2], other, [1], marker, [], default));
+        Assert.Equal(1L, await server.CountAsync("SELECT COUNT(*) FROM revisions;"));
+    }
+
+    [Fact]
+    public async Task ACharacterOffTheAllowlist_NeitherViewsNorIsViewed()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using var bram = server.NewPlayer();
+        var ariaProfile = ProfileId.Parse((await aria.BindAsync(Aria)).GetProperty("profileId").GetString()!);
+        var bramProfile = ProfileId.Parse((await bram.BindAsync(Bram, "Bram Oakes", "Gilgamesh")).GetProperty("profileId").GetString()!);
+        using (await aria.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(ariaProfile, "Plate"), aria.Key)))
+        {
+        }
+
+        using (await bram.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(bramProfile, "Plate"), bram.Key)))
+        {
+        }
+
+        // The operator takes Bram's id off the allowlist; the configuration reloads.
+        var configuration = (Microsoft.Extensions.Configuration.IConfigurationRoot)server.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+        configuration["AetherFrame:AllowedLodestoneIds:1"] = "99999999";
+        configuration.Reload();
+
+        using (var bramViews = await bram.SendAsync("/v1/lookup", RequestProofKind.Lookup, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}"))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, bramViews.StatusCode);
+        }
+
+        using (var bramViewed = await aria.SendAsync("/v1/lookup", RequestProofKind.Lookup, "{\"name\":\"Bram Oakes\",\"world\":\"Gilgamesh\"}"))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, bramViewed.StatusCode);
+        }
+
+        using var bramPublishes = await bram.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(bramProfile, "Plate again"), bram.Key));
+        Assert.Equal("not-bound", await bramPublishes.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task AHiddenBindingsPlate_IsNotServed()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using var namesake = server.NewPlayer();
+        using var bram = server.NewPlayer();
+        var ariaProfile = ProfileId.Parse((await aria.BindAsync(Aria, "Aria Starfall", "Gilgamesh")).GetProperty("profileId").GetString()!);
+        using (await aria.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(ariaProfile, "Plate"), aria.Key)))
+        {
+        }
+
+        // A newer check reads the same name and World for another character: Aria's binding is
+        // hidden, and the name now finds the newer one, which has published nothing.
+        await namesake.BindAsync(34567890, "Aria Starfall", "Gilgamesh");
+        await bram.BindAsync(Bram, "Bram Oakes", "Gilgamesh");
+        using var lookup = await bram.SendAsync("/v1/lookup", RequestProofKind.Lookup, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}");
+        Assert.Equal(HttpStatusCode.NotFound, lookup.StatusCode);
     }
 
     [Theory]
@@ -352,12 +488,14 @@ public class PlateEndpointTests
         }
 
         Assert.Equal(1L, await server.CountAsync("SELECT COUNT(*) FROM reports WHERE lodestone_id = " + Aria + " AND reason = 'spam';"));
-        server.Time.Advance(TimeSpan.FromDays(30));
-        using (await bram.SendAsync("/v1/report", RequestProofKind.Report, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\",\"reason\":\"other\"}"))
-        {
-        }
 
-        Assert.Equal(1L, await server.CountAsync("SELECT COUNT(*) FROM reports;"));
+        // Housekeeping drops it after 30 days, with no new report to prompt it.
+        var content = server.Services.GetRequiredService<AetherFrame.Server.Storage.ContentStore>();
+        server.Time.Advance(TimeSpan.FromDays(29));
+        Assert.Equal(0, await content.DropExpiredReportsAsync(default));
+        server.Time.Advance(TimeSpan.FromDays(1));
+        Assert.Equal(1, await content.DropExpiredReportsAsync(default));
+        Assert.Equal(0L, await server.CountAsync("SELECT COUNT(*) FROM reports;"));
     }
 
     [Fact]
@@ -395,7 +533,8 @@ public class PlateEndpointTests
 
         var log = server.Log.All;
         Assert.Contains("/v1/publish", log, StringComparison.Ordinal);
-        foreach (var secret in new[] { served.Marker.ToString(), served.Marker.ToString()[4..], "Secret Plate Name", profile.ToString(), "Aria", "Bram", "Gilgamesh", aria.Key.PublicKey.Id.ToString(), bram.Key.PublicKey.Id.ToString() })
+        Assert.Contains("/v1/report", log, StringComparison.Ordinal);
+        foreach (var secret in new[] { served.Marker.ToString(), served.Marker.ToString()[4..], "Secret Plate Name", profile.ToString(), "Aria", "Bram", "Gilgamesh", "spam", aria.Key.PublicKey.Id.ToString(), bram.Key.PublicKey.Id.ToString(), Aria.ToString(System.Globalization.CultureInfo.InvariantCulture), Bram.ToString(System.Globalization.CultureInfo.InvariantCulture) })
         {
             Assert.DoesNotContain(secret, log, StringComparison.Ordinal);
         }

@@ -6,6 +6,18 @@ using AetherFrame.Protocol.Remote;
 
 namespace AetherFrame.Server.Images;
 
+/// <summary>What re-encoding one image came to.</summary>
+internal sealed record ImageProcessing(byte[]? Bytes, bool IsBusy)
+{
+    /// <summary>The worker's queue is full, or no worker came: try again later.</summary>
+    public static readonly ImageProcessing Busy = new(null, true);
+
+    /// <summary>The worker refused the image, or failed on it.</summary>
+    public static readonly ImageProcessing Refused = new(null, false);
+
+    public static ImageProcessing Recoded(byte[] bytes) => new(bytes, false);
+}
+
 /// <summary>
 /// Decodes an image and encodes it again (decision I2). The server's is the image worker's client
 /// (N2-7c); until the worker exists, <see cref="NoImageProcessor"/> refuses every image, so a Plate
@@ -14,17 +26,17 @@ namespace AetherFrame.Server.Images;
 internal interface IImageProcessor
 {
     /// <summary>
-    /// The re-encoded copy of <paramref name="bytes"/>, which have already matched their declaration
-    /// (section 8.2.1), or null when the processor refuses them. Its answer is untrusted:
-    /// <see cref="ProcessedImages.Check"/> checks it before anything is stored.
+    /// Re-encodes <paramref name="bytes"/>, which have already matched their declaration (section
+    /// 8.2.1). The answer is untrusted: <see cref="ProcessedImages.Check"/> checks it before anything
+    /// is stored.
     /// </summary>
-    Task<byte[]?> ProcessAsync(ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation);
+    Task<ImageProcessing> ProcessAsync(ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation);
 }
 
 /// <summary>Refuses every image: the server's processor until the image worker (N2-7c) is configured.</summary>
 internal sealed class NoImageProcessor : IImageProcessor
 {
-    public Task<byte[]?> ProcessAsync(ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation) => Task.FromResult<byte[]?>(null);
+    public Task<ImageProcessing> ProcessAsync(ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation) => Task.FromResult(ImageProcessing.Refused);
 }
 
 /// <summary>The server's own check of a processor's output (decision I2: the worker's output is untrusted).</summary>

@@ -1,6 +1,7 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.IO;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +17,10 @@ using AetherFrame.Server.Requests;
 using AetherFrame.Server.Storage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Server.Kestrel.Core.Features;
 using Microsoft.Extensions.Options;
 
 namespace AetherFrame.Server.Endpoints;
@@ -32,6 +36,15 @@ internal static class PlateEndpoints
 
     /// <summary>How far ahead of the server's clock a snapshot's <c>createdAt</c> may be (decision N6).</summary>
     public static readonly TimeSpan MaxClockSkew = TimeSpan.FromSeconds(300);
+
+    /// <summary>How long a publish has to send its proof, before anything else is looked at.</summary>
+    public static readonly TimeSpan ProofDeadline = TimeSpan.FromSeconds(10);
+
+    /// <summary>How long an authenticated publish has to send the rest: 43 MB at the minimum rate, and a margin.</summary>
+    public static readonly TimeSpan BodyDeadline = TimeSpan.FromMinutes(45);
+
+    /// <summary>The slowest an authenticated publish may send, after a 10-second grace.</summary>
+    public static readonly MinDataRate MinBodyRate = new(bytesPerSecond: 16 * 1024, gracePeriod: TimeSpan.FromSeconds(10));
 
     private static readonly string[] CharacterFields = ["name", "world"];
     private static readonly string[] ImageFields = ["name", "world", "marker"];
@@ -52,13 +65,8 @@ internal static class PlateEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:json");
                 }
 
-                var key = call.Persona.ToString();
-                if (!limiter.TryTake(ServerLimits.LookupsPerKeyHour, key) || !limiter.TryTake(ServerLimits.LookupsPerKeyDay, key))
-                {
-                    return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:lookup/key");
-                }
-
-                var (refusal, target) = await viewing.FindAsync(http, call.Persona, body.String("name"), body.String("world"));
+                var (refusal, target) = await viewing.FindAsync(http, call.Persona, body.String("name"), body.String("world"), () =>
+                    limiter.TryTake(ServerLimits.LookupsPerKeyHour, call.Persona.ToString()) && limiter.TryTake(ServerLimits.LookupsPerKeyDay, call.Persona.ToString()));
                 if (refusal is not null)
                 {
                     return refusal;
@@ -79,12 +87,8 @@ internal static class PlateEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:json");
                 }
 
-                if (!limiter.TryTake(ServerLimits.ImagesPerKey, call.Persona.ToString()))
-                {
-                    return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:image/key");
-                }
-
-                var (refusal, target) = await viewing.FindAsync(http, call.Persona, body.String("name"), body.String("world"));
+                var (refusal, target) = await viewing.FindAsync(http, call.Persona, body.String("name"), body.String("world"), () =>
+                    limiter.TryTake(ServerLimits.ImagesPerKey, call.Persona.ToString()));
                 if (refusal is not null)
                 {
                     return refusal;
@@ -97,7 +101,7 @@ internal static class PlateEndpoints
             }));
 
         app.MapPost("/v1/report", (HttpContext http, SignedRequests requests, RateLimiter limiter, Viewing viewing, ContentStore content) =>
-            requests.RunActionAsync(http, RequestProofKind.Report, null, async call =>
+            requests.RunActionAsync(http, RequestProofKind.Report, ServerLimits.ReportsPerAddress, async call =>
             {
                 var body = ActionBody.Read(call.Action.Body, ReportFields);
                 if (body is null || !Reasons.Contains(body.String("reason")))
@@ -105,12 +109,8 @@ internal static class PlateEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:json");
                 }
 
-                if (!limiter.TryTake(ServerLimits.ReportsPerKey, call.Persona.ToString()))
-                {
-                    return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:report/key");
-                }
-
-                var (refusal, target) = await viewing.FindAsync(http, call.Persona, body.String("name"), body.String("world"));
+                var (refusal, target) = await viewing.FindAsync(http, call.Persona, body.String("name"), body.String("world"), () =>
+                    limiter.TryTake(ServerLimits.ReportsPerKey, call.Persona.ToString()));
                 if (refusal is not null)
                 {
                     return refusal;
@@ -122,16 +122,70 @@ internal static class PlateEndpoints
     }
 
     /// <summary>
-    /// Publishing (ServerApi-v1.md, section 2.2): the proof as section 14.4 checks it, then the
-    /// challenge, then the binding and the allowlist, the character's limit, the snapshot's schema,
-    /// profile id and clock, rule 4, and each image, which must match its declaration and pass the
-    /// image worker before anything is stored.
+    /// Publishing (ServerApi-v1.md, section 2.2). Before a publish slot is taken or the body is read
+    /// past its proof, the proof must pass section 14.4's first two steps, its challenge must be live,
+    /// and its signer bound to a character on the allowlist, so no one else can hold a slot. Then,
+    /// under a deadline and a minimum data rate, the rest: the whole of section 14.4 with the
+    /// document, the challenge consumed, the binding again, the character's limit, the snapshot's
+    /// schema, profile id and clock, rule 4, and each image, which must match its declaration and pass
+    /// the image worker before anything is stored.
     /// </summary>
     private static async Task<IResult> PublishAsync(HttpContext http, IOptions<ServerOptions> options, SignedRequests requests, ChallengeStore challenges, RateLimiter limiter, BindingStore bindings, Allowlist allowlist, ContentStore content, IImageProcessor processor, PublishSlots slots, TimeProvider time)
     {
         if (!limiter.TryTakeAddress(ServerLimits.PublishesPerAddress, http.Connection.RemoteIpAddress))
         {
             return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:publish/address");
+        }
+
+        if (http.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } sizeLimit)
+        {
+            sizeLimit.MaxRequestBodySize = MaxPublishRequestBytes;
+        }
+
+        if (http.Request.ContentLength > MaxPublishRequestBytes)
+        {
+            return SignedRequests.Fail(http, StatusCodes.Status413PayloadTooLarge, "body:too-large");
+        }
+
+        // The proof first, within a short deadline.
+        byte[]? proof;
+        using (var proofDeadline = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted))
+        {
+            proofDeadline.CancelAfter(ProofDeadline);
+            proof = await ReadProofAsync(http.Request.Body, proofDeadline.Token);
+        }
+
+        if (proof is null)
+        {
+            return SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:envelope");
+        }
+
+        VerifiedRequestProof early;
+        try
+        {
+            early = RequestProofCodec.CheckSubmissionProof(proof, options.Value.Deployment);
+        }
+        catch (ProtocolException e)
+        {
+            return SignedRequests.Fail(http, StatusCodes.Status403Forbidden, "proof:" + e.Error);
+        }
+
+        if (!await challenges.IsLiveAsync(early.Challenge, http.RequestAborted))
+        {
+            return await requests.RefuseChallengeAsync(http);
+        }
+
+        var signer = await bindings.FindByPersonaAsync(early.Persona, http.RequestAborted);
+        if (signer is null)
+        {
+            return await bindings.WasTakenOverAsync(early.Persona, http.RequestAborted)
+                ? SignedRequests.Fail(http, StatusCodes.Status410Gone, "publish:taken-over")
+                : Refuse(http, "not-bound");
+        }
+
+        if (!allowlist.Allows(signer.LodestoneId))
+        {
+            return Refuse(http, "not-bound");
         }
 
         if (!await slots.Gate.WaitAsync(0, http.RequestAborted))
@@ -141,21 +195,27 @@ internal static class PlateEndpoints
 
         try
         {
-            var (body, failure) = await SignedRequests.ReadBoundedAsync(http, MaxPublishRequestBytes, http.RequestAborted);
-            if (body is null)
+            if (http.Features.Get<IHttpMinRequestBodyDataRateFeature>() is { } rate)
             {
-                return SignedRequests.Fail(http, failure, "body:unread");
+                rate.MinDataRate = MinBodyRate;
             }
 
-            if (!SignedRequests.TrySplit(body, out var proof, out var payload) || !TryReadPublish(payload, out var document, out var imageBytes))
+            byte[]? payloadBytes;
+            using (var bodyDeadline = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted))
             {
-                return SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:envelope");
+                bodyDeadline.CancelAfter(BodyDeadline);
+                payloadBytes = await ReadRestAsync(http, 2 + proof.Length, MaxPublishRequestBytes - 2 - proof.Length, bodyDeadline.Token);
+            }
+
+            if (payloadBytes is null || !TryReadPublish(payloadBytes, out var document, out var imageBytes))
+            {
+                return SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:payload");
             }
 
             VerifiedSubmission submission;
             try
             {
-                submission = RequestProofCodec.VerifySubmission(proof.Span, document.Span, options.Value.Deployment);
+                submission = RequestProofCodec.VerifySubmission(proof, document.Span, options.Value.Deployment);
             }
             catch (ProtocolException e)
             {
@@ -229,13 +289,18 @@ internal static class PlateEndpoints
                     return Refuse(http, "image-refused");
                 }
 
-                var output = await processor.ProcessAsync(declared, imageBytes[index], http.RequestAborted);
-                if (output is null || !ProcessedImages.Check(output, declared))
+                var processed = await processor.ProcessAsync(declared, imageBytes[index], http.RequestAborted);
+                if (processed.IsBusy)
+                {
+                    return SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "publish:images-busy");
+                }
+
+                if (processed.Bytes is null || !ProcessedImages.Check(processed.Bytes, declared))
                 {
                     return Refuse(http, "image-refused");
                 }
 
-                stored.Add(new StoredImage(declared.Format, output));
+                stored.Add(new StoredImage(declared.Format, processed.Bytes));
             }
 
             var marker = RevisionMarker.NewMarker();
@@ -250,6 +315,72 @@ internal static class PlateEndpoints
         finally
         {
             slots.Gate.Release();
+        }
+    }
+
+    /// <summary>Reads the envelope's proof: its <c>u16</c> length, then that many bytes. Null for anything else.</summary>
+    private static async Task<byte[]?> ReadProofAsync(Stream body, CancellationToken cancellation)
+    {
+        try
+        {
+            var length = new byte[2];
+            await body.ReadExactlyAsync(length, cancellation);
+            var proofLength = BinaryPrimitives.ReadUInt16BigEndian(length);
+            if (proofLength < ProtocolLimits.RequestProofOverheadBytes + 1 || proofLength > ProtocolLimits.MaxRequestProofBytes)
+            {
+                return null;
+            }
+
+            var proof = new byte[proofLength];
+            await body.ReadExactlyAsync(proof, cancellation);
+            return proof;
+        }
+        catch (Exception e) when (e is EndOfStreamException or IOException or OperationCanceledException or Microsoft.AspNetCore.Http.BadHttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the rest of the body, at most <paramref name="bound"/> bytes: into one buffer of the
+    /// exact size when the request declares its length, so a publish holds its payload once. Null
+    /// when it is longer, cut short, too slow or unreadable.
+    /// </summary>
+    private static async Task<byte[]?> ReadRestAsync(HttpContext http, int alreadyRead, int bound, CancellationToken cancellation)
+    {
+        try
+        {
+            if (http.Request.ContentLength is { } total)
+            {
+                var remaining = total - alreadyRead;
+                if (remaining < 0 || remaining > bound)
+                {
+                    return null;
+                }
+
+                var exact = new byte[remaining];
+                await http.Request.Body.ReadExactlyAsync(exact, cancellation);
+                return exact;
+            }
+
+            using var buffer = new MemoryStream();
+            var chunk = new byte[64 * 1024];
+            int read;
+            while ((read = await http.Request.Body.ReadAsync(chunk, cancellation)) > 0)
+            {
+                if (buffer.Length + read > bound)
+                {
+                    return null;
+                }
+
+                buffer.Write(chunk, 0, read);
+            }
+
+            return buffer.ToArray();
+        }
+        catch (Exception e) when (e is EndOfStreamException or IOException or OperationCanceledException or Microsoft.AspNetCore.Http.BadHttpRequestException)
+        {
+            return null;
         }
     }
 
@@ -320,11 +451,13 @@ internal sealed class PublishSlots
 /// <summary>
 /// Who may view, and whom (decisions C5 and C8): the requester must be bound to a character on the
 /// allowlist, and the character looked up must be shown under that exact name and World, bound and on
-/// the allowlist too. Every other case is the same "not found".
+/// the allowlist too. Every other case is the same "not found". The requester's own limits are taken
+/// after the requester passes and before the target is looked for, so a key with no character costs
+/// the server nothing, and a "not found" counts as a find does (C6).
 /// </summary>
 internal sealed class Viewing(BindingStore bindings, Allowlist allowlist, Worlds worlds)
 {
-    public async Task<(IResult? Refusal, Binding? Target)> FindAsync(HttpContext http, PersonaId requester, string name, string world)
+    public async Task<(IResult? Refusal, Binding? Target)> FindAsync(HttpContext http, PersonaId requester, string name, string world, Func<bool> takeLimits)
     {
         var own = await bindings.FindByPersonaAsync(requester, http.RequestAborted);
         if (own is null)
@@ -337,6 +470,11 @@ internal sealed class Viewing(BindingStore bindings, Allowlist allowlist, Worlds
         if (!allowlist.Allows(own.LodestoneId))
         {
             return (SignedRequests.Fail(http, StatusCodes.Status404NotFound, "view:not-bound"), null);
+        }
+
+        if (!takeLimits())
+        {
+            return (SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:view/key"), null);
         }
 
         if (CharacterNames.Key(name) is not { } nameKey || !worlds.TryFind(world, out var canonicalWorld))

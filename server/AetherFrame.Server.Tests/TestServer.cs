@@ -204,8 +204,18 @@ internal sealed class FakeImages : AetherFrame.Server.Images.IImageProcessor
 {
     public Func<byte[], byte[]?> Answer { get; set; } = bytes => bytes;
 
-    public Task<byte[]?> ProcessAsync(AetherFrame.Protocol.Remote.ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation) =>
-        Task.FromResult(Answer(bytes.ToArray()));
+    public bool Busy { get; set; }
+
+    public Task<AetherFrame.Server.Images.ImageProcessing> ProcessAsync(AetherFrame.Protocol.Remote.ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation)
+    {
+        if (Busy)
+        {
+            return Task.FromResult(AetherFrame.Server.Images.ImageProcessing.Busy);
+        }
+
+        var answer = Answer(bytes.ToArray());
+        return Task.FromResult(answer is null ? AetherFrame.Server.Images.ImageProcessing.Refused : AetherFrame.Server.Images.ImageProcessing.Recoded(answer));
+    }
 }
 
 /// <summary>A clock the tests move by hand.</summary>

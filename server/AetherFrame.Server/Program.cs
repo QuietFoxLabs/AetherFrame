@@ -60,6 +60,7 @@ builder.Services.AddSingleton<Viewing>();
 builder.Services.AddSingleton<IImageProcessor, NoImageProcessor>();
 builder.Services.AddHostedService<DatabaseStartup>();
 builder.Services.AddHostedService<CheckpointRetries>();
+builder.Services.AddHostedService<Housekeeping>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Rereads>());
 builder.Services.AddHttpClient(LodestoneHttpPages.ClientName, (services, client) =>
     {

@@ -58,7 +58,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 | imageCount | 1 | the number of images, equal to the snapshot's |
 | images | | for each of the snapshot's images, in its order: a `u32` length, then the prepared copy's bytes |
 
-The server accepts it only when the proof passes section 14.4; the signer is bound to a character on the allowlist; the snapshot carries that binding's profile id (C4); its `createdAt` is at most 300 seconds ahead of the server's clock (N6); its revision is new or an exact resubmission (rule 4); and each image matches its declaration and section 8.2.1, then passes the image worker (I2). Then the revision becomes the character's latest: its served profile is built with a fresh marker, the previous revision's document and images are deleted, and the revision record is kept (N2).
+The server reads the proof first, within 10 seconds, and checks it before anything else: section 14.4's first two steps (`CheckSubmissionProof`), a live challenge (not yet consumed), and a signer bound to a character on the allowlist. Only then does it take one of two publish slots and read the rest, at no less than 16 KiB a second after a 10-second grace and within 45 minutes. So no one but a tester can hold a slot. It accepts the publish only when the proof passes all of section 14.4 with the document; the signer is bound to a character on the allowlist; the snapshot carries that binding's profile id (C4); its `createdAt` is at most 300 seconds ahead of the server's clock (N6); its revision is new or an exact resubmission (rule 4); and each image matches its declaration and section 8.2.1, then passes the image worker (I2). Then the revision becomes the character's latest: its served profile is built with a fresh marker, the previous revision's document and images are deleted, and the revision record is kept (N2).
 
 | Answer | When |
 |---|---|
@@ -66,7 +66,7 @@ The server accepts it only when the proof passes section 14.4; the signer is bou
 | `409` | the challenge, as above |
 | `410` | the signer is no longer bound to the character: another key's check took it over (C1) |
 | `422` with a reason | refused; the reason is one of the `publish` codes of section 4 |
-| `503` | the image queue is full: try again later |
+| `503` | both publish slots are taken, or the image worker's queue is full: try again later |
 
 ## 3. Unsigned requests
 
@@ -113,7 +113,11 @@ Recorded in DecisionRegister.md as "N2-7b's server details":
 - **Pausing** is the opting-out kind with `{"mode": "pause"}` in its signed body, so it adds no request kind (C9). It deletes what is served and keeps the binding and the revision records (N2), so an old revision can't come back.
 - **Retractions.** Publishing accepts only a schema 2 snapshot: a `ProfileRetraction` is refused (`not-a-layout`). In stage 1, opting out and pausing take its place, and there are no tombstones (C4).
 - **A key whose character another key took over** is remembered, by its identity alone, until it binds again or opts out, so that its plugin gets `410` and can say what happened (C1).
-- **Publishing** is also limited to 120 an hour per address, besides C6's 60 per character, and to two at a time: a third gets `503`, so buffered bodies stay bounded.
+- **Publishing** is also limited to 120 an hour per address, besides C6's 60 per character, and to two at a time: a third gets `503`, so buffered bodies stay bounded. A publish is authenticated before it waits for a slot (section 2.2), and its body is read once, into a buffer of its declared length.
+- **Resuming after a pause** takes a new revision: resending the revision that was live before the pause is an exact resubmission (rule 4), answered `204`, and shows nothing. N2-9 signs a new revision to resume.
+- **Reports** are limited to 60 a day per address as well as C6's 20 per key, and an hourly sweep drops those past 30 days whether or not another arrives (C5).
+- **Viewing's limits** are taken once the requester is found bound and allowed, before the target is looked for: a key with no character costs nothing, and a "not found" counts as a find (C6).
+- **A taken-over key's identity** is kept until that key binds again or opts out, with no time. It is one row per takeover, and says only that the key once held a character that another key now holds.
 - **The served profile** is built when a revision is published, under a fresh marker (D6), and stored with it. An image is served for the current marker and an index only, as `image/png` or `image/jpeg`.
 - **Forwarded headers** are believed from `AetherFrame:KnownProxies` alone (R4). The server refuses to start with ASP.NET Core's `ForwardedHeaders_Enabled` switch on, from any configuration source, since that switch clears the trusted lists; N2-8 puts Caddy's container address in `KnownProxies`, or every client would share one address's limits.
 - **A deletion's checkpoint** runs after the deletion commits, whether or not the client is still there. One that readers block for 30 seconds is retried every 30 seconds until it completes (D1).

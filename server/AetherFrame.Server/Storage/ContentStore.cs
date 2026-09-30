@@ -115,7 +115,7 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
         }
 
         await transaction.CommitAsync(cancellation);
-        await database.CheckpointAsync(cancellation);
+        await database.CheckpointAsync(CancellationToken.None);
         return PublishResult.Published;
     }
 
@@ -167,17 +167,40 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
         command.CommandText = "DELETE FROM images WHERE persona = $persona; DELETE FROM latest WHERE persona = $persona;";
         command.Parameters.AddWithValue("$persona", persona.ToString());
         var deleted = await command.ExecuteNonQueryAsync(cancellation) > 0;
-        await database.CheckpointAsync(cancellation);
+        if (deleted)
+        {
+            await database.CheckpointAsync(CancellationToken.None);
+        }
+
         return deleted;
     }
 
-    /// <summary>Keeps a report for the operator (decision C5): the reported character, a reason and the reporting key, with the day, and drops reports past 30 days.</summary>
-    public async Task ReportAsync(long lodestoneId, string reason, PersonaId reporter, CancellationToken cancellation)
+    /// <summary>
+    /// Drops reports past 30 days (decision C5). <see cref="Housekeeping"/> runs it every hour, so
+    /// none outlives its time for want of a new one.
+    /// </summary>
+    public async Task<int> DropExpiredReportsAsync(CancellationToken cancellation)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM reports WHERE day <= $expired; INSERT INTO reports (lodestone_id, reason, reporter, day) VALUES ($id, $reason, $reporter, $today);";
+        command.CommandText = "DELETE FROM reports WHERE day <= $expired;";
         command.Parameters.AddWithValue("$expired", Today - (long)ReportLifetime.TotalDays);
+        var dropped = await command.ExecuteNonQueryAsync(cancellation);
+        if (dropped > 0)
+        {
+            await database.CheckpointAsync(CancellationToken.None);
+        }
+
+        return dropped;
+    }
+
+    /// <summary>Keeps a report for the operator (decision C5): the reported character, a reason and the reporting key, with the day.</summary>
+    public async Task ReportAsync(long lodestoneId, string reason, PersonaId reporter, CancellationToken cancellation)
+    {
+        await DropExpiredReportsAsync(cancellation);
+        await using var connection = await database.OpenAsync(cancellation);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO reports (lodestone_id, reason, reporter, day) VALUES ($id, $reason, $reporter, $today);";
         command.Parameters.AddWithValue("$id", lodestoneId);
         command.Parameters.AddWithValue("$reason", reason);
         command.Parameters.AddWithValue("$reporter", reporter.ToString());
@@ -194,5 +217,26 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
         command.Parameters.AddWithValue("$profile", profileId.ToString());
         command.Parameters.AddWithValue("$revision", revisionId.ToArray());
         return await command.ExecuteScalarAsync(cancellation) as byte[];
+    }
+}
+
+/// <summary>Hourly housekeeping: drops reports past their 30 days (decision C5), whether or not any new report arrives.</summary>
+internal sealed class Housekeeping(ContentStore content) : Microsoft.Extensions.Hosting.BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await content.DropExpiredReportsAsync(stoppingToken);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // The next hour tries again.
+            }
+
+            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
+        }
     }
 }
