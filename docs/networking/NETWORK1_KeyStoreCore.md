@@ -90,6 +90,6 @@ Its non-blocking notes are recorded where they apply: the write-through move and
 
 ## 8. What comes next
 
-- Increment 7: the Windows DPAPI protector (K2's target) and the capability probe (K3), each with its own review; until then no protector exists outside tests.
+- Increment 7: the Windows DPAPI protector (K2's target) and the capability probe (K3), each with its own review; until then no protector exists outside tests. `[updated 2026-09-29: implemented by NETWORK2's N2-4, in the preview flavour only; nothing wires it before N2-5.]`
 - The persisted persona registry (records, labels and the active slot; the manager takes none at construction) before increment 9's wiring. With it: detecting and reporting key files that no record names (L12), and the write-through move (section 5).
 - Increment 6: the backup codec, which needs the D2 details and K5.

@@ -1,7 +1,7 @@
 # NETWORK1: planned architecture boundaries
 
 **Status (2026-09-29): the boundaries are in force; the six systems are planned.**
-- Of this document, the protocol API tidy (increment 1), the integration skeleton (increment 3: the preview flavour, the boundary tests and the log redaction) and the key store core (increment 5: system 2's store, envelope and seams, with no protector outside tests; [NETWORK1_KeyStoreCore.md](NETWORK1_KeyStoreCore.md)) are implemented. No system is complete.
+- Of this document, the protocol API tidy (increment 1), the integration skeleton (increment 3: the preview flavour, the boundary tests and the log redaction) and the key store core (increment 5: system 2's store, envelope and seams, with no protector outside tests; [NETWORK1_KeyStoreCore.md](NETWORK1_KeyStoreCore.md)) are implemented, and so is increment 7, the DPAPI protector and the capability probe, as NETWORK2's N2-4 (the register's K2 and K3 entries). Nothing wires the protector or the probe yet. No system is complete.
 - No persona key exists.
 - Protocol Specification v1 is still a **DRAFT**.
 - The plugin still has no network code. A player build holds no `AetherFrame.Protocol` or `AetherFrame.Personas` type; only the networking preview flavour compiles them in (D9b, P2).
