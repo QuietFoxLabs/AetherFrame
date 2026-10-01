@@ -712,8 +712,9 @@ internal static class AdventurePlateStarter
 
         document.BasicPlate = new BasicPlateSettings { ThemeId = ProfileThemePresets.All[0].Id };
 
-        // Identity Header: the character name, placed by the default (stacked) layout. Title and
-        // tagline are created when first turned on, as in the Basic editor.
+        // Identity Header: the character name, alone on the whole header region (as every layout
+        // places a name with no title, so no font is needed yet). The title is created when first
+        // turned on, as in the Basic editor.
         document.BasicIdentity = IdentityHeaderRules.CreateSettings(document);
         Add(IdentityHeaderRules.Create(ProfileElementRole.BasicName, document, character?.Name));
         IdentityHeaderRules.Place(document, static _ => null);
