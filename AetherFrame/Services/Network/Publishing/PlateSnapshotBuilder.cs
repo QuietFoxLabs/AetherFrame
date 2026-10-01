@@ -571,13 +571,14 @@ internal static class PlateSnapshotBuilder
                 ? footprint.Max.X > view.Min.X && footprint.Min.X < view.Max.X && footprint.Max.Y > view.Min.Y && footprint.Min.Y < view.Max.Y
                 : true;
 
-        /// <summary>A text's box, grown by what its drawn outline and shadow extend past it (as the renderer's clip is).</summary>
+        /// <summary>A text's box moved by its Height, grown by what its drawn outline and shadow extend past it (as the renderer's clip is).</summary>
         private static (Vector2 Min, Vector2 Max) TextFootprint(TextProfileElement text)
         {
             var outline = text.OutlineEnabled && text.OutlineThickness > 0f ? Math.Max(1f, Math.Min(text.OutlineThickness, TextProfileElement.MaxOutlineThickness)) : 0f;
             var shadow = text.ShadowEnabled ? Math.Max(Math.Abs(text.ShadowOffsetX), Math.Abs(text.ShadowOffsetY)) : 0f;
             var margin = new Vector2(outline + shadow);
-            return (text.Position - margin, text.Position + text.Size + margin);
+            var position = text.Position + new Vector2(0f, text.DrawnVerticalOffset);
+            return (position - margin, position + text.Size + margin);
         }
 
         private static (Vector2 Min, Vector2 Max) Bounds(IReadOnlyList<Vector2> points)

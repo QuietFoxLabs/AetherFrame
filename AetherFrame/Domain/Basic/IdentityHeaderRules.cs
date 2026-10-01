@@ -118,6 +118,7 @@ internal static class IdentityHeaderRules
         element.Underline = false;
         element.Strikethrough = false;
         element.LetterSpacing = 0f;
+        element.VerticalOffset = 0f;
         element.LineSpacing = defaults.LineSpacing;
         element.OutlineEnabled = false;
         element.ShadowEnabled = false;

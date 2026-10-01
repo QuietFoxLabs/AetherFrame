@@ -577,7 +577,7 @@ internal sealed partial class ProfileEditorWindow
             ContinueTextEdit(text.Id, element => element.VerticalOffset = value);
         }
 
-        EditorWidgets.Tooltip("Moves the text up or down inside its box, without moving the box or a Name Backing. Ctrl+click to type a value.");
+        EditorWidgets.Tooltip("Moves the text up or down without moving its box or a Name Backing. Ctrl+click to type a value.");
         if (ImGui.IsItemDeactivatedAfterEdit())
         {
             editorSession.CommitPendingEdit();

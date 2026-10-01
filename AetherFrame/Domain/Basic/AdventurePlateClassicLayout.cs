@@ -308,6 +308,7 @@ public static class AdventurePlateClassicLayout
         text.Underline = false;
         text.Strikethrough = false;
         text.LetterSpacing = heading ? MathF.Round(HeadingLetterSpacing * scale, 1) : 0f;
+        text.VerticalOffset = 0f;
         text.LineSpacing = defaults.LineSpacing;
         text.AutoFitText = true;
         text.AutoFitMinimumSize = ClampFont(AutoFitMinimum * Math.Min(1f, scale));

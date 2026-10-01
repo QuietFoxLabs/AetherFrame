@@ -866,6 +866,15 @@ public sealed class PlateSnapshotBuilderTests
         var read = PlateDocuments.Materialize(PlateDocuments.ToJson(plate));
         Assert.Equal(9f, Assert.IsType<TextProfileElement>(Assert.Single(read.Elements)).VerticalOffset);
 
+        // Not written while 0, so a Plate saved before Height stays byte for byte as it was.
+        ((TextProfileElement)plate.Elements[0]).VerticalOffset = 0f;
+        Assert.DoesNotContain("VerticalOffset", PlateDocuments.ToJson(plate).ToJsonString(), StringComparison.Ordinal);
+
+        // Resetting a Basic section, or the identity header, takes Height back to 0 like every text property.
+        var section = new TextProfileElement { Text = "Section", VerticalOffset = 12f };
+        IdentityHeaderRules.ApplyDefaultStyle(section, Blank());
+        Assert.Equal(0f, section.VerticalOffset);
+
         var broken = new TextProfileElement { Text = "Name", VerticalOffset = float.PositiveInfinity };
         ProfileElementLimits.Bound(broken);
         Assert.Equal(0f, broken.VerticalOffset);
