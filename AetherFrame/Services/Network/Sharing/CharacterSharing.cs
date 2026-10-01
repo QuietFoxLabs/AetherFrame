@@ -776,6 +776,20 @@ internal sealed class CharacterSharing
         }
     }
 
+    /// <summary>
+    /// A viewing request signed by <paramref name="key"/> for the character with
+    /// <paramref name="contentId"/> was answered 410 (C1): it is recorded as taken over, as any other
+    /// request's 410 is. Only ever called inside a persona-session operation.
+    /// </summary>
+    internal void ViewingTakenOver(ulong contentId, PersonaId key)
+    {
+        if (view.Find(contentId) is { IsBound: true } entry && entry.Key.Equals(key))
+        {
+            log("Sharing: a viewing request found the character taken over.");
+            TakenOver(entry);
+        }
+    }
+
     /// <summary>Records that another key's check took the character over (C1): nothing this key signed is sent again.</summary>
     private void TakenOver(SharingCharacter entry)
     {

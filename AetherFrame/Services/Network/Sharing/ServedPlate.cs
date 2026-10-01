@@ -153,7 +153,7 @@ internal sealed class ServedPlate
                     var found = BuiltInArtCatalog.Find(art.Art);
                     if (found is null)
                     {
-                        Note(notes, "A piece of artwork this AetherFrame doesn't have (" + art.Art + ") isn't shown.");
+                        Note(notes, "A piece of artwork this AetherFrame doesn't have (" + art.Art + ") shows as a box.");
                     }
 
                     steps.Add(new ServedShape(ServedShapeKind.Art, Point(art.A), Point(art.B), Point(art.C), Point(art.D), Color(art.Tint), Art: found));
@@ -287,11 +287,18 @@ internal sealed class ServedPlate
 
     private static Vector4 Color(LayoutColor color) => new(Unit(color.R), Unit(color.G), Unit(color.B), Unit(color.A));
 
+    /// <summary>The most notes kept: a Plate could name thousands of unknown idents.</summary>
+    internal const int MaxNotes = 6;
+
     private static void Note(List<string> notes, string note)
     {
-        if (!notes.Contains(note))
+        if (notes.Count < MaxNotes && !notes.Contains(note))
         {
             notes.Add(note);
+        }
+        else if (notes.Count == MaxNotes && !notes.Contains(note))
+        {
+            notes.Add("It uses more fonts or artwork this AetherFrame doesn't have.");
         }
     }
 }

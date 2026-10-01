@@ -22,10 +22,14 @@ internal static class ProfileBackgroundRenderer
     private const float MinTileScreenSize = 12f;
 
     internal static void Draw(ImDrawListPtr drawList, ProfileBackground? background, Vector2 canvasOrigin, Vector2 canvasScreenSize, float scale, ProfileRenderResources resources) =>
-        Draw(drawList, background, canvasOrigin, canvasScreenSize, scale, resources, background?.ImageAssetId is { } image ? resources.Images.GetWrapOrNull(image) : null);
+        Draw(drawList, background, canvasOrigin, canvasScreenSize, scale, resources, background is { Mode: ProfileBackgroundMode.Image, ImageAssetId: { } image } ? resources.Images.GetWrapOrNull(image) : null);
 
-    /// <summary>Draws <paramref name="background"/> with <paramref name="image"/> as its image's texture, whichever cache that comes from.</summary>
-    internal static void Draw(ImDrawListPtr drawList, ProfileBackground? background, Vector2 canvasOrigin, Vector2 canvasScreenSize, float scale, ProfileRenderResources resources, IDalamudTextureWrap? image)
+    /// <summary>
+    /// Draws <paramref name="background"/> with <paramref name="image"/> as its image's texture,
+    /// whichever cache that comes from. With no texture, an image background draws its placeholder
+    /// unless <paramref name="placeholderWhenMissing"/> is false, as a shared Plate's viewer draws it.
+    /// </summary>
+    internal static void Draw(ImDrawListPtr drawList, ProfileBackground? background, Vector2 canvasOrigin, Vector2 canvasScreenSize, float scale, ProfileRenderResources resources, IDalamudTextureWrap? image, bool placeholderWhenMissing = true)
     {
         // Whether the background draws at all is PaintVisibility's rule, which a shared snapshot follows too.
         var opacity = PaintVisibility.BackgroundOpacity(background);
@@ -52,7 +56,7 @@ internal static class ProfileBackgroundRenderer
                 break;
 
             case ProfileBackgroundMode.Image:
-                DrawImage(drawList, background, canvasOrigin, canvasScreenSize, opacity, image);
+                DrawImage(drawList, background, canvasOrigin, canvasScreenSize, opacity, image, placeholderWhenMissing);
                 break;
         }
 
@@ -153,9 +157,9 @@ internal static class ProfileBackgroundRenderer
         drawList.PopClipRect();
     }
 
-    private static void DrawImage(ImDrawListPtr drawList, ProfileBackground background, Vector2 origin, Vector2 size, float opacity, IDalamudTextureWrap? wrap)
+    private static void DrawImage(ImDrawListPtr drawList, ProfileBackground background, Vector2 origin, Vector2 size, float opacity, IDalamudTextureWrap? wrap, bool placeholderWhenMissing)
     {
-        if (background.ImageAssetId is null)
+        if (background.ImageAssetId is null || (wrap is null && !placeholderWhenMissing))
         {
             return;
         }
