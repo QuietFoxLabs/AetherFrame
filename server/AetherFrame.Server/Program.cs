@@ -108,7 +108,7 @@ builder.Services.AddSingleton<Viewing>();
 builder.Services.AddSingleton<ImageWorkerClient>();
 builder.Services.AddHostedService(services => services.GetRequiredService<ImageWorkerClient>());
 builder.Services.AddSingleton<IImageProcessor>(services =>
-    string.IsNullOrEmpty(services.GetRequiredService<IOptions<ServerOptions>>().Value.ImageWorkerSocket)
+    services.GetRequiredService<IOptions<ServerOptions>>().Value is { ImageWorkerSocket: "", ImageWorkerRuns: "" }
         ? new NoImageProcessor()
         : services.GetRequiredService<ImageWorkerClient>());
 builder.Services.AddHostedService<DatabaseStartup>();

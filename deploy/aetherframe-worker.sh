@@ -3,6 +3,10 @@
 # run, each ended from outside after at most AETHERFRAME_WORKER_LIFE seconds (60) however it
 # behaves, then a fresh one. A run takes at most one job and ends when it has answered; a run an
 # exploit controls can't outlive its life, and nothing of one container survives into the next.
+# Each run sees one socket only (I2's per-job isolation): the one the server offers now, in the
+# socket volume's runs folder, which answers a single connection and is then deleted. So a run can
+# take the job it was started for and no other. Reading the volume's folder needs root, as systemd
+# runs this.
 # systemd runs this as aetherframe-worker.service; it reads the deployed version from the .env
 # file the deploy workflow writes, so a new deployment's worker starts with the next run.
 set -uo pipefail
@@ -22,10 +26,20 @@ remove_all() {
 
 remove_all
 
+mount="$(docker volume inspect -f '{{ .Mountpoint }}' "$volume" 2>/dev/null)"
+
 while true; do
   version="$(sed -n 's/^AETHERFRAME_VERSION=\([0-9A-Za-z._-]*\)$/\1/p' "$env_file" 2>/dev/null | head -n 1)"
   if [[ -z "$version" ]]; then
     sleep 5
+    continue
+  fi
+
+  # The socket the server offers now: there is at most one, and it answers one connection.
+  socket="$(ls -1 "$mount"/runs/run-*.sock 2>/dev/null | head -n 1)"
+  if [[ -z "$mount" || -z "$socket" ]]; then
+    mount="$(docker volume inspect -f '{{ .Mountpoint }}' "$volume" 2>/dev/null)"
+    sleep 0.5
     continue
   fi
 
@@ -37,7 +51,7 @@ while true; do
     --ulimit nofile=256:256 --ulimit core=0:0 \
     --env AETHERFRAME_IMAGE_SOCKET=/run/aetherframe/images.sock \
     --env DOTNET_GCHeapHardLimit=0x10000000 \
-    --volume "$volume:/run/aetherframe:ro" \
+    --volume "$socket:/run/aetherframe/images.sock:ro" \
     --log-driver "${AETHERFRAME_WORKER_LOG_DRIVER:-journald}" \
     "aetherframe-worker:$version" &
   runner=$!

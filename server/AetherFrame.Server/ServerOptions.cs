@@ -54,6 +54,14 @@ public sealed class ServerOptions
     /// </summary>
     public string ImageWorkerSocket { get; set; } = "";
 
+    /// <summary>
+    /// A folder for one socket per worker run (decision I2's per-job isolation), in the volume the
+    /// worker host can see: the server offers exactly one fresh socket in it at a time, answers one
+    /// connection on it, then closes and deletes it, and the host mounts only that socket into the
+    /// next run. When set, it takes the place of <see cref="ImageWorkerSocket"/>.
+    /// </summary>
+    public string ImageWorkerRuns { get; set; } = "";
+
     /// <summary>The folder the daily backup is written to (N2-8), or empty for none.</summary>
     public string BackupFolder { get; set; } = "";
 
