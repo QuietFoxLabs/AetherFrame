@@ -63,7 +63,7 @@ Swap A and B and repeat checks 5 to 11, so each player both shares and views.
 | 6 | Not reported on its own between the two players. The search had passed for A's own Plate before the test, with build `0c96b18`. |
 | 7 | Passed: A changed and shared A's Plate, and B saw the update. |
 | 8 | Not reported on its own. |
-| 9 to 11 | Hide, report and opting out worked in game, and `admin reports` was among the steps the owner reported as working. Whether `admin characters` dropped B after opting out wasn't reported. |
+| 9 to 11 | Hide, report and opting out worked in game. The server side (`admin reports`, and `admin characters` after opting out) wasn't reported on its own. |
 | 12 | Passed with the server stopped (`docker compose stop server`) instead of the network: everything local worked, sharing said the server couldn't be reached, and both recovered once it started again. |
 
 **What the test taught:**
