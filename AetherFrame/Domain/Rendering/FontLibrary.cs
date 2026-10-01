@@ -19,10 +19,31 @@ internal enum FontCategory
 /// <summary>
 /// One family of the font library: its persisted id (never changed, since Plates and shared
 /// layouts name it), its name, where it is listed, its embedded files' prefix, which styles it has
-/// as real faces, and its surface model (<see cref="FontTierPolicy"/>), fitted to its files.
+/// as real faces, its surface model (<see cref="FontTierPolicy"/>), fitted to its files, and each
+/// face's <see cref="FaceShifts"/>.
 /// </summary>
 internal sealed record LibraryFontFamily(
-    string Id, string DisplayName, FontCategory Category, string FilePrefix, bool HasBold, bool HasItalic, bool HasBoldItalic, int Glyphs, double Scale);
+    string Id, string DisplayName, FontCategory Category, string FilePrefix, bool HasBold, bool HasItalic, bool HasBoldItalic, int Glyphs, double Scale, FaceShifts Shifts);
+
+/// <summary>
+/// How far each face of a library family draws its text down, as a fraction of the font size, so
+/// that the middle of its capitals (baseline to the top of 'H') sits where AetherFrame Sans's does
+/// in the same style. ImGui draws a face in a box from its ascent to its descent, the font size
+/// tall, and faces differ in how much of that box is above their capitals: without this, some sit
+/// high in a name box, out of line with what is drawn behind it. Measured from the files by
+/// tools/fonts/build_font_catalog.py; 0 for a style the family has no face for.
+/// </summary>
+internal readonly record struct FaceShifts(float Regular, float Bold, float Italic, float BoldItalic)
+{
+    /// <summary>The shift of the face <see cref="FontLibrary.FaceStyle"/> named.</summary>
+    internal float Of(string style) => style switch
+    {
+        "BoldItalic" => BoldItalic,
+        "Bold" => Bold,
+        "Italic" => Italic,
+        _ => Regular,
+    };
+}
 
 /// <summary>
 /// AetherFrame's font library (the owner's request of October 1, 2026): Google Fonts families
@@ -56,6 +77,14 @@ internal static partial class FontLibrary
         (_, true) when family.HasItalic => "Italic",
         _ => "Regular",
     };
+
+    /// <summary>
+    /// How far down text in <paramref name="familyId"/> draws, as a fraction of its font size, for
+    /// the face the style draws with (<see cref="FaceShifts"/>). 0 for AetherFrame's own families
+    /// and Dalamud's default, so every Plate made with them draws exactly as before.
+    /// </summary>
+    internal static float VerticalShift(string? familyId, bool bold, bool italic) =>
+        Find(familyId) is { } family ? family.Shifts.Of(FaceStyle(family, bold, italic)) : 0f;
 
     /// <summary>
     /// The (bold, italic) a request draws in for <paramref name="familyId"/>: for a library family,
