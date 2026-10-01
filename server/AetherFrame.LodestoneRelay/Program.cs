@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace AetherFrame.LodestoneRelay;
@@ -56,20 +57,35 @@ internal static class RelayProgram
             stop.Cancel();
         };
 
-        var relay = new Relay(new RelayOptions { Listen = listen, Client = client }, Console.WriteLine);
+        // The console is written from a queue of its own: a click in the window (Windows' QuickEdit)
+        // pauses writing, and must never pause the relay. Lines beyond the queue's room are dropped.
+        var lines = Channel.CreateBounded<string>(new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+        var writer = Task.Run(async () =>
+        {
+            await foreach (var line in lines.Reader.ReadAllAsync())
+            {
+                Console.WriteLine(line);
+            }
+        });
+
+        var relay = new Relay(new RelayOptions { Listen = listen, Client = client }, line => lines.Writer.TryWrite(line));
         try
         {
             await relay.RunAsync(
-                () => Console.WriteLine("The Lodestone relay is listening on " + relay.LocalEndPoint + " for " + client + " only, to " + Relay.Host + ":" + Relay.Port + " only. Ctrl+C stops it."),
+                () => lines.Writer.TryWrite("The Lodestone relay is listening on " + relay.LocalEndPoint + " for " + client + " only, to " + Relay.Host + ":" + Relay.Port + " only. Ctrl+C stops it."),
                 stop.Token);
         }
         catch (System.Net.Sockets.SocketException e)
         {
+            lines.Writer.TryComplete();
+            await writer;
             Console.Error.WriteLine("The relay can't listen on " + listen + ": " + e.Message);
             Console.Error.WriteLine("Is Tailscale connected, and is that this PC's Tailscale address?");
             return 1;
         }
 
+        lines.Writer.TryComplete();
+        await writer;
         return 0;
     }
 }

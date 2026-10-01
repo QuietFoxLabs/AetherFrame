@@ -37,6 +37,12 @@ internal sealed class RelayOptions
 
     /// <summary>The most tunnels open at once; the server's fetch budget needs far fewer.</summary>
     public int MaxTunnels { get; init; } = 8;
+
+    /// <summary>
+    /// The most tunnels opened in any hour: twice the server's own budget of 60 fetches an hour
+    /// (decision C2), so the relay holds even if the server didn't.
+    /// </summary>
+    public int MaxTunnelsPerHour { get; init; } = 120;
 }
 
 /// <summary>
@@ -66,6 +72,7 @@ internal sealed class Relay
     private readonly RelayOptions options;
     private readonly Func<CancellationToken, ValueTask<Stream>> connectUpstream;
     private readonly Action<string> log;
+    private readonly System.Collections.Generic.Queue<long> hour = new();
     private int open;
 
     /// <param name="options">The settings.</param>
@@ -113,6 +120,16 @@ internal sealed class Relay
                 }
                 catch (SocketException)
                 {
+                    // Such as the address going away for a moment: wait, rather than spin.
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(250), stop);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+
                     continue;
                 }
 
@@ -136,22 +153,18 @@ internal sealed class Relay
             return;
         }
 
-        if (Interlocked.Increment(ref open) > options.MaxTunnels)
-        {
-            Interlocked.Decrement(ref open);
-            await SendQuietlyAsync(client, Busy, stop);
-            Log("too many tunnels open: answered 503");
-            return;
-        }
-
         var started = DateTime.UtcNow;
+        var counted = false;
         try
         {
             using var stream = new NetworkStream(client, ownsSocket: false);
+
+            // The head is read before any answer, so an answer never meets unread bytes: closing then
+            // would reset the connection, and the client could lose the answer.
             var head = await ReadHeadAsync(stream, stop);
             if (head is null)
             {
-                Log("no complete request head in time: closed");
+                Log("no complete request head (too long, too slow, or closed): closed");
                 return;
             }
 
@@ -159,6 +172,21 @@ internal sealed class Relay
             {
                 await SendQuietlyAsync(client, Forbidden, stop);
                 Log("refused a request that isn't CONNECT " + Host + ":" + Port.ToString(System.Globalization.CultureInfo.InvariantCulture) + ": answered 403");
+                return;
+            }
+
+            counted = true;
+            if (Interlocked.Increment(ref open) > options.MaxTunnels)
+            {
+                await SendQuietlyAsync(client, Busy, stop);
+                Log("too many tunnels open: answered 503");
+                return;
+            }
+
+            if (!TryTakeFromHour())
+            {
+                await SendQuietlyAsync(client, Busy, stop);
+                Log("too many tunnels this hour: answered 503");
                 return;
             }
 
@@ -197,7 +225,31 @@ internal sealed class Relay
         }
         finally
         {
-            Interlocked.Decrement(ref open);
+            if (counted)
+            {
+                Interlocked.Decrement(ref open);
+            }
+        }
+    }
+
+    /// <summary>Takes one of the hour's tunnels, when the last hour has opened fewer than <see cref="RelayOptions.MaxTunnelsPerHour"/>.</summary>
+    private bool TryTakeFromHour()
+    {
+        lock (hour)
+        {
+            var now = Environment.TickCount64;
+            while (hour.Count > 0 && now - hour.Peek() >= 3_600_000)
+            {
+                hour.Dequeue();
+            }
+
+            if (hour.Count >= options.MaxTunnelsPerHour)
+            {
+                return false;
+            }
+
+            hour.Enqueue(now);
+            return true;
         }
     }
 

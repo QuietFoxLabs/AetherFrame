@@ -86,7 +86,7 @@ public sealed class ServerOptions
     /// <summary>
     /// Reads <see cref="LodestoneRelay"/>: empty is none; otherwise exactly an address and a port,
     /// written as .NET writes them back (no name, no scheme, no path), and not a wildcard, broadcast
-    /// or multicast address.
+    /// or multicast address, and no IPv6 scope, which a proxy address can't carry.
     /// </summary>
     internal static bool TryParseRelay(string text, out System.Net.IPEndPoint? relay)
     {
@@ -102,7 +102,7 @@ public sealed class ServerOptions
         }
 
         var address = endPoint.Address;
-        if (address.Equals(System.Net.IPAddress.Any) || address.Equals(System.Net.IPAddress.IPv6Any) || address.Equals(System.Net.IPAddress.Broadcast)
+        if ((address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 && address.ScopeId != 0) || address.Equals(System.Net.IPAddress.Any) || address.Equals(System.Net.IPAddress.IPv6Any) || address.Equals(System.Net.IPAddress.Broadcast)
             || address.Equals(System.Net.IPAddress.None) || address.Equals(System.Net.IPAddress.IPv6None) || address.IsIPv6Multicast
             || (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && address.GetAddressBytes()[0] is >= 224 and <= 239))
         {

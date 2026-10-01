@@ -1390,12 +1390,13 @@ It also made six smaller points, all applied as well:
   - listens on one address, never a wildcard: the PC's Tailscale address;
   - serves one client address, the server's, and closes any other connection unanswered;
   - accepts only `CONNECT na.finalfantasyxiv.com:443` (HTTP/1.0 or 1.1, the host's case aside), with the host and port fixed in code, and answers anything else `403` without connecting anywhere;
-  - reads at most 4 KiB of request head within 10 seconds, and keeps at most 8 tunnels;
+  - reads the whole request head, at most 4 KiB within 10 seconds, before any answer, and keeps at most 8 tunnels at once and 120 an hour, twice C2's 60 fetches, so it holds even if the server didn't;
   - closes a tunnel after 30 seconds idle or 5 minutes in all, or past 1 MiB up or 16 MiB down;
-  - logs one line per connection, never what a tunnel carries.
+  - logs one line per connection, never what a tunnel carries, from a queue of its own, so a paused console window never pauses the relay.
 
   The server's pooled connections through it are dropped after 15 seconds idle, before the relay would.
-- **Tailscale** joins the two machines with the owner's account, so nothing on the PC is reachable from the internet, and no port is forwarded. The owner installs it on both: it is a system change on the server and an account of the owner's, so Claude never does it.
+- **Tailscale** joins the two machines with the owner's account, so no port is forwarded and nothing on the PC is reachable from the internet. The server faces the internet, though, so its reach into the tailnet is limited too. Tailscale's default lets every machine reach every port of every other, so the runbook's access rules tag the server, and let the tag reach only the PC's port 8443. A tagged machine's key also never expires. The owner installs Tailscale on both machines and sets the rules: it is a system change on the server and an account of the owner's, so Claude never does it.
+- **The home connection.** For these requests the Lodestone sees the owner's home address, at most 60 an hour by C2's budget, with the relay's own limit behind it.
 
 **Rationale.** It keeps C2's promise that the server reads the page itself, with nothing a player controls in between, at no cost, and it changes nothing for players. The price is the owner's PC: it must be on, with the relay running, whenever someone checks a character or a re-read is due. For the two-player test, that is when the owner plays. A host the Lodestone accepts, or another way to prove a character, can replace it later without changing the protocol.
 

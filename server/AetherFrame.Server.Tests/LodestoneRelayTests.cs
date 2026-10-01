@@ -4,7 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -89,6 +92,7 @@ public sealed class LodestoneRelayTests
         await Send(stream, request);
         Assert.StartsWith("HTTP/1.1 403 Forbidden\r\n", await ReadToEnd(stream));
         Assert.Equal(0, harness.Upstream.Connections);
+        await harness.NoTunnelOpen();
     }
 
     [Fact]
@@ -133,6 +137,18 @@ public sealed class LodestoneRelayTests
         var stream = client.GetStream();
         await Send(stream, "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
         Assert.StartsWith("HTTP/1.1 502 Bad Gateway\r\n", await ReadToEnd(stream));
+        await harness.NoTunnelOpen();
+    }
+
+    [Fact]
+    public async Task ALodestoneThatNeverAnswers_Is502_AfterTheConnectTime()
+    {
+        await using var harness = await RelayHarness.StartAsync(hanging: true, connectTimeout: TimeSpan.FromMilliseconds(300));
+        using var client = await harness.ConnectAsync();
+        var stream = client.GetStream();
+        await Send(stream, "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
+        Assert.StartsWith("HTTP/1.1 502 Bad Gateway\r\n", await ReadToEnd(stream));
+        await harness.NoTunnelOpen();
     }
 
     [Fact]
@@ -145,6 +161,22 @@ public sealed class LodestoneRelayTests
         Assert.Equal("HTTP/1.1 200 Connection Established\r\n\r\n", await ReadAnswer(stream));
         Assert.Equal("", await ReadToEnd(stream));
         Assert.Contains(harness.Log, line => line.Contains("tunnel closed (idle)", StringComparison.Ordinal));
+        await harness.NoTunnelOpen();
+    }
+
+    [Fact]
+    public async Task ATunnelTheClientCloses_IsClosed_AndCountedOut()
+    {
+        await using var harness = await RelayHarness.StartAsync();
+        using (var client = await harness.ConnectAsync())
+        {
+            var stream = client.GetStream();
+            await Send(stream, "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
+            Assert.Equal("HTTP/1.1 200 Connection Established\r\n\r\n", await ReadAnswer(stream));
+            Assert.Equal(1, harness.Relay.OpenTunnels);
+        }
+
+        await harness.NoTunnelOpen();
     }
 
     [Fact]
@@ -158,6 +190,21 @@ public sealed class LodestoneRelayTests
         await stream.WriteAsync("more than eight bytes"u8.ToArray());
         Assert.Equal("", await ReadToEnd(stream));
         Assert.Contains(harness.Log, line => line.Contains("tunnel closed (too many bytes down)", StringComparison.Ordinal));
+        await harness.NoTunnelOpen();
+    }
+
+    [Fact]
+    public async Task ATunnelSendingTooMuch_IsClosed()
+    {
+        await using var harness = await RelayHarness.StartAsync(maxBytesUp: 8);
+        using var client = await harness.ConnectAsync();
+        var stream = client.GetStream();
+        await Send(stream, "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
+        Assert.Equal("HTTP/1.1 200 Connection Established\r\n\r\n", await ReadAnswer(stream));
+        await stream.WriteAsync("more than eight bytes"u8.ToArray());
+        await ReadToEnd(stream);
+        await harness.NoTunnelOpen();
+        Assert.Contains(harness.Log, line => line.Contains("tunnel closed (too many bytes up)", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -171,6 +218,26 @@ public sealed class LodestoneRelayTests
         using var second = await harness.ConnectAsync();
         await Send(second.GetStream(), "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
         Assert.StartsWith("HTTP/1.1 503 Service Unavailable\r\n", await ReadToEnd(second.GetStream()));
+        Assert.Equal(1, harness.Relay.OpenTunnels);
+    }
+
+    [Fact]
+    public async Task TunnelsBeyondTheHoursLimit_Are503()
+    {
+        await using var harness = await RelayHarness.StartAsync(maxTunnelsPerHour: 1);
+        using (var first = await harness.ConnectAsync())
+        {
+            await Send(first.GetStream(), "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
+            Assert.Equal("HTTP/1.1 200 Connection Established\r\n\r\n", await ReadAnswer(first.GetStream()));
+        }
+
+        await harness.NoTunnelOpen();
+        using var second = await harness.ConnectAsync();
+        await Send(second.GetStream(), "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
+        Assert.StartsWith("HTTP/1.1 503 Service Unavailable\r\n", await ReadToEnd(second.GetStream()));
+        Assert.Contains(harness.Log, line => line.Contains("too many tunnels this hour", StringComparison.Ordinal));
+        Assert.Equal(1, harness.Upstream.Connections);
+        await harness.NoTunnelOpen();
     }
 
     [Theory]
@@ -188,6 +255,7 @@ public sealed class LodestoneRelayTests
     [InlineData("255.255.255.255:8443", false)]
     [InlineData("224.0.0.1:8443", false)]
     [InlineData("[ff02::1]:8443", false)]
+    [InlineData("[fe80::1%2]:8443", false)]
     public void TheRelaySetting_IsExactlyAnAddressAndPort(string text, bool accepted)
     {
         Assert.Equal(accepted, ServerOptions.TryParseRelay(text, out var relay));
@@ -231,6 +299,24 @@ public sealed class LodestoneRelayTests
         Assert.Equal(0x16, hello[0]);
         Assert.Contains("na.finalfantasyxiv.com", Encoding.ASCII.GetString(hello), StringComparison.Ordinal);
         Assert.DoesNotContain("lodestone/character", Encoding.ASCII.GetString(hello), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARelayAnsweringWithItsOwnCertificate_GetsNoRequest_AndTheFetchFails()
+    {
+        // What a relay trying to forge a page would have to do: answer the TLS itself, for the
+        // Lodestone's name, with a certificate no authority signed. The server's client refuses it,
+        // so no request reaches it, and the fetch fails, which a check treats as "try later".
+        await using var harness = await RelayHarness.StartAsync(tls: true);
+        using var handler = LodestoneHttpPages.CreateHandler(harness.Relay.LocalEndPoint);
+        var pages = new LodestoneHttpPages(new OneClient(handler));
+
+        var response = await pages.GetAsync(12345678, CancellationToken.None);
+
+        Assert.Equal(0, response.Status);
+        Assert.Null(response.Html);
+        Assert.Equal(1, harness.Upstream.Connections);
+        Assert.False(harness.Upstream.SawRequest);
     }
 
     private static Task Send(NetworkStream stream, string text) => stream.WriteAsync(Encoding.ASCII.GetBytes(text)).AsTask();
@@ -288,14 +374,20 @@ public sealed class LodestoneRelayTests
         private readonly TcpListener listener = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource stop = new();
         private readonly bool echo;
+        private readonly X509Certificate2? certificate;
         private int connections;
+        private volatile bool sawRequest;
 
-        public FakeUpstream(bool echo)
+        public FakeUpstream(bool echo, bool tls)
         {
             this.echo = echo;
+            certificate = tls ? SelfSigned() : null;
             listener.Start();
             _ = AcceptAsync();
         }
+
+        /// <summary>Whether a request ever arrived inside TLS: only possible if the client accepted the certificate.</summary>
+        public bool SawRequest => sawRequest;
 
         public int Connections => Volatile.Read(ref connections);
 
@@ -308,6 +400,20 @@ public sealed class LodestoneRelayTests
             await stop.CancelAsync();
             listener.Stop();
             stop.Dispose();
+            certificate?.Dispose();
+        }
+
+        private static X509Certificate2 SelfSigned()
+        {
+            using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            var request = new CertificateRequest("CN=" + Relay.Host, key, HashAlgorithmName.SHA256);
+            var names = new SubjectAlternativeNameBuilder();
+            names.AddDnsName(Relay.Host);
+            request.CertificateExtensions.Add(names.Build());
+            using var made = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+
+            // Loaded again from its PFX, as TLS on Windows needs a key it can find.
+            return X509CertificateLoader.LoadPkcs12(made.Export(X509ContentType.Pfx), null);
         }
 
         private async Task AcceptAsync()
@@ -332,10 +438,23 @@ public sealed class LodestoneRelayTests
         {
             using (client)
             {
-                var stream = client.GetStream();
+                Stream stream = client.GetStream();
                 var buffer = new byte[16 * 1024];
                 try
                 {
+                    if (certificate is not null)
+                    {
+                        await using var ssl = new SslStream(stream);
+                        await ssl.AuthenticateAsServerAsync(certificate);
+                        if (await ssl.ReadAsync(buffer, stop.Token) > 0)
+                        {
+                            sawRequest = true;
+                            await ssl.WriteAsync("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"u8.ToArray(), stop.Token);
+                        }
+
+                        return;
+                    }
+
                     while (true)
                     {
                         var read = await stream.ReadAsync(buffer, stop.Token);
@@ -353,7 +472,7 @@ public sealed class LodestoneRelayTests
                         await stream.WriteAsync(buffer.AsMemory(0, read), stop.Token);
                     }
                 }
-                catch (Exception e) when (e is IOException or OperationCanceledException or ObjectDisposedException)
+                catch (Exception e) when (e is IOException or OperationCanceledException or ObjectDisposedException or System.Security.Authentication.AuthenticationException)
                 {
                 }
             }
@@ -385,29 +504,55 @@ public sealed class LodestoneRelayTests
             IPAddress? client = null,
             TimeSpan? headTimeout = null,
             TimeSpan? idleTimeout = null,
+            TimeSpan? connectTimeout = null,
+            long maxBytesUp = 1024 * 1024,
             long maxBytesDown = 16 * 1024 * 1024,
             int maxTunnels = 8,
+            int maxTunnelsPerHour = 120,
             bool unreachable = false,
-            bool echo = true)
+            bool hanging = false,
+            bool echo = true,
+            bool tls = false)
         {
-            var harness = new RelayHarness(new FakeUpstream(echo));
+            var harness = new RelayHarness(new FakeUpstream(echo, tls));
             var options = new RelayOptions
             {
                 Listen = new IPEndPoint(IPAddress.Loopback, 0),
                 Client = client ?? IPAddress.Loopback,
                 HeadTimeout = headTimeout ?? Wait,
                 IdleTimeout = idleTimeout ?? Wait,
+                ConnectTimeout = connectTimeout ?? Wait,
+                MaxBytesUp = maxBytesUp,
                 MaxBytesDown = maxBytesDown,
                 MaxTunnels = maxTunnels,
+                MaxTunnelsPerHour = maxTunnelsPerHour,
             };
             Func<CancellationToken, ValueTask<Stream>> connect = unreachable
                 ? _ => ValueTask.FromException<Stream>(new SocketException((int)SocketError.ConnectionRefused))
-                : harness.Upstream.ConnectAsync;
+                : hanging
+                    ? async cancellation =>
+                    {
+                        await Task.Delay(Timeout.Infinite, cancellation);
+                        throw new InvalidOperationException("Never reached.");
+                    }
+                    : harness.Upstream.ConnectAsync;
             harness.Relay = new Relay(options, harness.Log.Enqueue, connect);
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             harness.running = harness.Relay.RunAsync(started.SetResult, harness.stop.Token);
             await started.Task.WaitAsync(Wait);
             return harness;
+        }
+
+        /// <summary>Waits until every tunnel the relay counted is counted out again.</summary>
+        public async Task NoTunnelOpen()
+        {
+            var until = DateTime.UtcNow + Wait;
+            while (Relay.OpenTunnels != 0 && DateTime.UtcNow < until)
+            {
+                await Task.Delay(20);
+            }
+
+            Assert.Equal(0, Relay.OpenTunnels);
         }
 
         public async Task<TcpClient> ConnectAsync()
