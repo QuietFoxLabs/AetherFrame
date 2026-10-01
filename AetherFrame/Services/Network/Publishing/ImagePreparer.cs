@@ -16,9 +16,10 @@ namespace AetherFrame.Services.Network.Publishing;
 /// <summary>
 /// An image as the texture pipeline decoded it and read it back whole: its size, the distance in
 /// bytes between the starts of its rows (<paramref name="Pitch"/>, which may exceed the width's
-/// bytes), its DXGI format, and the bytes.
+/// bytes), its DXGI format, the bytes, and whether its colour is premultiplied by its alpha
+/// (<paramref name="Premultiplied"/>), which a DXGI format doesn't say.
 /// </summary>
-internal sealed record DecodedImage(int Width, int Height, int Pitch, int DxgiFormat, byte[] Pixels)
+internal sealed record DecodedImage(int Width, int Height, int Pitch, int DxgiFormat, byte[] Pixels, bool Premultiplied = false)
 {
     /// <summary>A file that decoded, whose pixels couldn't be read back: the texture pipeline failed, not the file, so it isn't missing.</summary>
     internal static readonly DecodedImage ReadBackFailed = new(0, 0, 0, 0, []);
@@ -156,8 +157,12 @@ internal static class ImagePreparer
     /// hides cleared (<see cref="Clear"/>), and whether every one of them is opaque. Each is what the
     /// renderer draws from the texture: BGRX as opaque, and a 16-bit channel c as round(c/257), as
     /// an 8-bit target receives it. Rows are read by the read-back's pitch, so no padding byte is
-    /// ever copied. False for a read-back in any other format (sRGB, float, block-compressed), a
-    /// buffer too short for its size, or a window outside it.
+    /// ever copied. Premultiplied colour (<see cref="DecodedImage.Premultiplied"/>) is made straight
+    /// again (<see cref="Straight"/>), which gives exactly what <see cref="Clear"/> gives for the
+    /// file's own colour when the pipeline rounded as <see cref="Clear"/> does; the known-answer
+    /// check proves that each session. A premultiplied 16-bit window with a translucent pixel is
+    /// refused: no pipeline was measured doing that. False for a read-back in any other format
+    /// (sRGB, float, block-compressed), a buffer too short for its size, or a window outside it.
     /// </summary>
     internal static bool TryCrop(DecodedImage image, PixelWindow window, out byte[] rgba, out bool opaque)
     {
@@ -194,9 +199,23 @@ internal static class ImagePreparer
                     Bgrx => (row[x + 2], row[x + 1], row[x], (byte)255),
                     _ => (Narrow(row[x..]), Narrow(row[(x + 2)..]), Narrow(row[(x + 4)..]), Narrow(row[(x + 6)..])),
                 };
-                output[at] = Clear(red, alpha);
-                output[at + 1] = Clear(green, alpha);
-                output[at + 2] = Clear(blue, alpha);
+                if (!image.Premultiplied)
+                {
+                    output[at] = Clear(red, alpha);
+                    output[at + 1] = Clear(green, alpha);
+                    output[at + 2] = Clear(blue, alpha);
+                }
+                else if (size == 8 && alpha is > 0 and < 255)
+                {
+                    return false;
+                }
+                else
+                {
+                    output[at] = Straight(red, alpha);
+                    output[at + 1] = Straight(green, alpha);
+                    output[at + 2] = Straight(blue, alpha);
+                }
+
                 output[at + 3] = alpha;
                 allOpaque &= alpha == 255;
                 at += 4;
@@ -226,6 +245,13 @@ internal static class ImagePreparer
         var premultiplied = ((2 * channel * alpha) + 255) / 510;
         return (byte)(((2 * premultiplied * 255) + alpha) / (2 * alpha));
     }
+
+    /// <summary>
+    /// A premultiplied channel made straight: round(p*255/a), at most 255, and 0 where a is 0. For
+    /// p = round(c*a/255) it is <see cref="Clear"/>(c, a).
+    /// </summary>
+    internal static byte Straight(byte premultiplied, byte alpha) =>
+        alpha == 0 ? (byte)0 : (byte)Math.Min(255, ((2 * premultiplied * 255) + alpha) / (2 * alpha));
 
     /// <summary>
     /// The per-session known-answer check (D5's N2-6 note, (3)). A small PNG with every kind of
@@ -474,7 +500,7 @@ internal static class ImagePreparer
     private static string Describe(DecodedImage? image, IImageCodec codec) =>
         image is null ? "no" + Failure(codec)
         : ReferenceEquals(image, DecodedImage.ReadBackFailed) ? "read-back failed" + Failure(codec)
-        : image.Width + "x" + image.Height + ", pitch " + image.Pitch + ", DXGI format " + image.DxgiFormat;
+        : image.Width + "x" + image.Height + ", pitch " + image.Pitch + ", DXGI format " + image.DxgiFormat + (image.Premultiplied ? ", premultiplied" : "");
 
     private static string Failure(IImageCodec codec) => codec is IImageCodecFailures { LastFailure: { } failure } ? " (" + failure + ")" : "";
 

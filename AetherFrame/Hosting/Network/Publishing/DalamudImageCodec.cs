@@ -17,7 +17,10 @@ namespace AetherFrame.Hosting.Network.Publishing;
 /// <list type="bullet">
 /// <item>decoding: WIC decodes the managed image as the renderer's textures are decoded, and the
 /// texture is read back whole, never through <c>TextureModificationArgs</c>, which can
-/// resample;</item>
+/// resample. Its colour comes back premultiplied by its alpha, though its DXGI format is the
+/// straight B8G8R8A8: measured in game on October 1, 2026, when the known image's pixel 90, 180,
+/// 45 at alpha 64 came back as 23, 45, 11. So every decode is declared premultiplied, and the
+/// session's known-answer check fails if that ever stops being true;</item>
 /// <item>encoding: the prepared pixels become a raw RGBA texture, which WIC encodes as N2-6's
 /// design sets it: a JPEG at quality 0.92 (a float, VT_R4) with 4:2:0 chroma and its JFIF APP0
 /// kept, or a PNG, not interlaced.</item>
@@ -82,7 +85,7 @@ internal sealed class DalamudImageCodec : IImageCodec, IImageCodecFailures
             try
             {
                 var (specification, pixels) = await readback.GetRawImageAsync(wrap, default, leaveWrapOpen: true, cancellation).ConfigureAwait(false);
-                return new DecodedImage(specification.Width, specification.Height, specification.Pitch, specification.DxgiFormat, pixels);
+                return new DecodedImage(specification.Width, specification.Height, specification.Pitch, specification.DxgiFormat, pixels, Premultiplied: true);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
