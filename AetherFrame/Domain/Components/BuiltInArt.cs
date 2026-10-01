@@ -43,7 +43,9 @@ public sealed record BuiltInArtAsset(
     public float AspectRatio => PixelHeight > 0 ? (float)PixelWidth / PixelHeight : 1f;
 
     /// <summary>How the artwork stretches to any width, or null when it is always drawn whole at its
-    /// own aspect ratio. Only Name Backings and Dividers are sliced (see <c>ComponentPaintPlan</c>).</summary>
+    /// own aspect ratio. Name Backings, Dividers and Section Headers can be sliced (see <c>ComponentPaintPlan</c>).
+    /// The cuts are part of what a shared Plate's piece ident (<see cref="PieceIdent"/>) means to another
+    /// viewer, so they are frozen with the artwork's id: different cuts need a new id.</summary>
     public ArtSlices? Slices { get; init; }
 
     /// <summary>The horizontal span of <paramref name="piece"/> in texture coordinates (0 to 1);
@@ -120,8 +122,8 @@ public sealed record BuiltInArtAsset(
 /// to <paramref name="CenterRight"/>.
 /// </summary>
 /// <param name="ContentLeft">Where the text area starts: the anchor box (the name and title, padded)
-/// spans <paramref name="ContentLeft"/> to <paramref name="ContentRight"/>. 0 for a divider, which
-/// spans its whole width.</param>
+/// spans <paramref name="ContentLeft"/> to <paramref name="ContentRight"/>. For a Divider or a
+/// Section Header, about where its left cap ends: the caps reach past the line it decorates.</param>
 /// <param name="CapLeft">Where the left cap ends and the left fill starts.</param>
 /// <param name="CenterLeft">Where the left fill ends and the center piece starts.</param>
 /// <param name="CenterRight">Where the center piece ends and the right fill starts.</param>
@@ -311,7 +313,7 @@ public static class BuiltInArtCatalog
         foreach (var piece in ArtPieces.Sliced)
         {
             var suffix = "." + ArtPieces.Suffix(piece);
-            if (ident.EndsWith(suffix, StringComparison.Ordinal) && Find(ident[..^suffix.Length]) is { Slices: not null } art)
+            if (ident.EndsWith(suffix, StringComparison.Ordinal) && Find(ident[..^suffix.Length]) is { Slices: { } slices } art && slices.IsValidFor(art.PixelWidth))
             {
                 return (art, piece);
             }

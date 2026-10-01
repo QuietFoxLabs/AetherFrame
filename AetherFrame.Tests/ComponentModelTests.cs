@@ -155,7 +155,7 @@ public class ComponentCatalogTests
             Assert.Contains(BuiltInComponentCatalog.OfKind(kind), d => !d.RequiresAsset);
         }
 
-        Assert.Equal(7, PlateComponentEditor.BasicSlots.Length + PlateComponentEditor.BasicDecorations.Length);
+        Assert.Equal(8, PlateComponentEditor.BasicSlots.Length + PlateComponentEditor.BasicDecorations.Length);
     }
 
     [Fact]

@@ -70,11 +70,6 @@ internal sealed partial class ProfileEditorWindow
         {
             if (combo.Success)
             {
-                foreach (var kind in PlateComponentEditor.AdvancedOnlyKinds)
-                {
-                    DrawAddComponentGroup(kind);
-                }
-
                 foreach (var kind in PlateComponentEditor.BasicSlots)
                 {
                     DrawAddComponentGroup(kind);

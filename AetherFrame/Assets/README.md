@@ -166,8 +166,10 @@ file against it. The ids, Components and Art Styles are made in `ArtSets` from t
   half size, the owner's choice of October 1, 2026, to keep the download near 77 MB instead of
   117 MB. Each is averaged exactly as `BundledArtImage.BuildLevels` makes its own half-size level,
   so wherever the piece is drawn at or below half its source's size it draws exactly as the source
-  would: at Size 100% that is every screen up to 4K with the Plate full screen. Larger, it is
-  magnified and slightly softer.
+  would. At Size 100% with the Plate full screen, that is every piece on every screen up to 1440p.
+  At 4K it is every Divider, Section Header and Corner Ornament, while 16 of the 19 Name Backings
+  (size factors above 1.68) are magnified, by up to 1.45 times (Watercolor Fantasy's), and slightly
+  softer.
 - Cuts are measured on each source and halved (the fills shrink by at most a texel, so they stay
   plain). Pieces whose fills meet in the middle have no center piece.
 - Size factors match Celestial Sakura's look: a Name Backing's plain band is 40 px around the

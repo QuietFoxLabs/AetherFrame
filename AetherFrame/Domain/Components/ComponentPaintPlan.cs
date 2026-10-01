@@ -270,27 +270,30 @@ public static class ComponentPaintPlan
             AddBand(output, nameBand, Pad(region, unit), 0f, canvasWidth);
         }
 
-        // Plate Frame artwork paints just before the first text, above every picture under it and
-        // below every text: an ornate frame reaching in from the edge never covers the name.
+        // Plate Frame artwork paints just before the first text: over the portrait and its frame, so
+        // the picture never cuts off a frame's corner (the preview cards draw it so), and under every
+        // text, so an ornate frame reaching in from the edge never covers the name. The Basic portrait
+        // is added after the starter text, so it is stacked above that text: while a frame paints,
+        // the portrait and its frame paint just before the first text instead. Nothing else moves.
         var artFramesPainted = artFrameBand.Count == 0;
+        var portraitUnderFrame = !artFramesPainted && portraitElement is not null && Contains(drawnElements, portraitElement);
+        var portraitPainted = false;
         foreach (var element in drawnElements)
         {
             if (!artFramesPainted && element is TextProfileElement)
             {
+                if (portraitUnderFrame && !portraitPainted)
+                {
+                    Paint(portraitElement!);
+                }
+
                 AddFrames(output, artFrameBand, profile, unit);
                 artFramesPainted = true;
             }
 
-            if (ReferenceEquals(element, firstIdentity) && nameBand.Count > 0 && drawnIdentity is { } identityRect)
+            if (!(portraitPainted && ReferenceEquals(element, portraitElement)))
             {
-                AddBand(output, nameBand, Pad(identityRect, unit), 0f, canvasWidth);
-            }
-
-            output.Add(ElementStep(element));
-
-            if (ReferenceEquals(element, portraitElement) && portraitBand.Count > 0)
-            {
-                AddBand(output, portraitBand, new ElementRect(element.Position, element.Size), RotationGeometry.GetRotationDegrees(element), canvasWidth);
+                Paint(element);
             }
         }
 
@@ -338,6 +341,40 @@ public static class ComponentPaintPlan
         }
 
         AddFrames(output, frameBand, profile, unit);
+
+        // One element, with the bands that go with it: the name backing just before the first
+        // identity element, the portrait's frame and overlay just after the portrait.
+        void Paint(ProfileElement element)
+        {
+            if (ReferenceEquals(element, firstIdentity) && nameBand.Count > 0 && drawnIdentity is { } identityRect)
+            {
+                AddBand(output, nameBand, Pad(identityRect, unit), 0f, canvasWidth);
+            }
+
+            output.Add(ElementStep(element));
+
+            if (ReferenceEquals(element, portraitElement))
+            {
+                portraitPainted = true;
+                if (portraitBand.Count > 0)
+                {
+                    AddBand(output, portraitBand, new ElementRect(element.Position, element.Size), RotationGeometry.GetRotationDegrees(element), canvasWidth);
+                }
+            }
+        }
+    }
+
+    private static bool Contains(IReadOnlyList<ProfileElement> elements, ProfileElement element)
+    {
+        foreach (var candidate in elements)
+        {
+            if (ReferenceEquals(candidate, element))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Section Header padding around a heading's text for a header backing, in reference pixels.</summary>

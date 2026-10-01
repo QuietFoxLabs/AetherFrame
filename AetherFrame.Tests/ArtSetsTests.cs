@@ -4,11 +4,14 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Components;
+using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
+using AetherFrame.Persistence;
 using AetherFrame.UI.Editor;
 using Xunit;
 
@@ -228,6 +231,33 @@ public class ArtSetsTests
         Assert.Same(line, plan[^1].Component);
     }
 
+    /// <summary>
+    /// A Plate made the way the Basic editor makes it: the portrait is added after the starter text,
+    /// so it is stacked above that text. Plate Frame artwork still paints over the portrait and its
+    /// frame, as the preview cards draw it, and under every text and the name plaque.
+    /// </summary>
+    [Fact]
+    public void OnARealPlate_PlateFrameArtwork_PaintsOverThePortraitAndItsFrame_UnderEveryText()
+    {
+        var document = PlateFactory.Create(PlateStartingLayout.AdventurePlateClassic, Guid.NewGuid(), "Style", ComponentDocuments.Now, new PlateStarterContent(FakeCharacter.Hero));
+        var portrait = BasicDocuments.Editor(document).CreatePortrait(Guid.NewGuid());
+        Assert.All(document.Elements.OfType<TextProfileElement>(), text => Assert.True(text.ZIndex < portrait.ZIndex));
+        document.Components = Style("allagan-tech").Components.Select(id => ComponentDocuments.Of(id)).ToList();
+
+        var plan = ComponentDocuments.Plan(document);
+        var frame = plan.FindIndex(s => s.Component?.Kind == PlateComponentKind.PlateFrame);
+        Assert.Single(plan, s => ReferenceEquals(s.Element, portrait));
+        Assert.True(plan.FindIndex(s => ReferenceEquals(s.Element, portrait)) < frame, "over the portrait");
+        Assert.True(plan.FindIndex(s => s.Component?.Kind == PlateComponentKind.PortraitFrame) < frame, "over the portrait's frame");
+        Assert.True(frame < plan.FindIndex(s => s.Component?.Kind == PlateComponentKind.NameBacking), "under the name plaque");
+        Assert.True(frame < plan.FindIndex(s => s.Element is TextProfileElement), "under every text");
+
+        // Without Plate Frame artwork, the portrait keeps its place in the stack.
+        document.Components.RemoveAll(c => c.Kind == PlateComponentKind.PlateFrame);
+        var unframed = ComponentDocuments.Plan(document);
+        Assert.True(unframed.FindIndex(s => ReferenceEquals(s.Element, portrait)) > unframed.FindLastIndex(s => s.Element is TextProfileElement));
+    }
+
     [Fact]
     public void PlateFrameArtwork_OnAPlateWithoutText_PaintsOnTop()
     {
@@ -262,6 +292,33 @@ public class ArtSetsTests
 
         harness.Session.Undo();
         Assert.Equal(before, harness.Json());
+    }
+
+    /// <summary>
+    /// A style's background artwork covers the Plate's own background. It is a Basic slot like every
+    /// other piece: taking it away is one undo step, leaves the style and its other pieces, and shows
+    /// the Plate's own background, which the artwork never changed.
+    /// </summary>
+    [Fact]
+    public async Task AStylesBackground_IsABasicSlot_AndTakingItAway_ShowsThePlatesOwnBackground()
+    {
+        using var harness = await BasicHarness.NewClassicAsync();
+        var style = Style("allagan-tech");
+        harness.Basic.ApplyTheme(style);
+        var artwork = style.Components.Single(id => BuiltInComponentCatalog.Find(id)!.Kind == PlateComponentKind.Background);
+        Assert.Equal(artwork, PlateComponentEditor.FindSlot(harness.Document, PlateComponentKind.Background)!.DefinitionId);
+        var background = JsonSerializer.Serialize(harness.Document.Background, JsonOptions.Default);
+        var withArtwork = harness.Json();
+
+        harness.Session.SetComponentSlot(PlateComponentKind.Background, null);
+
+        Assert.Null(PlateComponentEditor.FindSlot(harness.Document, PlateComponentKind.Background));
+        Assert.All(SevenKinds.Where(k => k != PlateComponentKind.Background), kind => Assert.NotNull(PlateComponentEditor.FindSlot(harness.Document, kind)));
+        Assert.Equal(style.Id, harness.Document.BasicPlate!.ThemeId);
+        Assert.Equal(background, JsonSerializer.Serialize(harness.Document.Background, JsonOptions.Default));
+
+        harness.Session.Undo();
+        Assert.Equal(withArtwork, harness.Json());
     }
 
     [Fact]

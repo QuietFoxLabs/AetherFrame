@@ -44,6 +44,8 @@ public sealed record ProfileThemePreset(
     /// theme (Monochrome, bright vivid gradients), and never a dark or muddy ink — on light themes a
     /// vivid mid-tone. A restrained dark outline (<see cref="NameOutlineColor"/>) keeps every one
     /// readable over light or dark backgrounds, gradients, patterns, images and Name Backings.
+    /// Art Styles are the exception: their name sits on the style's own plaque, so it takes the ink
+    /// that contrasts most with that plaque, a dark one on a light plaque (see <c>ArtSets</c>).
     /// Null only for a theme without a name treatment, which falls back to <see cref="TextColor"/>.
     /// </summary>
     public Vector4? NameColor { get; init; }

@@ -171,16 +171,16 @@ public class CelestialSakuraTests(ITestOutputHelper output)
     public void BasicSlots_OfferThePieces_WhoseKindHasASlot()
     {
         var document = ComponentDocuments.WithAnchors();
-        foreach (var (definitionId, _, kind, _, _, _, _) in Family.Where(f => f.Kind != PlateComponentKind.Background))
+        foreach (var (definitionId, _, kind, _, _, _, _) in Family)
         {
             Assert.Contains(kind, PlateComponentEditor.BasicSlots.Concat(PlateComponentEditor.BasicDecorations));
             Assert.True(PlateComponentEditor.SetSlot(document, kind, definitionId, BuiltInComponentCatalog.Instance) || PlateComponentEditor.FindSlot(document, kind)!.DefinitionId == definitionId);
             Assert.Equal(definitionId, PlateComponentEditor.FindSlot(document, kind)!.DefinitionId);
         }
 
-        // Background has no Basic slot: it is added in the Advanced editor, listed first.
-        Assert.DoesNotContain(PlateComponentKind.Background, PlateComponentEditor.BasicSlots.Concat(PlateComponentEditor.BasicDecorations));
-        Assert.Equal([PlateComponentKind.Background], PlateComponentEditor.AdvancedOnlyKinds);
+        // Background is a Basic slot too (an Art Style's background can be changed or taken away
+        // in Basic), listed first, as the Advanced editor lists it.
+        Assert.Equal(PlateComponentKind.Background, PlateComponentEditor.BasicSlots[0]);
         Assert.Equal("Background", PlateComponentEditor.KindLabel(PlateComponentKind.Background));
         Assert.Equal(BuiltInComponentCatalog.BackgroundCelestialSakura, BuiltInComponentCatalog.OfKind(PlateComponentKind.Background).First().Id); // then the art sets'
     }
