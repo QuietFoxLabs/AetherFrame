@@ -36,8 +36,9 @@ internal sealed partial class BasicProfileEditorWindow
     // Only the one-line layouts are offered (BasicIdentitySession.IsOffered): a title above or below
     // the name (Classic, Subtitle) looked unbalanced and made a Name Backing twice as tall, and Badge
     // and Accent were retired before them. The enum values, their look, and IdentityHeaderRules'
-    // revert/legacy logic all stay: a Plate saved with any of them opens unchanged, keeps rendering
-    // exactly as it did, and is only ever changed by an explicit pick of a layout offered here.
+    // revert/legacy logic all stay: a Plate saved with any of them opens unchanged, and a title it
+    // shows keeps rendering exactly as it did until a layout offered here is picked. A title turned
+    // on while none is shown goes on the name's line (BasicIdentitySession.IsOffered).
     private static readonly (IdentityTitleLayout Layout, string Label, string Tooltip)[] TitleLayouts =
     [
         (IdentityTitleLayout.InlineBefore, "Inline Before", "Title, then the character name, on one line"),
@@ -219,7 +220,7 @@ internal sealed partial class BasicProfileEditorWindow
         var current = BasicIdentitySession.GetLayout(profile);
         var customized = BasicIdentitySession.IsCustomized(profile);
 
-        if (!customized && !BasicIdentitySession.IsOffered(current))
+        if (!customized && !BasicIdentitySession.IsOffered(current) && BasicIdentitySession.IsTitleShown(profile))
         {
             DrawLegacyLayoutConversion(current, identity);
         }
@@ -264,7 +265,8 @@ internal sealed partial class BasicProfileEditorWindow
         }
 
         var order = BasicIdentitySession.OneLineFor(current) == IdentityTitleLayout.InlineBefore ? "before" : "after";
-        ToolTip($"Puts the title on the name's line, {order} the name, and updates its style to match (undoable).\nUntil you do this, the title keeps looking exactly as it always has.");
+        var look = current is IdentityTitleLayout.Badge or IdentityTitleLayout.Accent ? $", without the {current} look" : string.Empty;
+        ToolTip($"Puts the title on the name's line, {order} the name{look} (undoable).\nUntil you do this, the title keeps looking exactly as it always has.");
     }
 
     /// <summary>The title's prefix/suffix symbols (inside Advanced Styling).</summary>

@@ -185,17 +185,7 @@ internal sealed class BasicIdentitySession
     /// </summary>
     internal void SetLayout(IdentityTitleLayout layout) => Edit(ctx =>
     {
-        var identity = ctx.Identity();
-        var previous = identity.Layout;
-        identity.Layout = layout;
-
-        IdentityHeaderRules.ChangeLayoutLook(
-            identity,
-            Find(ctx.Profile, ProfileElementRole.BasicTitle),
-            previous,
-            layout,
-            Find(ctx.Profile, ProfileElementRole.BasicName)?.FontSize ?? IdentityHeaderRules.ScaledNameSize(ctx.Profile));
-
+        ctx.ChangeLayout(layout);
         ctx.RequestLayout(force: true);
     });
 
@@ -213,9 +203,16 @@ internal sealed class BasicIdentitySession
     /// <summary>
     /// True for the layouts Basic offers: the title on the name's line, before or after it. The others
     /// (the title above or below the name, Badge, Accent) are retired from Basic: a Plate saved with
-    /// one keeps it, and keeps looking exactly as it did, until the player picks an offered layout.
+    /// one keeps it, and a title it shows keeps looking exactly as it did, until the player picks an
+    /// offered layout. A title turned on while none is shown takes the offered layout at once
+    /// (<see cref="OneLineFor"/>), so a new title never appears above or below the name.
     /// </summary>
     internal static bool IsOffered(IdentityTitleLayout layout) => layout is IdentityTitleLayout.InlineBefore or IdentityTitleLayout.InlineAfter;
+
+    /// <summary>True when the Plate shows a title: its element is visible and has text. (FFXIV Title
+    /// chosen as the source, before a title is picked, shows none.)</summary>
+    internal static bool IsTitleShown(ProfileDocument profile) =>
+        Find(profile, ProfileElementRole.BasicTitle) is { Visible: true, Text.Length: > 0 };
 
     /// <summary>The offered layout keeping <paramref name="layout"/>'s order: the title first for one
     /// that shows it before or above the name, the name first for every other.</summary>
@@ -274,6 +271,7 @@ internal sealed class BasicIdentitySession
             title.Text = source == IdentityTitleSource.Custom
                 ? identity.CustomTitle
                 : ResolveGameTitleText(identity.GameTitleId) ?? string.Empty;
+            ctx.PutNewTitleOnOneLine();
         }
 
         ctx.RequestLayout(force: false);
@@ -290,6 +288,7 @@ internal sealed class BasicIdentitySession
         var title = ctx.EnsureElement(ProfileElementRole.BasicTitle);
         title.Visible = true;
         title.Text = gameTitle.GetText(titles.FeminineForms);
+        ctx.PutNewTitleOnOneLine();
         ctx.RequestLayout(force: false);
     });
 
@@ -304,6 +303,7 @@ internal sealed class BasicIdentitySession
         var title = ctx.EnsureElement(ProfileElementRole.BasicTitle);
         title.Visible = true;
         title.Text = value;
+        ctx.PutNewTitleOnOneLine();
         ctx.RequestLayout(force: false);
     });
 
@@ -456,6 +456,7 @@ internal sealed class BasicIdentitySession
     {
         private readonly BasicIdentitySession owner;
         private readonly bool hadNoHeader;
+        private readonly bool titleWasShown;
         private bool layoutRequested;
         private bool forceLayout;
         private bool createdElement;
@@ -468,6 +469,7 @@ internal sealed class BasicIdentitySession
             // Judged BEFORE this edit touches anything, so its own changes can't read as customization.
             WasCustomized = IsCustomized(profile);
             hadNoHeader = HasNoHeader(profile);
+            titleWasShown = IsTitleShown(profile);
         }
 
         internal ProfileDocument Profile { get; }
@@ -492,6 +494,37 @@ internal sealed class BasicIdentitySession
         {
             layoutRequested = true;
             forceLayout |= force;
+        }
+
+        /// <summary>Switches the header to <paramref name="layout"/>: the title swaps the previous
+        /// layout's look for this one's (see <see cref="IdentityHeaderRules.ChangeLayoutLook"/>).</summary>
+        internal void ChangeLayout(IdentityTitleLayout layout)
+        {
+            var identity = Identity();
+            var previous = identity.Layout;
+            identity.Layout = layout;
+
+            IdentityHeaderRules.ChangeLayoutLook(
+                identity,
+                Find(Profile, ProfileElementRole.BasicTitle),
+                previous,
+                layout,
+                Find(Profile, ProfileElementRole.BasicName)?.FontSize ?? IdentityHeaderRules.ScaledNameSize(Profile));
+        }
+
+        /// <summary>
+        /// For a title this edit turns on while none was shown, under a layout Basic no longer offers
+        /// (most Plates saved before have Subtitle and no title): the one-line layout keeping the old
+        /// layout's order, as Put on One Line does, in this same undo step. Nothing shown moves, since
+        /// no title was shown. A title already shown above or below keeps its place.
+        /// </summary>
+        internal void PutNewTitleOnOneLine()
+        {
+            var layout = Identity().Layout;
+            if (!titleWasShown && !IsOffered(layout))
+            {
+                ChangeLayout(OneLineFor(layout));
+            }
         }
 
         /// <summary>The element for <paramref name="role"/>, created with Identity defaults if missing.</summary>
