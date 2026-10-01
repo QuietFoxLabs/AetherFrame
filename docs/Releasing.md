@@ -15,7 +15,7 @@ Testers follow [Testing](Testing.md).
 ## Making a release
 
 1. Finish the milestone on `master` as [Versioning](Versioning.md) describes, with `Version.props` set to the new version.
-2. Move the `## [Unreleased]` notes in [CHANGELOG.md](../CHANGELOG.md) under `## [<version>] - <date>` and add its compare link. The release fails without that section.
+2. Move the `## [Unreleased]` notes in [CHANGELOG.md](../CHANGELOG.md) under `## [<version>] - <date>` and add its compare link. The release fails without that section, or with one over 16,384 characters (Dalamud's limit for the repository's changelog). Notes about code the release doesn't carry, such as the networking preview flavour's, can stay under `[Unreleased]`, as 0.1.7's did.
 3. Regenerate the dry-run repository fixture for the new version and commit it with steps 1 and 2 ([command](../distribution/dry-run/README.md#regenerating)). The tooling tests fail while `distribution/dry-run/pluginmaster.json` describes another version or another CHANGELOG text, so the Build workflow and a tagged Release would fail without it, and a tag is never moved.
 4. Optional dry run: **Actions → Release → Run workflow** on `master`. It builds, tests and checks the package and keeps it as a workflow artifact, without creating a release.
 5. Tag and push the tag (only after the Build workflow passed on that commit):
