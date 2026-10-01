@@ -134,6 +134,31 @@ class Face:
         return (x1 - x0 + 1) * (y1 - y0 + 1)
 
 
+def copyright_of(path):
+    """The font's copyright notice (name ID 0), as its own name table records it."""
+    data = open(path, "rb").read()
+    (num_tables,) = struct.unpack(">H", data[4:6])
+    name = None
+    for i in range(num_tables):
+        record = 12 + 16 * i
+        if data[record:record + 4] == b"name":
+            (name,) = struct.unpack(">I", data[record + 8:record + 12])
+    if name is None:
+        return ""
+    count, strings = struct.unpack(">HH", data[name + 2:name + 6])
+    found = {}
+    for i in range(count):
+        platform, encoding, language, name_id, length, offset = struct.unpack(">HHHHHH", data[name + 6 + 12 * i:name + 18 + 12 * i])
+        if name_id != 0:
+            continue
+        raw = data[name + strings + offset:name + strings + offset + length]
+        if platform == 3 and encoding in (1, 10):
+            found.setdefault("windows", raw.decode("utf-16-be", errors="replace"))
+        elif platform == 1 and encoding == 0:
+            found.setdefault("mac", raw.decode("mac_roman", errors="replace"))
+    return (found.get("windows") or found.get("mac") or "").strip()
+
+
 def measure(face, fallback):
     """The glyphs a tier rasterizes, and its surface at each ladder size."""
     added = [c for c, _ in fallback.map.items() if in_fallback(c) and c not in face.map]
@@ -205,6 +230,10 @@ def main():
         notices.append("=" * 78)
         notices.append(f"{family['name']} ({', '.join(styles)}), {family['license'].upper()}: {family['licenseSource']}")
         notices.append("=" * 78)
+        notice = copyright_of(os.path.join(LIBRARY, f"{family['prefix']}-Regular.ttf"))
+        if notice:
+            notices.append(notice)
+            notices.append("")
         with open(os.path.join(LICENSES_IN, family["prefix"] + ".txt"), encoding="utf-8", errors="replace") as source:
             notices.append(source.read().replace("\r\n", "\n").strip())
         notices.append("")

@@ -168,6 +168,51 @@ public partial class FontLibraryTests
         }
     }
 
+    [Fact]
+    public void ARequestIsKeyed_ByTheFaceItDrawsWith_SoItsFallbackIsThatFacesStyle()
+    {
+        // A family with Bold and Italic but no Bold Italic draws Bold+Italic upright Bold: the handle
+        // is Bold's, and so is its merged AetherFrame Sans (FontLibraryTests measures each face with
+        // Sans of its own style).
+        var noBoldItalic = FontLibrary.Families.Where(family => family.HasBold && family.HasItalic && !family.HasBoldItalic).ToList();
+        Assert.NotEmpty(noBoldItalic);
+        foreach (var family in noBoldItalic)
+        {
+            Assert.Equal((true, false), FontLibrary.EffectiveStyle(family.Id, true, true, true, true));
+        }
+
+        var cinzel = FontLibrary.Find("gf-cinzel")!;
+        Assert.Equal((false, false), FontLibrary.EffectiveStyle(cinzel.Id, false, true, cinzel.HasBold, cinzel.HasItalic));
+        Assert.Equal((true, false), FontLibrary.EffectiveStyle(cinzel.Id, true, true, cinzel.HasBold, cinzel.HasItalic));
+
+        // AetherFrame's own families and Dalamud Default keep their rule.
+        Assert.Equal((true, true), FontLibrary.EffectiveStyle(ProfileFontFamilies.AetherFrameSans, true, true, true, true));
+        Assert.Equal((false, false), FontLibrary.EffectiveStyle(ProfileFontFamilies.DalamudDefault, true, true, false, false));
+    }
+
+    [Fact]
+    public void EveryFamilysNotice_CarriesItsCopyright()
+    {
+        // Apache's section 4 and the OFL both travel with the copyright notice: each family's
+        // section names it, from the font's own name table, before its licence text.
+        var notices = File.ReadAllText(Path.Combine(LibraryDirectory, "THIRD-PARTY-FONT-LICENSES.txt")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var rule = new string('=', 78);
+        foreach (var family in FontLibrary.Families)
+        {
+            var header = notices.IndexOf(family.DisplayName + " (", StringComparison.Ordinal);
+            Assert.True(header >= 0, family.DisplayName);
+            var body = notices.IndexOf(rule, header, StringComparison.Ordinal) + rule.Length;
+            var next = notices.IndexOf(rule, body, StringComparison.Ordinal);
+            var section = notices[body..(next < 0 ? notices.Length : next)];
+            // What comes before the licence's own text: the font's notice, and an OFL file's own
+            // copyright line (some fonts' name tables give only the designer).
+            var licenceStart = new[] { "Apache License", "This Font Software is licensed" }
+                .Select(title => section.IndexOf(title, StringComparison.Ordinal)).Where(at => at >= 0).DefaultIfEmpty(section.Length).Min();
+            var preamble = section[..licenceStart];
+            Assert.True(preamble.Contains("opyright", StringComparison.OrdinalIgnoreCase) || preamble.Contains((char)0xA9) || preamble.Contains("(c)", StringComparison.OrdinalIgnoreCase), $"{family.DisplayName}: {preamble.Trim()}");
+        }
+    }
+
     private static IEnumerable<string> Styles(LibraryFontFamily family)
     {
         yield return "Regular";

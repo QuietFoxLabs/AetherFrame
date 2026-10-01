@@ -7,6 +7,8 @@ Alegreya (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent
 ==============================================================================
 Copyright 2011 The Alegreya Project Authors (https://github.com/huertatipografica/Alegreya)
 
+Copyright 2011 The Alegreya Project Authors (https://github.com/huertatipografica/Alegreya)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -102,6 +104,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Almendra (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/almendra/OFL.txt
 ==============================================================================
+Copyright (c) 2011-2012, Ana Sanfelippo (anasanfe@gmail.com), with Reserved Font Name 'Almendra'
+
 Copyright (c) 2011-2012, Ana Sanfelippo (anasanfe@gmail.com), with Reserved Font Name 'Almendra'
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -201,6 +205,8 @@ Cinzel (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main
 ==============================================================================
 Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)
 
+Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -296,6 +302,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Cinzel Decorative (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/cinzeldecorative/OFL.txt
 ==============================================================================
+Copyright © 2012 Natanael Gama (info@ndiscovered.com), with Reserved Font Name 'Cinzel'
+
 Copyright (c) 2012 Natanael Gama (info@ndiscovered.com), with Reserved Font Name 'Cinzel'
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -393,6 +401,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Eagle Lake (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/eaglelake/OFL.txt
 ==============================================================================
+Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Eagle Lake"
+
 Copyright (c) 2012, Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Names "Eagle Lake"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -490,6 +500,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Fondamento (Regular, Italic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/fondamento/OFL.txt
 ==============================================================================
+Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Fondamento"
+
 Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI) 
 (astigma@astigmatic.com), with Reserved Font Names "Fondamento" and 
 "Fondamento Italic"
@@ -589,6 +601,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Germania One (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/germaniaone/OFL.txt
 ==============================================================================
+Copyright (c) 2011 by John Vargas Beltran (john.vargasbeltran@gmail.com), with Reserved Font Name "Germania One"
+
 Copyright (c) 2011, John Vargas Beltr�n (www.johnvargasbeltran.com|john.vargasbeltran@gmail.com),
 with Reserved Font Name "Germania".
 
@@ -689,6 +703,8 @@ Grenze Gotisch (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fo
 ==============================================================================
 Copyright 2020 The Grenze Gotisch Project Authors (https://github.com/Omnibus-Type/Grenze-Gotisch)
 
+Copyright 2020 The Grenze Gotisch Project Authors (https://github.com/Omnibus-Type/Grenze-Gotisch)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -784,6 +800,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 IM Fell DW Pica (Regular, Italic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/imfelldwpica/OFL.txt
 ==============================================================================
+© 2007 Igino Marini (www.iginomarini.com) With Reserved Font Name IM FELL DW Pica Roman
+
 Copyright (c) 2010, Igino Marini (mail@iginomarini.com)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -881,6 +899,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 IM Fell English (Regular, Italic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/imfellenglish/OFL.txt
 ==============================================================================
+© 2007 Igino Marini (www.iginomarini.com) With Reserved Font Name IM FELL English Roman
+
 Copyright (c) 2010, Igino Marini (mail@iginomarini.com)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -978,6 +998,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Macondo (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/macondo/OFL.txt
 ==============================================================================
+Copyright (c) 1997 - 2011, John Vargas Beltran. (www.johnvargasbeltran.com|john.vargasbeltran@gmail.com), with Reserved Font Name "Macondo"
+
 Copyright � 1997 - 2011, John Vargas Beltr�n (www.johnvargasbeltran.com|john.vargasbeltran@gmail.com),
 with Reserved Font Name Macondo.
 
@@ -1076,6 +1098,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Marcellus (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/marcellus/OFL.txt
 ==============================================================================
+Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Marcellus"
+
 Copyright (c) 2012, Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Names "Marcellus"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -1173,6 +1197,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Marcellus SC (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/marcellussc/OFL.txt
 ==============================================================================
+Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Marcellus"
+
 Copyright (c) 2012, Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Names "Marcellus"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -1270,6 +1296,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 MedievalSharp (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/medievalsharp/OFL.txt
 ==============================================================================
+wmk69
+SIL Open Font License v.1.1
+
 Copyright (c) 2011, wmk69 (wmk69@o2.pl),
 with Reserved Font Name MedievalSharp.
 
@@ -1379,6 +1408,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Metamorphous (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/metamorphous/OFL.txt
 ==============================================================================
+Copyright (c) 2011, Sorkin Type Co (www.sorkintype.com)with Reserved Font Name "Metamorphous".
+
 Copyright (c) 2011-2012 by Sorkin Type Co (www.sorkintype.com),
 with Reserved Font Name "Metamorphous".
 
@@ -1477,6 +1508,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 New Rocker (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/newrocker/OFL.txt
 ==============================================================================
+Copyright (c) 2012, Pablo Impallari (www.impallari.com|impallari@gmail.com), Copyright (c) 2012, Brenda Gallo (gbrenda1987@gmail.com), Copyright (c) 2012, Rodrigo Fuenzalida (www.rfuenzalida.com|hello@rfuenzalida.com), with Reserved Font Name 'New Rocker'
+
 Copyright (c) 2011, Pablo Impallari (www.impallari.com|impallari@gmail.com),
 Copyright (c) 2011, Brenda Gallo (gbrenda1987@gmail.com),
 Copyright (c) 2011, Rodrigo Fuenzalida (www.rfuenzalida.com|hello@rfuenzalida.com), 
@@ -1579,6 +1612,8 @@ Philosopher (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercont
 ==============================================================================
 Copyright 2011 The Philosopher Project Authors (https://github.com/alexeiva/philosopher)
 
+Copyright 2011 The Philosopher Project Authors (https://github.com/alexeiva/philosopher)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org
@@ -1674,6 +1709,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Pirata One (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/pirataone/OFL.txt
 ==============================================================================
+Copyright (c) 2012, Rodrigo Fuenzalida, Nicolas Massi (www.taip.com.ar / abc.taip.com.ar), with Reserved Font Name 'Pirata'
+
 Copyright (c) 2012, Rodrigo Fuenzalida, Nicolas Massi (www.taip.com.ar / abc.taip.com.ar), with Reserved Font Name 'Pirata'
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -1773,6 +1810,8 @@ Texturina (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubuserconten
 ==============================================================================
 Copyright 2020 The Texturina Project Authors (https://github.com/Omnibus-Type/Texturina)
 
+Copyright 2020 The Texturina Project Authors (https://github.com/Omnibus-Type/Texturina)
+
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
@@ -1869,6 +1908,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Uncial Antiqua (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/uncialantiqua/OFL.txt
 ==============================================================================
+Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Uncial Antiqua"
+
 Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI)
 (astigma@astigmatic.com), with Reserved Font Names "Uncial Antiqua"
 
@@ -1967,6 +2008,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 UnifrakturCook (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/unifrakturcook/OFL.txt
 ==============================================================================
+Copyright (c) 2010 j. 'mach' wust with Reserved Font Name UnifrakturCook.
+Copyright (c) 2009 Peter Wiegel.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
 Copyright (c) 2010, j. 'mach' wust, with Reserved Font Name UnifrakturCook.
 Copyright (c) 2009, Peter Wiegel.
 
@@ -2065,6 +2111,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 UnifrakturMaguntia (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/unifrakturmaguntia/OFL.txt
 ==============================================================================
+Copyright (c) 2010 j. 'mach' wust with Reserved Font Name UnifrakturMaguntia.
+Copyright (c) 2009 Peter Wiegel.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
 Copyright (c) 2010, j. 'mach' wust, with Reserved Font Name UnifrakturMaguntia.
 Copyright (c) 2009, Peter Wiegel.
 
@@ -2165,6 +2216,8 @@ Alex Brush (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/o
 ==============================================================================
 Copyright 2011 The Alex Brush Project Authors (https://github.com/googlefonts/alex-brush)
 
+Copyright 2011 The Alex Brush Project Authors (https://github.com/googlefonts/alex-brush)
+
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
@@ -2261,6 +2314,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Allura (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/allura/OFL.txt
 ==============================================================================
+Copyright 2010 The Allura Project Authors (https://github.com/googlefonts/allura)
+
 Copyright 2010 The Allura Project Authors (https://github.com/googlefonts/allura)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -2360,6 +2415,8 @@ Amatic SC (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/m
 ==============================================================================
 Copyright 2015 The Amatic SC Project Authors (https://github.com/googlefonts/AmaticSC)
 
+Copyright 2015 The Amatic SC Project Authors (https://github.com/googlefonts/AmaticSC)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -2457,6 +2514,8 @@ Caveat (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main
 ==============================================================================
 Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)
 
+Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -2552,6 +2611,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Cookie (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/cookie/OFL.txt
 ==============================================================================
+Copyright (c) 2011 by Ania Kruk (hello@aniakruk.com), with Reserved Font Name Cookie.
+
 Copyright (c) 2011 by Ania Kruk (hello@aniakruk.com), 
 with Reserved Font Name "Cookie".
 
@@ -2650,6 +2711,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Courgette (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/courgette/OFL.txt
 ==============================================================================
+Copyright (c) 2012, Sorkin Type Co (www.sorkintype.com) with Reserved Font Name "Courgette".
+
 Copyright (c) 2012 by Sorkin Type Co (www.sorkintype.com), with Reserved Font Name "Courgette".
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -2747,6 +2810,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Dancing Script (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/dancingscript/OFL.txt
 ==============================================================================
+Copyright 2016 The Dancing Script Project Authors (https://github.com/googlefonts/DancingScript), with Reserved Font Name "Dancing Script".
+
 Copyright 2016 The Dancing Script Project Authors (https://github.com/googlefonts/DancingScript), with Reserved Font Name 'Dancing Script'.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -2844,6 +2909,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Great Vibes (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/greatvibes/OFL.txt
 ==============================================================================
+Copyright 2010 The Great Vibes Pro Project Authors (https://github.com/googlefonts/great-vibes)
+
 Copyright 2015 The Great Vibes Pro Project Authors (https://github.com/googlefonts/great-vibes)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -2941,6 +3008,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Homemade Apple (Regular), APACHE: https://raw.githubusercontent.com/google/fonts/main/apache/homemadeapple/LICENSE.txt
 ==============================================================================
+Copyright (c) 2010 by Font Diner, Inc. All rights reserved.
+
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -3146,6 +3215,8 @@ Apache License
 ==============================================================================
 Indie Flower (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/indieflower/OFL.txt
 ==============================================================================
+Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+
 Copyright 2010 The Indie Flower Authors (kimberlygeswein.com),
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -3245,6 +3316,8 @@ Italianno (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/of
 ==============================================================================
 Copyright 2009 The Italianno Project Authors (https://github.com/googlefonts/italianno)
 
+Copyright 2009 The Italianno Project Authors (https://github.com/googlefonts/italianno)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://scripts.sil.org/OFL
@@ -3339,6 +3412,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Kalam (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/kalam/OFL.txt
 ==============================================================================
+Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)
+
 Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -3436,6 +3511,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Kaushan Script (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/kaushanscript/OFL.txt
 ==============================================================================
+Copyright (c) 2011, Pablo Impallari (www.impallari.com|impallari@gmail.com),Copyright (c) 2011, Igino Marini. (www.ikern.com|mail@iginomarini.com),with Reserved Font Name Kaushan Script.
+
 Copyright (c) 2011, Pablo Impallari (www.impallari.com|impallari@gmail.com),
 Copyright (c) 2011, Igino Marini. (www.ikern.com|mail@iginomarini.com),
 with Reserved Font Name Kaushan Script.
@@ -3537,6 +3614,8 @@ Lobster (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/
 ==============================================================================
 Copyright 2010 The Lobster Project Authors (https://github.com/impallari/The-Lobster-Font), with Reserved Font Name "Lobster".
 
+Copyright 2010 The Lobster Project Authors (https://github.com/impallari/The-Lobster-Font), with Reserved Font Name "Lobster".
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -3632,6 +3711,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Marck Script (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/marckscript/OFL.txt
 ==============================================================================
+Copyright (c) 2011, Denis Masharov <denis.masharov@gmail.com>, Marck Fogel, with Reserved Font Names "Marck Script".
+
 Copyright (c) 2011, Denis Masharov <denis.masharov@gmail.com> & Marck Fogel,
 with Reserved Font Name "Marck Script".
 
@@ -3732,6 +3813,8 @@ Pacifico (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl
 ==============================================================================
 Copyright 2018 The Pacifico Project Authors (https://github.com/googlefonts/Pacifico)
 
+Copyright 2018 The Pacifico Project Authors (https://github.com/googlefonts/Pacifico)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -3827,6 +3910,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Parisienne (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/parisienne/OFL.txt
 ==============================================================================
+Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Parisienne"
+
 Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI)
 (astigma@astigmatic.com), with Reserved Font Names "Parisienne"
 
@@ -3925,6 +4010,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Patrick Hand (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/patrickhand/OFL.txt
 ==============================================================================
+Copyright (c) 2012 Patrick Wagesreiter (mail@patrickwagesreiter.at)
+
 Copyright (c) 2010-2012 Patrick Wagesreiter (mail@patrickwagesreiter.at)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -4022,6 +4109,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Pinyon Script (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/pinyonscript/OFL.txt
 ==============================================================================
+Copyright 2022 The PinyonScript Project Authors (https://github.com/SorkinType/Pinyon)
+
 Copyright 2024 The Pinyon Project Authors (https://github.com/SorkinType/Pinyon)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -4119,6 +4208,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Rouge Script (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/rougescript/OFL.txt
 ==============================================================================
+Copyright (c) 2011 Typesenses (typesenses@live.com.ar), with Reserved Font Name "Rouge Script"
+
 Copyright (c) 2011 Typesenses (typesenses@live.com.ar), 
 with Reserved Font Name "Rouge Script"
 
@@ -4217,6 +4308,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Sacramento (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/sacramento/OFL.txt
 ==============================================================================
+Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Sacramento"
+
 Copyright (c) 2012, Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Names 'Sacramento'
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -4314,6 +4407,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Satisfy (Regular), APACHE: https://raw.githubusercontent.com/google/fonts/main/apache/satisfy/LICENSE.txt
 ==============================================================================
+Copyright (c) 2011 by Font Diner, Inc. All rights reserved.
+
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -4521,6 +4616,8 @@ Shadows Into Light (Regular), OFL: https://raw.githubusercontent.com/google/font
 ==============================================================================
 Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
 
+Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -4616,6 +4713,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Tangerine (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/tangerine/OFL.txt
 ==============================================================================
+Copyright (c) 2010 by Toshi Omagari. All rights reserved.
+
 Copyright (c) 2010, Toshi Omagari (tosche@mac.com)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -4713,6 +4812,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Yellowtail (Regular), APACHE: https://raw.githubusercontent.com/google/fonts/main/apache/yellowtail/LICENSE.txt
 ==============================================================================
+Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence.
+http://www.apache.org/licenses/LICENSE-2.0.html
+
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -4920,6 +5022,8 @@ Bodoni Moda (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercont
 ==============================================================================
 Copyright 2020 The Bodoni Moda Project Authors (https://github.com/indestructible-type/Bodoni)
 
+Copyright 2020 The Bodoni Moda Project Authors (https://github.com/indestructible-type/Bodoni)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org/
@@ -5017,6 +5121,8 @@ Cardo (Regular, Bold, Italic), OFL: https://raw.githubusercontent.com/google/fon
 ==============================================================================
 Copyright (c) 2002-2011, David J. Perry (hospes02@scholarsfonts.net)
 
+Copyright (c) 2002-2011, David J. Perry (hospes02@scholarsfonts.net)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -5112,6 +5218,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Cormorant (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/cormorant/OFL.txt
 ==============================================================================
+Copyright 2015 The Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)
+
 Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -5209,6 +5317,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Cormorant Garamond (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/OFL.txt
 ==============================================================================
+Copyright 2015 The Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)
+
 Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -5308,6 +5418,8 @@ Crimson Text (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercon
 ==============================================================================
 Copyright 2010 The Crimson Text Project Authors (https://github.com/googlefonts/Crimson)
 
+Copyright 2010 The Crimson Text Project Authors (https://github.com/googlefonts/Crimson)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://scripts.sil.org/OFL
@@ -5403,6 +5515,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Della Respira (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/dellarespira/OFL.txt
 ==============================================================================
+Copyright (c) 2011-2012, Nathan Willis (nwillis@glyphography.com), with Reserved Font Names "Della Respira"
+
 Copyright (c) 2011-2012, Nathan Willis (nwillis@glyphography.com), with Reserved Font Names "Della Respira"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -5502,6 +5616,8 @@ EB Garamond (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercont
 ==============================================================================
 Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12)
 
+Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org
@@ -5599,6 +5715,8 @@ Gilda Display (Regular), OFL: https://raw.githubusercontent.com/google/fonts/mai
 ==============================================================================
 Copyright 2012 The Gilda Display Project Authors (https://github.com/etunni/gilda-display) with Reserved Font Name 'Gilda'.
 
+Copyright 2012 The Gilda Display Project Authors (https://github.com/etunni/gilda-display) with Reserved Font Name 'Gilda'.
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://scripts.sil.org/OFL
@@ -5694,6 +5812,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Libre Baskerville (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/OFL.txt
 ==============================================================================
+Copyright 2012 The Libre Baskerville Project Authors (https://github.com/impallari/Libre-Baskerville)
+
 Copyright 2012 The Libre Baskerville Project Authors (https://github.com/impallari/Libre-Baskerville) with Reserved Font Name Libre Baskerville.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -5793,6 +5913,8 @@ Lora (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com
 ==============================================================================
 Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora".
 
+Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora".
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://scripts.sil.org/OFL
@@ -5888,6 +6010,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Merriweather (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/OFL.txt
 ==============================================================================
+Copyright 2024 The Merriweather Project Authors (https://github.com/EbenSorkin/Merriweather4) with Reserved Font Name "Merriweather".
+
 Copyright 2020 The Merriweather Project Authors (https://github.com/EbenSorkin/Merriweather4) with Reserved Font Name "Merriweather".
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -5987,6 +6111,8 @@ Old Standard TT (Regular, Bold, Italic), OFL: https://raw.githubusercontent.com/
 ==============================================================================
 Copyright 2011 The Old Standard Project Authors (amkryukov@gmail.com)
 
+Copyright 2011 The Old Standard Project Authors (amkryukov@gmail.com)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -6082,6 +6208,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Playfair Display (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/OFL.txt
 ==============================================================================
+Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display".
+
 Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -6179,6 +6307,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Prata (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/prata/OFL.txt
 ==============================================================================
+Copyright 2011 The Prata Project Authors (contact@cyreal.org)
+
 Copyright 2011 The Prata Project Authors (https://github.com/cyrealtype/Prata)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -6278,6 +6408,8 @@ Spectral (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent
 ==============================================================================
 Copyright 2017 The Spectral Project Authors (https://github.com/productiontype/Spectral)
 
+Copyright 2017 The Spectral Project Authors (https://github.com/productiontype/Spectral)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org
@@ -6373,6 +6505,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Comfortaa (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/comfortaa/OFL.txt
 ==============================================================================
+Copyright 2011 The Comfortaa Project Authors (https://github.com/alexeiva/comfortaa), with Reserved Font Name "Comfortaa".
+
 Copyright 2011 The Comfortaa Project Authors (https://github.com/alexeiva/comfortaa), with Reserved Font Name "Comfortaa".
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -6472,6 +6606,8 @@ Exo 2 (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.co
 ==============================================================================
 Copyright 2013 The Exo 2 Project Authors (https://github.com/googlefonts/Exo-2.0)
 
+Copyright 2013 The Exo 2 Project Authors (https://github.com/googlefonts/Exo-2.0)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org
@@ -6567,6 +6703,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Inter (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt
 ==============================================================================
+Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+
 Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -6666,6 +6804,8 @@ Josefin Sans (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercon
 ==============================================================================
 Copyright 2010 The Josefin Sans Project Authors (https://github.com/ThomasJockin/JosefinSansFont-master), with Reserved Font Name "Josefin Sans".
 
+Copyright 2010 The Josefin Sans Project Authors (https://github.com/ThomasJockin/JosefinSansFont-master), with Reserved Font Name "Josefin Sans".
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -6763,6 +6903,8 @@ Kanit (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.co
 ==============================================================================
 Copyright 2020 The Kanit Project Authors (https://github.com/cadsondemak/kanit)
 
+Copyright 2020 The Kanit Project Authors (https://github.com/cadsondemak/kanit)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -6858,6 +7000,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Lato (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/lato/OFL.txt
 ==============================================================================
+Copyright (c) 2010-2011 by tyPoland Lukasz Dziedzic with Reserved Font Name "Lato". Licensed under the SIL Open Font License, Version 1.1.
+
 Copyright (c) 2010-2014 by tyPoland Lukasz Dziedzic (team@latofonts.com) with Reserved Font Name "Lato"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -6955,6 +7099,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Montserrat (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/OFL.txt
 ==============================================================================
+Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)
+
 Copyright 2024 The Montserrat.Git Project Authors (https://github.com/JulietaUla/Montserrat.git)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -7054,6 +7200,8 @@ Nunito (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.c
 ==============================================================================
 Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
 
+Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -7151,6 +7299,8 @@ Open Sans (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubuserconten
 ==============================================================================
 Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
 
+Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://scripts.sil.org/OFL
@@ -7245,6 +7395,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Oswald (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/OFL.txt
 ==============================================================================
+Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)
+
 Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -7344,6 +7496,8 @@ Poppins (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.
 ==============================================================================
 Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)
 
+Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -7439,6 +7593,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Quicksand (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/quicksand/OFL.txt
 ==============================================================================
+Copyright 2019 The Quicksand Project Authors (https://github.com/andrew-paglinawan/QuicksandFamily.git), with Reserved Font Name "Quicksand"
+
 Copyright 2011 The Quicksand Project Authors (https://github.com/andrew-paglinawan/QuicksandFamily), with Reserved Font Name “Quicksand”.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -7536,6 +7692,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Rajdhani (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/rajdhani/OFL.txt
 ==============================================================================
+Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)
+
 Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -7635,6 +7793,8 @@ Raleway (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.
 ==============================================================================
 Copyright 2010 The Raleway Project Authors (impallari@gmail.com), with Reserved Font Name "Raleway".
 
+Copyright 2010 The Raleway Project Authors (impallari@gmail.com), with Reserved Font Name "Raleway".
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -7730,6 +7890,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Source Sans 3 (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/OFL.txt
 ==============================================================================
+© 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’
+
 Copyright 2010-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -7829,6 +7991,8 @@ Work Sans (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubuserconten
 ==============================================================================
 Copyright 2019 The Work Sans Project Authors (https://github.com/weiweihuanghuang/Work-Sans)
 
+Copyright 2019 The Work Sans Project Authors (https://github.com/weiweihuanghuang/Work-Sans)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -7924,6 +8088,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Abril Fatface (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/abrilfatface/OFL.txt
 ==============================================================================
+Copyright (c) 2011, Copyright (c) 2011, TypeTogether (www.type-together.com), with Reserved Font Names "Abril" and "Abril Fatface"
+
 Copyright (c) 2011, TypeTogether (www.type-together.com), 
 with Reserved Font Names "Abril" and "Abril Fatface"
 
@@ -8024,6 +8190,8 @@ Alfa Slab One (Regular), OFL: https://raw.githubusercontent.com/google/fonts/mai
 ==============================================================================
 Copyright 2016 The Alfa Slab One Project Authors (http://www.jmsole.cl | info@jmsole.cl), with Reserved Font Name "Alfa Slab".
 
+Copyright 2016 The Alfa Slab One Project Authors (http://www.jmsole.cl | info@jmsole.cl), with Reserved Font Name "Alfa Slab".
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -8119,6 +8287,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Audiowide (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/audiowide/OFL.txt
 ==============================================================================
+Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Audiowide"
+
 Copyright (c) 2012, Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Names "Audiowide"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -8218,6 +8388,8 @@ Bangers (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/
 ==============================================================================
 Copyright 2010 The Bangers Project Authors (https://github.com/googlefonts/bangers)
 
+Copyright 2010 The Bangers Project Authors (https://github.com/googlefonts/bangers)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://scripts.sil.org/OFL
@@ -8313,6 +8485,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Bebas Neue (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/OFL.txt
 ==============================================================================
+Copyright 2019 The Bebas Neue Project Authors (https://github.com/dharmatype/Bebas-Neue)
+
 Copyright © 2010 by Dharma Type.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -8410,6 +8584,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Black Ops One (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/blackopsone/OFL.txt
 ==============================================================================
+Copyright 2022 The PinyonScript Project Authors (https://github.com/SorkinType/Black-Ops)
+
 Copyright 2022 The Black-Ops Project Authors (https://github.com/googlefonts/googlefonts-project-template)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -8509,6 +8685,8 @@ Bungee (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/b
 ==============================================================================
 Copyright 2023 The Bungee Project Authors (https://github.com/djrrb/Bungee)
 
+Copyright 2023 The Bungee Project Authors (https://github.com/djrrb/Bungee)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org
@@ -8604,6 +8782,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Creepster (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/creepster/OFL.txt
 ==============================================================================
+Copyright (c) 2011, Font Diner, Inc (diner@fontdiner.com), with Reserved Font Names "Creepster"
+
 Copyright (c) 2011, Font Diner, Inc (diner@fontdiner.com),
 with Reserved Font Names "Creepster"
 
@@ -8704,6 +8884,8 @@ Fredoka (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/mai
 ==============================================================================
 Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)
 
+Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -8799,6 +8981,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Lilita One (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/lilitaone/OFL.txt
 ==============================================================================
+Copyright (c) 2011 Juan Montoreano (juan@remolacha.biz), with Reserved Font Names "Lilita One"
+
 Copyright (c) 2011 Juan Montoreano (juan@remolacha.biz), 
 with Reserved Font Name Lilita
 
@@ -8897,6 +9081,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Luckiest Guy (Regular), APACHE: https://raw.githubusercontent.com/google/fonts/main/apache/luckiestguy/LICENSE.txt
 ==============================================================================
+Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence.http://www.apache.org/licenses/LICENSE-2.0.html
+
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -9102,6 +9288,8 @@ Apache License
 ==============================================================================
 Monoton (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/monoton/OFL.txt
 ==============================================================================
+Copyright (c) 2011 by vernon adams. All rights reserved.
+
 Copyright (c) 2011 by vernon adams (vern@newtypography.co.uk),
 with Reserved Font Names "Monoton"
 
@@ -9200,6 +9388,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Orbitron (Regular, Bold), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/orbitron/OFL.txt
 ==============================================================================
+Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron), with Reserved Font Name: "Orbitron".
+
 Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron), with Reserved Font Name: "Orbitron"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -9297,6 +9487,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Permanent Marker (Regular), APACHE: https://raw.githubusercontent.com/google/fonts/main/apache/permanentmarker/LICENSE.txt
 ==============================================================================
+Copyright (c) 2010 by Font Diner, Inc. All rights reserved.
+
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -9502,6 +9694,8 @@ Apache License
 ==============================================================================
 Press Start 2P (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/OFL.txt
 ==============================================================================
+Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
+
 Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P".
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -9599,6 +9793,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Righteous (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/righteous/OFL.txt
 ==============================================================================
+Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with ReservedFont Name "Righteous"
+
 Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI)
 (astigma@astigmatic.com), with Reserved Font Names "Righteous"
 
@@ -9699,6 +9895,8 @@ Russo One (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/of
 ==============================================================================
 Copyright (c) 2011-2012, Jovanny Lemonad (jovanny.ru), with Reserved Font Name "Russo"
 
+Copyright (c) 2011-2012, Jovanny Lemonad (jovanny.ru), with Reserved Font Name "Russo"
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -9794,6 +9992,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Special Elite (Regular), APACHE: https://raw.githubusercontent.com/google/fonts/main/apache/specialelite/LICENSE.txt
 ==============================================================================
+Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence.http://www.apache.org/licenses/LICENSE-2.0.html
+
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -9999,6 +10199,8 @@ Apache License
 ==============================================================================
 Staatliches (Regular), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/staatliches/OFL.txt
 ==============================================================================
+Copyright 2018 The Staatliches Project Authors (https://github.com/googlefonts/staatliches)
+
 Copyright 2018 The Staatliches Authors (https://github.com/googlefonts/staatliches)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -10096,6 +10298,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Syncopate (Regular, Bold), APACHE: https://raw.githubusercontent.com/google/fonts/main/apache/syncopate/LICENSE.txt
 ==============================================================================
+Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence.http://www.apache.org/licenses/LICENSE-2.0.html
+
 Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -10303,6 +10507,8 @@ Courier Prime (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubuserco
 ==============================================================================
 Copyright 2015 The Courier Prime Project Authors (https://github.com/quoteunquoteapps/CourierPrime).
 
+Copyright 2015 The Courier Prime Project Authors (https://github.com/quoteunquoteapps/CourierPrime).
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
@@ -10398,6 +10604,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 IBM Plex Mono (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/OFL.txt
 ==============================================================================
+Copyright 2017 IBM Corp. All rights reserved.
+
 Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -10495,6 +10703,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ==============================================================================
 Space Mono (Regular, Bold, Italic, BoldItalic), OFL: https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/OFL.txt
 ==============================================================================
+Copyright 2016 The Space Mono Project Authors (https://github.com/googlefonts/spacemono)
+
 Copyright 2016 The Space Mono Project Authors (https://github.com/googlefonts/spacemono)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

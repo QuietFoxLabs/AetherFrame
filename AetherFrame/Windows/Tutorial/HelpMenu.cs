@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using AetherFrame.Services.Commands;
 using AetherFrame.Services.Diagnostics;
@@ -36,6 +37,9 @@ internal sealed class HelpMenu
     private readonly string[] chapterRows;
     private string? resumeLabel;
     private int resumeChapter = -1;
+
+    /// <summary>Opens the fonts' licences (<see cref="FontLicencesWindow"/>).</summary>
+    internal Action? OpenFontLicences { get; set; }
 
     internal HelpMenu(OnboardingCoordinator coordinator, ITutorialHost host)
     {
@@ -210,6 +214,13 @@ internal sealed class HelpMenu
         Shortcut(AetherFrameCommand.Alias, OpenCommandMeaning);
         Shortcut(ViewCommand, "Show your character's Active Plate");
         Shortcut(VersionCommand, "Print the running version in chat");
+
+        // ---- licences
+        AetherControls.SectionHeader("About");
+        if (OpenFontLicences is { } openLicences && ImGui.MenuItem("Font licences"))
+        {
+            openLicences();
+        }
 
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceXs * scale));
         AetherControls.Muted("Everything stays on your PC. Bugs and ideas: the AetherFrame repository's issue tracker.");

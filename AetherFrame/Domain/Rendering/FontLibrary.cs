@@ -54,6 +54,28 @@ internal static partial class FontLibrary
     /// The lookup, in a class of its own: field initializers across a partial class's files run in
     /// no defined order, and this one reads <see cref="Families"/>, from the generated file.
     /// </summary>
+    /// <summary>
+    /// The (bold, italic) a request draws in for <paramref name="familyId"/>: for a library family,
+    /// those of the face <see cref="FaceStyle"/> picks, so two requests drawn with one face share one
+    /// handle, and its merged AetherFrame Sans is that face's style too; for any other family,
+    /// <paramref name="supportsBold"/> and <paramref name="supportsItalic"/> decide, as they always have.
+    /// </summary>
+    internal static (bool Bold, bool Italic) EffectiveStyle(string familyId, bool bold, bool italic, bool supportsBold, bool supportsItalic)
+    {
+        if (Find(familyId) is not { } family)
+        {
+            return (bold && supportsBold, italic && supportsItalic);
+        }
+
+        return FaceStyle(family, bold, italic) switch
+        {
+            "BoldItalic" => (true, true),
+            "Bold" => (true, false),
+            "Italic" => (false, true),
+            _ => (false, false),
+        };
+    }
+
     private static class Index
     {
         internal static readonly Dictionary<string, LibraryFontFamily> ById = Build();

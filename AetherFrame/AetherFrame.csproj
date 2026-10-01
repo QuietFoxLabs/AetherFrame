@@ -35,6 +35,9 @@
     <EmbeddedResource Include="Fonts\Library\*.ttf">
       <LogicalName>AetherFrame.Fonts.Library.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <!-- The fonts' licences travel with them, shown from Help (FontLicencesWindow). -->
+    <EmbeddedResource Include="Fonts\THIRD-PARTY-FONT-LICENSES.txt" LogicalName="AetherFrame.Fonts.THIRD-PARTY-FONT-LICENSES.txt" />
+    <EmbeddedResource Include="Fonts\Library\THIRD-PARTY-FONT-LICENSES.txt" LogicalName="AetherFrame.Fonts.Library.THIRD-PARTY-FONT-LICENSES.txt" />
   </ItemGroup>
 
   <!-- Built-in Component artwork (optimized runtime copies; the full-size sources live in

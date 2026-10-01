@@ -129,8 +129,7 @@ internal sealed class ProfileFontService : IDisposable
     private IFontHandle GetHandleCore(string? familyId, float requestedPixelSize, bool bold, bool italic)
     {
         var descriptor = ProfileFontCatalog.Resolve(familyId);
-        var effectiveBold = bold && descriptor.SupportsBold;
-        var effectiveItalic = italic && descriptor.SupportsItalic;
+        var (effectiveBold, effectiveItalic) = FontLibrary.EffectiveStyle(descriptor.Id, bold, italic, descriptor.SupportsBold, descriptor.SupportsItalic);
 
         var tierIndex = FontTierPolicy.FindTierIndex(descriptor.Id, requestedPixelSize);
 
@@ -200,10 +199,11 @@ internal sealed class ProfileFontService : IDisposable
             }
 
             var descriptor = ProfileFontCatalog.Resolve(text.FontFamily);
-            var effectiveBold = text.Bold && descriptor.SupportsBold;
-            var effectiveItalic = text.Italic && descriptor.SupportsItalic;
+            var (effectiveBold, effectiveItalic) = FontLibrary.EffectiveStyle(descriptor.Id, text.Bold, text.Italic, descriptor.SupportsBold, descriptor.SupportsItalic);
 
-            if (warmedCombos.Add((descriptor.Id, effectiveBold, effectiveItalic)))
+            // A library family warms only the tier its text uses: a Plate (a shared one above all)
+            // may name dozens of library families, and six sizes of each would crowd the atlas.
+            if (!FontTierPolicy.UsesFallback(descriptor.Id) && warmedCombos.Add((descriptor.Id, effectiveBold, effectiveItalic)))
             {
                 // The common baseline (covers most zoom/view-scale variations of this combo)...
                 WarmSizes(descriptor.Id, effectiveBold, effectiveItalic, FontTierPolicy.CommonEditorSizes);

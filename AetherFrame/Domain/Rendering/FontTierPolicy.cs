@@ -79,6 +79,11 @@ internal static class FontTierPolicy
     /// pathological session (many Plates, many families, every zoom level) from growing without
     /// bound, not to make the steady state small.
     /// </summary>
+    // [updated 2026-10-01, the font library] The budget is sized for AetherFrame's own three
+    // families and Dalamud Default at their common sizes and caps. A Plate naming many library
+    // families is held to it by warming only each library text's own tier, and past it by the LRU
+    // eviction: a Plate that needs more at once than the budget holds rebuilds as it draws, at the
+    // cost of frames, never of memory.
     internal const long AtlasBudgetPixels = 18L * 4096 * 4096;
 
     /// <summary>
