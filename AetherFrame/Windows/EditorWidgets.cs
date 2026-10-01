@@ -43,7 +43,7 @@ internal static class EditorWidgets
     /// <summary>
     /// For a window's PreDraw: the size it opens at the very first time (see
     /// <see cref="FirstUseWindowSize"/>). Called before anything else in PreDraw sets the next
-    /// window size, so anything that must win (Clean Preview's presentation) still does. Deliberately
+    /// window size, so anything later in PreDraw that sets it still wins. Deliberately
     /// not <c>Window.Size</c>: Dalamud applies that after PreDraw, overriding those.
     /// </summary>
     internal static void SetFirstUseSize(Vector2 preferred, Vector2 minimum) =>

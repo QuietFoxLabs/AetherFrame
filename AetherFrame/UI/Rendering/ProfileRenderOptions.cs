@@ -9,7 +9,7 @@ namespace AetherFrame.UI.Rendering;
 /// </summary>
 internal readonly record struct ProfileRenderOptions
 {
-    /// <summary>What Profile View, Clean Preview, the Basic preview, and any other finished rendering use.</summary>
+    /// <summary>What Profile View, the Basic preview, and any other finished rendering use.</summary>
     internal static readonly ProfileRenderOptions Finished = default;
 
     /// <summary>Editor-only: the translucent placement box drawn behind each text element.</summary>
@@ -33,7 +33,7 @@ internal readonly record struct ProfileRenderOptions
     /// <summary>
     /// Presentation-only: skips the opaque canvas backdrop <c>ProfileRenderer</c> normally paints
     /// under the Plate's own background, so wherever the authored background is absent or
-    /// translucent the Plate shows whatever is behind it (Clean Preview: the game world). The
+    /// translucent the Plate shows whatever is behind it (the Plate Viewer: the game world). The
     /// authored background itself is drawn exactly as always.
     /// </summary>
     internal bool HideCanvasBackdrop { get; init; }

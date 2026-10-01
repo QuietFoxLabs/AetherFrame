@@ -210,6 +210,49 @@ public sealed class ServedPlateTests
     }
 
     [Fact]
+    public void AViewer_FitsThePublishersOwnVisualBounds_OverflowIncluded()
+    {
+        // The owner's request of October 1, 2026: another player's Plate shows as My Plates' View
+        // shows one, artwork past the Plate's edges included.
+        var plate = PlateFactory.Create(PlateStartingLayout.AdventurePlateClassic, Guid.NewGuid(), "Adventure Plate", Now, new PlateStarterContent(new BasicCharacterInfo("Visible Hero", "Phoenix", "Light", 19, "Paladin", 100, "ABC")));
+        var frame = ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameCelestialSakura);
+        frame.Scale = 1.3f;
+        plate.Components = [frame];
+        var expected = AetherFrame.UI.Rendering.ProfileVisualBounds.Compute(plate);
+        Assert.True(expected.Min.X < 0f || expected.Min.Y < 0f, "The frame should overflow the canvas.");
+
+        var served = Serve(plate);
+        Assert.Equal(expected.Min.X, served.VisualMin.X, 1);
+        Assert.Equal(expected.Min.Y, served.VisualMin.Y, 1);
+        Assert.Equal(expected.Max.X, served.VisualMax.X, 1);
+        Assert.Equal(expected.Max.Y, served.VisualMax.Y, 1);
+
+        // A procedural frame's shapes sit inside its placement box, which the publisher's bounds
+        // unite: the viewer's fit holds every shape and the canvas, within the publisher's bounds.
+        var drawn = PlateFactory.Create(PlateStartingLayout.AdventurePlateClassic, Guid.NewGuid(), "Adventure Plate", Now, new PlateStarterContent(new BasicCharacterInfo("Visible Hero", "Phoenix", "Light", 19, "Paladin", 100, "ABC")));
+        var procedural = ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameDouble);
+        procedural.Scale = 1.3f;
+        drawn.Components = [procedural];
+        var publisher = AetherFrame.UI.Rendering.ProfileVisualBounds.Compute(drawn);
+        var servedDrawn = Serve(drawn);
+        Assert.True(servedDrawn.VisualMin.X >= publisher.Min.X - 0.01f && servedDrawn.VisualMin.Y >= publisher.Min.Y - 0.01f);
+        Assert.True(servedDrawn.VisualMax.X <= publisher.Max.X + 0.01f && servedDrawn.VisualMax.Y <= publisher.Max.Y + 0.01f);
+        Assert.True(servedDrawn.VisualMin.X < 0f && servedDrawn.VisualMax.X > servedDrawn.Canvas.X, "The frame's shapes overflow the canvas, and the fit holds them.");
+        foreach (var shape in servedDrawn.Steps.OfType<ServedShape>())
+        {
+            foreach (var point in new[] { shape.A, shape.B, shape.C, shape.D })
+            {
+                Assert.InRange(point.X, servedDrawn.VisualMin.X, servedDrawn.VisualMax.X);
+                Assert.InRange(point.Y, servedDrawn.VisualMin.Y, servedDrawn.VisualMax.Y);
+            }
+        }
+
+        // Without overflow, it is the canvas.
+        var blank = Serve(Blank());
+        Assert.Equal((Vector2.Zero, blank.Canvas), (blank.VisualMin, blank.VisualMax));
+    }
+
+    [Fact]
     public void AFontOrArtworkThisBuildLacks_IsNamedInANote_AndNeverLookedFor()
     {
         var marker = RevisionMarker.NewMarker();

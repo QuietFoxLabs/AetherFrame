@@ -55,16 +55,15 @@ internal sealed class KeyboardShortcutService : IDisposable
     /// soon as the editor window closes or loses focus — so interception stops immediately.
     /// </summary>
     internal void SetEditorFocusState(bool editorFocused, bool textInputActive) =>
-        SetEditorFocusState(editorFocused, textInputActive, previewActive: false, canvasInteractionActive: false);
+        SetEditorFocusState(editorFocused, textInputActive, canvasInteractionActive: false);
 
     /// <summary>
-    /// Full form of <see cref="SetEditorFocusState(bool, bool)"/>. <paramref name="previewActive"/>
-    /// limits shortcuts to leaving Clean Preview (Escape) and saving; editing keys are left alone.
-    /// <paramref name="canvasInteractionActive"/> (a drag/resize the editor owns) is the only time
-    /// Alt — which the editor reads to bypass snapping — is kept from the game.
+    /// Full form of <see cref="SetEditorFocusState(bool, bool)"/>. <paramref name="canvasInteractionActive"/>
+    /// (a drag/resize the editor owns) is the only time Alt — which the editor reads to bypass
+    /// snapping — is kept from the game.
     /// </summary>
-    internal void SetEditorFocusState(bool editorFocused, bool textInputActive, bool previewActive, bool canvasInteractionActive) =>
-        interpreter.SetEditorFocusState(editorFocused, textInputActive, previewActive, canvasInteractionActive);
+    internal void SetEditorFocusState(bool editorFocused, bool textInputActive, bool canvasInteractionActive) =>
+        interpreter.SetEditorFocusState(editorFocused, textInputActive, canvasInteractionActive);
 
     /// <summary>
     /// The Basic editor's form of <see cref="SetEditorFocusState(bool, bool)"/>: only the shared
@@ -111,7 +110,6 @@ internal sealed class KeyboardShortcutService : IDisposable
             ShortcutKey.Control => VirtualKey.CONTROL,
             ShortcutKey.Shift => VirtualKey.SHIFT,
             ShortcutKey.Alt => VirtualKey.MENU,
-            ShortcutKey.Escape => VirtualKey.ESCAPE,
             ShortcutKey.Delete => VirtualKey.DELETE,
             ShortcutKey.Left => VirtualKey.LEFT,
             ShortcutKey.Right => VirtualKey.RIGHT,

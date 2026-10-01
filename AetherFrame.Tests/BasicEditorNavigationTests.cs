@@ -71,9 +71,7 @@ public class BasicEditorNavigationTests
         navigation.Select(BasicEditorCategory.Identity);
         navigation.Zoom = PreviewZoom.Larger;
 
-        EditorPreview.Enter(harness.Session);
-        navigation.TrackPlate(harness.Document.ProfileId);
-        EditorPreview.Exit(harness.Session);
+        EditorPreview.Show(harness.Session, harness.Document.ProfileId, _ => { });
         navigation.TrackPlate(harness.Document.ProfileId);
 
         Assert.Equal(BasicEditorCategory.Identity, navigation.Selected);
@@ -364,11 +362,7 @@ public class BasicEditorNavigationTests
 
             if (frame % 2 == 0)
             {
-                EditorPreview.Enter(harness.Session);
-            }
-            else
-            {
-                EditorPreview.Exit(harness.Session);
+                EditorPreview.Show(harness.Session, harness.Document.ProfileId, _ => { });
             }
 
             navigation.Zoom = (PreviewZoom)(frame % 3);

@@ -1,16 +1,15 @@
 using System;
 using System.Numerics;
-using AetherFrame.UI.Editor;
+using AetherFrame.UI.Rendering;
 using Dalamud.Bindings.ImGui;
 
 namespace AetherFrame.Windows;
 
 /// <summary>
-/// AetherFrame's one Close control look, shared by every window that closes something: Clean
-/// Preview, the Plate Viewer (and its message window), and the Advanced editor's title bar. A
-/// compact translucent dark disc with a faint outer shadow, a light ring and a bold light X —
-/// readable on bright and dark backgrounds alike — that turns red on hover (closing is
-/// destructive) and deeper red while pressed. Colors: <see cref="CleanPreviewPresentation"/>.
+/// AetherFrame's Close control look, drawn over a Plate: the Plate Viewer's (and its message
+/// window's). A compact translucent dark disc with a faint outer shadow, a light ring and a bold
+/// light X — readable on bright and dark backgrounds alike — that turns red on hover (closing is
+/// destructive) and deeper red while pressed. Colors: <see cref="PlateViewerPresentation"/>.
 /// </summary>
 internal static class PresentationControls
 {
@@ -49,15 +48,15 @@ internal static class PresentationControls
         }
 
         var line = Math.Max(1f, radius / 8f);
-        var backing = pressed ? CleanPreviewPresentation.CloseBackingPressed
-            : hovered ? CleanPreviewPresentation.CloseBackingHovered
-            : CleanPreviewPresentation.CloseBacking;
+        var backing = pressed ? PlateViewerPresentation.CloseBackingPressed
+            : hovered ? PlateViewerPresentation.CloseBackingHovered
+            : PlateViewerPresentation.CloseBacking;
         drawList.AddCircleFilled(center, radius, ImGui.GetColorU32(backing));
-        drawList.AddCircle(center, radius - (line / 2f), ImGui.GetColorU32(CleanPreviewPresentation.CloseShadow), 0, line * 2f);
-        drawList.AddCircle(center, radius - line, ImGui.GetColorU32(CleanPreviewPresentation.CloseRing), 0, line);
+        drawList.AddCircle(center, radius - (line / 2f), ImGui.GetColorU32(PlateViewerPresentation.CloseShadow), 0, line * 2f);
+        drawList.AddCircle(center, radius - line, ImGui.GetColorU32(PlateViewerPresentation.CloseRing), 0, line);
 
         var arm = radius * 0.38f;
-        var glyph = ImGui.GetColorU32(CleanPreviewPresentation.CloseGlyph);
+        var glyph = ImGui.GetColorU32(PlateViewerPresentation.CloseGlyph);
         drawList.AddLine(center - new Vector2(arm), center + new Vector2(arm), glyph, line * 1.6f);
         drawList.AddLine(center + new Vector2(arm, -arm), center + new Vector2(-arm, arm), glyph, line * 1.6f);
     }

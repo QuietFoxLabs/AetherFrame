@@ -22,8 +22,8 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// The Basic editor: choose what to edit, edit it, always see the result. The shared
-/// <see cref="EditorActionBar"/> (the same one the Advanced editor has) sits on top; its Preview is
-/// the same Clean Preview as the Advanced editor's (<see cref="CleanPreviewPresenter"/>). A navigation
+/// <see cref="EditorActionBar"/> (the same one the Advanced editor has) sits on top; its Preview opens
+/// the Plate Viewer on the open Plate, as the Advanced editor's does (<see cref="EditorPreview"/>). A navigation
 /// rail (Style, Portrait, Identity, Details, Message) picks what the inspector shows — one
 /// category at a time, its title and summary pinned above its controls — beside an always-visible
 /// live preview (which a click on a section also navigates from). On narrower windows the
@@ -86,9 +86,6 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     // Unsaved-changes protection when the window closes: the same guard the Advanced editor has.
     private readonly EditorCloseGuard closeGuard;
 
-    // Preview: the same Clean Preview the Advanced editor's Preview shows.
-    private readonly CleanPreviewPresenter cleanPreview;
-
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
@@ -127,6 +124,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         };
         Size = new Vector2(1180, 760);
         SizeCondition = ImGuiCond.FirstUseEver;
+        RespectCloseHotkey = true;
 
         this.profileService = profileService;
         this.editorSession = editorSession;
@@ -142,7 +140,6 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         actionBar = new EditorActionBar(commands, EditorSurfaceKind.Basic, openLibrary, openAdvancedEditor, () => Help, plateMenu);
         this.keyboardShortcuts = keyboardShortcuts;
         closeGuard = new EditorCloseGuard(editorSession, commands);
-        cleanPreview = new CleanPreviewPresenter(this, editorSession, profileService, renderResources, ImGuiWindowFlags.None);
     }
 
     /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
@@ -152,26 +149,16 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     {
     }
 
-    /// <summary>One editing surface at a time: the Advanced editor hands over if it's open. Opens editing, never Preview.</summary>
-    public override void OnOpen()
-    {
-        surfaces.NotifyOpened(EditorSurfaceKind.Basic);
-        EditorPreview.Exit(editorSession);
-    }
+    /// <summary>One editing surface at a time: the Advanced editor hands over if it's open.</summary>
+    public override void OnOpen() => surfaces.NotifyOpened(EditorSurfaceKind.Basic);
 
-    /// <summary>Clean Preview's presentation (see <see cref="CleanPreviewPresenter"/>), or the editor's own.</summary>
     public override void PreDraw()
     {
         chrome.PushStyle();
-        cleanPreview.PreDraw();
         AetherWindowChrome.ApplyPolicy(this);
     }
 
-    public override void PostDraw()
-    {
-        cleanPreview.PostDraw();
-        chrome.PopStyle();
-    }
+    public override void PostDraw() => chrome.PopStyle();
 
     /// <inheritdoc/>
     public void Show()
@@ -205,13 +192,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     {
         if (closeGuard.ShouldReopenOnClose())
         {
-            // The unsaved-changes question needs the normal editor window, not the preview's.
-            EditorPreview.Exit(editorSession);
             IsOpen = true;
             return;
         }
-
-        EditorPreview.Exit(editorSession);
 
         // Draw won't run again until the window reopens: stop claiming shortcuts right away.
         keyboardShortcuts.SetEditorFocusState(editorFocused: false, textInputActive: false);
@@ -220,8 +203,6 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     public override void Draw()
     {
-        cleanPreview.CaptureEditorRect();
-
         // Drawn unconditionally so an in-progress file pick isn't stranded if the Plate
         // becomes unavailable (e.g. it's deleted from My Plates) while the dialog is open.
         fileDialogManager.Draw();
@@ -248,17 +229,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             return;
         }
 
-        // Ctrl+S / Ctrl+Z / Ctrl+Y, exactly as the action bar's Save, Undo and Redo — and in Preview,
-        // Escape (leave it) and Ctrl+S, exactly as in the Advanced editor's.
+        // Ctrl+S / Ctrl+Z / Ctrl+Y, exactly as the action bar's Save, Undo and Redo.
         var focused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
-        if (editorSession.PreviewActive)
-        {
-            keyboardShortcuts.SetEditorFocusState(focused, ImGui.GetIO().WantTextInput, previewActive: true, canvasInteractionActive: false);
-        }
-        else
-        {
-            keyboardShortcuts.SetDocumentShortcutFocusState(focused, ImGui.GetIO().WantTextInput);
-        }
+        keyboardShortcuts.SetDocumentShortcutFocusState(focused, ImGui.GetIO().WantTextInput);
 
         ApplyShortcuts();
         if (closeGuard.Advance())
@@ -270,61 +243,52 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         // Basic settings) are only created by the first explicit edit that needs them.
         basicEditorSession.Identity.RefineLayout();
 
-        if (editorSession.PreviewActive)
-        {
-            // Preview: the same Clean Preview as the Advanced editor's — this window becomes the
-            // finished Plate alone, over the game, until its close control or Escape.
-            cleanPreview.Draw(profile);
-        }
-        else
-        {
-            // The shared action bar (My Plates, Basic | Advanced, Undo/Redo, Preview/Revert/Save),
-            // outside every scrolling region so it's always in view.
-            actionBar.Draw(profile, editorSession.PreviewActive, () => EditorPreview.Enter(editorSession), EditorPreview.Tooltip, basicEditorSession.ErrorMessage);
-            EditorWidgets.UnsupportedElementsNotice(profile);
-            ImGui.Separator();
+        // The shared action bar (My Plates, Basic | Advanced, Undo/Redo, Preview/Revert/Save),
+        // outside every scrolling region so it's always in view.
+        actionBar.Draw(profile, () => EditorPreview.Show(editorSession, profile.ProfileId, actionBar.PlateMenu.View), EditorPreview.Tooltip, basicEditorSession.ErrorMessage);
+        EditorWidgets.UnsupportedElementsNotice(profile);
+        ImGui.Separator();
 
-            var scale = ImGuiHelpers.GlobalScale;
-            var style = ImGui.GetStyle();
-            var body = ImGui.GetContentRegionAvail();
-            body.Y = Math.Max(body.Y, 160f * scale);
+        var scale = ImGuiHelpers.GlobalScale;
+        var style = ImGui.GetStyle();
+        var body = ImGui.GetContentRegionAvail();
+        body.Y = Math.Max(body.Y, 160f * scale);
 
-            switch (BasicEditorView.ChooseLayout(body.X, scale))
+        switch (BasicEditorView.ChooseLayout(body.X, scale))
+        {
+            case BasicEditorLayoutMode.ThreeColumn:
             {
-                case BasicEditorLayoutMode.ThreeColumn:
-                {
-                    var inspectorWidth = Math.Clamp(body.X * 0.36f, InspectorMinWidth * scale, InspectorMaxWidth * scale);
-                    DrawNavigator(profile, new Vector2(NavigatorWidth * scale, body.Y));
-                    ImGui.SameLine();
-                    DrawInspector(profile, new Vector2(inspectorWidth, body.Y), withCategoryStrip: false);
-                    ImGui.SameLine();
-                    DrawPreview(profile, new Vector2(0f, body.Y));
-                    break;
-                }
+                var inspectorWidth = Math.Clamp(body.X * 0.36f, InspectorMinWidth * scale, InspectorMaxWidth * scale);
+                DrawNavigator(profile, new Vector2(NavigatorWidth * scale, body.Y));
+                ImGui.SameLine();
+                DrawInspector(profile, new Vector2(inspectorWidth, body.Y), withCategoryStrip: false);
+                ImGui.SameLine();
+                DrawPreview(profile, new Vector2(0f, body.Y));
+                break;
+            }
 
-                case BasicEditorLayoutMode.TwoColumn:
-                {
-                    var inspectorWidth = Math.Clamp(body.X * 0.45f, InspectorMinWidth * scale, InspectorMaxWidth * scale);
-                    DrawInspector(profile, new Vector2(inspectorWidth, body.Y), withCategoryStrip: true);
-                    ImGui.SameLine();
-                    DrawPreview(profile, new Vector2(0f, body.Y));
-                    break;
-                }
+            case BasicEditorLayoutMode.TwoColumn:
+            {
+                var inspectorWidth = Math.Clamp(body.X * 0.45f, InspectorMinWidth * scale, InspectorMaxWidth * scale);
+                DrawInspector(profile, new Vector2(inspectorWidth, body.Y), withCategoryStrip: true);
+                ImGui.SameLine();
+                DrawPreview(profile, new Vector2(0f, body.Y));
+                break;
+            }
 
-                default:
-                {
-                    // Narrow: categories first (wrapping, never cut off), the preview at the
-                    // canvas' own aspect, then the inspector.
-                    DrawCategoryStrip(profile);
-                    var remaining = ImGui.GetContentRegionAvail().Y;
-                    var previewHeight = Math.Clamp(
-                        (body.X * profile.CanvasHeight / Math.Max(1f, profile.CanvasWidth)) + ImGui.GetFrameHeightWithSpacing(),
-                        140f * scale,
-                        remaining * 0.45f);
-                    DrawPreview(profile, new Vector2(-1f, previewHeight));
-                    DrawInspector(profile, new Vector2(-1f, Math.Max(120f * scale, remaining - previewHeight - style.ItemSpacing.Y)), withCategoryStrip: false);
-                    break;
-                }
+            default:
+            {
+                // Narrow: categories first (wrapping, never cut off), the preview at the
+                // canvas' own aspect, then the inspector.
+                DrawCategoryStrip(profile);
+                var remaining = ImGui.GetContentRegionAvail().Y;
+                var previewHeight = Math.Clamp(
+                    (body.X * profile.CanvasHeight / Math.Max(1f, profile.CanvasWidth)) + ImGui.GetFrameHeightWithSpacing(),
+                    140f * scale,
+                    remaining * 0.45f);
+                DrawPreview(profile, new Vector2(-1f, previewHeight));
+                DrawInspector(profile, new Vector2(-1f, Math.Max(120f * scale, remaining - previewHeight - style.ItemSpacing.Y)), withCategoryStrip: false);
+                break;
             }
         }
 
@@ -338,23 +302,15 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     /// <summary>
     /// The document shortcuts queued by <see cref="KeyboardShortcutService"/> (Basic only gets
-    /// those, plus Escape in Preview), applied through the same commands as the action bar — so
-    /// Ctrl+S never saves a clean Plate, exactly like the Save button.
+    /// those), applied through the same commands as the action bar — so Ctrl+S never saves a clean
+    /// Plate, exactly like the Save button.
     /// </summary>
     private void ApplyShortcuts()
     {
         foreach (var action in keyboardShortcuts.DequeuePendingActions())
         {
-            if (editorSession.PreviewActive && action.Kind is not (EditorShortcutActionKind.ExitPreview or EditorShortcutActionKind.Save))
-            {
-                continue;
-            }
-
             switch (action.Kind)
             {
-                case EditorShortcutActionKind.ExitPreview:
-                    EditorPreview.Exit(editorSession);
-                    break;
                 case EditorShortcutActionKind.Save:
                     actionBar.Commands.Save();
                     break;

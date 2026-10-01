@@ -174,7 +174,7 @@ internal static class TutorialScript
                 "Save writes the Plate to your PC (Ctrl+S does the same). Revert throws away unsaved changes and returns to the last saved version, after asking; even that can be undone.",
                 TutorialTarget.EditorSave, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("saving.preview", "Preview",
-                "Preview shows the finished Plate alone, over the game, exactly as others would see it. Press Escape (while the preview is focused) or click its close button to come back.",
+                "Preview opens the finished Plate in the Plate Viewer, over the game, exactly as others see it, and it follows your edits as you make them. Drag it to move it, Ctrl+scroll to resize it, and press Escape or its close button to close it.",
                 TutorialTarget.EditorPreview, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("saving.plate-menu", "The Plate menu",
                 "Click the Plate menu (the card icon and the Plate's name) to stay in the editor: View shows the Plate over the game in the movable Plate Viewer, Set Active makes it your character's Active Plate, and Save as New Plate keeps what you see as a new Plate. Save as Template, Export and Rename are here too. Set Active, Save as Template and Export use the last saved version, so save first to include your changes.",

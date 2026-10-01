@@ -3,7 +3,6 @@ using System.Numerics;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Plates;
-using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
 using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
@@ -24,13 +23,14 @@ namespace AetherFrame.Windows;
 /// changes a Plate, its dirty state, its undo history, or which Plate is Active.
 ///
 /// <para><b>What it shows</b> (<see cref="PlateViewerTarget"/>): an explicitly requested Plate or
-/// Template document; otherwise — the default request, e.g. <c>/aetherframe view</c> — the
+/// Template document, or a Plate that isn't a document here at all (<see cref="IPlatePresentation"/>,
+/// such as another player's shared Plate), presented the same way; otherwise — the default request, e.g. <c>/aetherframe view</c> — the
 /// logged-in character's Active Plate, always as last saved (never the editors' unsaved state). With
 /// no Active Plate it shows an intentional empty state pointing at My Plates, never some other Plate.</para>
 ///
-/// <para><b>Presentation.</b> Like Clean Preview, the Plate floats directly over the game: the
-/// window is exactly the Plate's composition (its fitted visual bounds — canvas plus any
-/// intentional Component overflow) and draws nothing of its own (<see cref="CleanPreviewPresentation"/>).
+/// <para><b>Presentation.</b> The Plate floats directly over the game: the window is exactly the
+/// Plate's composition (its fitted visual bounds — canvas plus any intentional Component overflow)
+/// and draws nothing of its own (<see cref="PlateViewerPresentation"/>).
 /// The Plate's own background is drawn as authored. The only chrome is an always-visible Close
 /// control; only the composition and that control take mouse input.</para>
 ///
@@ -73,7 +73,11 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     private PlateViewerContent content;
     private ProfileDocument? presentedDocument;
     private CanvasBounds presentedBounds;
+    private Vector2 presentedCanvasSize;
     private PlateViewerLayout? layout;
+
+    // A Plate that isn't a document here, presented in place of the target while set.
+    private IPlatePresentation? presentation;
     private Vector2 styleWindowPadding;
 
     /// <param name="openMyPlates">The No Active Plate empty state's Open My Plates action.</param>
@@ -94,6 +98,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     /// </summary>
     internal void ShowActivePlate()
     {
+        ReleasePresentation();
         target.RequestActivePlate();
         IsOpen = true;
         BringToFront();
@@ -102,8 +107,10 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     /// <summary>Shows a specific Plate (its live copy if it's the one open in the editors).</summary>
     internal void ShowPlate(Guid plateId)
     {
+        ReleasePresentation();
         target.RequestPlate(plateId);
         IsOpen = true;
+        BringToFront();
     }
 
     /// <summary>
@@ -113,49 +120,67 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     /// </summary>
     internal void ShowDocument(ProfileDocument document)
     {
+        ReleasePresentation();
         target.RequestDocument(document);
         IsOpen = true;
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Presents a Plate that isn't a document here (another player's, say), exactly as a Plate is
+    /// presented, until the viewer closes or is asked to show something else.
+    /// </summary>
+    internal void ShowPresentation(IPlatePresentation shown)
     {
+        if (!ReferenceEquals(presentation, shown))
+        {
+            ReleasePresentation();
+            presentation = shown;
+        }
+
+        IsOpen = true;
+        BringToFront();
+    }
+
+    public void Dispose() => ReleasePresentation();
+
+    private void ReleasePresentation()
+    {
+        if (presentation is { } released)
+        {
+            presentation = null;
+            released.Released();
+        }
     }
 
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
-    public override void OnClose() => placement.EndDrag();
+    public override void OnClose()
+    {
+        placement.EndDrag();
+        ReleasePresentation();
+    }
 
     public override void PreDraw()
     {
         chrome.PushStyle();
         presenting = false;
         layout = null;
-        content = target.Resolve(activePlates, library.GetSavedDocument, profileService.CurrentProfile);
-        presentedDocument = content.Document;
-
         var viewport = ImGui.GetMainViewport();
-        if (presentedDocument is { } document)
+        if (presentation is { } shown)
         {
-            var bounds = ProfileVisualBounds.Compute(document);
-            if (placement.Update(bounds, CanvasSize(document), viewport.WorkPos, viewport.WorkSize, ControlSize) is { } computed)
+            presentedDocument = null;
+            if (shown.TryGetBounds(out var shownBounds, out var shownCanvas) && TryPresent(shownBounds, shownCanvas, viewport))
             {
-                layout = computed;
-                presentedBounds = bounds;
-                hint.ShowOnce(ImGui.GetTime());
-                styleWindowPadding = ImGui.GetStyle().WindowPadding;
-                ImGui.SetNextWindowPos(computed.WindowPos, ImGuiCond.Always);
-                ImGui.SetNextWindowSize(computed.WindowSize, ImGuiCond.Always);
-                Flags = PresentationFlags;
-                AllowBackgroundBlur = CleanPreviewPresentation.AllowBackgroundBlur;
-
-                // Popped in PostDraw (Dalamud calls it after End on every frame PreDraw ran).
-                ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, CleanPreviewPresentation.WindowPadding);
-                ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, CleanPreviewPresentation.WindowBorderSize);
-                ImGui.PushStyleColor(ImGuiCol.WindowBg, CleanPreviewPresentation.BackgroundColor);
-                ImGui.PushStyleColor(ImGuiCol.ChildBg, CleanPreviewPresentation.BackgroundColor);
-                presenting = true;
-                AetherWindowChrome.ApplyPolicy(this);
+                return;
+            }
+        }
+        else
+        {
+            content = target.Resolve(activePlates, library.GetSavedDocument, profileService.CurrentProfile);
+            presentedDocument = content.Document;
+            if (presentedDocument is { } document && TryPresent(ProfileVisualBounds.Compute(document), CanvasSize(document), viewport))
+            {
                 return;
             }
         }
@@ -166,6 +191,34 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         Flags = MessageFlags;
         AllowBackgroundBlur = true;
         AetherWindowChrome.ApplyPolicy(this);
+    }
+
+    /// <summary>Sets the frame up to present <paramref name="bounds"/>, floating over the game; false when there's nothing to fit.</summary>
+    private bool TryPresent(CanvasBounds bounds, Vector2 canvasSize, ImGuiViewportPtr viewport)
+    {
+        if (placement.Update(bounds, canvasSize, viewport.WorkPos, viewport.WorkSize, ControlSize) is { } computed)
+        {
+            layout = computed;
+            presentedBounds = bounds;
+            presentedCanvasSize = canvasSize;
+            hint.ShowOnce(ImGui.GetTime());
+            styleWindowPadding = ImGui.GetStyle().WindowPadding;
+            ImGui.SetNextWindowPos(computed.WindowPos, ImGuiCond.Always);
+            ImGui.SetNextWindowSize(computed.WindowSize, ImGuiCond.Always);
+            Flags = PresentationFlags;
+            AllowBackgroundBlur = PlateViewerPresentation.AllowBackgroundBlur;
+
+            // Popped in PostDraw (Dalamud calls it after End on every frame PreDraw ran).
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, PlateViewerPresentation.WindowPadding);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, PlateViewerPresentation.WindowBorderSize);
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, PlateViewerPresentation.BackgroundColor);
+            ImGui.PushStyleColor(ImGuiCol.ChildBg, PlateViewerPresentation.BackgroundColor);
+            presenting = true;
+            AetherWindowChrome.ApplyPolicy(this);
+            return true;
+        }
+
+        return false;
     }
 
     public override void PostDraw()
@@ -182,9 +235,15 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
     public override void Draw()
     {
-        if (presenting && layout is { } current && presentedDocument is { } profile)
+        if (presenting && layout is { } current && (presentation is not null || presentedDocument is not null))
         {
-            DrawPresentation(profile, current);
+            DrawPresentation(current);
+            return;
+        }
+
+        if (presentation is { } shown)
+        {
+            DrawPresentationMessage(shown);
             return;
         }
 
@@ -234,6 +293,31 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         }
     }
 
+    /// <summary>What a presented Plate says while it has nothing to draw: its message, wrapped, with Close at the right and its action, if any, under it.</summary>
+    private void DrawPresentationMessage(IPlatePresentation shown)
+    {
+        var left = ImGui.GetCursorPosX();
+        var width = 340f * ImGuiHelpers.GlobalScale;
+        var start = ImGui.GetCursorPosY();
+        using (ImRaii.TextWrapPos(left + width))
+        {
+            ImGui.TextUnformatted(shown.Message);
+        }
+
+        var end = ImGui.GetCursorPosY();
+        ImGui.SetCursorPos(new Vector2(left + width + ImGui.GetStyle().ItemSpacing.X, start));
+        DrawMessageClose();
+        ImGui.SetCursorPosY(Math.Max(end, ImGui.GetCursorPosY()));
+        if (shown.MessageAction is { } action)
+        {
+            ImGui.Spacing();
+            if (ImGui.Button(action))
+            {
+                shown.RunMessageAction();
+            }
+        }
+    }
+
     private void DrawMessageClose()
     {
         if (PresentationControls.Close("##CloseProfileView", ImGui.GetCursorScreenPos(), ImGui.GetFrameHeight(), "Close"))
@@ -246,7 +330,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
     private static Vector2 CanvasSize(ProfileDocument document) => new(Math.Max(0f, document.CanvasWidth), Math.Max(0f, document.CanvasHeight));
 
-    private void DrawPresentation(ProfileDocument profile, PlateViewerLayout current)
+    private void DrawPresentation(PlateViewerLayout current)
     {
         var windowPos = ImGui.GetWindowPos();
         var mouse = ImGui.GetMousePos();
@@ -275,7 +359,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         }
 
         // Resize: Ctrl + wheel only (a plain wheel does nothing here).
-        if (hovered && io.KeyCtrl && io.MouseWheel != 0f && placement.ZoomByWheel(io.MouseWheel, presentedBounds, CanvasSize(profile), viewport.WorkSize, current.ControlSize))
+        if (hovered && io.KeyCtrl && io.MouseWheel != 0f && placement.ZoomByWheel(io.MouseWheel, presentedBounds, presentedCanvasSize, viewport.WorkSize, current.ControlSize))
         {
             hint.Dismiss();
         }
@@ -287,7 +371,14 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             ImGui.OpenPopup(ContextMenuId);
         }
 
-        ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, windowPos + current.CanvasOffset, current.Scale, renderResources, CleanPreviewPresentation.RenderOptions);
+        if (presentation is { } shown)
+        {
+            shown.Draw(ImGui.GetWindowDrawList(), windowPos + current.CanvasOffset, current.Scale, windowPos, windowPos + current.WindowSize);
+        }
+        else if (presentedDocument is { } profile)
+        {
+            ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, windowPos + current.CanvasOffset, current.Scale, renderResources, PlateViewerPresentation.RenderOptions);
+        }
 
         if (PresentationControls.Close("##ViewerClose", windowPos + current.CloseOffset, current.ControlSize, "Close (Esc)"))
         {
@@ -295,11 +386,11 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             IsOpen = false;
         }
 
-        DrawContextMenu(profile, current);
+        DrawContextMenu(current);
         DrawHint(windowPos, current);
     }
 
-    private void DrawContextMenu(ProfileDocument profile, PlateViewerLayout current)
+    private void DrawContextMenu(PlateViewerLayout current)
     {
         // The presentation zeroed WindowPadding for the viewer itself; the menu gets the normal padding.
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, styleWindowPadding);
@@ -311,7 +402,13 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             }
 
             var viewport = ImGui.GetMainViewport();
-            var canvasSize = CanvasSize(profile);
+            var canvasSize = presentedCanvasSize;
+            if (presentation is { } shown)
+            {
+                shown.DrawMenuItems();
+                ImGui.Separator();
+            }
+
             ImGui.TextDisabled($"Size: {placement.Percent}%");
             ImGui.Separator();
             foreach (var percent in PlateViewerPlacement.PresetPercents)
@@ -358,7 +455,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         var min = bottomCenter - new Vector2(size.X / 2f, size.Y + (12f * ImGuiHelpers.GlobalScale));
 
         var drawList = ImGui.GetForegroundDrawList();
-        drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(CleanPreviewPresentation.HintBacking with { W = CleanPreviewPresentation.HintBacking.W * opacity }), size.Y / 2f);
-        drawList.AddText(min + padding, ImGui.GetColorU32(CleanPreviewPresentation.HintText with { W = CleanPreviewPresentation.HintText.W * opacity }), PlateViewerHint.Text);
+        drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(PlateViewerPresentation.HintBacking with { W = PlateViewerPresentation.HintBacking.W * opacity }), size.Y / 2f);
+        drawList.AddText(min + padding, ImGui.GetColorU32(PlateViewerPresentation.HintText with { W = PlateViewerPresentation.HintText.W * opacity }), PlateViewerHint.Text);
     }
 }

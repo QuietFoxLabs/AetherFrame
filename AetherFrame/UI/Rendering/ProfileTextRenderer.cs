@@ -17,7 +17,7 @@ namespace AetherFrame.UI.Rendering;
 /// input that affects it (text, font, size, box, spacing, wrap, auto fit). Consequences:</para>
 /// <list type="bullet">
 /// <item>Line breaks and the auto-fit size are computed once and then reused by every view — the
-/// editor at any zoom, Clean Preview, and Profile View all draw the identical lines, rather than
+/// editor at any zoom, the Basic preview, and Profile View all draw the identical lines, rather than
 /// each re-wrapping against whichever font size tier its own scale happens to rasterize at.</item>
 /// <item>A frame where nothing changed does no measuring at all; only drawing.</item>
 /// </list>

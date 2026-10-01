@@ -89,11 +89,10 @@ internal sealed class EditorActionBar
     /// (if any), each on its own line.
     /// </summary>
     /// <param name="profile">The open Plate.</param>
-    /// <param name="previewActive">Whether this editor's Preview is showing (the Preview button is highlighted).</param>
-    /// <param name="togglePreview">What Preview does in this editor.</param>
+    /// <param name="showPreview">What Preview does in this editor.</param>
     /// <param name="previewTooltip">What Preview shows, in this editor's words.</param>
     /// <param name="errorMessage">The editor's current error, if any.</param>
-    internal void Draw(ProfileDocument profile, bool previewActive, Action togglePreview, string previewTooltip, string? errorMessage)
+    internal void Draw(ProfileDocument profile, Action showPreview, string previewTooltip, string? errorMessage)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var style = ImGui.GetStyle();
@@ -172,11 +171,12 @@ internal sealed class EditorActionBar
         TutorialAnchorMarks.Mark(TutorialTarget.EditorSaveState);
 
         ImGui.SameLine();
-        if (EditorWidgets.TextToggle(PreviewLabel, previewActive, tooltip: previewTooltip))
+        if (ImGui.Button(PreviewLabel))
         {
-            togglePreview();
+            showPreview();
         }
 
+        EditorWidgets.Tooltip(previewTooltip);
         TutorialAnchorMarks.Mark(TutorialTarget.EditorPreview);
 
         ImGui.SameLine();
