@@ -44,9 +44,7 @@ along. The Name Backing, Divider and Section Header prompts below ask for exactl
 
 ## The set prompt
 
-Replace `[THEME]` with a few words about the look, for example "frost-covered silver and pale blue
-crystal, Ishgard in winter", "brass, teak and rope, a pirate harbor" or "living wood, moss and
-white flowers in a deep forest".
+Replace `[SET NAME]` and `[THEME]` with one of the [themes](#themes) below, or your own.
 
 ```
 I want you to design a matching set of decorative artwork for a Final Fantasy XIV plugin called
@@ -55,6 +53,7 @@ Adventure Plate. The card is 1280 x 720: the character's portrait fills the left
 runs across the top of the right two thirds, and short info sections with small headings fill the
 rest.
 
+Set name: [SET NAME].
 Theme: [THEME].
 
 The set has 7 pieces: a Background, a Plate Frame, a Corner Ornament, a Portrait Frame, a Name
@@ -80,6 +79,11 @@ piece must follow these rules:
    a single even color and no busy detail.
 10. The exact pixel size I give for each piece. If you can't make that exact size, make that exact
     shape (the same width-to-height ratio) as large as you can.
+11. Bold details. The game shows these pieces much smaller than you make them, often a sixth of the
+    size, so the thinnest line should be at least 8 pixels thick and nothing important should be
+    tiny.
+12. The plugin draws all text itself, in fonts the player picks, so any typography in the theme
+    just means calm, clear areas where text will go, never actual lettering.
 
 First, make one style sheet image showing all 7 pieces together on a neutral grey background, so
 I can check the look before we start. After that, make one piece per message, in the order I ask.
@@ -157,7 +161,9 @@ it to fit names of any length, so it has to be built in five parts, left to righ
 
 Each plain stretch must be at least 10% of the width, and it must look exactly the same in every
 column: no gems, studs, cracks, veins, sparkles, gradients or shading that changes from left to
-right. Only those two parts are stretched, so any detail in them would smear.
+right. Shading that changes from top to bottom is fine. Only those two parts are stretched, so any
+detail in them would smear. If the theme is better without a center crest, leave it out and tell
+me; then the two plain stretches simply meet in the middle.
 
 The band where the name is written runs the full length between the two ends. It is centered
 vertically and about one third of the picture's height. Make it one calm color, either clearly
@@ -173,7 +179,7 @@ An ornamental horizontal line that sits under the character's name. Like the Nam
 stretches it to fit, so build it in five parts, left to right:
 1. Left end: a small finial or flourish, inside the leftmost 15% of the width.
 2. A plain straight line: the same thickness and color all along, with no beads, taper, gradient
-   or sparkle.
+   or sparkle. (A glow or shading above and below the line is fine if it's the same all along.)
 3. Center ornament: inside the middle 30% of the width.
 4. The same plain straight line as part 2.
 5. Right end: a mirror image of the left end, inside the rightmost 15%.
@@ -196,7 +202,8 @@ written in small capital letters. The game stretches it to fit each heading.
   because the heading text sits there.
 - Make the ribbon a calm color that small text reads well on, and tell me whether it's light or
   dark.
-- It should be a quieter, smaller relative of the Name Backing.
+- It should be a quieter, smaller relative of the Name Backing. The game shows it only about 20
+  pixels tall, so keep it bold and simple: a clear shape and a clear outline, no fine detail.
 ```
 
 ### 7. Background (1672 x 941)
@@ -212,6 +219,223 @@ A scenic or textured backdrop in the set's palette, drawn behind everything else
 - No characters, creatures, text or symbols.
 - It should look good with the Plate Frame from piece 1 on top of it.
 ```
+
+## Themes
+
+Each theme gives the set name (also the start of each file name) and the theme text to paste in
+place of `[THEME]`. The themes describe a look, not a place in the game, so ChatGPT draws something
+new instead of copying the game's own emblems. Each theme also has a note on what to watch for,
+mostly what must stay out of the plain stretches. "Band" is the Name Backing's band. A light band
+takes a dark name, and a dark band a light name.
+
+### 1. Celestial Sakura
+
+AetherFrame already has this set, apart from a Section Header (it has two Dividers, which don't
+stretch). Instead of a new set, open a new chat, attach `CelestialSakura_Nameplate.png` and
+`CelestialSakura_Divider_Ornate.png` (in `AetherFrame/Assets/Components/CelestialSakura/`), and
+paste:
+
+```
+These two images are from an existing art set: champagne gold filigree, blush cherry blossoms,
+pearls and a crescent moon. Make one new piece that matches them exactly in style, palette,
+materials and line weight. Transparent background (PNG with an alpha channel), no text, no
+checkerboard, flat front view, left-right symmetrical.
+```
+
+Then paste the Section Header prompt (piece 6) as it is.
+
+### 2. Ishgardian Gothic: `IshgardianGothic`
+
+```
+Gothic cathedral architecture: pointed arches and stone tracery, stained glass in deep blues with
+touches of gold, silver filigree, pale carved stone, original heraldic shields and banners (no real
+coats of arms), frost and icy blue-white highlights.
+```
+
+Watch: stained glass and tracery go in the ends, the crest and the Background. The plain stretches
+are plain silver rails and smooth stone. Band: dark blue enamel.
+
+### 3. Allagan Tech: `AllaganTech`
+
+```
+Ancient high technology: dark gunmetal and aged bronze panels with geometric seams, glowing
+circuitry lines in orange and cyan, hexagon and triangle motifs, small glowing energy cores.
+```
+
+Watch: in the plain stretches, a glowing line must run perfectly straight from left to right.
+Junctions and cores go in the ends and the crest. Glows must fade into real transparency, never
+into a black backdrop. Band: dark.
+
+### 4. Ancient Amaurot: `AncientAmaurot`
+
+```
+Art deco meets a lost ancient civilization: polished black stone, gold inlay lines, stepped
+geometric ornaments, sunbursts, stars, and faint glowing sigils of creation magic (original
+shapes, not real or in-game symbols).
+```
+
+Watch: gold lines in the stretches run straight and level. Band: black stone.
+
+### 5. Crystarium Crystal: `CrystariumCrystal`
+
+```
+Faceted crystal clusters, translucent glass, white marble, refracted light, blue and violet
+gradients, slim silver accents.
+```
+
+Watch: crystal clusters only in the ends and the crest. In the stretches, gradients may only run
+from top to bottom. Band: white marble.
+
+### 6. Dark Fantasy: `DarkFantasy`
+
+```
+Blackened wrought iron, thorned vines, raven feathers and raven silhouettes, blood-red gems and
+accents, worn and distressed metal, restrained gothic ornament.
+```
+
+Watch: put smoke only in the Background, because on a transparent piece it tends to turn into a
+grey haze. Thorns and feathers go in the ends and the crest. The rails are plain iron, and the
+band is smooth, not distressed. Band: dark.
+
+### 7. High Fantasy Royal: `HighFantasyRoyal`
+
+```
+Ornate polished gold, white and cream marble, royal blue velvet, faceted gemstones, original
+heraldic lions and crowns (no real coats of arms), strictly symmetrical and regal.
+```
+
+Watch: gems only in the ends and the crest. Band: royal blue velvet.
+
+### 8. Watercolor Fantasy: `WatercolorFantasy`
+
+```
+Soft watercolor painting with visible brush and paper texture, pastel gradients, loosely painted
+flowers, clouds and gentle sparkles of magic, edges that look hand-painted.
+```
+
+Watch: around each shape the background must still be truly transparent, with no paper texture.
+The stretches are one flat, even wash with clean edges. Band: light.
+
+### 9. Anime Pop: `AnimePop`
+
+```
+Bright saturated colors, thick black outlines, halftone dots, speed lines, sticker-style shapes
+with white borders, stars and comic bursts.
+```
+
+Watch: no lettering at all (rule 12). Halftone and speed lines go only in the ends, the crest and
+the Background. The stretches are flat color with a bold outline. Band: white.
+
+### 10. Cyberpunk Neon: `CyberpunkNeon`
+
+```
+Neon grid lines, translucent holographic panels, glowing cyan, magenta and purple edges, small
+glitch artifacts, sleek angular futuristic frames.
+```
+
+Watch: glitches only in the ends, the crest and the Background. Neon glows fade into real
+transparency. Band: dark translucent panel.
+
+### 11. Minimalist Modern: `MinimalistModern`
+
+```
+Clean geometry, lots of empty space, precise lines, subtle soft gradients, muted slate, sand and
+grey with one small accent color.
+```
+
+Watch: "precise lines" still follow rule 11 (8 pixels at least), or they vanish in the game. The
+Name Backing may well skip its center crest. Band: light.
+
+### 12. Tarot and Arcana: `TarotArcana`
+
+```
+Ornate tarot card borders in gold on midnight black and deep purple, celestial symbols,
+constellations, crescent moons, suns with faces, all-seeing eyes, mystical geometric diagrams,
+engraved metal.
+```
+
+Watch: constellations and diagrams in the ends, the crest and the Background. Band: midnight.
+
+### 13. Botanical Cottage Fantasy: `BotanicalCottage`
+
+```
+Wildflowers, climbing vines, little mushrooms, butterflies, pressed leaves on parchment, soft sage
+greens with warm cream and brown.
+```
+
+Watch: vines only in the ends and the crest. The stretch is a plain twig or ribbon rail on smooth
+parchment, with no stains. Band: parchment.
+
+### 14. Oceanic / Siren: `OceanicSiren`
+
+```
+Deep ocean blues and teals, pearls, branching coral, seashell ornaments, flowing water curls,
+bioluminescent glows in aqua and soft pink.
+```
+
+Watch: bubbles and coral only in the ends, the crest and the Background. Band: pearl.
+
+### 15. Void and Cosmic Horror: `VoidCosmicHorror`
+
+```
+Black space with warped stars, cracks of glowing purple energy, floating stone shards, unsettling
+eyes, impossible geometry.
+```
+
+Watch: cracks and eyes only in the ends, the crest and the Background. Floating shards stay inside
+the picture's margin. The stretches are smooth obsidian. Band: dark.
+
+### 16. Retro RPG: `RetroRPG`
+
+```
+16-bit era fantasy RPG: chunky pixel art where every art pixel is a clean square block of about
+8 x 8 image pixels, classic menu windows with a blue top-to-bottom gradient and a white border,
+small original crystals, parchment map details. Original designs only: no characters, creatures,
+logos or crystals from any existing game.
+```
+
+Watch: the stretches must be flat colors only, because stretched pixel blocks turn into rectangles.
+Shown small in the game, the pixels soften a little; that's expected. Band: the blue window.
+
+### 17. Art Nouveau: `ArtNouveau`
+
+```
+Art Nouveau: flowing whiplash curves, stylized lilies and irises, elegant arched portrait framing,
+stained-glass colors (amber, teal, plum) with gold outlines, in the spirit of 1900s posters but
+entirely original.
+```
+
+Watch: the band must be straight; curves belong in the ends and the crest. Band: cream.
+
+### 18. Japanese Ukiyo-e Fantasy: `UkiyoeFantasy`
+
+```
+Japanese woodblock print style: bold ink outlines, flat limited colors (indigo, vermilion, cream),
+stylized waves, clouds and mountains, traditional patterns such as seigaiha waves and asanoha
+stars, original compositions.
+```
+
+Watch: repeating patterns go only in the ends, the crest and the Background. The stretches are
+flat color with an ink outline. Band: cream paper.
+
+### 19. Steampunk / Machinist: `SteampunkMachinist`
+
+```
+Polished brass and copper, interlocking gears, pressure gauges, rivets, dark leather, blueprint
+style mechanical line drawings.
+```
+
+Watch: rivets and stitching repeat, so they go only in the ends. The rails are plain brass and the
+band is plain leather. Band: dark leather.
+
+### 20. Cute Kawaii: `CuteKawaii`
+
+```
+Pastel pink, lavender, mint and baby blue, puffy rounded shapes, stars, hearts, clouds, bows and
+ribbons, sticker-style white outlines, little sparkles.
+```
+
+Watch: hearts and sparkles only in the ends and the crest. Band: white.
 
 ## Checklist for each piece
 
