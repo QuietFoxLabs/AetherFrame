@@ -4,7 +4,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ## [Unreleased]
 
-Networking work, compiled only into the networking preview flavour, which is never released. Player builds contain none of it.
+Mostly networking work, compiled only into the networking preview flavour, which is never released. Player builds contain none of it, apart from entries marked "all builds".
 
 ### Added
 
@@ -28,6 +28,7 @@ Networking work, compiled only into the networking preview flavour, which is nev
 
 ### Fixed
 
+- All builds: the Help button reads **Help** instead of a "?", which sat off centre in its button. In My Plates it moves to the window's top right corner, after the Plate count; in both editors it stays at the right end of the top bar.
 - From the first sharing test in game, in the networking preview flavour:
   - AetherFrame no longer shows Dalamud's "error while rendering this plugin" when it starts. A frame could run before sharing's parts were made, so drawing now starts only once everything it uses exists.
   - When image preparation's check fails, the log now says which step failed and what the game's texture pipeline did. It describes only the check's own test image.
