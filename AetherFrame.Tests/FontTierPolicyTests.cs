@@ -576,15 +576,37 @@ public class FontTierPolicyTests
     /// </summary>
     internal sealed class TrueTypeFace
     {
+        private readonly int ascent;
         private readonly int ascentMinusDescent;
         private readonly (short X0, short Y0, short X1, short Y1)?[] boxes;
         private readonly Dictionary<int, int> codepointToGlyph;
 
-        private TrueTypeFace(int ascentMinusDescent, (short, short, short, short)?[] boxes, Dictionary<int, int> map)
+        private TrueTypeFace(int ascent, int ascentMinusDescent, (short, short, short, short)?[] boxes, Dictionary<int, int> map)
         {
+            this.ascent = ascent;
             this.ascentMinusDescent = ascentMinusDescent;
             this.boxes = boxes;
             codepointToGlyph = map;
+        }
+
+        /// <summary>
+        /// The middle of the capitals, from the top of the box ImGui draws the face in (ascent to
+        /// descent, the font size tall), as a fraction of its height; null when the face has none of
+        /// E, H, I, L and T. The capitals reach the median top of those flat-topped letters (the
+        /// lower middle one of an even count), as tools/fonts/build_font_catalog.py measures them:
+        /// one letter alone can carry a swash or an ascender.
+        /// </summary>
+        internal double? CapCentre
+        {
+            get
+            {
+                var tops = "EHILT"
+                    .Where(c => codepointToGlyph.TryGetValue(c, out var glyph) && boxes[glyph] is not null)
+                    .Select(c => (int)boxes[codepointToGlyph[c]]!.Value.Y1)
+                    .Order()
+                    .ToList();
+                return tops.Count == 0 ? null : (ascent - (tops[(tops.Count - 1) / 2] / 2.0)) / ascentMinusDescent;
+            }
         }
 
         internal bool Maps(int codepoint) => codepointToGlyph.ContainsKey(codepoint);
@@ -712,7 +734,7 @@ public class FontTierPolicyTests
                     }
                 }
 
-                return new TrueTypeFace(ascent - descent, boxes, map);
+                return new TrueTypeFace(ascent, ascent - descent, boxes, map);
             }
 
             Assert.Equal(4, U16(b, sub));
@@ -751,7 +773,7 @@ public class FontTierPolicyTests
                 }
             }
 
-            return new TrueTypeFace(ascent - descent, boxes, map);
+            return new TrueTypeFace(ascent, ascent - descent, boxes, map);
         }
 
         private static int U16(byte[] b, int o) => (b[o] << 8) | b[o + 1];
