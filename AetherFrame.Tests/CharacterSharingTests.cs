@@ -684,11 +684,17 @@ public partial class CharacterSharingTests
             ["/v1/lodestone/check"] = RequestProofKind.LodestoneCheck,
             ["/v1/lodestone/reread"] = RequestProofKind.LodestoneReread,
             ["/v1/opt-out"] = RequestProofKind.OptOut,
+            ["/v1/lookup"] = RequestProofKind.Lookup,
+            ["/v1/image"] = RequestProofKind.Image,
+            ["/v1/report"] = RequestProofKind.Report,
         };
 
         private readonly HashSet<string> issued = new();
 
         internal Dictionary<string, Func<string, (HttpStatusCode Status, string? Body)>> Answers { get; } = new();
+
+        /// <summary>Answers with bodies of bytes, by path: a served profile or an image.</summary>
+        internal Dictionary<string, Func<string, (HttpStatusCode Status, byte[]? Body)>> Bytes { get; } = new();
 
         internal List<SeenAction> Actions { get; } = new();
 
@@ -756,6 +762,12 @@ public partial class CharacterSharingTests
 
             var text = Encoding.UTF8.GetString(body);
             Actions.Add(new SeenAction(path, verified.PublicKey.Id, text));
+            if (Bytes.TryGetValue(path, out var bytes))
+            {
+                var (byteStatus, byteAnswer) = bytes(text);
+                return new HttpResponseMessage(byteStatus) { Content = new ByteArrayContent(byteAnswer ?? []) };
+            }
+
             var (status, answer) = Answers.TryGetValue(path, out var scripted) ? scripted(text) : Default(path, text);
             return Answer(status, answer);
         }

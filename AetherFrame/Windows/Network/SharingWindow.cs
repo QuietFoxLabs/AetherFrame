@@ -69,6 +69,9 @@ internal sealed class SharingWindow : Window, IDisposable
         RespectCloseHotkey = true;
     }
 
+    /// <summary>Opens the viewer (N2-10), offered while one of the player's characters shares.</summary>
+    internal Action? OpenViewer { get; set; }
+
     public override void PreDraw()
     {
         chrome.PushStyle();
@@ -191,7 +194,37 @@ internal sealed class SharingWindow : Window, IDisposable
             }
         }
 
+        DrawViewing(view);
         DrawTurnOffAll(view);
+    }
+
+    /// <summary>Viewing other players' Plates: offered once a character shares, since viewing is part of sharing (V1).</summary>
+    private void DrawViewing(CharacterSharingView view)
+    {
+        if (OpenViewer is not { } open || !HasBound(view))
+        {
+            return;
+        }
+
+        AetherControls.SectionHeader("Other players' Plates");
+        Wrapped("Right-click another player's character in game and choose View AetherFrame Plate, or search for them by name and World.", AetherPalette.TextMuted);
+        if (AetherControls.SecondaryButton("Find a player's Plate##AetherFrameSharingViewer"))
+        {
+            open();
+        }
+    }
+
+    private static bool HasBound(CharacterSharingView view)
+    {
+        foreach (var character in view.Characters)
+        {
+            if (character.IsBound)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void DrawConsent(CharacterSharingView view, CharacterContext character, bool newKey)

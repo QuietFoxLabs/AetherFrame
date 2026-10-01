@@ -1402,6 +1402,21 @@ It also made six smaller points, all applied as well:
 
 **Not settled:** a relay that runs unattended, such as a small always-on device at home, if sharing grows past the test.
 
+### N2-10's viewer. APPROVED (Claude, under the owner's delegation of September 29, 2026), October 1, 2026
+
+The owner asked on October 1, 2026 for N2-10 and N2-11 "to be done asap", for a test with other players. Batch C (C5) and D6 settle what viewing is. These are the details they leave, decided under the delegation:
+- **Which key signs a lookup.** The logged-in character's key when it shares, otherwise the first of the player's characters that does. C5 needs a bound key for every lookup, and the server answers the same whichever it is. A player with no shared character looks nothing up, and sees no menu item and no search (V1).
+- **How a Plate is drawn.** The served profile is turned back into AetherFrame's own renderer's elements: each text into a text element carrying its display text whole, with no affixes and no role, and each image into an image element. Shapes are drawn as Components draw theirs, and the background as the renderer draws one. So a Plate draws for the viewer through the same code as for its owner, to the hundredth the layout carries. Everything is clipped to the viewer's own area (section 8.5). A font or an artwork this build doesn't bundle is matched by exact ident only and never fetched. A text in an unknown font is drawn as a box, and each unknown ident is named once in a note below the Plate.
+- **Images.** Each served image is checked by section 8.2.1, then against its entry's format, width and height, before it is decoded. One that fails is left out, and a note says how many were. Everything received is held in memory only, and closing the viewer drops it.
+- **Hide.** A hidden player is stored by the name and World the viewer looked them up by, in `HiddenPlates.json` in AetherFrame's configuration folder, and never sent anywhere. A hidden Plate isn't looked up at all until the player shows it again. A file that can't be read hides nobody and is never written over.
+- **Report.** The viewer offers C5's four reasons, as the server's API names them (offensive, impersonation, spam, other), each once per Plate shown.
+- **Menus.** The right-click item is offered in the world, the party list, the friend list and chat (C5), only on a target with a full name and a home World. The search lists the game's public Worlds and starts at the player's own.
+- **A takeover.** A lookup, an image or a report answered 410 means another key's check took the signing character over (C1). It is recorded exactly as any other request's 410 is, so the Sharing window says so and that key signs nothing more.
+- **Busy.** A lookup waits, a frame at a time, while the persona session runs another operation (a publish, say), and a newer lookup replaces one still waiting. It puts back the persona selection it found, as every sharing operation does.
+- **The tutorial's chapter on sharing moves to when sharing reaches player builds.** The tutorial is compiled into every build, and sharing exists only in the preview flavour, so a chapter now would point at windows a player build doesn't have. NETWORK2's acceptance (section 2) doesn't need it: the Sharing window and the viewer say what each step does.
+
+**Rationale.** Each choice keeps C5 and D6 as written and costs the test nothing: drawing through the owner's own renderer is what makes "looks as it does for A" (NETWORK2, section 2, step 5) hold by construction, and every refusal leaves the rest of the Plate drawn.
+
 ## Gates
 
 | Gate | Must be decided before |
