@@ -257,13 +257,15 @@ public class IdentityResponsiveNameTests
 
     [Theory]
     [InlineData(IdentityTitleLayout.InlineAfter)]
+    [InlineData(IdentityTitleLayout.InlineBefore)]
     [InlineData(IdentityTitleLayout.Subtitle)]
     public void NoTitle_TheNameHasTheWholeRegion(IdentityTitleLayout layout)
     {
         foreach (var absent in new[] { true, false })
         {
             var (document, name, _) = Plate(AdventurePlateOrientation.Normal, layout, Names[2], absent ? null : "the Brave", titleVisible: false);
-            Assert.Equal(document.BasicIdentity!.RegionPosition.Y, name.Position.Y, 3);
+            Assert.Equal(document.BasicIdentity!.RegionPosition, name.Position);
+            Assert.Equal(document.BasicIdentity.RegionWidth, name.Size.X, 3);
             Assert.Equal(name.FontSize, Rendered(name).Size);
         }
     }

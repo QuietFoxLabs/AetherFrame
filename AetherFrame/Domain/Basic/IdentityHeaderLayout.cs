@@ -14,13 +14,15 @@ namespace AetherFrame.Domain.Basic;
 /// positions and sizes those two separate elements; it never composes their text.
 /// Stacked layouts give every line the full region width (each element's own alignment then
 /// places its text); inline layouts size each box to its text and place them side by side,
-/// aligned as a group by the name's alignment, with their baselines lined up.
+/// aligned as a group by the name's alignment, with their baselines lined up. A name shown
+/// without a title has the whole region width in every layout: nothing shares its line, so its
+/// box never depends on a measured (or, before a font is built, estimated) width.
 ///
 /// <para><b>The name comes first.</b> The name is the primary identity element, so its size is
 /// never traded for the title's placement:</para>
 /// <list type="number">
 /// <item>The name shows at its font size, in a box its measured text width plus padding
-/// (stacked: the whole region width).</item>
+/// (stacked, or with no title shown: the whole region width).</item>
 /// <item>An inline title sits <see cref="InlineGapRatio"/> after (or before) the name while both
 /// fit the region at their full sizes.</item>
 /// <item>Otherwise the title reflows to its own line under the name, aligned with it — the name
@@ -107,11 +109,13 @@ internal static class IdentityHeaderLayout
         regionWidth = Math.Max(1f, regionWidth);
         var gap = MathF.Round(Math.Max(name.FontSize, title.FontSize) * LineGapRatio);
 
-        if (layout is IdentityTitleLayout.InlineBefore or IdentityTitleLayout.InlineAfter)
+        // An inline layout lines the title up beside the name. With no title shown there is nothing
+        // to line up, so the name is placed as the stacked layouts place it: on the whole region.
+        var showTitle = title.Exists && title.Visible;
+        if (showTitle && layout is IdentityTitleLayout.InlineBefore or IdentityTitleLayout.InlineAfter)
         {
             var showName = name.Exists && name.Visible;
-            var showTitle = title.Exists && title.Visible;
-            if (!showName || !showTitle || FitsInline(regionWidth, name, title))
+            if (!showName || FitsInline(regionWidth, name, title))
             {
                 return ComputeInline(layout, regionPosition, regionWidth, groupAlignment, name, title);
             }
@@ -171,7 +175,8 @@ internal static class IdentityHeaderLayout
     }
 
     // One line: the shown boxes at their natural widths (the name at most the region's width),
-    // side by side and aligned as a group, baselines lined up. Only called when they fit.
+    // side by side and aligned as a group, baselines lined up. Only called with the title shown,
+    // when they fit.
     private static Result ComputeInline(
         IdentityTitleLayout layout, Vector2 region, float regionWidth, TextAlignment groupAlignment, Line name, Line title)
     {

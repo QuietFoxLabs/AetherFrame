@@ -446,13 +446,20 @@ public static class ComponentPaintPlan
     }
 
     /// <summary>The union of the drawn name and title's text extents (see <see cref="TextExtent"/>), and the
-    /// first of them in paint order; null when neither is drawn.</summary>
+    /// first of them in paint order; null when neither is drawn. A title with no text yet (FFXIV Title
+    /// before one is picked, Custom before anything is typed) draws nothing and takes no space in the
+    /// header, so it is left out too.</summary>
     private static ElementRect? IdentityExtent(IReadOnlyList<ProfileElement> drawnElements, Func<TextProfileElement, float?>? measureText, out ProfileElement? first)
     {
         ElementRect? extent = null;
         first = null;
         foreach (var element in drawnElements)
         {
+            if (element is TextProfileElement { Role: ProfileElementRole.BasicTitle } title && title.GetDisplayText().Length == 0)
+            {
+                continue;
+            }
+
             if (element.Role is ProfileElementRole.BasicName or ProfileElementRole.BasicTitle)
             {
                 first ??= element;
