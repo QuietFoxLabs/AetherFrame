@@ -144,19 +144,20 @@ public static class PackageValidator
                 $"compiled against Dalamud {dalamud.Version}, whose API level {dalamud.Version.Major} is not the configured {config.DalamudApiLevel}.");
         }
 
-        // The flavour distribution/repository.json names: a player package holds none of the
-        // networking code; a sharing package (the owner's direction of October 1, 2026, "Testing
-        // channel gets sharing") holds it, so a release is never the other flavour by mistake.
+        // The flavour distribution/repository.json gives the version: from sharingSince on (the
+        // owner's direction of October 1, 2026, "Testing channel gets sharing"), the sharing build,
+        // holding the networking code; before it, a player build, holding none of it. A release is
+        // never the other flavour by mistake, and an older release still checks as what it was.
         var networking = assembly.TypeNamespaces
             .Where(ns => NetworkingNamespaces.Any(n => ns == n || ns.StartsWith(n + ".", StringComparison.Ordinal)))
             .ToList();
-        if (config.Flavour == ReleaseFlavour.Sharing)
+        if (config.FlavourOf(version) == ReleaseFlavour.Sharing)
         {
             checks.Require(
                 networking.Count > 0,
                 "plugin flavour",
                 "sharing build, with the sharing code",
-                "the DLL holds no sharing code; distribution/repository.json says releases carry sharing (releaseFlavour).");
+                $"the DLL holds no sharing code; distribution/repository.json says releases from {config.SharingSince} carry sharing (sharingSince).");
         }
         else
         {
@@ -164,7 +165,9 @@ public static class PackageValidator
                 networking.Count == 0,
                 "plugin flavour",
                 "player build, no networking code",
-                $"the DLL holds types in {string.Join(", ", networking)}; it is a networking preview build, which is never packaged for players.");
+                config.SharingSince is { } since
+                    ? $"the DLL holds types in {string.Join(", ", networking)}; it is a networking build, and releases before {since} carry none (sharingSince)."
+                    : $"the DLL holds types in {string.Join(", ", networking)}; it is a networking preview build, which is never packaged for players.");
         }
 
         // The manifest.

@@ -149,6 +149,7 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 - Assembly version `MAJOR.MINOR.PATCH.0` and file version equal to it.
 - Informational version `MAJOR.MINOR.PATCH+<40-character commit id>`: the SDK writes it when building from a Git checkout, so a build from a source archive or with a stale version never passes.
 - References `Dalamud` at a major version equal to the configured API level.
+- The flavour `sharingSince` gives its version: from that version on, the sharing build, holding the networking code; before it, a player build, holding none, as those versions were released. Without `sharingSince`, every release is a player build.
 
 **The manifest (`AetherFrame.json`)**
 - Strict JSON: no comments, trailing commas, duplicate keys or unknown keys. Keys Dalamud writes into installed plugins (`WorkingPluginId`, `InstalledFromUrl`, `Disabled`, `Testing`, `ScheduledForDeletion`) fail with an explanation.

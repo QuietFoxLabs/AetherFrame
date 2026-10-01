@@ -506,6 +506,81 @@ public class PackageValidatorTests
     }
 
     [Fact]
+    public void FromSharingSince_AReleaseIsTheSharingBuild()
+    {
+        // The owner's direction of October 1, 2026 ("Testing channel gets sharing"): from
+        // sharingSince on, a release carries the sharing code, and a player build is refused.
+        var configuration = TestPackages.Configuration(TestPackages.ConfigJsonWithSharing("0.1.5"));
+        Assert.Equal(new ProductVersion(0, 1, 5), configuration.SharingSince);
+
+        using var directory = new TempDirectory();
+        var (sharing, _) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(directory, assembly: TestPackages.Assembly(typeNamespace: "AetherFrame.Protocol")),
+            Configuration = configuration,
+        });
+        Assert.Contains(sharing.Checks, c => c.Name == "plugin flavour" && c.Passed && c.Detail == "sharing build, with the sharing code");
+
+        using var other = new TempDirectory();
+        var (player, _) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(other),
+            Configuration = configuration,
+        });
+        Assert.Contains("holds no sharing code", TestPackages.Failure(player, "plugin flavour"));
+        Assert.Contains("from 0.1.5", TestPackages.Failure(player, "plugin flavour"));
+    }
+
+    [Fact]
+    public void BeforeSharingSince_AReleaseIsStillAPlayerBuild()
+    {
+        // 0.1.7 and earlier were released without the networking code. A publication verifies the
+        // releases it describes again, a rollback included, so they must still pass as player builds,
+        // and a networking build at such a version is still refused.
+        var configuration = TestPackages.Configuration(TestPackages.ConfigJsonWithSharing("0.1.6"));
+        Assert.Equal(ReleaseFlavour.Player, configuration.FlavourOf(new ProductVersion(0, 1, 5)));
+        Assert.Equal(ReleaseFlavour.Sharing, configuration.FlavourOf(new ProductVersion(0, 1, 6)));
+        Assert.Equal(ReleaseFlavour.Sharing, configuration.FlavourOf(new ProductVersion(0, 2, 0)));
+
+        using var directory = new TempDirectory();
+        var (player, _) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(directory),
+            Configuration = configuration,
+        });
+        Assert.Contains(player.Checks, c => c.Name == "plugin flavour" && c.Passed && c.Detail == "player build, no networking code");
+
+        using var other = new TempDirectory();
+        var (networking, _) = TestPackages.Validate(new PackageValidationRequest
+        {
+            PackagePath = TestPackages.Package(other, assembly: TestPackages.Assembly(typeNamespace: "AetherFrame.Personas.Storage")),
+            Configuration = configuration,
+        });
+        Assert.Contains("releases before 0.1.6 carry none", TestPackages.Failure(networking, "plugin flavour"));
+    }
+
+    [Theory]
+    [InlineData("\"sharing\"")]
+    [InlineData("\"0.1\"")]
+    [InlineData("true")]
+    public void ASharingSinceThatIsNotAVersion_IsRefused(string value)
+    {
+        var json = TestPackages.ConfigJson().Replace("\"dalamudApiLevel\"", "\"sharingSince\": " + value + ",\n  \"dalamudApiLevel\"", StringComparison.Ordinal);
+        Assert.ThrowsAny<Exception>(() => TestPackages.Configuration(json));
+    }
+
+    [Fact]
+    public void WithoutSharingSince_EveryReleaseIsAPlayerBuild()
+    {
+        var configuration = TestPackages.Configuration();
+        Assert.Null(configuration.SharingSince);
+        Assert.Equal(ReleaseFlavour.Player, configuration.FlavourOf(new ProductVersion(9, 9, 9)));
+        Assert.Null(configuration.WithDownloadUrlTemplate(configuration.DownloadUrlTemplate).SharingSince);
+        var withSharing = TestPackages.Configuration(TestPackages.ConfigJsonWithSharing("0.1.8"));
+        Assert.Equal(new ProductVersion(0, 1, 8), withSharing.WithDownloadUrlTemplate(withSharing.DownloadUrlTemplate).SharingSince);
+    }
+
+    [Fact]
     public void DllCompiledAgainstAnotherApiLevel_Fails()
     {
         using var directory = new TempDirectory();

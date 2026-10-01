@@ -298,6 +298,19 @@ internal static class TestPackages
         }
         """;
 
+    /// <summary>A configuration whose releases carry sharing from <paramref name="since"/> on.</summary>
+    internal static string ConfigJsonWithSharing(string since) => $$"""
+        {
+          "$comment": "test configuration with sharing",
+          "internalName": "{{InternalName}}",
+          "sharingSince": "{{since}}",
+          "dalamudApiLevel": 15,
+          "sourceRepositoryUrl": "{{RepoUrl}}",
+          "pluginMasterUrl": "{{PluginMasterUrl}}",
+          "downloadUrlTemplate": "{{DownloadTemplate}}"
+        }
+        """;
+
     /// <summary>The address the source repository had before it moved, and its release download template.</summary>
     internal const string PreviousRepoUrl = "https://github.com/richhiiee/AetherFrame";
     internal const string PreviousDownloadTemplate = "https://github.com/richhiiee/AetherFrame/releases/download/v{version}/{package}";
