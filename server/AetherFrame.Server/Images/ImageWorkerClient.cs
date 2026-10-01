@@ -18,6 +18,14 @@ namespace AetherFrame.Server.Images;
 /// folder the worker's container mounts read-only, so the worker has no socket it could replace.
 /// Each worker run connects, takes one job and ends; at most 16 jobs wait, and a 17th is told to
 /// retry. Everything the worker answers is untrusted: <see cref="ProcessedImages.Check"/> checks it.
+/// <para>
+/// With <see cref="ServerOptions.ImageWorkerRuns"/>, each run has a socket of its own (I2's per-job
+/// isolation): the server offers one fresh socket at a time, under a random name, answers exactly
+/// one connection on it, then closes it and deletes it before it offers the next. The host mounts
+/// only the socket on offer into a run's container, so a run an exploit controls can take the one
+/// job it was started for and nothing else: its socket answers no second connection, and it can't
+/// see any other.
+/// </para>
 /// </summary>
 internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger<ImageWorkerClient> logger) : BackgroundService, IImageProcessor
 {
@@ -137,8 +145,17 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
         }
     }
 
+    /// <summary>The name pattern of a run's socket in <see cref="ServerOptions.ImageWorkerRuns"/>.</summary>
+    internal const string RunSocketPattern = "run-*.sock";
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!string.IsNullOrEmpty(options.Value.ImageWorkerRuns))
+        {
+            await OfferRunSocketsAsync(options.Value.ImageWorkerRuns, stoppingToken);
+            return;
+        }
+
         var path = options.Value.ImageWorkerSocket;
         if (string.IsNullOrEmpty(path))
         {
@@ -163,6 +180,49 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
         while (!stoppingToken.IsCancellationRequested)
         {
             var worker = await listener.AcceptAsync(stoppingToken);
+            if (!connected.Writer.TryWrite((worker, Stopwatch.GetTimestamp())))
+            {
+                worker.Dispose();
+            }
+        }
+    }
+
+    /// <summary>One socket per run: offered, one connection answered, then closed and deleted, and the next offered.</summary>
+    private async Task OfferRunSocketsAsync(string folder, CancellationToken stoppingToken)
+    {
+        Directory.CreateDirectory(folder);
+
+        // An earlier server's sockets answer nothing: none is left for the host to mount.
+        foreach (var stale in Directory.GetFiles(folder, RunSocketPattern))
+        {
+            File.Delete(stale);
+        }
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var path = Path.Combine(folder, "run-" + Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16)) + ".sock");
+            Socket worker;
+            using (var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified))
+            {
+                try
+                {
+                    listener.Bind(new UnixDomainSocketEndPoint(path));
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.GroupWrite);
+                    }
+
+                    listener.Listen(1);
+                    worker = await listener.AcceptAsync(stoppingToken);
+                }
+                finally
+                {
+                    // Deleted before anything else happens: the host never mounts a socket that has
+                    // already answered, and this one answers nothing more once its listener closes.
+                    File.Delete(path);
+                }
+            }
+
             if (!connected.Writer.TryWrite((worker, Stopwatch.GetTimestamp())))
             {
                 worker.Dispose();

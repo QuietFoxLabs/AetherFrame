@@ -42,6 +42,19 @@ internal static class ServerLimits
 
     public static readonly Limit PublishesPerAddress = new("publish/address", 120, TimeSpan.FromHours(1));
 
+    /// <summary>
+    /// Images a character may send through the worker in an hour (the open alpha, October 1, 2026):
+    /// four full publishes of eight, so one character can't keep the one worker to itself.
+    /// </summary>
+    public static readonly Limit ImageJobsPerCharacter = new("image-job/character", 32, TimeSpan.FromHours(1));
+
+    /// <summary>
+    /// Images of a character the worker failed on (refused, crashed or stalled) in an hour: each may
+    /// hold the worker's one pipeline for a whole run, so after three the character's publishes with
+    /// images wait out the hour.
+    /// </summary>
+    public static readonly Limit WorkerFailuresPerCharacter = new("worker-failure/character", 3, TimeSpan.FromHours(1));
+
     public static readonly Limit ReportsPerKey = new("report/key", 20, TimeSpan.FromDays(1));
 
     public static readonly Limit ReportsPerAddress = new("report/address", 60, TimeSpan.FromDays(1));
@@ -90,6 +103,21 @@ internal sealed class RateLimiter(TimeProvider time)
 {
     private readonly ConcurrentDictionary<(string Limit, string Subject), Counter> counters = new();
     private DateTimeOffset lastSweep;
+
+    /// <summary>Whether <paramref name="limit"/> has room for one more event for <paramref name="subject"/>, without counting one.</summary>
+    public bool HasRoom(Limit limit, string subject)
+    {
+        if (!counters.TryGetValue((limit.Name, subject), out var counter))
+        {
+            return true;
+        }
+
+        lock (counter)
+        {
+            counter.Trim(time.GetUtcNow());
+            return counter.Removed || counter.Events.Count < limit.Count;
+        }
+    }
 
     /// <summary>Counts one event against <paramref name="limit"/> for <paramref name="subject"/>, unless it is already at the limit.</summary>
     public bool TryTake(Limit limit, string subject, int multiple = 1)

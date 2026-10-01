@@ -111,11 +111,16 @@ internal static class AdminCommands
           allowlist                   the Lodestone ids the configuration allows now (C8)
         """;
 
-    public static async Task<int> RunAsync(string[] args, ServerDatabase database, BindingStore bindings, TextWriter output, IReadOnlyList<string>? allowlist = null)
+    public static async Task<int> RunAsync(string[] args, ServerDatabase database, BindingStore bindings, TextWriter output, IReadOnlyList<string>? allowlist = null, bool open = false)
     {
         switch (args)
         {
             case ["allowlist"]:
+                if (open)
+                {
+                    await output.WriteLineAsync("Open to everyone (OpenToEveryone): any character whose Lodestone check passes may share and view. The ids below don't limit who.");
+                }
+
                 foreach (var text in allowlist ?? [])
                 {
                     await output.WriteLineAsync(Lodestone.LodestoneIds.TryParse(text, out _) ? text : text + "  (not a Lodestone id: ignored)");
