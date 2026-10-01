@@ -26,6 +26,12 @@ Networking work, compiled only into the networking preview flavour, which is nev
 - The remote protocol's request proof, which the plugin doesn't use yet (NETWORK2 increment N2-3b; decisions S1, D7 and L8 in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md), and the owner's advance approval of this signed-byte change). Submitting a Plate to a server will need a small proof signed by the Plate's own key, in its own signing context: it names the server's address, carries a one-time challenge the server issued, and fingerprints the exact document, so nobody else can submit a copy of a player's Plate, nothing sent to one server works on another, and nothing can be replayed. The specification states the rules every signing context follows, and the test vectors gain valid and rejected proofs.
 - The remote protocol's image rule, which the plugin doesn't use yet (NETWORK2 increment N2-6b, its first part; decisions I1, D5 and I2 in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md)). The publisher, the server and every viewer check a shared image's bytes by one rule before decoding anything: a non-animated, non-interlaced 8-bit truecolour PNG holding only the chunks decoders need, or a JPEG with one baseline, extended or progressive frame, at most 64 scans and only the markers such a JPEG needs, that ends where it says it ends, within the size limits. The specification's section 8.2.1 states the rule exactly, with test vectors.
 
+### Fixed
+
+- From the first sharing test in game, in the networking preview flavour:
+  - AetherFrame no longer shows Dalamud's "error while rendering this plugin" when it starts. A frame could run before sharing's parts were made, so drawing now starts only once everything it uses exists.
+  - When image preparation's check fails, the log now says which step failed and what the game's texture pipeline did. It describes only the check's own test image.
+
 ## [0.1.7] - 2026-09-30
 
 A new look and a first-time tutorial, a Plate menu in both editors, and more Plate Library reliability fixes. This version has no networking and needs no account. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged.

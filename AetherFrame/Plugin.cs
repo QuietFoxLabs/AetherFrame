@@ -307,16 +307,6 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 ClientState.Logout -= OnLogout;
             });
 
-            PluginInterface.UiBuilder.Draw += DrawUi;
-            PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
-            PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
-            startup.OnFailure("drawing", () =>
-            {
-                PluginInterface.UiBuilder.Draw -= DrawUi;
-                PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
-                PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
-            });
-
 #if AETHERFRAME_NETWORK_PREVIEW
             // Starts in the background. Until the player acts it writes only its lock file (creating
             // the persona folder) and the capability probe's scratch files, in the temp folder and
@@ -380,6 +370,18 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 && characterSharing.View.Find(shown.ContentId) is { Stage: SharingStage.Shared } entry && entry.PublishedPlate != plateId
                 && plateLibrary.GetActivePlateId(shown.ContentId) == plateId;
 #endif
+
+            // Drawing starts last: the plugin is created off the framework thread, so a frame can
+            // run while this constructor does, and every frame's work must find all it uses made.
+            PluginInterface.UiBuilder.Draw += DrawUi;
+            PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
+            PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
+            startup.OnFailure("drawing", () =>
+            {
+                PluginInterface.UiBuilder.Draw -= DrawUi;
+                PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
+                PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
+            });
 
             // Names the exact build in dalamud.log, so a stale dev DLL is obvious.
             Log.Information($"==={AetherFrameBuildInfo.Current.Describe()} loaded ({PluginInterface.Manifest.Name})===");
