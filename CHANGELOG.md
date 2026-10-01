@@ -28,7 +28,7 @@ Networking work, compiled only into the networking preview flavour, which is nev
 
 ## [0.1.7] - 2026-09-30
 
-A new look and a first-time tutorial, a Plate menu in both editors, and more Plate Library reliability fixes, released to the testing channel at the owner's request. This build has no networking: the networking work is compiled only into the separate networking preview flavour, which is never released, so it stays listed under Unreleased. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged.
+A new look and a first-time tutorial, a Plate menu in both editors, and more Plate Library reliability fixes. This version has no networking and needs no account. Saved Plates, Templates, `.aetherframe` packages and the configuration format are unchanged.
 
 ### Added
 
