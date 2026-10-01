@@ -35,6 +35,13 @@ internal static partial class FontLibrary
     /// <summary>The family with exactly this id, or null. Allocation-free: font lookups run per text, per frame.</summary>
     internal static LibraryFontFamily? Find(string? id) => id is not null && Index.ById.TryGetValue(id, out var family) ? family : null;
 
+    /// <summary>The fonts' licence notices, embedded in the plugin (AetherFrame.csproj) and shown from Help.</summary>
+    internal static readonly string[] NoticeResources =
+    [
+        "AetherFrame.Fonts.THIRD-PARTY-FONT-LICENSES.txt",
+        "AetherFrame.Fonts.Library.THIRD-PARTY-FONT-LICENSES.txt",
+    ];
+
     /// <summary>The embedded resource name of a family's face (AetherFrame.csproj's Fonts\Library glob).</summary>
     internal static string ResourceName(LibraryFontFamily family, string style) => "AetherFrame.Fonts.Library." + family.FilePrefix + "-" + style + ".ttf";
 
@@ -50,10 +57,6 @@ internal static partial class FontLibrary
         _ => "Regular",
     };
 
-    /// <summary>
-    /// The lookup, in a class of its own: field initializers across a partial class's files run in
-    /// no defined order, and this one reads <see cref="Families"/>, from the generated file.
-    /// </summary>
     /// <summary>
     /// The (bold, italic) a request draws in for <paramref name="familyId"/>: for a library family,
     /// those of the face <see cref="FaceStyle"/> picks, so two requests drawn with one face share one
@@ -76,6 +79,10 @@ internal static partial class FontLibrary
         };
     }
 
+    /// <summary>
+    /// The lookup, in a class of its own: field initializers across a partial class's files run in
+    /// no defined order, and this one reads <see cref="Families"/>, from the generated file.
+    /// </summary>
     private static class Index
     {
         internal static readonly Dictionary<string, LibraryFontFamily> ById = Build();

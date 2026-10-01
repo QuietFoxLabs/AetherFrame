@@ -213,6 +213,30 @@ public partial class FontLibraryTests
         }
     }
 
+    [Fact]
+    public void ThePlugin_CarriesEveryFaceAndBothNotices_UnderTheNamesItReads()
+    {
+        // The built plugin (CI sets AETHERFRAME_PLUGIN_ASSEMBLY): the faces ProfileFontService loads
+        // and the notices Help's Font licences reads are embedded under exactly these names.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new System.Reflection.PortableExecutable.PEReader(File.OpenRead(path));
+        var metadata = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe);
+        var names = metadata.ManifestResources.Select(handle => metadata.GetString(metadata.GetManifestResource(handle).Name)).ToHashSet(StringComparer.Ordinal);
+        Assert.All(FontLibrary.NoticeResources, resource => Assert.Contains(resource, names));
+        foreach (var family in FontLibrary.Families)
+        {
+            foreach (var style in Styles(family))
+            {
+                Assert.Contains(FontLibrary.ResourceName(family, style), names);
+            }
+        }
+    }
+
     private static IEnumerable<string> Styles(LibraryFontFamily family)
     {
         yield return "Regular";

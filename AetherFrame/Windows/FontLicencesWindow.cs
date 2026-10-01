@@ -18,12 +18,6 @@ namespace AetherFrame.Windows;
 /// </summary>
 internal sealed class FontLicencesWindow : Window
 {
-    private static readonly string[] Resources =
-    [
-        "AetherFrame.Fonts.THIRD-PARTY-FONT-LICENSES.txt",
-        "AetherFrame.Fonts.Library.THIRD-PARTY-FONT-LICENSES.txt",
-    ];
-
     private readonly AetherWindowChrome chrome = new();
     private string? text;
 
@@ -40,7 +34,7 @@ internal sealed class FontLicencesWindow : Window
     {
         var assembly = Assembly.GetExecutingAssembly();
         var notices = new System.Text.StringBuilder();
-        foreach (var resource in Resources)
+        foreach (var resource in AetherFrame.Domain.Rendering.FontLibrary.NoticeResources)
         {
             using var stream = assembly.GetManifestResourceStream(resource)
                 ?? throw new InvalidOperationException($"Embedded licence '{resource}' was not found.");
@@ -62,7 +56,15 @@ internal sealed class FontLicencesWindow : Window
 
     public override void Draw()
     {
-        text ??= ReadNotices();
+        try
+        {
+            text ??= ReadNotices();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException)
+        {
+            text = "The licences couldn't be read from this AetherFrame (" + exception.GetType().Name + "). They are in AetherFrame's repository, in AetherFrame/Fonts.";
+        }
+
         ImGui.TextUnformatted("AetherFrame's fonts are free software, each under its own licence below.");
         ImGui.Separator();
 
