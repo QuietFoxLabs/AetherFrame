@@ -27,9 +27,9 @@ where each runtime copy was made from.
   rotate or mirror it.
 - Name Backings and Dividers may be **sliced** (`ArtSlices` in `BuiltInArtCatalog`), below.
 
-`BuiltInArtTests`, `CelestialSakuraTests` and `SlicedArtTests` check all of this against the embedded bytes.
+`BuiltInArtTests`, `CelestialSakuraTests`, `SlicedArtTests` and `ArtSetsTests` check all of this against the embedded bytes.
 
-## Sliced artwork (Name Backings and Dividers)
+## Sliced artwork (Name Backings, Dividers and Section Headers)
 
 A name can be two letters or twenty, so a backing drawn at one fixed ratio is either tiny behind a
 short name or too short for a long one. Sliced artwork is cut at five x positions into a left cap,
@@ -125,7 +125,8 @@ is 992 x 1586 (0.6255), which is 0.076% off, so it is drawn exactly over the por
 **Default placements** on the Adventure Plate Classic, in logical px, before any Scale or Offset:
 
 - Background and Plate Frame fill the canvas at (0, 0, 1280, 720). Art Plate Frames skip the
-  14 px inset of the procedural borders, because the drawing carries its own margin.
+  14 px inset of the procedural borders, because the drawing carries its own margin, and paint just
+  before the first text, so the name and every text draw over the frame, never under it.
 - Portrait Frame covers the portrait.
 - Nameplate: sliced (see above), 1.5x the padded name box's height and centered on the name. With
   the starter's 60 px name box, it is 108 px tall, and as wide as the name's text plus about 100 px
@@ -150,3 +151,36 @@ once, the first time a Plate draws it. That takes about 45–55 ms of CPU per pi
 the thread pool (`BuiltInArtLoader`), not inside Draw. The piece appears a frame or a few later.
 If that ever matters, the Celestial Dream route is available: approved, reduced runtime copies
 made from the full-size sources.
+
+## The art sets: 19 sets of seven pieces, and Celestial Sakura's Section Header
+
+Made by `tools/art/make_runtime_art.py` from the owner's sources (run it from the repository root,
+with the source folder as its argument). [ArtSets.md](ArtSets.md) lists every runtime file with
+its source's SHA-256 and its own, its cuts and its size factor, and `ArtSetsTests` checks every
+file against it. The ids, Components and Art Styles are made in `ArtSets` from the generated
+`ArtSetData.g.cs`.
+
+- The Background, Plate Frame and Portrait Frame are the sources, byte for byte (1672 x 941 and
+  992 x 1586), with their Content Credentials.
+- The Name Backing, Divider and Section Header (1086 x 362) and the Corner Ornament (627 x 627) are
+  half size, the owner's choice of October 1, 2026, to keep the download near 77 MB instead of
+  117 MB. Each is averaged exactly as `BundledArtImage.BuildLevels` makes its own half-size level,
+  so wherever the piece is drawn at or below half its source's size it draws exactly as the source
+  would: at Size 100% that is every screen up to 4K with the Plate full screen. Larger, it is
+  magnified and slightly softer.
+- Cuts are measured on each source and halved (the fills shrink by at most a texel, so they stay
+  plain). Pieces whose fills meet in the middle have no center piece.
+- Size factors match Celestial Sakura's look: a Name Backing's plain band is 40 px around the
+  starter name; a Divider's drawing about 48 px tall (most are thinner, so they stop at the largest
+  factor, 4); a Section Header's band 22 px of the 24 px heading row; a Corner Ornament 3.
+- A Section Header drawn from artwork is a backing: one placement behind each drawn heading,
+  around its measured text with 6 px either side, at the bottom of the element stack. An end
+  reaching past the heading's column tucks behind the portrait and its frame.
+- Each set is also an Art Style, a theme (`af.style.<slug>`) that places its seven pieces. Its text
+  colors are chosen from the pixels: dark or light ink, whichever contrasts more with the band
+  behind the name, the band behind the headings, and the background behind the Details. Every
+  style clears 4.5:1 (WCAG AA) on all three (`ArtSetsTests`).
+- `StylePreviews/<Folder>.png` (384 x 216) is each style's card in the theme browser: a sample
+  Plate the generator draws from the runtime pieces. It is an illustration, never a Component.
+- Memory: a whole set drawn at once is about 33 MB of GPU memory with its levels, loaded once, the
+  first time a Plate draws each piece, on the thread pool.

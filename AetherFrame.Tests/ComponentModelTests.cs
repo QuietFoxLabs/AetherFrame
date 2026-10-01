@@ -117,7 +117,7 @@ public class ComponentCatalogTests
             Assert.Equal(kind, definition!.Kind);
         }
 
-        Assert.Equal(Shipped.Length, BuiltInComponentCatalog.All.Count);
+        Assert.Equal(Shipped.Length + ArtSets.Definitions.Count, BuiltInComponentCatalog.All.Count); // the art sets: ArtSetsTests
     }
 
     [Fact]

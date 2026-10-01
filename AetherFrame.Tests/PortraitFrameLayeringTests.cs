@@ -79,15 +79,19 @@ public class PortraitFrameLayeringTests
         Assert.True(frame > image, "the frame must paint over the picture");
         Assert.True(frame > lastElement && overlay > frame);
         Assert.True(plan.FindIndex(s => s.Layer == PlateLayer.Decorations) > overlay);
-        Assert.Equal(PlateLayer.PlateFrame, plan[^1].Layer);
+        Assert.Equal(PlateLayer.Decorations, plan[^1].Layer);
         Assert.Equal(PlateLayer.Background, plan[0].Layer);
+
+        // The Plate Frame artwork paints under every text, the portrait band (for its picture) over it.
+        var plateFrame = plan.FindIndex(s => s.Layer == PlateLayer.PlateFrame);
+        Assert.True(plateFrame < plan.FindIndex(s => s.Element is TextProfileElement) && plateFrame < frame);
 
         var layout = Domain.Basic.AdventurePlateClassicLayout.GetRect(ProfileElementRole.BasicPortrait, AdventurePlateOrientation.Normal, document)!.Value;
         Assert.Equal(layout, plan[frame].Placement.Rect); // Offset and Scale still move it onto the picture
     }
 
     [Fact]
-    public void TheSemanticOrder_BackgroundPortraitFrameOverlayContentDecorationsPlateFrame()
+    public void TheSemanticOrder_BackgroundPortraitFrameOverlayPlateFrameArtContentDecorations()
     {
         var document = ComponentDocuments.WithAnchors();
         document.Components =
@@ -106,9 +110,9 @@ public class PortraitFrameLayeringTests
             [
                 PlateLayer.Background,
                 PlateLayer.Portrait, PlateLayer.PortraitFrame, PlateLayer.PortraitOverlay,
+                PlateLayer.PlateFrame, // artwork: under every text, so it never covers the name
                 PlateLayer.NameBacking, PlateLayer.Identity, PlateLayer.Identity, PlateLayer.Identity, PlateLayer.Identity, PlateLayer.Identity,
                 PlateLayer.Decorations,
-                PlateLayer.PlateFrame,
             ],
             layers);
     }

@@ -42,11 +42,11 @@ public class SlicedArtTests
     }
 
     [Fact]
-    public void OnlyNameBackingsAndDividers_AreSliced_AndEverySlicingFitsItsArtwork()
+    public void OnlyPiecesThatFollowText_AreSliced_AndEverySlicingFitsItsArtwork()
     {
         foreach (var art in BuiltInArtCatalog.All.Where(a => a.Slices is not null))
         {
-            Assert.True(art.Kind is PlateComponentKind.NameBacking or PlateComponentKind.Divider, art.Id);
+            Assert.True(ComponentPaintPlan.FollowsText(art.Kind), art.Id);
             Assert.True(art.Slices!.IsValidFor(art.PixelWidth), art.Id);
         }
     }

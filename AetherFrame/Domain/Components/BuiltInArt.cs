@@ -224,8 +224,7 @@ public static class BuiltInArtCatalog
 
     /// <summary>The words every Celestial Sakura piece answers to, before its own role words. Declared
     /// before the pieces: static fields initialize in order.</summary>
-    private static readonly string[] CelestialSakuraKeywords =
-        ["celestial sakura", "sakura", "cherry blossom", "blossom", "moon", "crescent", "rose", "pink", "gold", "pearl"];
+    private static readonly string[] CelestialSakuraKeywords = ArtKeywords.CelestialSakura;
 
     /// <summary>A twilight sky with cherry branches and a crescent moon, covering the whole Plate (opaque).</summary>
     public static readonly BuiltInArtAsset CelestialSakuraBackgroundArt = CelestialSakura(
@@ -283,6 +282,7 @@ public static class BuiltInArtCatalog
         CelestialSakuraOrnateDividerArt,
         CelestialSakuraSlimDividerArt,
         CelestialSakuraCornerOrnamentArt,
+        .. ArtSets.Assets,
     ];
 
     private static readonly Dictionary<string, BuiltInArtAsset> ById = BuildIndex();
@@ -349,4 +349,13 @@ public static class BuiltInArtCatalog
 
         return index;
     }
+}
+
+/// <summary>Search words more than one catalog uses: a class of its own, so the catalogs share them
+/// without depending on each other's static initialization.</summary>
+internal static class ArtKeywords
+{
+    /// <summary>The words every Celestial Sakura piece answers to, before its own role words.</summary>
+    internal static readonly string[] CelestialSakura =
+        ["celestial sakura", "sakura", "cherry blossom", "blossom", "moon", "crescent", "rose", "pink", "gold", "pearl"];
 }

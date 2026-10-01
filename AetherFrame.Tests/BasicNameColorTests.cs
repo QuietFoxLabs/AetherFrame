@@ -32,7 +32,7 @@ public class BasicNameColorTests
     [Fact]
     public void EveryBuiltInTheme_HasItsOwnNameTreatment()
     {
-        foreach (var theme in ProfileThemePresets.All)
+        foreach (var theme in ProfileThemePresets.SimpleThemes)
         {
             // Explicit metadata on every theme: nothing falls through to TextColor or the black/white outline fallback.
             Assert.NotNull(theme.NameColor);
@@ -46,14 +46,14 @@ public class BasicNameColorTests
         }
 
         // Not one white name for everything.
-        var distinct = ProfileThemePresets.All.Select(t => t.PreferredNameColor).Distinct().Count();
+        var distinct = ProfileThemePresets.SimpleThemes.Select(t => t.PreferredNameColor).Distinct().Count();
         Assert.True(distinct >= 29, $"{distinct} distinct name colors");
     }
 
     [Fact]
     public void EveryName_IsBrightDisplayText_NeverADarkOrMuddyInk()
     {
-        foreach (var theme in ProfileThemePresets.All)
+        foreach (var theme in ProfileThemePresets.SimpleThemes)
         {
             var name = theme.PreferredNameColor;
             var (_, saturation, _) = Hsv(name);
@@ -90,7 +90,7 @@ public class BasicNameColorTests
         // Large bold display text: along the name's line, in both orientations, either the fill or its
         // outline stands clear of the background everywhere; where the fill alone is soft (a bright name
         // on a bright gradient) the outline is strong enough to carry it.
-        foreach (var theme in ProfileThemePresets.All)
+        foreach (var theme in ProfileThemePresets.SimpleThemes)
         {
             var name = BasicNameColor.Automatic(theme);
             var outline = theme.PreferredNameOutlineColor;
@@ -182,7 +182,7 @@ public class BasicNameColorTests
     [Fact]
     public void EveryBuiltInTheme_UsesADarkOutline_NotALightHalo()
     {
-        foreach (var theme in ProfileThemePresets.All)
+        foreach (var theme in ProfileThemePresets.SimpleThemes)
         {
             Assert.False(BasicNameColor.IsLightHalo(theme), theme.Id);
         }

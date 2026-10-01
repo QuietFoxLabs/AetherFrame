@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
 using AetherFrame.Services;
@@ -126,6 +127,7 @@ internal sealed class BackgroundStylePanel
 
     // Card sizes in unscaled pixels, at Dalamud's global UI scale when drawn (their labels scale too).
     private static float ThemeCardWidth => EditorWidgets.Scaled(118f);
+    private static float ArtStyleCardWidth => EditorWidgets.Scaled(176f);
     private static float ThemeCardPadding => EditorWidgets.Scaled(6f);
     private static float PatternCardSize => EditorWidgets.Scaled(68f);
 
@@ -153,7 +155,8 @@ internal sealed class BackgroundStylePanel
 
         foreach (var family in ProfileThemePresets.FamilyOrder)
         {
-            var members = ProfileThemePresets.All.Where(p => p.Family == family).ToArray();
+            // An Art Style is its artwork: as background colors alone it would only mislead.
+            var members = ProfileThemePresets.All.Where(p => p.Family == family && !p.IsArtStyle).ToArray();
             if (members.Length == 0)
             {
                 continue;
@@ -162,7 +165,7 @@ internal sealed class BackgroundStylePanel
             using var id = ImRaii.PushId($"ThemeFamily{family}");
             if (ImGui.CollapsingHeader($"{family} ({members.Length})"))
             {
-                DrawThemeCardGrid(profile, members, null, applyTheme);
+                DrawThemeCardGrid(profile, members, null, applyTheme, ThemeCardWidth);
                 ImGui.Spacing();
             }
         }
@@ -202,7 +205,7 @@ internal sealed class BackgroundStylePanel
             ImGui.SameLine();
             ImGui.TextUnformatted(chosen.Name);
             ImGui.SameLine();
-            ImGui.TextDisabled(chosen.Family.ToString());
+            ImGui.TextDisabled(chosen.IsArtStyle ? "Art Style" : ThemeBrowser.SimpleThemesLabel);
         }
         else
         {
@@ -246,29 +249,50 @@ internal sealed class BackgroundStylePanel
         // Sized to the content up to a few rows, then scrolling on its own.
         var headings = themeBrowser.Family is null;
         var style = ImGui.GetStyle();
-        var cardHeight = ThemeCardHeight(profile);
-        var columns = ThemeBrowser.Columns(ImGui.GetContentRegionAvail().X - style.ScrollbarSize, ThemeCardWidth, style.ItemSpacing.X);
-        var contentHeight = 0f;
-        foreach (var (_, themes) in groups)
+        var available = ImGui.GetContentRegionAvail().X - style.ScrollbarSize;
+        var firstSimple = groups.FindIndex(g => g.Family != ThemeFamily.ArtStyle);
+        var simpleHeading = headings && firstSimple > 0;
+        var contentHeight = simpleHeading ? ImGui.GetTextLineHeightWithSpacing() + style.ItemSpacing.Y : 0f;
+        foreach (var (family, themes) in groups)
         {
+            var cardWidth = CardWidth(family);
+            var columns = ThemeBrowser.Columns(available, cardWidth, style.ItemSpacing.X);
             var rows = (themes.Count + columns - 1) / columns;
-            contentHeight += (rows * cardHeight) + ((rows - 1) * style.ItemSpacing.Y) + (headings ? ImGui.GetTextLineHeightWithSpacing() + style.ItemSpacing.Y : 0f);
+            contentHeight += (rows * ThemeCardHeight(profile, family, cardWidth)) + ((rows - 1) * style.ItemSpacing.Y) + (headings ? ImGui.GetTextLineHeightWithSpacing() + style.ItemSpacing.Y : 0f);
         }
 
-        var maxHeight = (ThemeBrowserVisibleRows * cardHeight) + ((ThemeBrowserVisibleRows - 0.5f) * style.ItemSpacing.Y);
+        var simpleCardHeight = ThemeCardHeight(profile, ThemeFamily.Classic, ThemeCardWidth);
+        var maxHeight = (ThemeBrowserVisibleRows * simpleCardHeight) + ((ThemeBrowserVisibleRows - 0.5f) * style.ItemSpacing.Y);
         using (var grid = ImRaii.Child("##ThemeGrid", new Vector2(-1f, MathF.Min(contentHeight, maxHeight)), false))
         {
             if (grid.Success)
             {
-                foreach (var (family, themes) in groups)
+                for (var g = 0; g < groups.Count; g++)
                 {
+                    var (family, themes) = groups[g];
                     using var id = ImRaii.PushId($"ThemeGroup{family}");
-                    if (headings)
+                    if (simpleHeading && g == firstSimple)
                     {
-                        ImGui.TextDisabled(family.ToString());
+                        // Under All: the Art Styles first, then the Simple Themes.
+                        ImGui.Spacing();
+                        ImGui.TextUnformatted(ThemeBrowser.SimpleThemesLabel);
+                        EditorWidgets.Tooltip("Colors only. Choosing one after an Art Style takes away the style's own pieces.");
                     }
 
-                    DrawThemeCardGrid(profile, themes, current, applyTheme);
+                    if (headings)
+                    {
+                        if (family == ThemeFamily.ArtStyle)
+                        {
+                            ImGui.TextUnformatted(ThemeBrowser.FamilyLabel(family));
+                            EditorWidgets.Tooltip("A whole look: a background, frames, corners, a name plaque, a divider and section headers,\nwith text colors to match. Each piece stays yours to change under Frame & Decorations.");
+                        }
+                        else
+                        {
+                            ImGui.TextDisabled(ThemeBrowser.FamilyLabel(family));
+                        }
+                    }
+
+                    DrawThemeCardGrid(profile, themes, current, applyTheme, CardWidth(family));
                 }
             }
         }
@@ -286,7 +310,7 @@ internal sealed class BackgroundStylePanel
         Filter("All", null, ProfileThemePresets.All.Length);
         foreach (var (family, count) in families)
         {
-            Filter(family.ToString(), family, count);
+            Filter(ThemeBrowser.FamilyLabel(family), family, count);
         }
 
         void Filter(string name, ThemeFamily? family, int count)
@@ -315,13 +339,19 @@ internal sealed class BackgroundStylePanel
         }
     }
 
-    private float ThemeCardHeight(ProfileDocument profile) =>
-        (ThemeCardWidth * profile.CanvasHeight / MathF.Max(1f, profile.CanvasWidth)) + (ThemeCardPadding * 3f) + ImGui.GetTextLineHeight();
+    private static float CardWidth(ThemeFamily family) => family == ThemeFamily.ArtStyle ? ArtStyleCardWidth : ThemeCardWidth;
 
-    private void DrawThemeCardGrid(ProfileDocument profile, IReadOnlyList<ProfileThemePreset> members, ProfileThemePreset? current, Action<ProfileThemePreset> applyTheme)
+    /// <summary>An Art Style's card shows its 16:9 preview; a Simple Theme's, the Plate's own canvas shape.</summary>
+    private static float PreviewHeight(ProfileDocument profile, bool artStyle, float cardWidth) =>
+        artStyle ? cardWidth * ArtSets.PreviewHeight / ArtSets.PreviewWidth : cardWidth * profile.CanvasHeight / MathF.Max(1f, profile.CanvasWidth);
+
+    private static float ThemeCardHeight(ProfileDocument profile, ThemeFamily family, float cardWidth) =>
+        PreviewHeight(profile, family == ThemeFamily.ArtStyle, cardWidth) + (ThemeCardPadding * 3f) + ImGui.GetTextLineHeight();
+
+    private void DrawThemeCardGrid(ProfileDocument profile, IReadOnlyList<ProfileThemePreset> members, ProfileThemePreset? current, Action<ProfileThemePreset> applyTheme, float cardWidth)
     {
         var spacing = ImGui.GetStyle().ItemSpacing.X;
-        var columns = ThemeBrowser.Columns(ImGui.GetContentRegionAvail().X, ThemeCardWidth, spacing);
+        var columns = ThemeBrowser.Columns(ImGui.GetContentRegionAvail().X, cardWidth, spacing);
         var rowStartX = ImGui.GetCursorPosX();
 
         for (var i = 0; i < members.Count; i++)
@@ -339,7 +369,7 @@ internal sealed class BackgroundStylePanel
             }
 
             var selected = current?.Id == members[i].Id;
-            if (DrawThemeCard(profile, members[i], selected))
+            if (DrawThemeCard(profile, members[i], selected, cardWidth))
             {
                 applyTheme(members[i]);
             }
@@ -356,11 +386,11 @@ internal sealed class BackgroundStylePanel
     /// <summary>One theme's card: the profile's background as it would look with the theme applied,
     /// sample text in its Name/Title colors, and its name below. An accent border and a check mark
     /// mark the theme currently applied to this profile. A card scrolled out of view draws nothing.</summary>
-    private bool DrawThemeCard(ProfileDocument profile, ProfileThemePreset preset, bool selected)
+    private bool DrawThemeCard(ProfileDocument profile, ProfileThemePreset preset, bool selected, float cardWidth)
     {
-        var previewHeight = ThemeCardWidth * profile.CanvasHeight / MathF.Max(1f, profile.CanvasWidth);
+        var previewHeight = PreviewHeight(profile, preset.IsArtStyle, cardWidth);
         var textHeight = ImGui.GetTextLineHeight();
-        var cardSize = new Vector2(ThemeCardWidth, previewHeight + (ThemeCardPadding * 3f) + textHeight);
+        var cardSize = new Vector2(cardWidth, previewHeight + (ThemeCardPadding * 3f) + textHeight);
 
         ImGui.InvisibleButton($"##Theme{preset.Id}", cardSize);
         var min = ImGui.GetItemRectMin();
@@ -377,9 +407,53 @@ internal sealed class BackgroundStylePanel
         drawList.AddRectFilled(min, max, ImGui.GetColorU32(hovered ? CardHoverColor : CardColor), 6f);
 
         var previewMin = min + new Vector2(ThemeCardPadding);
-        var previewSize = new Vector2(ThemeCardWidth - (ThemeCardPadding * 2f), previewHeight);
+        var previewSize = new Vector2(cardWidth - (ThemeCardPadding * 2f), previewHeight);
         var previewMax = previewMin + previewSize;
 
+        if (preset.IsArtStyle)
+        {
+            DrawArtStylePreview(drawList, preset, previewMin, previewMax);
+        }
+        else
+        {
+            DrawThemePreview(drawList, profile, preset, previewMin, previewMax);
+        }
+
+        var borderColor = selected ? EditorWidgets.AccentColor : hovered ? EditorWidgets.AccentColor : CardBorderColor;
+        drawList.AddRect(previewMin, previewMax, ImGui.GetColorU32(borderColor), 3f, ImDrawFlags.None, selected || hovered ? 2f : 1f);
+
+        if (selected)
+        {
+            DrawSelectedMark(drawList, new Vector2(previewMax.X - 4f, previewMin.Y + 4f));
+        }
+
+        var textPos = new Vector2(previewMin.X, previewMax.Y + ThemeCardPadding);
+        drawList.PushClipRect(textPos, new Vector2(previewMax.X, max.Y), true);
+        drawList.AddText(textPos, ImGui.GetColorU32(ImGuiCol.Text), preset.Name);
+        drawList.PopClipRect();
+
+        return clicked;
+    }
+
+    /// <summary>An Art Style's card: its bundled preview, a sample Plate in the style. While the preview
+    /// loads (once, a frame or a few), the style's own colors stand in.</summary>
+    private void DrawArtStylePreview(ImDrawListPtr drawList, ProfileThemePreset preset, Vector2 previewMin, Vector2 previewMax)
+    {
+        drawList.AddRectFilledMultiColor(
+            previewMin, previewMax,
+            ImGui.GetColorU32(preset.PrimaryColor), ImGui.GetColorU32(preset.SecondaryColor),
+            ImGui.GetColorU32(preset.SecondaryColor), ImGui.GetColorU32(preset.PrimaryColor));
+        if (ArtSets.PreviewArt(preset) is { } art && renderResources.Art.GetWrapOrNull(art, previewMax.X - previewMin.X) is { } wrap)
+        {
+            drawList.AddImage(wrap.Handle, previewMin, previewMax);
+        }
+    }
+
+    /// <summary>A Simple Theme's card: the profile's background as it would look with the theme applied,
+    /// and sample text in its Name and Title colors.</summary>
+    private void DrawThemePreview(ImDrawListPtr drawList, ProfileDocument profile, ProfileThemePreset preset, Vector2 previewMin, Vector2 previewMax)
+    {
+        var previewSize = previewMax - previewMin;
         var preview = profile.Background?.Clone() ?? new ProfileBackground();
         var keepImage = preview.HasImage;
         preset.ApplyTo(preview);
@@ -398,21 +472,6 @@ internal sealed class BackgroundStylePanel
         drawList.AddText(font, sampleSize, new Vector2(textX, previewMax.Y - (sampleSize * 2.1f)), ImGui.GetColorU32(preset.PreferredNameColor with { W = 1f }), "Name");
         drawList.AddText(font, sampleSize * 0.85f, new Vector2(textX, previewMax.Y - sampleSize), ImGui.GetColorU32(preset.AccentTextColor with { W = 1f }), "Title");
         drawList.PopClipRect();
-
-        var borderColor = selected ? EditorWidgets.AccentColor : hovered ? EditorWidgets.AccentColor : CardBorderColor;
-        drawList.AddRect(previewMin, previewMax, ImGui.GetColorU32(borderColor), 3f, ImDrawFlags.None, selected || hovered ? 2f : 1f);
-
-        if (selected)
-        {
-            DrawSelectedMark(drawList, new Vector2(previewMax.X - 4f, previewMin.Y + 4f));
-        }
-
-        var textPos = new Vector2(previewMin.X, previewMax.Y + ThemeCardPadding);
-        drawList.PushClipRect(textPos, new Vector2(previewMax.X, max.Y), true);
-        drawList.AddText(textPos, ImGui.GetColorU32(ImGuiCol.Text), preset.Name);
-        drawList.PopClipRect();
-
-        return clicked;
     }
 
     private void DrawSolidSwatches()

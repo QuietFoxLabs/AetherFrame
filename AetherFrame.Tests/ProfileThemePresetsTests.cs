@@ -68,8 +68,9 @@ public class ProfileThemePresetsTests
     [Fact]
     public void CatalogSize_IsInTheRequestedRange()
     {
-        Assert.InRange(ProfileThemePresets.All.Length, 28, 34);
-        Assert.Equal(30, ProfileThemePresets.All.Length);
+        Assert.InRange(ProfileThemePresets.SimpleThemes.Length, 28, 34);
+        Assert.Equal(30, ProfileThemePresets.SimpleThemes.Length);
+        Assert.Equal(20, ProfileThemePresets.All.Count(p => p.IsArtStyle)); // ArtSetsTests
     }
 
     // ---------------------------------------------------------------- stable ids (task: verify/test)
@@ -140,7 +141,8 @@ public class ProfileThemePresetsTests
     [Fact]
     public void FamilyAssignments_MatchTheCuratedMap()
     {
-        foreach (var preset in ProfileThemePresets.All)
+        Assert.All(ProfileThemePresets.All.Where(p => p.IsArtStyle), p => Assert.Equal(ThemeFamily.ArtStyle, p.Family));
+        foreach (var preset in ProfileThemePresets.SimpleThemes)
         {
             Assert.True(ExpectedFamily.TryGetValue(preset.Name, out var expected), $"{preset.Name} is missing from the test's expected-family map.");
             Assert.Equal(expected, preset.Family);
@@ -156,7 +158,7 @@ public class ProfileThemePresetsTests
     [Fact]
     public void FamilyOrder_IsDeterministic()
     {
-        ThemeFamily[] expected = [ThemeFamily.Classic, ThemeFamily.Pastel, ThemeFamily.Vibrant, ThemeFamily.Gradient, ThemeFamily.Special];
+        ThemeFamily[] expected = [ThemeFamily.ArtStyle, ThemeFamily.Classic, ThemeFamily.Pastel, ThemeFamily.Vibrant, ThemeFamily.Gradient, ThemeFamily.Special];
         Assert.Equal(expected, ProfileThemePresets.FamilyOrder);
     }
 
@@ -217,8 +219,9 @@ public class ProfileThemePresetsTests
     [Fact]
     public void NoTwoThemes_HaveNearIdenticalBackgroundColors()
     {
+        // Simple Themes only: an Art Style's plain colors are its artwork's averages, and its look is the artwork.
         const float minDistance = 0.12f;
-        var all = ProfileThemePresets.All;
+        var all = ProfileThemePresets.SimpleThemes;
 
         for (var i = 0; i < all.Length; i++)
         {

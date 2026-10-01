@@ -77,10 +77,13 @@ public enum ComponentStatus
 /// <para><b>Ordering.</b> Elements keep exactly the order <c>ProfilePaintOrder</c> gives them
 /// (ZIndex, ties by list order), so a Plate without components paints exactly as before. Components
 /// are placed by their <see cref="PlateLayer"/> relative to what they decorate:
-/// Backgrounds before everything (over the canvas); Portrait Frames then Portrait Overlays
-/// immediately after the portrait element; Name Backings
+/// Backgrounds before everything (over the canvas), then Section Header backings (sliced Section
+/// Header artwork, behind every element; see <see cref="IsHeaderBacking"/>); Portrait Frames then
+/// Portrait Overlays immediately after the portrait element; Plate Frame artwork immediately before
+/// the first text element, so no text is ever under a frame drawn in from the edge; Name Backings
 /// immediately before the first identity element (name or title); then, after every element,
-/// Decorations, then Plate Frames. Within one layer: ascending <see cref="PlateComponent.LayerOrder"/>,
+/// Decorations, then procedural Plate Frames (and Plate Frame artwork on a Plate without text).
+/// Within one layer: ascending <see cref="PlateComponent.LayerOrder"/>,
 /// ties by list order. When the anchor element doesn't exist at all, the component uses the
 /// Adventure Plate Classic layout's placement: a Name Backing paints at the bottom of the element
 /// stack (still behind any text), a Portrait Frame or Overlay above every element (still over any
@@ -182,7 +185,9 @@ public static class ComponentPaintPlan
         var backgroundBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
         var portraitBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
         var nameBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
+        var headerBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
         var decorationBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
+        var artFrameBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
         var frameBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
 
         for (var i = 0; i < components.Count && i < PlateComponentLimits.MaxComponentCount; i++)
@@ -205,8 +210,14 @@ public static class ComponentPaintPlan
                 case PlateLayer.NameBacking:
                     nameBand.Add(entry);
                     break;
+                case PlateLayer.Decorations when IsHeaderBacking(definition!):
+                    headerBand.Add(entry);
+                    break;
                 case PlateLayer.Decorations:
                     decorationBand.Add(entry);
+                    break;
+                case PlateLayer.PlateFrame when definition!.Art is not null:
+                    artFrameBand.Add(entry);
                     break;
                 case PlateLayer.PlateFrame:
                     frameBand.Add(entry);
@@ -217,7 +228,9 @@ public static class ComponentPaintPlan
         SortBand(backgroundBand);
         SortBand(portraitBand);
         SortBand(nameBand);
+        SortBand(headerBand);
         SortBand(decorationBand);
+        SortBand(artFrameBand);
         SortBand(frameBand);
 
         var unit = Unit(profile);
@@ -225,6 +238,21 @@ public static class ComponentPaintPlan
 
         // Backgrounds: the whole canvas, under everything else.
         AddBand(output, backgroundBand, CanvasRect(profile), 0f, canvasWidth);
+
+        // Section header artwork: a backing around each drawn heading's measured text, at the bottom
+        // of the element stack, so every text draws over it, and an end reaching past the heading's
+        // column tucks behind the portrait and its frame instead of covering them.
+        foreach (var (component, definition, _) in headerBand)
+        {
+            foreach (var element in drawnElements)
+            {
+                if (element is TextProfileElement && BasicSections.IsHeading(element.Role))
+                {
+                    var box = Pad(TextExtent(element, measureText), new Vector2(SectionHeaderPadX, SectionHeaderPadY) * unit);
+                    output.Add(ComponentStep(component, definition, ArtBand(box, definition, canvasWidth), 0f, false, false));
+                }
+            }
+        }
 
         // Anchors: the portrait element, and the identity elements (name, title).
         var portraitElement = BasicSections.Find(profile, ProfileElementRole.BasicPortrait);
@@ -242,8 +270,17 @@ public static class ComponentPaintPlan
             AddBand(output, nameBand, Pad(region, unit), 0f, canvasWidth);
         }
 
+        // Plate Frame artwork paints just before the first text, above every picture under it and
+        // below every text: an ornate frame reaching in from the edge never covers the name.
+        var artFramesPainted = artFrameBand.Count == 0;
         foreach (var element in drawnElements)
         {
+            if (!artFramesPainted && element is TextProfileElement)
+            {
+                AddFrames(output, artFrameBand, profile, unit);
+                artFramesPainted = true;
+            }
+
             if (ReferenceEquals(element, firstIdentity) && nameBand.Count > 0 && drawnIdentity is { } identityRect)
             {
                 AddBand(output, nameBand, Pad(identityRect, unit), 0f, canvasWidth);
@@ -294,7 +331,28 @@ public static class ComponentPaintPlan
             }
         }
 
-        foreach (var (component, definition, _) in frameBand)
+        // No text at all: the artwork frames paint where every frame used to, on top.
+        if (!artFramesPainted)
+        {
+            AddFrames(output, artFrameBand, profile, unit);
+        }
+
+        AddFrames(output, frameBand, profile, unit);
+    }
+
+    /// <summary>Section Header padding around a heading's text for a header backing, in reference pixels.</summary>
+    public const float SectionHeaderPadX = 6f;
+    public const float SectionHeaderPadY = 0f;
+
+    /// <summary>True for a Section Header drawn as a backing behind its heading: sliced artwork, which
+    /// paints before the elements (see <see cref="Build"/>). Procedural Section Headers mark the heading
+    /// from above it, after every element, as they always have.</summary>
+    public static bool IsHeaderBacking(ComponentDefinition definition) =>
+        definition.Kind == PlateComponentKind.SectionHeader && definition.Art is { } art && IsSliced(art);
+
+    private static void AddFrames(List<PaintStep> output, List<(PlateComponent Component, ComponentDefinition Definition, int Index)> band, ProfileDocument profile, float unit)
+    {
+        foreach (var (component, definition, _) in band)
         {
             // A procedural border sits just inside the edge; artwork covers the whole canvas (the
             // drawing carries its own margin, so an inset would only shrink it).
@@ -393,7 +451,7 @@ public static class ComponentPaintPlan
     /// </summary>
     private static ElementRect ArtBand(ElementRect box, ComponentDefinition definition, float canvasWidth)
     {
-        if (definition.Art is not { } art || definition.Kind is not (PlateComponentKind.NameBacking or PlateComponentKind.Divider))
+        if (definition.Art is not { } art || !FollowsText(definition.Kind))
         {
             return box;
         }
@@ -414,6 +472,11 @@ public static class ComponentPaintPlan
 
         return new ElementRect(box.Position + ((box.Size - size) / 2f), size);
     }
+
+    /// <summary>The kinds whose artwork is sized around text it decorates (the name, a heading), and so
+    /// may be sliced to fit it: Name Backings, Dividers and Section Headers.</summary>
+    public static bool FollowsText(PlateComponentKind kind) =>
+        kind is PlateComponentKind.NameBacking or PlateComponentKind.Divider or PlateComponentKind.SectionHeader;
 
     /// <summary>True when <paramref name="art"/> stretches to any width (valid <see cref="BuiltInArtAsset.Slices"/>).</summary>
     public static bool IsSliced(BuiltInArtAsset art) => art.Slices is { } slices && slices.IsValidFor(art.PixelWidth) && art.PixelHeight > 0;
@@ -518,7 +581,7 @@ public static class ComponentPaintPlan
 
         var center = anchor.Position + (anchor.Size / 2f) + offset;
         var size = anchor.Size * scale;
-        if (definition.Art is { } art && !(IsSliced(art) && definition.Kind is (PlateComponentKind.NameBacking or PlateComponentKind.Divider)))
+        if (definition.Art is { } art && !(IsSliced(art) && FollowsText(definition.Kind)))
         {
             size = FitAspect(size, art.AspectRatio); // sliced art was already sized by ArtBand, and Scale keeps its shape
         }
@@ -576,11 +639,9 @@ public static class ComponentPaintPlan
 
     private const float TextExtentSlack = 2f;
 
-    private static ElementRect Pad(ElementRect rect, float unit)
-    {
-        var pad = new Vector2(NameBackingPadX, NameBackingPadY) * unit;
-        return new ElementRect(rect.Position - pad, rect.Size + (2f * pad));
-    }
+    private static ElementRect Pad(ElementRect rect, float unit) => Pad(rect, new Vector2(NameBackingPadX, NameBackingPadY) * unit);
+
+    private static ElementRect Pad(ElementRect rect, Vector2 pad) => new(rect.Position - pad, rect.Size + (2f * pad));
 
     private static ElementRect CanvasRect(ProfileDocument profile) =>
         new(Vector2.Zero, new Vector2(Math.Max(0f, profile.CanvasWidth), Math.Max(0f, profile.CanvasHeight)));
