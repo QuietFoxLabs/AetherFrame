@@ -28,10 +28,11 @@ public class FairPublishTests
         Assert.Null(slots.TryTake(1, IPAddress.Parse("198.51.100.2")));
         Assert.Null(slots.TryTake(2, IPAddress.Parse("198.51.100.1")));
 
-        // An IPv6 /64 counts as one address.
+        // An IPv6 /48 counts as one address: a home holds many /64s.
         var v6 = slots.TryTake(3, IPAddress.Parse("2001:db8:1:2::10"));
         Assert.NotNull(v6);
         Assert.Null(slots.TryTake(4, IPAddress.Parse("2001:db8:1:2::99")));
+        Assert.Null(slots.TryTake(5, IPAddress.Parse("2001:db8:1:ff00::1")));
 
         var rest = Enumerable.Range(0, PublishSlots.Total - 2).Select(index => slots.TryTake(10 + index, IPAddress.Parse("203.0.113." + (index + 1)))).ToList();
         Assert.All(rest, Assert.NotNull);

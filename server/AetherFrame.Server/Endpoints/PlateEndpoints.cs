@@ -47,7 +47,7 @@ internal static class PlateEndpoints
     public static readonly TimeSpan BodyDeadline = TimeSpan.FromSeconds(300);
 
     /// <summary>The slowest an authenticated publish may send, after a 10-second grace.</summary>
-    public static readonly MinDataRate MinBodyRate = new(bytesPerSecond: 64 * 1024, gracePeriod: TimeSpan.FromSeconds(10));
+    public static readonly MinDataRate MinBodyRate = new(bytesPerSecond: 16 * 1024, gracePeriod: TimeSpan.FromSeconds(10));
 
     private static readonly string[] CharacterFields = ["name", "world"];
     private static readonly string[] ImageFields = ["name", "world", "marker"];
@@ -456,11 +456,11 @@ internal static class PlateEndpoints
     }
 }
 
-/// <summary>Two publishes at a time at most, so buffered bodies stay bounded; a third is told to retry.</summary>
 /// <summary>
-/// The publish slots, held while a publish's body uploads: <see cref="Total"/> in all, and at most one
-/// per character and one per address range (an IPv4 address, or an IPv6 /64), so no one player can
-/// hold them all (the open alpha, October 1, 2026). A slot is released when its holder is disposed.
+/// The publish slots, held while a publish's body uploads, which also keeps buffered bodies bounded:
+/// <see cref="Total"/> in all, and at most one per character and one per address range (an IPv4
+/// address, or an IPv6 /48, the widest group a site is likely to hold), so no one player can hold
+/// them all (the open alpha, October 1, 2026). A slot is released when its holder is disposed.
 /// </summary>
 internal sealed class PublishSlots
 {
@@ -477,7 +477,7 @@ internal sealed class PublishSlots
         var keys = new[]
         {
             "character/" + lodestoneId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            "address/" + System.Linq.Enumerable.First(AetherFrame.Server.Limits.AddressGroups.Of(address)).Group,
+            "address/" + System.Linq.Enumerable.Last(AetherFrame.Server.Limits.AddressGroups.Of(address)).Group,
         };
 
         lock (gate)
