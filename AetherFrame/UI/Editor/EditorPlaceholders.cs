@@ -7,7 +7,7 @@ namespace AetherFrame.UI.Editor;
 /// Editor-only placeholder text for elements with no content yet, drawn dimmed by
 /// <see cref="ProfileTextRenderer"/> in place of the (empty) content. Lives in the editor layer
 /// and only reaches the renderer through <see cref="ProfileRenderOptions.PlaceholderProvider"/>,
-/// which finished rendering (Profile View, Clean Preview, the Basic preview) never sets — so a
+/// which finished rendering (Profile View, the Basic preview) never sets — so a
 /// placeholder can't appear in a finished profile, and nothing like "(empty)" is hardcoded into
 /// rendering.
 ///

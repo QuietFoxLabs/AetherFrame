@@ -16,7 +16,7 @@ namespace AetherFrame.UI.Rendering;
 ///
 /// This is purely a rendering service: it owns no editing state and knows nothing about
 /// selection, dragging, resizing, snapping, hit testing, or undo/redo — those remain editor
-/// concerns. The Advanced editor canvas, its Clean Preview, the Basic editor preview, and the
+/// concerns. The Advanced editor canvas, the Basic editor preview, and the
 /// read-only Profile View all call into this one class, so they can never disagree about how a
 /// profile looks. Anything editor-only (element bounds, placeholders) must be requested
 /// explicitly through <see cref="ProfileRenderOptions"/>; the default is the finished profile.

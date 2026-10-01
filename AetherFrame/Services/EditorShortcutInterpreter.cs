@@ -12,7 +12,6 @@ internal enum EditorShortcutActionKind
     Save,
     Duplicate,
     FitCanvas,
-    ExitPreview,
 }
 
 internal readonly record struct EditorShortcutAction(EditorShortcutActionKind Kind, Vector2 NudgeDelta = default);
@@ -23,7 +22,6 @@ internal enum ShortcutKey
     Control,
     Shift,
     Alt,
-    Escape,
     Delete,
     Left,
     Right,
@@ -79,13 +77,11 @@ internal sealed class EditorShortcutInterpreter
     private bool previousSDown;
     private bool previousDDown;
     private bool previousFDown;
-    private bool previousEscapeDown;
 
     // Published by the open editor's previous Draw (or OnClose); read on the next Update. Volatile:
     // written on the render thread, read on the framework thread.
     private volatile bool editorFocused;
     private volatile bool textInputActive;
-    private volatile bool previewActive;
     private volatile bool canvasInteractionActive;
     private volatile bool documentShortcutsOnly;
 
@@ -98,12 +94,11 @@ internal sealed class EditorShortcutInterpreter
     /// <summary>True while Dalamud has plugin UI hidden: no shortcut is recognized or queued.</summary>
     internal bool IsUiHidden => uiHidden;
 
-    /// <inheritdoc cref="KeyboardShortcutService.SetEditorFocusState(bool, bool, bool, bool)"/>
-    internal void SetEditorFocusState(bool editorFocused, bool textInputActive, bool previewActive, bool canvasInteractionActive)
+    /// <inheritdoc cref="KeyboardShortcutService.SetEditorFocusState(bool, bool, bool)"/>
+    internal void SetEditorFocusState(bool editorFocused, bool textInputActive, bool canvasInteractionActive)
     {
         this.editorFocused = editorFocused;
         this.textInputActive = textInputActive;
-        this.previewActive = previewActive;
         this.canvasInteractionActive = canvasInteractionActive;
         documentShortcutsOnly = false;
     }
@@ -111,7 +106,7 @@ internal sealed class EditorShortcutInterpreter
     /// <inheritdoc cref="KeyboardShortcutService.SetDocumentShortcutFocusState"/>
     internal void SetDocumentShortcutFocusState(bool editorFocused, bool textInputActive)
     {
-        SetEditorFocusState(editorFocused, textInputActive, previewActive: false, canvasInteractionActive: false);
+        SetEditorFocusState(editorFocused, textInputActive, canvasInteractionActive: false);
         documentShortcutsOnly = true;
     }
 
@@ -145,7 +140,7 @@ internal sealed class EditorShortcutInterpreter
         }
 
         resyncHeldKeys = true;
-        SetEditorFocusState(editorFocused: false, textInputActive: false, previewActive: false, canvasInteractionActive: false);
+        SetEditorFocusState(editorFocused: false, textInputActive: false, canvasInteractionActive: false);
     }
 
     /// <summary>Dalamud showed plugin UI again. Shortcuts resume once an editor draws with focus.</summary>
@@ -201,24 +196,6 @@ internal sealed class EditorShortcutInterpreter
         {
             DetectHistoryShortcuts(keyboard, ctrlDown, shiftDown);
             ResetHeldKeys(keepSaveKey: true, keepHistoryKeys: true);
-            return;
-        }
-
-        var escapeDown = keyboard.IsDown(ShortcutKey.Escape);
-        var escapePressed = escapeDown && !previousEscapeDown;
-        previousEscapeDown = escapeDown;
-
-        if (previewActive)
-        {
-            // Clean Preview is view-only: Escape leaves it (and must not also reach the game,
-            // where it would open the system menu or clear the target); nothing else is claimed.
-            if (escapePressed)
-            {
-                Enqueue(EditorShortcutActionKind.ExitPreview);
-                keyboard.Suppress(ShortcutKey.Escape);
-            }
-
-            ResetHeldKeys(keepSaveKey: true, keepEscapeKey: true);
             return;
         }
 
@@ -326,7 +303,6 @@ internal sealed class EditorShortcutInterpreter
         previousDeleteDown = keyboard.IsDown(ShortcutKey.Delete);
         previousDDown = keyboard.IsDown(ShortcutKey.D);
         previousFDown = keyboard.IsDown(ShortcutKey.F);
-        previousEscapeDown = keyboard.IsDown(ShortcutKey.Escape);
         leftRepeat.HoldUntilReleased(keyboard.IsDown(ShortcutKey.Left));
         rightRepeat.HoldUntilReleased(keyboard.IsDown(ShortcutKey.Right));
         upRepeat.HoldUntilReleased(keyboard.IsDown(ShortcutKey.Up));
@@ -337,7 +313,7 @@ internal sealed class EditorShortcutInterpreter
     /// Releases held-key state so a later focus regain starts clean rather than treating an
     /// already-held key as a fresh press or resuming mid-repeat.
     /// </summary>
-    private void ResetHeldKeys(bool keepSaveKey = false, bool keepEscapeKey = false, bool keepHistoryKeys = false)
+    private void ResetHeldKeys(bool keepSaveKey = false, bool keepHistoryKeys = false)
     {
         leftRepeat.Reset();
         rightRepeat.Reset();
@@ -356,11 +332,6 @@ internal sealed class EditorShortcutInterpreter
         if (!keepSaveKey)
         {
             previousSDown = false;
-        }
-
-        if (!keepEscapeKey)
-        {
-            previousEscapeDown = false;
         }
     }
 

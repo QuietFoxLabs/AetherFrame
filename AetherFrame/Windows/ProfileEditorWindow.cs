@@ -20,13 +20,13 @@ namespace AetherFrame.Windows;
 /// <summary>
 /// The Advanced (freeform) profile editor: Layers panel, canvas, and Inspector around one shared
 /// <see cref="EditorSession"/>. Split across partial files by panel:
-/// this file (lifecycle, toolbar, status bar, shortcuts, save protection, Clean Preview),
+/// this file (lifecycle, toolbar, status bar, shortcuts, save protection),
 /// <c>.Layers.cs</c>, <c>.Canvas.cs</c> (viewport, input, editor chrome), <c>.Inspector.cs</c>
 /// (element properties), and <c>.CanvasSettings.cs</c> (canvas size and background).
 ///
 /// Everything drawn on the canvas that isn't the profile itself (bounds, selection, handles, snap
 /// guides, placeholders) is editor chrome layered on top of <see cref="ProfileRenderer"/>'s
-/// output; Clean Preview and Profile View use the renderer alone, so they can never show it.
+/// output; the Plate Viewer (Preview, View) uses the renderer alone, so it can never show it.
 /// </summary>
 internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditorSurface
 {
@@ -68,9 +68,6 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     // Unsaved-changes protection when the window closes (shared with the Basic editor's own).
     private readonly EditorCloseGuard closeGuard;
 
-    // Preview: the shared Clean Preview, which the Basic editor's Preview uses too.
-    private readonly CleanPreviewPresenter cleanPreview;
-
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
@@ -90,13 +87,14 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         EditorSurfaceCoordinator surfaces,
         EditorDocumentCommands commands,
         EditorPlateMenu plateMenu)
-        : base("AetherFrame Advanced Editor##ProfileEditorWindow")
+        : base("AetherFrame Advanced Editor##ProfileEditorWindow", EditorFlags)
     {
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = AdvancedEditorLayout.MinimumWindowSize,
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
+        RespectCloseHotkey = true;
 
         this.profileService = profileService;
         this.editorSession = editorSession;
@@ -108,7 +106,6 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         backgroundPanel = new BackgroundStylePanel(editorSession, renderResources, OpenImageFileDialog);
         actionBar = new EditorActionBar(commands, EditorSurfaceKind.Advanced, openLibrary, openBasicEditor, () => Help, plateMenu);
         closeGuard = new EditorCloseGuard(editorSession, commands);
-        cleanPreview = new CleanPreviewPresenter(this, editorSession, profileService, renderResources, EditorFlags);
 
         // Title bar, left to right: Dalamud's Window Options (Settings) | Minimize | Close — all three
         // Dalamud's own, the same as every other AetherFrame window (see TitleBarOrder). Minimize is
@@ -148,7 +145,6 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         surfaces.NotifyOpened(EditorSurfaceKind.Advanced);
 
         editorSession.AutoFit = true;
-        editorSession.PreviewActive = false;
         lastCanvasPanelSize = new Vector2(-1f, -1f);
     }
 
@@ -182,13 +178,9 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
 
         if (closeGuard.ShouldReopenOnClose())
         {
-            // The unsaved-changes question needs the normal editor window, not the preview's.
-            editorSession.PreviewActive = false;
             IsOpen = true;
             return;
         }
-
-        editorSession.PreviewActive = false;
 
         // Draw won't run again until the window reopens, so this is the only reliable place to
         // tell the keyboard service to stop intercepting immediately.
@@ -196,28 +188,18 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         fileDialogManager.Reset();
     }
 
-    /// <summary>
-    /// The first-open size, then Clean Preview's presentation (see <see cref="CleanPreviewPresenter"/>)
-    /// or the editor's own — in that order, so the preview's sizing always wins.
-    /// </summary>
+    /// <summary>The first-open size.</summary>
     public override void PreDraw()
     {
         chrome.PushStyle();
         EditorWidgets.SetFirstUseSize(AdvancedEditorLayout.FirstUseSize, AdvancedEditorLayout.MinimumWindowSize);
-        cleanPreview.PreDraw();
         AetherWindowChrome.ApplyPolicy(this);
     }
 
-    public override void PostDraw()
-    {
-        cleanPreview.PostDraw();
-        chrome.PopStyle();
-    }
+    public override void PostDraw() => chrome.PopStyle();
 
     public override void Draw()
     {
-        cleanPreview.CaptureEditorRect();
-
         // Drawn unconditionally so an in-progress file pick isn't stranded if the profile
         // becomes unavailable (e.g. character logs out) while the dialog is open.
         fileDialogManager.Draw();
@@ -249,14 +231,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
             IsOpen = false;
         }
 
-        if (editorSession.PreviewActive)
-        {
-            cleanPreview.Draw(profile);
-        }
-        else
-        {
-            DrawEditor(profile);
-        }
+        DrawEditor(profile);
 
         // Outside every child region: the one consistent id-stack scope every popup is
         // opened/drawn from — see pendingContextMenuOpenElementId.
@@ -300,7 +275,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     /// </summary>
     private void DrawToolbar(ProfileDocument profile)
     {
-        actionBar.Draw(profile, editorSession.PreviewActive, () => EditorPreview.Show(editorSession, profile.ProfileId, actionBar.PlateMenu.View), EditorPreview.Tooltip, editorSession.ErrorMessage);
+        actionBar.Draw(profile, () => EditorPreview.Show(editorSession, profile.ProfileId, actionBar.PlateMenu.View), EditorPreview.Tooltip, editorSession.ErrorMessage);
 
         var toolbarMin = ImGui.GetCursorScreenPos();
         var atCapacity = profile.Elements.Count >= ProfileDocument.MaxElementCount;
@@ -438,7 +413,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     // ---------------------------------------------------------------- keyboard
 
     /// <summary>
-    /// Publishes this frame's focus/text-input/preview/interaction state to
+    /// Publishes this frame's focus/text-input/interaction state to
     /// <see cref="KeyboardShortcutService"/> so it knows what to intercept on the NEXT
     /// <c>Framework.Update</c> tick. Detection/suppression happen there — early enough that FFXIV
     /// never also reacts — not here.
@@ -452,7 +427,6 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         keyboardShortcutService.SetEditorFocusState(
             editorFocused,
             textInputActive,
-            editorSession.PreviewActive,
             editorSession.ActiveInteraction != ElementInteractionKind.None);
 
         if (editorFocused && !textInputActive)
@@ -473,11 +447,6 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     {
         foreach (var action in keyboardShortcutService.DequeuePendingActions())
         {
-            if (editorSession.PreviewActive && action.Kind is not (EditorShortcutActionKind.ExitPreview or EditorShortcutActionKind.Save))
-            {
-                continue;
-            }
-
             switch (action.Kind)
             {
                 case EditorShortcutActionKind.Undo:
@@ -508,9 +477,6 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
                     break;
                 case EditorShortcutActionKind.FitCanvas:
                     FitCanvas();
-                    break;
-                case EditorShortcutActionKind.ExitPreview:
-                    EditorPreview.Exit(editorSession);
                     break;
             }
         }

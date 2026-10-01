@@ -268,7 +268,7 @@ internal sealed class FramePushes : IOutstandingStyle
 /// public override void PostDraw() { /* the window's own PostDraw */ chrome.PopStyle(); }
 /// </code>
 ///
-/// The style goes on first so a window's own pushes (Clean Preview's transparent presentation,
+/// The style goes on first so a window's own pushes (the Plate Viewer's transparent presentation,
 /// say) win over it; ImGui pops by count, so the order of the pops in PostDraw doesn't matter.
 /// The policy goes on last so it wins over whatever flags the window's own PreDraw set.
 /// </summary>

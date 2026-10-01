@@ -53,7 +53,7 @@ Everything is useful, but these areas matter most right now:
 
 - **My Plates** (`/af`): creating, duplicating, renaming, deleting and choosing the Active Plate, on more than one character if you can.
 - **Basic Editor**: filling in every section, and whether it feels familiar if you know Adventure Plates.
-- **Advanced Editor**: moving, resizing, rotating, layering, undo and redo, and Clean Preview.
+- **Advanced Editor**: moving, resizing, rotating, layering, undo and redo, and Preview.
 - **Plate Viewer** (`/af view`): does it show the Plate you chose as Active?
 - **Import and export**: sharing a `.aetherframe` file with another tester and importing theirs.
 - **UI scale**: everything at Dalamud's 100%, 150% and 200% global scale.
