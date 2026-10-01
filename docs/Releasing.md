@@ -142,6 +142,7 @@ The AI Usage Policy asks for two separate disclosures:
 | Celestial Dream *Astrolabe Pivot* | Created with AI assistance. The runtime copy is resampled, so it carries no credentials | Description and README |
 | Plugin icon | Generated with ChatGPT, then refined. The file carries no provenance metadata | Description and README. **A hand-made replacement is recommended before the D17 submission.** When it lands, drop the icon from the description and from `ReleaseMetadataTests` |
 | Fonts | PT Sans, PT Serif, Cousine under the SIL OFL 1.1 | `Fonts/THIRD-PARTY-FONT-LICENSES.txt` |
+| Font library | 101 Google Fonts families, each under the SIL OFL 1.1 or the Apache License 2.0 (`tools/fonts/library.json` records each file's source and checksum) | `Fonts/Library/THIRD-PARTY-FONT-LICENSES.txt` |
 
 ### Draft PR description
 

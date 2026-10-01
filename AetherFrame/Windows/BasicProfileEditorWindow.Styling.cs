@@ -19,7 +19,6 @@ namespace AetherFrame.Windows;
 internal sealed partial class BasicProfileEditorWindow
 {
     private static readonly string[] AlignmentLabels = ["Left", "Center", "Right"];
-    private static readonly string[] FontLabels = ProfileFontCatalog.All.Select(f => f.DisplayName).ToArray();
 
     [Flags]
     private enum StyleControls
@@ -117,20 +116,9 @@ internal sealed partial class BasicProfileEditorWindow
     {
         var element = target.Element;
 
-        var familyIndex = 0;
-        for (var i = 0; i < ProfileFontCatalog.All.Count; i++)
-        {
-            if (ProfileFontCatalog.All[i].Id == element.FontFamily)
-            {
-                familyIndex = i;
-                break;
-            }
-        }
-
         StyleLabel("Font");
-        if (ImGui.Combo("##Font", ref familyIndex, FontLabels, FontLabels.Length))
+        if (FontPicker.Draw("##Font", element.FontFamily, out var family))
         {
-            var family = ProfileFontCatalog.All[familyIndex].Id;
             target.Edit(e => e.FontFamily = family, false);
         }
 

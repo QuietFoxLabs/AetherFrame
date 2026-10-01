@@ -27,7 +27,6 @@ namespace AetherFrame.Windows;
 /// </summary>
 internal sealed partial class ProfileEditorWindow
 {
-    private static readonly string[] FontFamilyLabels = ProfileFontCatalog.All.Select(f => f.DisplayName).ToArray();
     private static readonly string[] VerticalAlignmentLabels = ["Top", "Middle", "Bottom"];
     // The same order and words as the Basic editor's portrait (Image Fit: Fill, Fit, Stretch).
     private static readonly string[] DisplayModeLabels = ["Fill", "Fit", "Stretch"];
@@ -469,20 +468,9 @@ internal sealed partial class ProfileEditorWindow
             return;
         }
 
-        var familyIndex = 0;
-        for (var i = 0; i < ProfileFontCatalog.All.Count; i++)
-        {
-            if (ProfileFontCatalog.All[i].Id == text.FontFamily)
-            {
-                familyIndex = i;
-                break;
-            }
-        }
-
         EditorWidgets.PropertyLabel("Font");
-        if (ImGui.Combo("##Family", ref familyIndex, FontFamilyLabels, FontFamilyLabels.Length))
+        if (FontPicker.Draw("##Family", text.FontFamily, out var newFamily))
         {
-            var newFamily = ProfileFontCatalog.All[familyIndex].Id;
             ApplyImmediateTextEdit(text.Id, element => element.FontFamily = newFamily);
         }
 
