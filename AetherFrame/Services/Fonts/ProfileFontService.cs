@@ -291,6 +291,16 @@ internal sealed class ProfileFontService : IDisposable
             toolkit.Font = resourceName is not null
                 ? toolkit.AddFontFromMemory(GetEmbeddedFontBytes(resourceName), config, resourceName)
                 : toolkit.AddDalamudDefaultFont(sizePx);
+
+            // A library family draws a character it lacks (an accented letter in a display face,
+            // say) in AetherFrame Sans of the same style, rather than as "?": ImGui merges only the
+            // codepoints the family doesn't map.
+            if (FontTierPolicy.UsesFallback(descriptor.Id))
+            {
+                var fallbackName = FaceResourceName("PTSans", bold, italic);
+                var fallback = new SafeFontConfig { SizePx = sizePx, GlyphRanges = FontTierPolicy.FallbackGlyphRanges, MergeFont = toolkit.Font };
+                toolkit.AddFontFromMemory(GetEmbeddedFontBytes(fallbackName), fallback, fallbackName);
+            }
         }));
 
     /// <summary>Maps a curated family id + real style to its embedded TTF's logical resource
@@ -301,6 +311,7 @@ internal sealed class ProfileFontService : IDisposable
         ProfileFontFamilies.AetherFrameSans => FaceResourceName("PTSans", bold, italic),
         ProfileFontFamilies.AetherFrameSerif => FaceResourceName("PTSerif", bold, italic),
         ProfileFontFamilies.AetherFrameMono => FaceResourceName("Cousine", bold, italic),
+        _ when FontLibrary.Find(familyId) is { } library => FontLibrary.ResourceName(library, FontLibrary.FaceStyle(library, bold, italic)),
         _ => null,
     };
 

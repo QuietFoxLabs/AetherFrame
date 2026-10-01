@@ -130,8 +130,24 @@ internal static class FontTierPolicy
         ProfileFontFamilies.AetherFrameSans => ProfileFontFamilies.AetherFrameSans,
         ProfileFontFamilies.AetherFrameSerif => ProfileFontFamilies.AetherFrameSerif,
         ProfileFontFamilies.AetherFrameMono => ProfileFontFamilies.AetherFrameMono,
+        _ when FontLibrary.Find(familyId) is { } library => library.Id,
         _ => ProfileFontFamilies.DalamudDefault,
     };
+
+    /// <summary>
+    /// What a library family merges in from AetherFrame Sans (the same style), as inclusive
+    /// pairs in ImGui's format: where the family has no glyph of its own in these ranges (an
+    /// accented letter in a display face, say), Sans draws it instead of the fallback "?".
+    /// ImGui skips every codepoint the family already maps. tools/fonts/build_font_catalog.py fits
+    /// each library family's model with these same ranges.
+    /// </summary>
+    internal static readonly ushort[] FallbackGlyphRanges =
+    [
+        0x0020, 0x024F, 0x0370, 0x03FF, 0x0400, 0x04FF, 0x2000, 0x206F, 0x20A0, 0x20CF, 0x2100, 0x214F, 0x2190, 0x21FF, 0,
+    ];
+
+    /// <summary>Whether <paramref name="familyId"/> is a library family, built with AetherFrame Sans merged in (<see cref="FallbackGlyphRanges"/>).</summary>
+    internal static bool UsesFallback(string? familyId) => FontLibrary.Find(familyId) is not null;
 
     /// <summary>The glyph ranges to build a family's faces with (ImGui format), or null for
     /// Dalamud Default, which keeps Dalamud's own default ranges. The array is shared and must
@@ -162,6 +178,7 @@ internal static class FontTierPolicy
         ProfileFontFamilies.AetherFrameSans => SansModel.Glyphs,
         ProfileFontFamilies.AetherFrameSerif => SerifModel.Glyphs,
         ProfileFontFamilies.AetherFrameMono => MonoModel.Glyphs,
+        var id when FontLibrary.Find(id) is { } library => library.Glyphs,
         _ => 0,
     };
 
@@ -178,6 +195,7 @@ internal static class FontTierPolicy
             ProfileFontFamilies.AetherFrameSans => SansModel,
             ProfileFontFamilies.AetherFrameSerif => SerifModel,
             ProfileFontFamilies.AetherFrameMono => MonoModel,
+            var id when FontLibrary.Find(id) is { } library => new SurfaceModel(library.Glyphs, library.Scale),
             _ => default,
         };
 
@@ -197,8 +215,23 @@ internal static class FontTierPolicy
         ProfileFontFamilies.AetherFrameSans => SansMaxTierIndex,
         ProfileFontFamilies.AetherFrameSerif => SerifMaxTierIndex,
         ProfileFontFamilies.AetherFrameMono => MonoMaxTierIndex,
+        var id when LibraryMaxTierIndexes.TryGetValue(id, out var index) => index,
         _ => DalamudDefaultMaxTierIndex,
     };
+
+    // Each library family's largest tier, from its fitted model (computed once).
+    private static readonly Dictionary<string, int> LibraryMaxTierIndexes = BuildLibraryMaxTierIndexes();
+
+    private static Dictionary<string, int> BuildLibraryMaxTierIndexes()
+    {
+        var indexes = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var family in FontLibrary.Families)
+        {
+            indexes.Add(family.Id, LargestTierWithin(new SurfaceModel(family.Glyphs, family.Scale), LibraryTierBudgetPixels));
+        }
+
+        return indexes;
+    }
 
     /// <summary>The largest tier size <paramref name="familyId"/> may build, in pixels.</summary>
     internal static float MaxTierSize(string? familyId) => SizeLadder[MaxTierIndex(familyId)];
@@ -225,13 +258,21 @@ internal static class FontTierPolicy
         return maxIndex;
     }
 
-    private static int LargestTierWithin(SurfaceModel model)
+    /// <summary>
+    /// A library family's largest tier keeps its estimate under this, below
+    /// <see cref="SingleTierBudgetPixels"/>: decorative faces' glyph boxes vary far more than
+    /// AetherFrame's own text faces', which packs them less tightly into a texture. FontLibraryTests
+    /// packs every library face at its cap.
+    /// </summary>
+    internal const long LibraryTierBudgetPixels = 12_500_000;
+
+    private static int LargestTierWithin(SurfaceModel model, long budget = SingleTierBudgetPixels)
     {
         var index = 0;
         for (var i = 0; i < SizeLadder.Count; i++)
         {
             var side = (model.Scale * SizeLadder[i]) + PaddingPixels;
-            if (model.Glyphs * side * side <= SingleTierBudgetPixels)
+            if (model.Glyphs * side * side <= budget)
             {
                 index = i;
             }

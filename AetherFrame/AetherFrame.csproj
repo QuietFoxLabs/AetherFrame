@@ -22,13 +22,18 @@
   </PropertyGroup>
 
   <!-- Curated portable fonts (PT Sans, PT Serif, Cousine — SIL Open Font License 1.1, see
-       Fonts/THIRD-PARTY-FONT-LICENSES.txt), embedded so profile text renders identically on
+       Fonts/THIRD-PARTY-FONT-LICENSES.txt), and the font library below, embedded so profile text renders identically on
        every machine without depending on locally-installed Windows fonts. Loaded at runtime via
        ProfileFontService through the logical resource names set here. -->
   <ItemGroup>
     <None Remove="Fonts\*.ttf" />
     <EmbeddedResource Include="Fonts\*.ttf">
       <LogicalName>AetherFrame.Fonts.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <!-- The font library (tools/fonts; Fonts/Library/THIRD-PARTY-FONT-LICENSES.txt). -->
+    <None Remove="Fonts\Library\*.ttf" />
+    <EmbeddedResource Include="Fonts\Library\*.ttf">
+      <LogicalName>AetherFrame.Fonts.Library.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
