@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AetherFrame.Server\AetherFrame.Server.csproj" />
     <ProjectReference Include="..\AetherFrame.ImageWorker\AetherFrame.ImageWorker.csproj" />
+    <ProjectReference Include="..\AetherFrame.LodestoneRelay\AetherFrame.LodestoneRelay.csproj" />
   </ItemGroup>
 
   <!-- The plugin's client for this server (docs/networking/NETWORK2.md, N2-9a), compiled here so
