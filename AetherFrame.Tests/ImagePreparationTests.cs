@@ -318,13 +318,58 @@ public sealed class ImagePreparationTests
         Assert.Equal(pixels, DecodePng(ImagePreparer.KnownPng())!.Pixels);
         Assert.Contains(Enumerable.Range(0, width * height), index => pixels[(index * 4) + 3] == 0 && pixels[index * 4] != 0);
 
-        // A decoder that premultiplies, a JPEG path that swaps channels, an encoder that adds a
-        // chunk or a segment, one that fails: publishing is off for the session.
+        // Dalamud's pipeline: premultiplied colour, declared as such by its codec.
+        Assert.True(await ImagePreparer.SelfTestAsync(new FakeCodec { Premultiplies = true, DeclaresPremultiplied = true }, CancellationToken.None));
+
+        // A decoder that premultiplies without saying so, or says so and doesn't, a JPEG path that
+        // swaps channels, an encoder that adds a chunk or a segment, one that fails: publishing is
+        // off for the session.
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Premultiplies = true }, CancellationToken.None));
+        Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { DeclaresPremultiplied = true }, CancellationToken.None));
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { SwapsJpegChannels = true }, CancellationToken.None));
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (rgba, w, h, format) => format == ImageFormat.Png ? PngWith(Chunk("tEXt", KeyedText()), w, h, rgba) : Jpeg(w, h) }, CancellationToken.None));
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (rgba, w, h, format) => format == ImageFormat.Png ? Png(w, h, rgba) : JpegFrom(App0(), Segment(0xFE, [1]), Dqt(), Sof0(h, w), Dht(), Sos(), Entropy(), Eoi()) }, CancellationToken.None));
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (_, _, _, _) => null }, CancellationToken.None));
+    }
+
+    [Fact]
+    public void PremultipliedColour_MadeStraight_IsExactlyTheClearedColour()
+    {
+        // For every channel and alpha: what a pipeline that premultiplies as round(c*a/255) hands
+        // back, made straight again, is the colour preparation would have cleared it to.
+        for (var alpha = 0; alpha < 256; alpha++)
+        {
+            for (var channel = 0; channel < 256; channel++)
+            {
+                Assert.Equal(ImagePreparer.Clear((byte)channel, (byte)alpha), ImagePreparer.Straight((byte)Premultiplied(channel, alpha), (byte)alpha));
+            }
+        }
+
+        // A value no premultiplication could give stays within a byte.
+        Assert.Equal(255, ImagePreparer.Straight(200, 10));
+    }
+
+    [Fact]
+    public void APremultipliedReadBack_IsCroppedStraight_AndA16BitTranslucentOneIsRefused()
+    {
+        // 2 by 1, BGRA, premultiplied: 90, 180, 45 at alpha 64 comes back as 23, 45, 11.
+        var bgra = new byte[] { 11, 45, 23, 64, 7, 8, 9, 255 };
+        Assert.True(ImagePreparer.TryCrop(new DecodedImage(2, 1, 8, ImagePreparer.Bgra, bgra, Premultiplied: true), PixelWindow.Whole(2, 1), out var rgba, out var opaque));
+        Assert.Equal(new byte[] { ImagePreparer.Clear(90, 64), ImagePreparer.Clear(180, 64), ImagePreparer.Clear(45, 64), 64, 9, 8, 7, 255 }, rgba);
+        Assert.False(opaque);
+
+        // 16 bits a channel: opaque is kept, translucent is refused.
+        var wide = new byte[16];
+        for (var index = 0; index < 16; index += 2)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(wide.AsSpan(index), 0xFFFF);
+        }
+
+        Assert.True(ImagePreparer.TryCrop(new DecodedImage(2, 1, 16, ImagePreparer.Rgba64, wide, Premultiplied: true), PixelWindow.Whole(2, 1), out _, out var wideOpaque));
+        Assert.True(wideOpaque);
+        BinaryPrimitives.WriteUInt16LittleEndian(wide.AsSpan(6), 0x8000);
+        Assert.False(ImagePreparer.TryCrop(new DecodedImage(2, 1, 16, ImagePreparer.Rgba64, wide, Premultiplied: true), PixelWindow.Whole(2, 1), out _, out _));
+        Assert.True(ImagePreparer.TryCrop(new DecodedImage(2, 1, 16, ImagePreparer.Rgba64, wide), PixelWindow.Whole(2, 1), out _, out _));
     }
 
     [Fact]
@@ -641,8 +686,11 @@ public sealed class ImagePreparationTests
 
         internal Func<byte[], int, int, ImageFormat, byte[]?> Encoder { get; init; } = (rgba, width, height, format) => format == ImageFormat.Jpeg ? Jpeg(width, height) : PngAsWicWrites(width, height, rgba);
 
-        /// <summary>Whether it hands back premultiplied colour, as a pipeline measured otherwise might.</summary>
+        /// <summary>Whether it hands back premultiplied colour, as Dalamud's does (measured in game on October 1, 2026).</summary>
         internal bool Premultiplies { get; init; }
+
+        /// <summary>Whether its decodes say they are premultiplied, as Dalamud's codec declares them.</summary>
+        internal bool DeclaresPremultiplied { get; init; }
 
         /// <summary>Whether its JPEG path swaps red and blue, as a pipeline measured otherwise might.</summary>
         internal bool SwapsJpegChannels { get; init; }
@@ -654,7 +702,7 @@ public sealed class ImagePreparationTests
             var key = Convert.ToHexString(file.Span);
             if (jpegs.TryGetValue(key, out var jpeg))
             {
-                return Task.FromResult<DecodedImage?>(new DecodedImage(jpeg.Width, jpeg.Height, jpeg.Width * 4, ImagePreparer.Rgba, jpeg.Rgba));
+                return Task.FromResult<DecodedImage?>(new DecodedImage(jpeg.Width, jpeg.Height, jpeg.Width * 4, ImagePreparer.Rgba, jpeg.Rgba, DeclaresPremultiplied));
             }
 
             if (!decodes.TryGetValue(key, out var image))
@@ -674,6 +722,11 @@ public sealed class ImagePreparationTests
                 }
 
                 image = image with { Pixels = pixels };
+            }
+
+            if (image is not null && DeclaresPremultiplied)
+            {
+                image = image with { Premultiplied = true };
             }
 
             return Task.FromResult(image);
