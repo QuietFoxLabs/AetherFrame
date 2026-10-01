@@ -23,14 +23,19 @@ internal static class ServedPlatePainter
     private static readonly Vector4 PlaceholderBorder = new(0.5f, 0.5f, 0.5f, 0.8f);
 
     /// <param name="imageOf">The texture of each served image by index, or null for none.</param>
-    internal static void Draw(ImDrawListPtr drawList, ServedPlate plate, Vector2 origin, float scale, Vector2 clipMin, Vector2 clipMax, ProfileRenderResources resources, Func<int, IDalamudTextureWrap?> imageOf)
+    /// <param name="drawBackdrop">Whether to draw the workspace backdrop under the canvas, as an editor does; the Plate Viewer doesn't, so the game shows through.</param>
+    internal static void Draw(ImDrawListPtr drawList, ServedPlate plate, Vector2 origin, float scale, Vector2 clipMin, Vector2 clipMax, ProfileRenderResources resources, Func<int, IDalamudTextureWrap?> imageOf, bool drawBackdrop = true)
     {
         resources.Fonts.EnsurePrewarmed(plate.FontWarmup);
         drawList.PushClipRect(clipMin, clipMax, true);
         try
         {
             var canvas = plate.Canvas * scale;
-            drawList.AddRectFilled(origin, origin + canvas, ImGui.GetColorU32(BackdropColor));
+            if (drawBackdrop)
+            {
+                drawList.AddRectFilled(origin, origin + canvas, ImGui.GetColorU32(BackdropColor));
+            }
+
             ProfileBackgroundRenderer.Draw(drawList, plate.Background, origin, canvas, scale, resources, plate.BackgroundIndex >= 0 ? imageOf(plate.BackgroundIndex) : null, placeholderWhenMissing: false);
 
             foreach (var step in plate.Steps)

@@ -55,7 +55,10 @@ internal sealed class ServedPlate
         Notes = notes;
 
         // The canvas united with every shape: shapes are what Components paint, which may overflow
-        // the canvas on purpose, so this is the publisher's own visual bounds (ProfileVisualBounds).
+        // the canvas on purpose. The publisher's ProfileVisualBounds unites each Component's
+        // placement box instead, which a served layout doesn't carry: for artwork, fitted to its box,
+        // the two are the same; a procedural shape sits inside its box, so these can be tighter, and
+        // never cut anything off.
         var min = Vector2.Zero;
         var max = canvas;
         foreach (var step in steps)
@@ -93,7 +96,7 @@ internal sealed class ServedPlate
     /// <summary>The canvas, in canvas units.</summary>
     internal Vector2 Canvas { get; }
 
-    /// <summary>The top left of what it shows: the canvas and everything its Components paint outside it.</summary>
+    /// <summary>The top left of what it shows: the canvas and every shape its Components paint, overflow included (within the publisher's own visual bounds).</summary>
     internal Vector2 VisualMin { get; }
 
     /// <summary>The bottom right of what it shows.</summary>
