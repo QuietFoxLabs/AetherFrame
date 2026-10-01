@@ -202,7 +202,7 @@ internal sealed class HelpMenu
         Shortcut("Arrows", "Nudge by 1 px (Shift: 10 px)");
         Shortcut("F", "Fit the canvas to the window");
         Shortcut("Alt", "Hold to move without snapping");
-        Shortcut("Esc", "Leave Preview");
+        Shortcut("Esc", "Close the Plate Viewer (Preview)");
         Shortcut("Wheel", "Zoom the canvas; middle-drag pans");
 
         // ---- commands
