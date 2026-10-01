@@ -258,6 +258,29 @@ public class ArtSetsTests
         Assert.True(unframed.FindIndex(s => ReferenceEquals(s.Element, portrait)) > unframed.FindLastIndex(s => s.Element is TextProfileElement));
     }
 
+    /// <summary>
+    /// A new Plate has no portrait element until a picture is imported. The style's Portrait Frame then
+    /// paints at the portrait's place, still under the Plate Frame artwork, so the frame's corners show
+    /// as on the preview cards. Without Plate Frame artwork, it stays over every element, as before.
+    /// </summary>
+    [Fact]
+    public void OnANewPlate_WithoutAPortrait_PlateFrameArtwork_PaintsOverThePortraitFrame()
+    {
+        var document = PlateFactory.Create(PlateStartingLayout.AdventurePlateClassic, Guid.NewGuid(), "Style", ComponentDocuments.Now, new PlateStarterContent(FakeCharacter.Hero));
+        Assert.DoesNotContain(document.Elements, e => e.Role == ProfileElementRole.BasicPortrait);
+        document.Components = Style("high-fantasy-royal").Components.Select(id => ComponentDocuments.Of(id)).ToList();
+
+        var plan = ComponentDocuments.Plan(document);
+        var frame = plan.FindIndex(s => s.Component?.Kind == PlateComponentKind.PlateFrame);
+        Assert.Single(plan, s => s.Component?.Kind == PlateComponentKind.PortraitFrame);
+        Assert.True(plan.FindIndex(s => s.Component?.Kind == PlateComponentKind.PortraitFrame) < frame, "over the portrait's frame");
+        Assert.True(frame < plan.FindIndex(s => s.Element is TextProfileElement), "under every text");
+
+        document.Components.RemoveAll(c => c.Kind == PlateComponentKind.PlateFrame);
+        var unframed = ComponentDocuments.Plan(document);
+        Assert.True(unframed.FindIndex(s => s.Component?.Kind == PlateComponentKind.PortraitFrame) > unframed.FindLastIndex(s => s.IsElement));
+    }
+
     [Fact]
     public void PlateFrameArtwork_OnAPlateWithoutText_PaintsOnTop()
     {

@@ -270,41 +270,57 @@ public static class ComponentPaintPlan
             AddBand(output, nameBand, Pad(region, unit), 0f, canvasWidth);
         }
 
-        // Plate Frame artwork paints just before the first text: over the portrait and its frame, so
-        // the picture never cuts off a frame's corner (the preview cards draw it so), and under every
-        // text, so an ornate frame reaching in from the edge never covers the name. The Basic portrait
-        // is added after the starter text, so it is stacked above that text: while a frame paints,
-        // the portrait and its frame paint just before the first text instead. Nothing else moves.
-        var artFramesPainted = artFrameBand.Count == 0;
-        var portraitUnderFrame = !artFramesPainted && portraitElement is not null && Contains(drawnElements, portraitElement);
-        var portraitPainted = false;
-        foreach (var element in drawnElements)
+        // No portrait element at all (for instance before a picture is imported, or a picture added as
+        // a plain image in the Advanced editor): the portrait's frame and overlay go at the layout's
+        // portrait placement, over every picture. A frame or an overlay only ever exists to sit on top
+        // of the picture in that place, so the bottom of the stack (under that very picture) would hide it.
+        var fallbackPortraitBand = portraitElement is null && portraitBand.Count > 0;
+        var fallbackPortrait = fallbackPortraitBand
+            ? AdventurePlateClassicLayout.GetRect(ProfileElementRole.BasicPortrait, orientation, profile) ?? CanvasRect(profile)
+            : default;
+
+        if (artFrameBand.Count == 0)
         {
-            if (!artFramesPainted && element is TextProfileElement)
-            {
-                if (portraitUnderFrame && !portraitPainted)
-                {
-                    Paint(portraitElement!);
-                }
-
-                AddFrames(output, artFrameBand, profile, unit);
-                artFramesPainted = true;
-            }
-
-            if (!(portraitPainted && ReferenceEquals(element, portraitElement)))
+            foreach (var element in drawnElements)
             {
                 Paint(element);
             }
-        }
 
-        // No portrait element at all (for instance a picture added as a plain image in the Advanced
-        // editor): the layout's portrait placement, over every element. A frame or an overlay only
-        // ever exists to sit on top of the picture in that place, so the bottom of the stack — under
-        // that very picture — would hide it.
-        if (portraitElement is null && portraitBand.Count > 0)
+            if (fallbackPortraitBand)
+            {
+                AddBand(output, portraitBand, fallbackPortrait, 0f, canvasWidth);
+            }
+        }
+        else
         {
-            var fallback = AdventurePlateClassicLayout.GetRect(ProfileElementRole.BasicPortrait, orientation, profile) ?? CanvasRect(profile);
-            AddBand(output, portraitBand, fallback, 0f, canvasWidth);
+            // Plate Frame artwork lies between the pictures and the text, as the preview cards draw it:
+            // over every picture and the portrait's frame, so a picture never cuts off a frame's corner,
+            // and under every text and the name plaque, so an ornate frame reaching in from the edge
+            // never covers the name. So while it paints, the pictures paint first and the text after,
+            // each in its own order. (The Basic portrait is added after the starter text, so its order
+            // alone would put it over the text and the frame.)
+            foreach (var element in drawnElements)
+            {
+                if (element is not TextProfileElement)
+                {
+                    Paint(element);
+                }
+            }
+
+            if (fallbackPortraitBand)
+            {
+                AddBand(output, portraitBand, fallbackPortrait, 0f, canvasWidth);
+            }
+
+            AddFrames(output, artFrameBand, profile, unit);
+
+            foreach (var element in drawnElements)
+            {
+                if (element is TextProfileElement)
+                {
+                    Paint(element);
+                }
+            }
         }
 
         foreach (var (component, definition, _) in decorationBand)
@@ -334,12 +350,6 @@ public static class ComponentPaintPlan
             }
         }
 
-        // No text at all: the artwork frames paint where every frame used to, on top.
-        if (!artFramesPainted)
-        {
-            AddFrames(output, artFrameBand, profile, unit);
-        }
-
         AddFrames(output, frameBand, profile, unit);
 
         // One element, with the bands that go with it: the name backing just before the first
@@ -353,28 +363,11 @@ public static class ComponentPaintPlan
 
             output.Add(ElementStep(element));
 
-            if (ReferenceEquals(element, portraitElement))
+            if (ReferenceEquals(element, portraitElement) && portraitBand.Count > 0)
             {
-                portraitPainted = true;
-                if (portraitBand.Count > 0)
-                {
-                    AddBand(output, portraitBand, new ElementRect(element.Position, element.Size), RotationGeometry.GetRotationDegrees(element), canvasWidth);
-                }
+                AddBand(output, portraitBand, new ElementRect(element.Position, element.Size), RotationGeometry.GetRotationDegrees(element), canvasWidth);
             }
         }
-    }
-
-    private static bool Contains(IReadOnlyList<ProfileElement> elements, ProfileElement element)
-    {
-        foreach (var candidate in elements)
-        {
-            if (ReferenceEquals(candidate, element))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /// <summary>Section Header padding around a heading's text for a header backing, in reference pixels.</summary>

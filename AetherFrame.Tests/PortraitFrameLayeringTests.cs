@@ -74,17 +74,17 @@ public class PortraitFrameLayeringTests
         var image = plan.FindIndex(s => ReferenceEquals(s.Element, picture));
         var frame = plan.FindIndex(s => s.Layer == PlateLayer.PortraitFrame);
         var overlay = plan.FindIndex(s => s.Layer == PlateLayer.PortraitOverlay);
-        var lastElement = plan.FindLastIndex(s => s.IsElement);
 
         Assert.True(frame > image, "the frame must paint over the picture");
-        Assert.True(frame > lastElement && overlay > frame);
+        Assert.True(overlay > frame);
         Assert.True(plan.FindIndex(s => s.Layer == PlateLayer.Decorations) > overlay);
         Assert.Equal(PlateLayer.Decorations, plan[^1].Layer);
         Assert.Equal(PlateLayer.Background, plan[0].Layer);
 
-        // The Plate Frame artwork paints under every text, the portrait band (for its picture) over it.
+        // The Plate Frame artwork paints over the portrait band, as over a portrait element's and on the
+        // preview cards, and under every text.
         var plateFrame = plan.FindIndex(s => s.Layer == PlateLayer.PlateFrame);
-        Assert.True(plateFrame < plan.FindIndex(s => s.Element is TextProfileElement) && plateFrame < frame);
+        Assert.True(plateFrame > overlay && plateFrame < plan.FindIndex(s => s.Element is TextProfileElement));
 
         var layout = Domain.Basic.AdventurePlateClassicLayout.GetRect(ProfileElementRole.BasicPortrait, AdventurePlateOrientation.Normal, document)!.Value;
         Assert.Equal(layout, plan[frame].Placement.Rect); // Offset and Scale still move it onto the picture
