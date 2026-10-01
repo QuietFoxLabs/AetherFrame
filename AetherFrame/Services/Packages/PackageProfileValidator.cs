@@ -457,6 +457,7 @@ internal static class PackageProfileValidator
             Color(text.OutlineColor, "outline color");
             Color(text.ShadowColor, "shadow color");
             Style(text.LetterSpacing, "letter spacing");
+            Style(text.VerticalOffset, "height");
             Style(text.LineSpacing, "line spacing");
             Style(text.OutlineThickness, "outline thickness");
             Style(text.OutlineOpacity, "outline opacity");

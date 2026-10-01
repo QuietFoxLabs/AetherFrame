@@ -813,6 +813,74 @@ public sealed class PlateSnapshotBuilderTests
     }
 
     [Fact]
+    public void Height_MovesOnlyTheSharedText_NotTheNameBackingAroundIt()
+    {
+        // The owner's request of October 1, 2026: Height nudges a text that sits a little high or
+        // low, and the Name Backing that follows its box stays where it is, for viewers too.
+        var plate = ComponentDocuments.WithAnchors();
+        var name = (TextProfileElement)plate.Elements.Single(e => e.Role == ProfileElementRole.BasicName);
+        name.Wrap = false;
+        plate.Components = [ComponentDocuments.Of(BuiltInComponentCatalog.NameBackingBar)];
+        var before = Candidate(Resolve(plate)).Items;
+
+        foreach (var (height, drawn) in new[] { (7f, 7f), (-12.5f, -12.5f), (500f, TextProfileElement.MaxVerticalOffset), (float.NaN, 0f) })
+        {
+            name.VerticalOffset = height;
+            var after = Candidate(Resolve(plate)).Items;
+
+            Assert.Equal(before.Count, after.Count);
+            // A picture's prepared copy differs from one preparation to the next here, so pictures
+            // are compared by where they draw.
+            var moved = Enumerable.Range(0, before.Count).Where(i => (before[i], after[i]) switch
+            {
+                (LayoutImage a, LayoutImage b) => (a.Position, a.Width, a.Height, a.Rotation) != (b.Position, b.Width, b.Height, b.Rotation),
+                var (a, b) => !SnapshotComparer.Same(a, b),
+            }).ToList();
+            if (drawn == 0f)
+            {
+                Assert.Empty(moved);
+                continue;
+            }
+
+            var index = Assert.Single(moved);
+            var was = Assert.IsType<LayoutText>(before[index]);
+            var now = Assert.IsType<LayoutText>(after[index]);
+            Assert.Equal(was.Position.X, now.Position.X);
+            Assert.Equal((int)MathF.Round(drawn * 100f), now.Position.Y - was.Position.Y);
+            Assert.Equal((was.Width, was.Height, was.Text), (now.Width, now.Height, now.Text));
+        }
+    }
+
+    [Fact]
+    public void Height_IsKept_Copied_AndAlwaysANumber()
+    {
+        var text = new TextProfileElement { Text = "Name", VerticalOffset = 6f };
+        var copy = (TextProfileElement)text.Clone();
+        Assert.Equal(6f, copy.VerticalOffset);
+        Assert.True(text.ContentEquals(copy));
+        copy.VerticalOffset = -3f;
+        Assert.False(text.ContentEquals(copy));
+
+        var plate = Blank();
+        plate.Elements.Add(new TextProfileElement { Text = "Name", VerticalOffset = 9f });
+        var read = PlateDocuments.Materialize(PlateDocuments.ToJson(plate));
+        Assert.Equal(9f, Assert.IsType<TextProfileElement>(Assert.Single(read.Elements)).VerticalOffset);
+
+        // Not written while 0, so a Plate saved before Height stays byte for byte as it was.
+        ((TextProfileElement)plate.Elements[0]).VerticalOffset = 0f;
+        Assert.DoesNotContain("VerticalOffset", PlateDocuments.ToJson(plate).ToJsonString(), StringComparison.Ordinal);
+
+        // Resetting a Basic section, or the identity header, takes Height back to 0 like every text property.
+        var section = new TextProfileElement { Text = "Section", VerticalOffset = 12f };
+        IdentityHeaderRules.ApplyDefaultStyle(section, Blank());
+        Assert.Equal(0f, section.VerticalOffset);
+
+        var broken = new TextProfileElement { Text = "Name", VerticalOffset = float.PositiveInfinity };
+        ProfileElementLimits.Bound(broken);
+        Assert.Equal(0f, broken.VerticalOffset);
+    }
+
+    [Fact]
     public void AVisibleComponentThisBuildDoesntKnow_IsRefused_NamingIt_AHiddenOneIsNot()
     {
         // As a newer build saves them, read back as a player's Plate is: an unknown kind with a

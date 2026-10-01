@@ -110,7 +110,7 @@ internal static class ProfileRenderer
         // The element's own cached display text (what the full renderer draws, affixes included)
         // rather than a fresh concatenation: this runs for every text element of every visible
         // card, every frame, and only its length matters.
-        TextBars.Compute(text.Position, text.Size, text.GetDisplayText(), text.FontSize, text.Wrap, text.Alignment, text.VerticalAlignment, TextProfileElement.LayoutPadding, TextBarBuffer);
+        TextBars.Compute(text.Position + new Vector2(0f, text.DrawnVerticalOffset), text.Size, text.GetDisplayText(), text.FontSize, text.Wrap, text.Alignment, text.VerticalAlignment, TextProfileElement.LayoutPadding, TextBarBuffer);
         var color = ImGui.GetColorU32(text.Color with { W = text.Color.W * 0.6f });
         foreach (var (min, max) in TextBarBuffer)
         {
