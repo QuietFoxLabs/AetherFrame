@@ -40,3 +40,31 @@ Swap A and B and repeat checks 5 to 11, so each player both shares and views.
 - Each tester turns sharing off before removing the test build, so the server keeps nothing of theirs.
 - The owner tells Claude the result in chat or in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25): which checks passed, and for any that didn't, what was done and what was seen. A tester's `/xllog` lines for AetherFrame help, and never hold a name, a World, a code or a key.
 - Testers can be taken off the allowlist afterwards. Claude gives the command.
+
+## Results
+
+### October 1, 2026: passed
+
+**Set-up:**
+- **Plugin:**
+  - The owner's PC ran preview build `02468e6` (`master` after [#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79)) from `E:\AetherFrame Test Build\`; dalamud.log shows it loaded at 14:55 UTC.
+  - The second PC ran tester kit `0c96b18` (`master` after [#78](https://github.com/QuietFoxLabs/AetherFrame/pull/78)), SHA-256 `902faca7...a0eb`.
+  - #79 only removed code nothing reached (Clean Preview), so the two builds behave the same.
+- **Server:** `1a8527a` at `plates.aetherframe.dev`, with the Lodestone relay on the owner's PC.
+- **Players:** the owner (A) and a second player (B), each on their own PC, both of which the owner controlled. The tester is named nowhere here.
+
+**Results, as the owner reported them in chat:**
+
+| # | Result |
+|---|---|
+| 1 | Not reported on its own. |
+| 2 to 4 | Passed for B. B's first checks failed only because B wasn't yet on the allowlist (`check:allowlist` in the server log); once added, the check passed and B shared a Plate. |
+| 5 | Passed both ways: A saw B's Plate, and B saw A's. |
+| 6 | Not reported on its own between the two players. The search had passed for A's own Plate before the test, with build `0c96b18`. |
+| 7 | Passed: A changed and shared A's Plate, and B saw the update. |
+| 8 | Not reported on its own. |
+| 9 to 11 | Hide, report and opting out worked in game. The server side (`admin reports`, and `admin characters` after opting out) wasn't reported on its own. |
+| 12 | Passed with the server stopped (`docker compose stop server`) instead of the network: everything local worked, sharing said the server couldn't be reached, and both recovered once it started again. |
+
+**What the test taught:**
+- **Add the tester before their first check.** A check before the allowlist holds their id fails with the same "check didn't pass" as any other cause (C2), and spends one of the hour's 10 checks. So run the allowlist command first, and confirm it ends in the expected number of ids, before a tester presses Check.

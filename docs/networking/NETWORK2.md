@@ -29,6 +29,8 @@ The owner will buy and set up a domain and a server when needed. Putting network
 
 `[updated 2026-09-30: rewritten after the owner's decisions V1 to V5 (DecisionRegister.md). Sharing is viewing a Plate by character, opt-in and both ways, like the game's Adventure Plates. The share-code test this section described before is superseded, and so is its "stage 2" target lookup, which is now the test.]`
 
+`[updated 2026-10-01: passed on October 1, 2026, by the owner (preview build 02468e6) and a second player (tester kit 0c96b18); the results are in TwoPlayerTest.md.]`
+
 Two players on native Windows, each running a **networking preview build**, and one server the owner hosts. How a preview build reaches the second player is a decision of its own (the tester kit, N2-11), because P2 keeps preview builds out of releases and test builds.
 
 1. **Nothing until you opt in.** A preview build that hasn't opted in adds no menu item and no search box, sends nothing, and looks nothing up.
