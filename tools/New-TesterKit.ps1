@@ -7,8 +7,9 @@
     A tester kit is how a preview build reaches a second player (docs/networking/NETWORK2.md,
     section 3; "N2-11's tester kit" in docs/networking/DecisionRegister.md). It is never a release
     or a test build, and never goes into the folder the owner's game loads. This script:
-    1. reads the three plugin files from -Package, and checks the DLL is the preview flavour and the
-       manifest is AetherFrame's;
+    1. reads the three plugin files from -Package, checks them against the SHA256SUMS.txt staged
+       with them, and checks the DLL is the preview flavour, stamped with -BuildId's commit, and
+       the manifest is AetherFrame's, so a kit always holds exactly the staged build named;
     2. makes -StagingRoot\<yyyy-MM-dd> <build id> tester kit\, which must not exist yet;
     3. writes AetherFrame-tester-kit-<build id>.zip there, holding an AetherFrame folder with the
        three files, distribution\tester-kit\How to install.txt, and SHA256SUMS.txt for the three
@@ -17,9 +18,9 @@
     It deletes and overwrites nothing.
 
 .PARAMETER Package
-    A folder holding the preview build's AetherFrame.dll, AetherFrame.json and
-    AetherFrame.deps.json, and nothing else but a SHA256SUMS.txt, as AUTOPILOT.md's preview test
-    builds stage them.
+    A staged preview build: a folder holding AetherFrame.dll, AetherFrame.json,
+    AetherFrame.deps.json and the SHA256SUMS.txt Install-TestBuild.ps1 wrote for them, and nothing
+    else, as AUTOPILOT.md's preview test builds stage them.
 
 .PARAMETER BuildId
     The short or full commit the build was made from.
@@ -92,7 +93,29 @@ foreach ($name in $PluginFiles) {
     $files[$name] = [System.IO.File]::ReadAllBytes($path)
 }
 
+# The staged checksums: every file must be exactly the one staged.
+$sumsPath = Join-Path $Package 'SHA256SUMS.txt'
+if (-not (Test-Path -LiteralPath $sumsPath -PathType Leaf)) {
+    throw "$Package has no SHA256SUMS.txt. Package a staged build: E:\AetherFrame Test Builds\<date> <commit> preview\."
+}
+$staged = @{}
+foreach ($line in [System.IO.File]::ReadAllLines($sumsPath)) {
+    if ($line -match '^([0-9a-f]{64})  (\S+)$') {
+        $staged[$Matches[2]] = $Matches[1]
+    }
+}
+foreach ($name in $PluginFiles) {
+    if ($staged[$name] -ne (Get-BytesSha256 $files[$name])) {
+        throw "$name isn't the file SHA256SUMS.txt names: this isn't the staged build."
+    }
+}
+
 $dllText = [System.Text.Encoding]::ASCII.GetString($files['AetherFrame.dll'])
+
+# The build's commit, stamped in its informational version as "<version>+<full sha>".
+if ($dllText -notmatch ('\d+\.\d+\.\d+\+' + [regex]::Escape($BuildId))) {
+    throw "The DLL isn't stamped with commit $BuildId. Name the commit the staged build was made from."
+}
 $isPreview = $false
 foreach ($namespace in $NetworkingNamespaces) {
     if ($dllText.Contains($namespace)) {
