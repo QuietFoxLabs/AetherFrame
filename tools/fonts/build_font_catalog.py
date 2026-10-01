@@ -8,7 +8,8 @@ the estimate is never below any face's real surface at any ladder size.
 
 It also measures where each face puts its capitals in the line box ImGui draws it in (hhea's
 ascent to descent, the font size tall), and records how far, as a fraction of the font size, the
-face must move down so that the middle of its capitals (baseline to the top of 'H') sits where
+face must move down so that the middle of its capitals (the baseline to the median top of the
+flat-topped capitals E, H, I, L and T, since one letter alone can carry a swash or an ascender) sits where
 AetherFrame Sans's does in the same style. Faces whose metrics leave a tall space above the
 capitals would otherwise sit high in a name box. It writes:
 
@@ -178,12 +179,21 @@ def measure(face, fallback):
     return glyphs, surfaces
 
 
+# The flat-topped capitals the cap height is the median top of. One alone can mislead: Uncial
+# Antiqua's H is an uncial h with an ascender, and Cinzel Decorative's has a swash.
+CAP_LETTERS = "EHILT"
+
+
+def cap_top(face):
+    """The median top of the flat-topped capitals the face has (the lower middle one of an even count), or None."""
+    tops = sorted(face.boxes[face.map[ord(c)]][3] for c in CAP_LETTERS if ord(c) in face.map and face.boxes[face.map[ord(c)]] is not None)
+    return tops[(len(tops) - 1) // 2] if tops else None
+
+
 def cap_centre(face):
-    """The middle of the capitals (baseline to the top of 'H'), from the line box's top, as a fraction of its height."""
-    glyph = face.map.get(ord("H"))
-    if glyph is None or face.boxes[glyph] is None:
-        return None
-    return (face.ascent - face.boxes[glyph][3] / 2) / face.height
+    """The middle of the capitals (baseline to cap_top), from the line box's top, as a fraction of its height."""
+    top = cap_top(face)
+    return None if top is None else (face.ascent - top / 2) / face.height
 
 
 def shift(face, fallback):

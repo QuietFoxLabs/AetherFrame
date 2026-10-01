@@ -194,7 +194,8 @@ public partial class FontLibraryTests
     public void EveryFace_CentresItsCapitals_WhereAetherFrameSansDoes()
     {
         // The owner's report of October 1, 2026: some library fonts sat high in the name box, out
-        // of line with the name backing. Each face's shift moves the middle of its capitals to
+        // of line with the name backing. Each face's shift moves the middle of its capitals (the
+        // median top of E, H, I, L and T) to
         // where AetherFrame Sans of the same style has them, to within rounding, so the generated
         // table can't drift from the files.
         var moved = 0;
@@ -216,6 +217,11 @@ public partial class FontLibraryTests
 
         // The faces the report was about: Josefin Sans, for one, sat its capitals 13% of the font size high.
         Assert.True(FontLibrary.Find("gf-josefin-sans")!.Shifts.Regular > 0.1f);
+
+        // A swash or an ascender on one capital doesn't count: Uncial Antiqua's H is an uncial h,
+        // and Cinzel Decorative's has a swash, so measured by H alone they moved twice as far.
+        Assert.InRange(FontLibrary.Find("gf-uncial-antiqua")!.Shifts.Regular, 0.02f, 0.05f);
+        Assert.InRange(FontLibrary.Find("gf-cinzel-decorative")!.Shifts.Bold, 0.04f, 0.075f);
         Assert.True(moved > 50, $"only {moved} faces move by 3% of the font size or more");
     }
 
