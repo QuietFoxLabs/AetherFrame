@@ -89,13 +89,20 @@ internal sealed class PlateViewerWindow : Window, IDisposable
 
     public override void Draw()
     {
+        var view = viewing.View;
         if (!viewing.CanView)
         {
+            // A takeover leaves no character sharing: say what happened, not just how to start.
+            if (view.Failure == ViewFailure.TakenOver)
+            {
+                AetherControls.Callout(AetherTone.Warning, FailureText(ViewFailure.TakenOver));
+            }
+
             Wrapped(NotSharing, AetherPalette.TextMuted);
+            Release();
             return;
         }
 
-        var view = viewing.View;
         if (view.Target is { } target && target != seenTarget)
         {
             // A Plate asked for from the game's menu fills the search in, so it can be refreshed or changed.
@@ -139,9 +146,9 @@ internal sealed class PlateViewerWindow : Window, IDisposable
 
             case ViewStage.Hidden:
                 Wrapped("You hid this player's Plate on this PC, so it isn't looked up.");
-                if (AetherControls.SecondaryButton("Show their Plate again##AetherFrameViewerUnhide") && !viewing.Unhide())
+                if (AetherControls.SecondaryButton("Show their Plate again##AetherFrameViewerUnhide"))
                 {
-                    actionProblem = HideProblem();
+                    actionProblem = viewing.Unhide() ? null : HideProblem();
                 }
 
                 break;
@@ -278,9 +285,9 @@ internal sealed class PlateViewerWindow : Window, IDisposable
         }
 
         ImGui.SameLine();
-        if (AetherControls.SecondaryButton("Hide this player##AetherFrameViewerHide", tooltip: "Never look this player's Plate up on this PC, until you show it again. Nothing is sent.") && !viewing.Hide())
+        if (AetherControls.SecondaryButton("Hide this player##AetherFrameViewerHide", tooltip: "Never look this player's Plate up on this PC, until you show it again. Nothing is sent."))
         {
-            actionProblem = HideProblem();
+            actionProblem = viewing.Hide() ? null : HideProblem();
         }
 
         ImGui.SameLine();
