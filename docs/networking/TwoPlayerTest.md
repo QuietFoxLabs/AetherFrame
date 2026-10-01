@@ -46,7 +46,10 @@ Swap A and B and repeat checks 5 to 11, so each player both shares and views.
 ### October 1, 2026: passed
 
 **Set-up:**
-- **Plugin:** preview build `0c96b18` (`master` after [#78](https://github.com/QuietFoxLabs/AetherFrame/pull/78)) on both PCs. The owner's PC loaded it from `E:\AetherFrame Test Build\`. The second PC loaded tester kit `0c96b18`, SHA-256 `902faca7...a0eb`.
+- **Plugin:**
+  - The owner's PC ran preview build `02468e6` (`master` after [#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79)) from `E:\AetherFrame Test Build\`; dalamud.log shows it loaded at 14:55 UTC.
+  - The second PC ran tester kit `0c96b18` (`master` after [#78](https://github.com/QuietFoxLabs/AetherFrame/pull/78)), SHA-256 `902faca7...a0eb`.
+  - #79 only removed code nothing reached (Clean Preview), so the two builds behave the same.
 - **Server:** `1a8527a` at `plates.aetherframe.dev`, with the Lodestone relay on the owner's PC.
 - **Players:** the owner (A) and a second player (B) on another PC in the same home, the owner at both keyboards. The tester is named nowhere here.
 
