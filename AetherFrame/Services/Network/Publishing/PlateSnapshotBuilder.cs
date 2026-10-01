@@ -820,7 +820,9 @@ internal static class PlateSnapshotBuilder
             flags |= text.ShadowEnabled ? LayoutTextFlags.Shadow : LayoutTextFlags.None;
 
             var before = refusals;
-            var position = Point(text.Position, text);
+            // Height moves the drawn text and its clip, never the box a Name Backing follows (whose
+            // steps are already planned), so a viewer draws it as the text's box moved by Height.
+            var position = Point(text.Position + new Vector2(0f, text.DrawnVerticalOffset), text);
             var width = Hundredths(text.Size.X, 0, ProtocolLimits.MaxLayoutExtent, text);
             var height = Hundredths(text.Size.Y, 0, ProtocolLimits.MaxLayoutExtent, text);
 

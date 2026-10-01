@@ -470,6 +470,10 @@ internal static class ProfileTextRenderer
         float textAlpha,
         bool isPlaceholder)
     {
+        // Height moves the drawn text, and its clip, as if the box were that much lower; the box
+        // itself, and whatever follows it, stays.
+        screenPos.Y += element.DrawnVerticalOffset * scale;
+
         var font = ImGui.GetFont();
         var bakedFontSize = ImGui.GetFontSize();
         var padding = element.UsesLegacyLayout ? LegacyPaddingScreenPixels : PaddingLogical * scale;

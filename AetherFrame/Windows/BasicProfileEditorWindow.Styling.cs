@@ -133,6 +133,17 @@ internal sealed partial class BasicProfileEditorWindow
 
         CommitOnRelease(target);
 
+        var height = element.DrawnVerticalOffset;
+        StyleLabel("Height");
+        if (ImGui.SliderFloat("##Height", ref height, -TextProfileElement.MaxVerticalOffset, TextProfileElement.MaxVerticalOffset, "%.0f px", ImGuiSliderFlags.AlwaysClamp))
+        {
+            var value = MathF.Round(height);
+            target.Edit(e => e.VerticalOffset = value, true);
+        }
+
+        EditorWidgets.Tooltip("Moves the text up or down, without moving its backing. Ctrl+click to type a value.");
+        CommitOnRelease(target);
+
         var color = element.Color;
         StyleLabel("Color");
         if (ImGui.ColorEdit4("##Color", ref color, ImGuiColorEditFlags.NoAlpha))

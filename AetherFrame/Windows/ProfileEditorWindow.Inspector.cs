@@ -569,6 +569,20 @@ internal sealed partial class ProfileEditorWindow
             editorSession.CommitPendingEdit();
         }
 
+        var height = text.DrawnVerticalOffset;
+        EditorWidgets.PropertyLabel("Height");
+        if (ImGui.SliderFloat("##Height", ref height, -TextProfileElement.MaxVerticalOffset, TextProfileElement.MaxVerticalOffset, "%.0f px", ImGuiSliderFlags.AlwaysClamp))
+        {
+            var value = MathF.Round(height);
+            ContinueTextEdit(text.Id, element => element.VerticalOffset = value);
+        }
+
+        EditorWidgets.Tooltip("Moves the text up or down inside its box, without moving the box or a Name Backing. Ctrl+click to type a value.");
+        if (ImGui.IsItemDeactivatedAfterEdit())
+        {
+            editorSession.CommitPendingEdit();
+        }
+
         var lineSpacing = text.LineSpacing;
         EditorWidgets.PropertyLabel("Line Spacing");
         if (ImGui.SliderFloat("##LineSpacing", ref lineSpacing, TextProfileElement.MinLineSpacing, TextProfileElement.MaxLineSpacing, "%.2fx"))

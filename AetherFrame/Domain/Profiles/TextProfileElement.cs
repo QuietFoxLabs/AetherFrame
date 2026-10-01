@@ -26,6 +26,7 @@ public sealed class TextProfileElement : ProfileElement, IJsonOnDeserializing
     public const float MaxLetterSpacing = 40f;
     public const float MinLineSpacing = 0.5f;
     public const float MaxLineSpacing = 3f;
+    public const float MaxVerticalOffset = 40f;
 
     /// <summary>Inset between the element box and its text, in logical pixels (current layout).</summary>
     public const float LayoutPadding = 4f;
@@ -84,6 +85,19 @@ public sealed class TextProfileElement : ProfileElement, IJsonOnDeserializing
     /// <summary>Vertical placement of the laid-out text block inside the element box.
     /// Top (the default) matches every legacy element.</summary>
     public TextVerticalAlignment VerticalAlignment { get; set; } = TextVerticalAlignment.Top;
+
+    /// <summary>
+    /// How far the text draws below where its alignment puts it, in logical pixels (negative is
+    /// up): Height in both editors, at the owner's request of October 1, 2026, for a font that
+    /// sits a little high or low. Only the drawn text moves. The element box stays, and so does
+    /// everything that follows the box, such as a Name Backing.
+    /// Not written while 0, so every Plate saved before it stays byte for byte as it was.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public float VerticalOffset { get; set; }
+
+    /// <summary><see cref="VerticalOffset"/> as drawn: within <see cref="MaxVerticalOffset"/> either way, 0 when not a number.</summary>
+    internal float DrawnVerticalOffset => float.IsFinite(VerticalOffset) ? System.Math.Clamp(VerticalOffset, -MaxVerticalOffset, MaxVerticalOffset) : 0f;
 
     public bool Wrap { get; set; } = true;
 
@@ -231,6 +245,7 @@ public sealed class TextProfileElement : ProfileElement, IJsonOnDeserializing
         && Color == o.Color
         && Alignment == o.Alignment
         && VerticalAlignment == o.VerticalAlignment
+        && VerticalOffset.Equals(o.VerticalOffset)
         && Wrap == o.Wrap
         && FontFamily == o.FontFamily
         && Bold == o.Bold
@@ -261,6 +276,7 @@ public sealed class TextProfileElement : ProfileElement, IJsonOnDeserializing
         Color = text.Color;
         Alignment = text.Alignment;
         VerticalAlignment = text.VerticalAlignment;
+        VerticalOffset = text.VerticalOffset;
         Wrap = text.Wrap;
         FontFamily = text.FontFamily;
         Bold = text.Bold;

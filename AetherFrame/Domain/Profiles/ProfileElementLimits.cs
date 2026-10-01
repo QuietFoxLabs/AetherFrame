@@ -34,6 +34,7 @@ public static class ProfileElementLimits
         new(nameof(TextProfileElement.FontSize), e => e.FontSize, (e, v) => e.FontSize = v),
         ..Vector4Slots<TextProfileElement>(nameof(TextProfileElement.Color), e => e.Color, (e, v) => e.Color = v),
         new(nameof(TextProfileElement.LetterSpacing), e => e.LetterSpacing, (e, v) => e.LetterSpacing = v),
+        new(nameof(TextProfileElement.VerticalOffset), e => e.VerticalOffset, (e, v) => e.VerticalOffset = v),
         new(nameof(TextProfileElement.LineSpacing), e => e.LineSpacing, (e, v) => e.LineSpacing = v),
         new(nameof(TextProfileElement.AutoFitMinimumSize), e => e.AutoFitMinimumSize, (e, v) => e.AutoFitMinimumSize = v),
         ..Vector4Slots<TextProfileElement>(nameof(TextProfileElement.OutlineColor), e => e.OutlineColor, (e, v) => e.OutlineColor = v),
