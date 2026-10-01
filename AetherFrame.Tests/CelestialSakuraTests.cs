@@ -96,11 +96,14 @@ public class CelestialSakuraTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void TheFamily_IsExactlyTheSevenPieces_InCatalogOrder_AndNothingElseJoinsIt()
+    public void TheFamily_IsTheSevenApprovedPieces_AndItsSectionHeader_InCatalogOrder()
     {
+        // The Section Header joined with the art sets (ArtSets); nothing else joins the family.
         var family = BuiltInArtCatalog.OfFamily(BuiltInArtCatalog.CelestialSakuraFamily).ToList();
-        Assert.Equal(Family.Select(f => f.ArtId), family.Select(a => a.Id));
-        Assert.Equal(Family.Select(f => f.DefinitionId).Order(StringComparer.Ordinal), BuiltInComponentCatalog.All.Where(d => d.Family == "Celestial Sakura").Select(d => d.Id).Order(StringComparer.Ordinal));
+        Assert.Equal(Family.Select(f => f.ArtId).Append(ArtSets.CelestialSakuraSectionHeader), family.Select(a => a.Id));
+        Assert.Equal(
+            Family.Select(f => f.DefinitionId).Append(ArtSets.SectionHeaderCelestialSakura).Order(StringComparer.Ordinal),
+            BuiltInComponentCatalog.All.Where(d => d.Family == "Celestial Sakura").Select(d => d.Id).Order(StringComparer.Ordinal));
         Assert.Null(Definition(BuiltInComponentCatalog.CornerOrnamentAstrolabePivot).Family); // Celestial Dream untouched
         Assert.All(BuiltInComponentCatalog.All.Where(d => d.Art is null), d => Assert.Null(d.Family));
     }
@@ -124,7 +127,7 @@ public class CelestialSakuraTests(ITestOutputHelper output)
             Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
         }
 
-        Assert.Equal(["Celestial Sakura Ornate", "Celestial Sakura Slim"], BuiltInComponentCatalog.OfKind(PlateComponentKind.Divider).Where(d => d.Family is not null).Select(d => d.Name));
+        Assert.Equal(["Celestial Sakura Ornate", "Celestial Sakura Slim"], BuiltInComponentCatalog.OfKind(PlateComponentKind.Divider).Where(d => d.Family == BuiltInArtCatalog.CelestialSakuraFamily).Select(d => d.Name));
     }
 
     [Theory]
@@ -168,18 +171,18 @@ public class CelestialSakuraTests(ITestOutputHelper output)
     public void BasicSlots_OfferThePieces_WhoseKindHasASlot()
     {
         var document = ComponentDocuments.WithAnchors();
-        foreach (var (definitionId, _, kind, _, _, _, _) in Family.Where(f => f.Kind != PlateComponentKind.Background))
+        foreach (var (definitionId, _, kind, _, _, _, _) in Family)
         {
             Assert.Contains(kind, PlateComponentEditor.BasicSlots.Concat(PlateComponentEditor.BasicDecorations));
             Assert.True(PlateComponentEditor.SetSlot(document, kind, definitionId, BuiltInComponentCatalog.Instance) || PlateComponentEditor.FindSlot(document, kind)!.DefinitionId == definitionId);
             Assert.Equal(definitionId, PlateComponentEditor.FindSlot(document, kind)!.DefinitionId);
         }
 
-        // Background has no Basic slot: it is added in the Advanced editor, listed first.
-        Assert.DoesNotContain(PlateComponentKind.Background, PlateComponentEditor.BasicSlots.Concat(PlateComponentEditor.BasicDecorations));
-        Assert.Equal([PlateComponentKind.Background], PlateComponentEditor.AdvancedOnlyKinds);
+        // Background is a Basic slot too (an Art Style's background can be changed or taken away
+        // in Basic), listed first, as the Advanced editor lists it.
+        Assert.Equal(PlateComponentKind.Background, PlateComponentEditor.BasicSlots[0]);
         Assert.Equal("Background", PlateComponentEditor.KindLabel(PlateComponentKind.Background));
-        Assert.Equal([BuiltInComponentCatalog.BackgroundCelestialSakura], BuiltInComponentCatalog.OfKind(PlateComponentKind.Background).Select(d => d.Id));
+        Assert.Equal(BuiltInComponentCatalog.BackgroundCelestialSakura, BuiltInComponentCatalog.OfKind(PlateComponentKind.Background).First().Id); // then the art sets'
     }
 
     // ---- Resource names -------------------------------------------------------------------------
@@ -217,7 +220,8 @@ public class CelestialSakuraTests(ITestOutputHelper output)
     public void RuntimeFiles_AreExactlyTheApprovedPngs_ByteForByte()
     {
         var folder = Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Assets", "Components", "CelestialSakura");
-        Assert.Equal(Family.Select(f => f.File).Order(StringComparer.Ordinal), Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        // Besides the seven approved files: the Section Header, a half-size runtime copy (Assets/ArtSets.md).
+        Assert.Equal(Family.Select(f => f.File).Append("CelestialSakura_SectionHeader.png").Order(StringComparer.Ordinal), Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
         foreach (var (definitionId, _, _, file, _, _, sha256) in Family)
         {
             Assert.Equal(sha256, Sha256(File.ReadAllBytes(Path.Combine(folder, file))));
@@ -260,7 +264,7 @@ public class CelestialSakuraTests(ITestOutputHelper output)
             loaded.Add(art.Id, BundledArtImage.LoadLevels(ReadResource(art.ResourceName), art));
         }
 
-        Assert.Equal(7, loaded.Count);
+        Assert.Equal(8, loaded.Count); // the seven approved pieces and the Section Header
         foreach (var (id, levels) in loaded)
         {
             var art = BuiltInArtCatalog.Find(id)!;
@@ -372,7 +376,10 @@ public class CelestialSakuraTests(ITestOutputHelper output)
         var step = Assert.Single(PlanOf(document, BuiltInComponentCatalog.NameBackingCelestialSakura));
         var rect = step.Placement.Rect;
 
-        AssertAspect(3f, rect.Size);
+        // Sliced: 1.5x the padded name's height, and at least as wide as its caps and crest at that
+        // height (SlicedArtTests covers how it follows the name's measured width).
+        Assert.Equal((name.Size.Y + (2f * ComponentPaintPlan.NameBackingPadY)) * 1.5f, rect.Size.Y, 3);
+        Assert.True(rect.Size.X / rect.Size.Y >= 1652f / 724f, $"{rect} is narrower than the plaque's fixed pieces");
         Assert.InRange(rect.Size.X, 300f, 900f); // a useful width, whatever the name
         AssertInsideCanvas(document, rect);
         var center = rect.Position + (rect.Size / 2f);
@@ -499,9 +506,14 @@ public class CelestialSakuraTests(ITestOutputHelper output)
         Assert.All(document.Components!, c => Assert.Contains(components, s => ReferenceEquals(s.Component, c)));
         Assert.All(components, s => Assert.NotNull(s.Definition!.Art));
 
-        // Background first; Plate Frame last; the portrait frame right after the portrait.
+        // Background first; the Plate Frame (artwork) just before the first text, so no text is
+        // under it; the corners last; the portrait frame right after the portrait.
         Assert.Equal(PlateLayer.Background, plan[0].Layer);
-        Assert.Equal(PlateLayer.PlateFrame, plan[^1].Layer);
+        var firstText = plan.FindIndex(s => s.Element is TextProfileElement);
+        var plateFrame = plan.FindIndex(s => s.Layer == PlateLayer.PlateFrame);
+        var nameBacking = plan.FindIndex(s => s.Layer == PlateLayer.NameBacking);
+        Assert.True(plateFrame < nameBacking && nameBacking == firstText - 1, $"frame {plateFrame}, backing {nameBacking}, first text {firstText}");
+        Assert.Equal(PlateLayer.Decorations, plan[^1].Layer);
         var portrait = plan.FindIndex(s => s.Element?.Role == ProfileElementRole.BasicPortrait);
         Assert.Equal(PlateLayer.PortraitFrame, plan[portrait + 1].Layer);
 

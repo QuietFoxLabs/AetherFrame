@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 
 namespace AetherFrame.Domain.Basic;
@@ -573,10 +574,13 @@ internal sealed class BasicPlateEditor
     // ---------------------------------------------------------------- theme
 
     /// <summary>
-    /// Applies a theme preset: the background's colors (an image background keeps showing its
-    /// image), and the matching text color for every Basic text element (opacity kept) — except a
-    /// character name with a custom color, which keeps it (see <see cref="BasicNameColor"/>). Only
-    /// copies values — every one stays editable, and nothing references the preset afterwards.
+    /// Applies a theme preset: the background's colors (an image background keeps its image), and
+    /// the matching text color for every Basic text element (opacity kept) — except a character name
+    /// with a custom color, which keeps it (see <see cref="BasicNameColor"/>). Only copies values —
+    /// every one stays editable, and nothing references the preset afterwards. An Art Style also
+    /// places its pieces (<see cref="ApplyStylePieces"/>): its background artwork covers the Plate's
+    /// own background, image included, until it is taken away under Frame &amp; Decorations or where
+    /// the background is edited; the background itself is kept under it.
     /// </summary>
     internal void ApplyTheme(ProfileThemePreset preset)
     {
@@ -605,7 +609,49 @@ internal sealed class BasicPlateEditor
             }
         }
 
+        ApplyStylePieces(ProfileThemePresets.Find(Settings.ThemeId), preset);
         Settings.ThemeId = preset.Id;
+    }
+
+    /// <summary>
+    /// An Art Style places its pieces in the Basic slots (<see cref="PlateComponentEditor.SetSlot"/>: a
+    /// slot already holding a Component keeps it, with its Advanced refinements, and only changes its
+    /// style). Leaving a style for a theme without a piece of some kind takes away the leaving style's
+    /// piece of that kind, but only while it is still the style's own: a piece the player chose since
+    /// stays. A Plate already holding the most Components a Plate can gets no new slot.
+    /// </summary>
+    private void ApplyStylePieces(ProfileThemePreset? previous, ProfileThemePreset preset)
+    {
+        var catalog = BuiltInComponentCatalog.Instance;
+        var placed = new HashSet<PlateComponentKind>();
+        foreach (var id in preset.Components)
+        {
+            if (catalog.Find(id) is { } definition)
+            {
+                placed.Add(definition.Kind);
+            }
+        }
+
+        if (previous is { IsArtStyle: true })
+        {
+            foreach (var id in previous.Components)
+            {
+                if (catalog.Find(id) is { } definition && !placed.Contains(definition.Kind)
+                    && PlateComponentEditor.FindSlot(Profile, definition.Kind) is { } slot && string.Equals(slot.DefinitionId, id, StringComparison.Ordinal))
+                {
+                    PlateComponentEditor.SetSlot(Profile, definition.Kind, null, catalog);
+                }
+            }
+        }
+
+        foreach (var id in preset.Components)
+        {
+            if (catalog.Find(id) is { } definition
+                && (PlateComponentEditor.FindSlot(Profile, definition.Kind) is not null || PlateComponentEditor.HasCapacity(Profile)))
+            {
+                PlateComponentEditor.SetSlot(Profile, definition.Kind, id, catalog);
+            }
+        }
     }
 
     // ---------------------------------------------------------------- internals
@@ -712,8 +758,9 @@ internal static class AdventurePlateStarter
 
         document.BasicPlate = new BasicPlateSettings { ThemeId = ProfileThemePresets.All[0].Id };
 
-        // Identity Header: the character name, placed by the default (stacked) layout. Title and
-        // tagline are created when first turned on, as in the Basic editor.
+        // Identity Header: the character name, alone on the whole header region (as every layout
+        // places a name with no title, so no font is needed yet). The title is created when first
+        // turned on, as in the Basic editor.
         document.BasicIdentity = IdentityHeaderRules.CreateSettings(document);
         Add(IdentityHeaderRules.Create(ProfileElementRole.BasicName, document, character?.Name));
         IdentityHeaderRules.Place(document, static _ => null);

@@ -25,8 +25,36 @@ where each runtime copy was made from.
   so filtering never outlines strokes dark. The file itself is not changed.
 - Corner Ornaments are drawn for the top-left corner. The catalog says whether the other corners
   rotate or mirror it.
+- Name Backings and Dividers may be **sliced** (`ArtSlices` in `BuiltInArtCatalog`), below.
 
-`BuiltInArtTests` and `CelestialSakuraTests` check all of this against the embedded bytes.
+`BuiltInArtTests`, `CelestialSakuraTests`, `SlicedArtTests` and `ArtSetsTests` check all of this against the embedded bytes.
+
+## Sliced artwork (Name Backings, Dividers and Section Headers)
+
+A name can be two letters or twenty, so a backing drawn at one fixed ratio is either tiny behind a
+short name or too short for a long one. Sliced artwork is cut at five x positions into a left cap,
+a fill, a center piece, a fill and a right cap:
+
+```
+| left cap | left fill | center piece | right fill | right cap |
+0       CapLeft    CenterLeft    CenterRight    CapRight     width
+   ContentLeft ^                                    ^ ContentRight
+```
+
+- The caps and the center piece are always drawn at the artwork's own proportions. Only the two
+  fills stretch, equally. So a fill must look the same in every column: straight rails and a plain
+  band, no ornament. Artwork without a center piece sets `CenterLeft` equal to `CenterRight`.
+- Height: the anchor box's height times `SizeFactor`, as for unsliced art.
+- Width: the anchor box (the padded name and title, or the Divider's line) spans `ContentLeft` to
+  `ContentRight`, so the plaque is the box's width plus the art outside its text area. It is never
+  narrower than the caps and center piece together, and never stretches past the Plate's left or
+  right edge. Scale, Offset and Rotation then apply to the whole plaque as usual.
+- Each piece is its own primitive (`ComponentPrimitive.Piece`) with its own texture window. All
+  pieces of one placement draw from the same level. A shared Plate names each piece by its own art
+  ident, the artwork's id plus `.left-cap`, `.left-fill`, `.center`, `.right-fill` or `.right-cap`
+  (`BuiltInArtCatalog.FindPiece`), so the art quad's format is unchanged.
+- To measure a new piece: the fills are where every column has the same silhouette and nearly the
+  same colors. Measure them on the runtime PNG, never by eye on a scaled preview.
 
 ## Celestial Dream / Corner Ornaments / AstrolabePivot.png — 512 x 512
 
@@ -97,10 +125,17 @@ is 992 x 1586 (0.6255), which is 0.076% off, so it is drawn exactly over the por
 **Default placements** on the Adventure Plate Classic, in logical px, before any Scale or Offset:
 
 - Background and Plate Frame fill the canvas at (0, 0, 1280, 720). Art Plate Frames skip the
-  14 px inset of the procedural borders, because the drawing carries its own margin.
+  14 px inset of the procedural borders, because the drawing carries its own margin, and paint
+  between the pictures and the text: over the portrait and its frame, under the name and every text.
 - Portrait Frame covers the portrait.
-- Nameplate: 1.5x the padded name box, fitted at 3:1 and centered on the name. With the starter's
-  60 px name box, that is 324 x 108 at y 20.
+- Nameplate: sliced (see above), 1.5x the padded name box's height and centered on the name. With
+  the starter's 60 px name box, it is 108 px tall, and as wide as the name's text plus about 100 px
+  (at least 246 px, the blossom ends and the crest). Its cuts, measured on the PNG: `ContentLeft`
+  340 and `ContentRight` 1840 (the ivory band's inner edges, inside the blossom ends);
+  `CapLeft` 512 and `CapRight` 1672 (where the ends' scrolls finish); `CenterLeft` 760 and
+  `CenterRight` 1400 (the crescent crest and the pearl below it, with their flourishes). Between
+  512 and 760, and between 1400 and 1672, the plaque is only its rails and band: every column has
+  the same silhouette (rows 208 to 476).
 - Dividers are centered on the procedural Divider line and fitted at 3:1. The Ornate band is 3x
   the Divider height (216 x 72), which keeps the crescent clear of the name. The Slim band is 4x
   (288 x 96).
@@ -116,3 +151,38 @@ once, the first time a Plate draws it. That takes about 45–55 ms of CPU per pi
 the thread pool (`BuiltInArtLoader`), not inside Draw. The piece appears a frame or a few later.
 If that ever matters, the Celestial Dream route is available: approved, reduced runtime copies
 made from the full-size sources.
+
+## The art sets: 19 sets of seven pieces, and Celestial Sakura's Section Header
+
+Made by `tools/art/make_runtime_art.py` from the owner's sources (run it from the repository root,
+with the source folder as its argument). [ArtSets.md](ArtSets.md) lists every runtime file with
+its source's SHA-256 and its own, its cuts and its size factor, and `ArtSetsTests` checks every
+file against it. The ids, Components and Art Styles are made in `ArtSets` from the generated
+`ArtSetData.g.cs`.
+
+- The Background, Plate Frame and Portrait Frame are the sources, byte for byte (1672 x 941 and
+  992 x 1586), with their Content Credentials.
+- The Name Backing, Divider and Section Header (1086 x 362) and the Corner Ornament (627 x 627) are
+  half size, the owner's choice of October 1, 2026, to keep the download near 77 MB instead of
+  117 MB. Each is averaged exactly as `BundledArtImage.BuildLevels` makes its own half-size level,
+  so wherever the piece is drawn at or below half its source's size it draws exactly as the source
+  would. At Size 100% with the Plate full screen, that is every piece on every screen up to 1440p.
+  At 4K it is every Divider, Section Header and Corner Ornament, while 16 of the 19 Name Backings
+  (size factors above 1.68) are magnified, by up to 1.45 times (Watercolor Fantasy's), and slightly
+  softer.
+- Cuts are measured on each source and halved (the fills shrink by at most a texel, so they stay
+  plain). Pieces whose fills meet in the middle have no center piece.
+- Size factors match Celestial Sakura's look: a Name Backing's plain band is 40 px around the
+  starter name; a Divider's drawing about 48 px tall (most are thinner, so they stop at the largest
+  factor, 4); a Section Header's band 22 px of the 24 px heading row; a Corner Ornament 3.
+- A Section Header drawn from artwork is a backing: one placement behind each drawn heading,
+  around its measured text with 6 px either side, at the bottom of the element stack. An end
+  reaching past the heading's column tucks behind the portrait and its frame.
+- Each set is also an Art Style, a theme (`af.style.<slug>`) that places its seven pieces. Its text
+  colors are chosen from the pixels: dark or light ink, whichever contrasts more with the band
+  behind the name, the band behind the headings, and the background behind the Details. Every
+  style clears 4.5:1 (WCAG AA) on all three (`ArtSetsTests`).
+- `StylePreviews/<Folder>.png` (384 x 216) is each style's card in the theme browser: a sample
+  Plate the generator draws from the runtime pieces. It is an illustration, never a Component.
+- Memory: a whole set drawn at once is about 33 MB of GPU memory with its levels, loaded once, the
+  first time a Plate draws each piece, on the thread pool.

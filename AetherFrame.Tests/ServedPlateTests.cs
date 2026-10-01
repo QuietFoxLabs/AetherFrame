@@ -159,7 +159,12 @@ public sealed class ServedPlateTests
     public void AClassicPlate_DrawsEveryShapeAtItsPointsAndColour()
     {
         var plate = PlateFactory.Create(PlateStartingLayout.AdventurePlateClassic, Guid.NewGuid(), "Adventure Plate", Now, new PlateStarterContent(new BasicCharacterInfo("Visible Hero", "Phoenix", "Light", 19, "Paladin", 100, "ABC")));
-        plate.Components = [ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameDouble), ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameCelestialSakura)];
+        plate.Components =
+        [
+            ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameDouble),
+            ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameCelestialSakura),
+            ComponentDocuments.Of(BuiltInComponentCatalog.NameBackingCelestialSakura),
+        ];
         var (candidate, served) = ServeWithCandidate(plate);
 
         Assert.Equal(candidate.Items.Count, served.Steps.Count);
@@ -184,7 +189,10 @@ public sealed class ServedPlateTests
                 case LayoutArtQuad art:
                     var drawnArt = Assert.IsType<ServedShape>(served.Steps[index]);
                     Assert.Equal(ServedShapeKind.Art, drawnArt.Kind);
-                    Assert.Same(BuiltInArtCatalog.Find(art.Art), drawnArt.Art);
+                    var found = BuiltInArtCatalog.FindPiece(art.Art);
+                    Assert.NotNull(found);
+                    Assert.Same(found.Value.Art, drawnArt.Art);
+                    Assert.Equal(found.Value.Piece, drawnArt.Piece);
                     Assert.Equal(art.Tint, Bytes(drawnArt.Color));
                     break;
 
@@ -196,6 +204,7 @@ public sealed class ServedPlateTests
 
         Assert.Contains(served.Steps, step => step is ServedShape { Kind: ServedShapeKind.Quad });
         Assert.Contains(served.Steps, step => step is ServedShape { Kind: ServedShapeKind.Art, Art: not null });
+        Assert.Contains(served.Steps, step => step is ServedShape { Kind: ServedShapeKind.Art, Piece: ArtPiece.Center });
         Assert.Contains(served.Steps, step => step is ServedText);
         Assert.Empty(served.Notes);
     }

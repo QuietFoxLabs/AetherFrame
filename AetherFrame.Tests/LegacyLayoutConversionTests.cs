@@ -3,16 +3,17 @@ using System.Threading.Tasks;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Persistence;
+using AetherFrame.UI.Editor;
 using Xunit;
 
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// The explicit "Convert to Classic" action for a Plate saved with the retired Badge or Accent
+/// The explicit "Put on One Line" action for a Plate saved with the retired Badge or Accent
 /// layout (see <c>BasicProfileEditorWindow.Identity.DrawLegacyLayoutConversion</c>): opening such a
 /// Plate must never mutate or dirty it, and the conversion itself — calling
 /// <see cref="AetherFrame.UI.Editor.BasicIdentitySession.SetLayout"/> with
-/// <see cref="IdentityTitleLayout.Classic"/>, exactly what the button does — must be one undo step
+/// <see cref="AetherFrame.UI.Editor.BasicIdentitySession.OneLineFor"/>, exactly what the button does — must be one undo step
 /// that redoes exactly. The UI button itself lives in Windows/ (Dalamud/ImGui) and can't be linked
 /// into this Dalamud-free test project; these tests cover the domain action it calls.
 /// </summary>
@@ -76,30 +77,30 @@ public class LegacyLayoutConversionTests
     // ---------------------------------------------------------------- the conversion itself
 
     [Fact]
-    public async Task LegacyBadge_ConvertToClassic_RemovesTheBadgeLook_ButKeepsText()
+    public async Task LegacyBadge_PutOnOneLine_RemovesTheBadgeLook_ButKeepsText()
     {
         using var harness = await BasicHarness.OpenDocumentAsync(LegacyBadgePlate());
         harness.SimulateBasicFrame();
 
-        harness.Identity.SetLayout(IdentityTitleLayout.Classic);
+        harness.Identity.SetLayout(BasicIdentitySession.OneLineFor(harness.Document.BasicIdentity!.Layout));
 
         var title = BasicSections.FindText(harness.Document, ProfileElementRole.BasicTitle)!;
-        Assert.Equal(IdentityTitleLayout.Classic, harness.Document.BasicIdentity!.Layout);
+        Assert.Equal(IdentityTitleLayout.InlineAfter, harness.Document.BasicIdentity!.Layout);
         Assert.False(title.Bold);
         Assert.Equal(0f, title.LetterSpacing);
         Assert.Equal("the Brave", title.Text);
     }
 
     [Fact]
-    public async Task LegacyAccent_ConvertToClassic_RemovesTheItalicLook_ButKeepsTextAndSymbols()
+    public async Task LegacyAccent_PutOnOneLine_RemovesTheItalicLook_ButKeepsTextAndSymbols()
     {
         using var harness = await BasicHarness.OpenDocumentAsync(LegacyAccentPlate());
         harness.SimulateBasicFrame();
 
-        harness.Identity.SetLayout(IdentityTitleLayout.Classic);
+        harness.Identity.SetLayout(BasicIdentitySession.OneLineFor(harness.Document.BasicIdentity!.Layout));
 
         var title = BasicSections.FindText(harness.Document, ProfileElementRole.BasicTitle)!;
-        Assert.Equal(IdentityTitleLayout.Classic, harness.Document.BasicIdentity!.Layout);
+        Assert.Equal(IdentityTitleLayout.InlineAfter, harness.Document.BasicIdentity!.Layout);
         Assert.False(title.Italic);
         Assert.Equal("the Wanderer", title.Text);
 
@@ -114,14 +115,14 @@ public class LegacyLayoutConversionTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ConvertToClassic_IsOneUndoStep_AndRedoesExactly(bool badge)
+    public async Task PutOnOneLine_IsOneUndoStep_AndRedoesExactly(bool badge)
     {
         var document = badge ? LegacyBadgePlate() : LegacyAccentPlate();
         using var harness = await BasicHarness.OpenDocumentAsync(document);
         harness.SimulateBasicFrame();
         var beforeConversion = harness.Json();
 
-        harness.Identity.SetLayout(IdentityTitleLayout.Classic);
+        harness.Identity.SetLayout(BasicIdentitySession.OneLineFor(harness.Document.BasicIdentity!.Layout));
         var afterConversion = harness.Json();
         Assert.NotEqual(beforeConversion, afterConversion);
 
@@ -131,18 +132,18 @@ public class LegacyLayoutConversionTests
 
         harness.Session.Redo();
         Assert.Equal(afterConversion, harness.Json());
-        Assert.Equal(IdentityTitleLayout.Classic, harness.Document.BasicIdentity!.Layout);
+        Assert.Equal(IdentityTitleLayout.InlineAfter, harness.Document.BasicIdentity!.Layout);
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ConvertToClassic_AfterASave_LeavesNoPhantomDirtyState(bool badge)
+    public async Task PutOnOneLine_AfterASave_LeavesNoPhantomDirtyState(bool badge)
     {
         using var harness = await BasicHarness.OpenDocumentAsync(badge ? LegacyBadgePlate() : LegacyAccentPlate());
         harness.SimulateBasicFrame();
 
-        harness.Identity.SetLayout(IdentityTitleLayout.Classic);
+        harness.Identity.SetLayout(BasicIdentitySession.OneLineFor(harness.Document.BasicIdentity!.Layout));
         Assert.True(harness.Session.IsDirty);
 
         await harness.Session.SaveProfileAsync();

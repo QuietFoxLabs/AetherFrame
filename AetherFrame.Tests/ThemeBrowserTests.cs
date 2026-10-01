@@ -192,7 +192,7 @@ public class ThemeBrowserTests
     public async Task ApplyingAThemeFromTheBrowser_StoresItsExistingId()
     {
         using var harness = await BasicHarness.CreatePlateAsync(PlateStartingLayout.AdventurePlateClassic, new PlateStarterContent(FakeCharacter.Hero));
-        var royal = ThemeBrowser.Filter(All, "royal", null).Single();
+        var royal = ThemeBrowser.Filter(All, "royal", ThemeFamily.Special).Single(); // not High Fantasy Royal, an Art Style
 
         harness.Basic.ApplyTheme(royal);
 

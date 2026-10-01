@@ -66,11 +66,13 @@ internal static class IdentityHeaderRules
     /// <summary>The default character name size on this canvas.</summary>
     internal static float ScaledNameSize(ProfileDocument profile) => AdventurePlateClassicLayout.ClampFont(NameFontSize * CanvasScale(profile));
 
-    /// <summary>New settings with the Adventure Plate Classic header region for the Plate's orientation.</summary>
+    /// <summary>New settings with the Adventure Plate Classic header region for the Plate's orientation,
+    /// and the title on the name's line, after it: Basic no longer offers the title above or below the
+    /// name. (The property's own default is unchanged, for Plates saved without the field.)</summary>
     internal static BasicIdentityHeader CreateSettings(ProfileDocument profile)
     {
         var (position, width) = DefaultRegion(profile);
-        return new BasicIdentityHeader { Layout = IdentityTitleLayout.Subtitle, RegionPosition = position, RegionWidth = width };
+        return new BasicIdentityHeader { Layout = IdentityTitleLayout.InlineAfter, RegionPosition = position, RegionWidth = width };
     }
 
     internal static (Vector2 Position, float Width) DefaultRegion(ProfileDocument profile) =>

@@ -33,14 +33,14 @@ internal sealed partial class BasicProfileEditorWindow
     private static readonly string[] DecorationLabels =
         BasicIdentitySession.DecorationSymbols.Select(s => s.Length == 0 ? "None" : s).ToArray();
 
-    // Badge and Accent are retired from Basic's picker (no longer offered to choose), but the enum
-    // values, their look, and IdentityHeaderRules' revert/legacy logic all stay: a Plate saved with
-    // either opens unchanged, keeps rendering exactly as it did, and is only ever changed by an
-    // explicit pick of one of the four layouts still offered here.
+    // Only the one-line layouts are offered (BasicIdentitySession.IsOffered): a title above or below
+    // the name (Classic, Subtitle) looked unbalanced and made a Name Backing twice as tall, and Badge
+    // and Accent were retired before them. The enum values, their look, and IdentityHeaderRules'
+    // revert/legacy logic all stay: a Plate saved with any of them opens unchanged, and a title it
+    // shows keeps rendering exactly as it did until a layout offered here is picked. A title turned
+    // on while none is shown goes on the name's line (BasicIdentitySession.IsOffered).
     private static readonly (IdentityTitleLayout Layout, string Label, string Tooltip)[] TitleLayouts =
     [
-        (IdentityTitleLayout.Classic, "Classic", "Title above the character name"),
-        (IdentityTitleLayout.Subtitle, "Subtitle", "Character name above the title"),
         (IdentityTitleLayout.InlineBefore, "Inline Before", "Title, then the character name, on one line"),
         (IdentityTitleLayout.InlineAfter, "Inline After", "Character name, then the title, on one line"),
     ];
@@ -151,8 +151,8 @@ internal sealed partial class BasicProfileEditorWindow
 
             if (chosen is not null)
             {
-                Hint(chosen.IsPrefix ? "In game, this title is shown before (above) the name." : "In game, this title is shown after (below) the name.");
-                var gameLayout = chosen.IsPrefix ? IdentityTitleLayout.Classic : IdentityTitleLayout.Subtitle;
+                Hint(chosen.IsPrefix ? "In game, this title comes before the name." : "In game, this title comes after the name.");
+                var gameLayout = BasicIdentitySession.GamePlacement(chosen.IsPrefix);
                 if (BasicIdentitySession.GetLayout(profile) != gameLayout)
                 {
                     ImGui.SameLine();
@@ -208,7 +208,7 @@ internal sealed partial class BasicProfileEditorWindow
         ToolTip("Removes the symbols before and after the title (undoable). You can pick new ones\nunder Advanced Styling > Title symbols.");
     }
 
-    /// <summary>The curated title layouts (only meaningful while a title is shown): one row of four.</summary>
+    /// <summary>The curated title layouts (only meaningful while a title is shown): one row of two.</summary>
     private static void DrawIdentityLayoutChoice(ProfileDocument profile, BasicIdentitySession identity)
     {
         if (BasicIdentitySession.GetTitleSource(profile) == IdentityTitleSource.None)
@@ -220,7 +220,7 @@ internal sealed partial class BasicProfileEditorWindow
         var current = BasicIdentitySession.GetLayout(profile);
         var customized = BasicIdentitySession.IsCustomized(profile);
 
-        if (!customized && current is IdentityTitleLayout.Badge or IdentityTitleLayout.Accent)
+        if (!customized && !BasicIdentitySession.IsOffered(current) && BasicIdentitySession.IsTitleShown(profile))
         {
             DrawLegacyLayoutConversion(current, identity);
         }
@@ -242,21 +242,31 @@ internal sealed partial class BasicProfileEditorWindow
     }
 
     /// <summary>
-    /// A legacy Badge or Accent layout, called out explicitly with a dedicated migration action
-    /// rather than leaving the user to notice that clicking Classic (one of the four regular buttons
-    /// below) happens to also do it. Nothing here runs on its own: the Plate keeps rendering exactly
-    /// as it always has — unchanged, not dirtied — until this button is pressed, and pressing it is
-    /// one undo step (the same <see cref="BasicIdentitySession.SetLayout"/> the regular buttons use).
+    /// A layout Basic no longer offers (the title above or below the name, Badge, Accent), called out
+    /// explicitly with a dedicated migration action rather than leaving the user to notice that one of
+    /// the regular buttons below also does it. Nothing here runs on its own: the Plate keeps rendering
+    /// exactly as it always has — unchanged, not dirtied — until this button is pressed, and pressing
+    /// it is one undo step (the same <see cref="BasicIdentitySession.SetLayout"/> the regular buttons
+    /// use), to the one-line layout that keeps the title's order (<see cref="BasicIdentitySession.OneLineFor"/>).
     /// </summary>
     private static void DrawLegacyLayoutConversion(IdentityTitleLayout current, BasicIdentitySession identity)
     {
-        ImGui.TextColored(EditorWidgets.WarningColor, $"This Plate uses the retired \"{current}\" layout.");
-        if (ImGui.SmallButton("Convert to Classic"))
+        var shown = current switch
         {
-            identity.SetLayout(IdentityTitleLayout.Classic);
+            IdentityTitleLayout.Classic => "its title above the name",
+            IdentityTitleLayout.Subtitle => "its title below the name",
+            _ => $"the retired \"{current}\" layout",
+        };
+
+        ImGui.TextColored(EditorWidgets.WarningColor, $"This Plate shows {shown}.");
+        if (ImGui.SmallButton("Put on One Line"))
+        {
+            identity.SetLayout(BasicIdentitySession.OneLineFor(current));
         }
 
-        ToolTip("Switches to the Classic layout and updates the title's style to match (undoable).\nUntil you do this, the title keeps looking exactly as it always has.");
+        var order = BasicIdentitySession.OneLineFor(current) == IdentityTitleLayout.InlineBefore ? "before" : "after";
+        var look = current is IdentityTitleLayout.Badge or IdentityTitleLayout.Accent ? $", without the {current} look" : string.Empty;
+        ToolTip($"Puts the title on the name's line, {order} the name{look} (undoable).\nUntil you do this, the title keeps looking exactly as it always has.");
     }
 
     /// <summary>The title's prefix/suffix symbols (inside Advanced Styling).</summary>

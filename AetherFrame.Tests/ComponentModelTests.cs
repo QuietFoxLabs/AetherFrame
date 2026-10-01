@@ -117,7 +117,7 @@ public class ComponentCatalogTests
             Assert.Equal(kind, definition!.Kind);
         }
 
-        Assert.Equal(Shipped.Length, BuiltInComponentCatalog.All.Count);
+        Assert.Equal(Shipped.Length + ArtSets.Definitions.Count, BuiltInComponentCatalog.All.Count); // the art sets: ArtSetsTests
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class ComponentCatalogTests
             Assert.Contains(BuiltInComponentCatalog.OfKind(kind), d => !d.RequiresAsset);
         }
 
-        Assert.Equal(7, PlateComponentEditor.BasicSlots.Length + PlateComponentEditor.BasicDecorations.Length);
+        Assert.Equal(8, PlateComponentEditor.BasicSlots.Length + PlateComponentEditor.BasicDecorations.Length);
     }
 
     [Fact]

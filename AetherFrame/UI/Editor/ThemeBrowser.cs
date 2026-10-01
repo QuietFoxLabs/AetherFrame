@@ -100,10 +100,18 @@ internal static class ThemeBrowser
     internal static int Columns(float width, float cardWidth, float spacing) =>
         Math.Max(1, (int)((width + spacing) / Math.Max(1f, cardWidth + spacing)));
 
+    /// <summary>A family's name as the browser shows it: "Art Styles" for the art styles, the family's
+    /// own name for each family of Simple Themes.</summary>
+    internal static string FamilyLabel(ThemeFamily family) => family == ThemeFamily.ArtStyle ? "Art Styles" : family.ToString();
+
+    /// <summary>The heading over every family but the art styles: their themes set colors only.</summary>
+    internal const string SimpleThemesLabel = "Simple Themes";
+
     private static bool Matches(ProfileThemePreset theme, string word) =>
         theme.Name.Contains(word, StringComparison.OrdinalIgnoreCase)
         || theme.Description.Contains(word, StringComparison.OrdinalIgnoreCase)
-        || theme.Family.ToString().Contains(word, StringComparison.OrdinalIgnoreCase);
+        || FamilyLabel(theme.Family).Contains(word, StringComparison.OrdinalIgnoreCase)
+        || (!theme.IsArtStyle && SimpleThemesLabel.Contains(word, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>The Theme browser's view state (search text and family filter): editor-only, never part of a Plate.</summary>

@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using System.Numerics;
+using AetherFrame.Domain.Components;
 
 namespace AetherFrame.Domain.Profiles;
 
@@ -41,6 +44,8 @@ public sealed record ProfileThemePreset(
     /// theme (Monochrome, bright vivid gradients), and never a dark or muddy ink — on light themes a
     /// vivid mid-tone. A restrained dark outline (<see cref="NameOutlineColor"/>) keeps every one
     /// readable over light or dark backgrounds, gradients, patterns, images and Name Backings.
+    /// Art Styles are the exception: their name sits on the style's own plaque, so it takes the ink
+    /// that contrasts most with that plaque, a dark one on a light plaque (see <c>ArtSets</c>).
     /// Null only for a theme without a name treatment, which falls back to <see cref="TextColor"/>.
     /// </summary>
     public Vector4? NameColor { get; init; }
@@ -64,6 +69,19 @@ public sealed record ProfileThemePreset(
     /// <summary>This theme with its name treatment: display color, outline color, outline strength.</summary>
     public ProfileThemePreset WithName(Vector4 name, Vector4 outline, float strength) =>
         this with { NameColor = name, NameOutlineColor = outline, NameOutlineStrength = strength };
+
+    /// <summary>
+    /// For an Art Style (<see cref="ThemeFamily.ArtStyle"/>): the Component definition ids it places in
+    /// the Basic slots, one per kind (see <c>AetherFrame.Domain.Components.ArtSets</c>). Empty for every
+    /// Simple Theme, which sets colors only.
+    /// </summary>
+    public IReadOnlyList<string> Components { get; init; } = [];
+
+    /// <summary>An Art Style's preview card: the manifest resource name of a bundled PNG; null otherwise.</summary>
+    public string? PreviewResource { get; init; }
+
+    /// <summary>True for an Art Style: a theme whose look is its artwork (<see cref="Components"/>).</summary>
+    public bool IsArtStyle => Components.Count > 0;
 
     private static float Luminance(Vector4 c)
     {
@@ -104,6 +122,10 @@ public enum ThemeFamily
     Vibrant,
     Gradient,
     Special,
+
+    /// <summary>The Art Styles: a theme with a bundled art set (<see cref="ProfileThemePreset.IsArtStyle"/>).
+    /// Every other family is a Simple Theme.</summary>
+    ArtStyle,
 }
 
 /// <summary>Curated presets and swatches shared by every editor's background controls.</summary>
@@ -114,7 +136,7 @@ public static class ProfileThemePresets
     /// can be reordered independently without silently reshuffling the browser.</summary>
     public static readonly ThemeFamily[] FamilyOrder =
     [
-        ThemeFamily.Classic, ThemeFamily.Pastel, ThemeFamily.Vibrant, ThemeFamily.Gradient, ThemeFamily.Special,
+        ThemeFamily.ArtStyle, ThemeFamily.Classic, ThemeFamily.Pastel, ThemeFamily.Vibrant, ThemeFamily.Gradient, ThemeFamily.Special,
     ];
 
     // The first 22 entries keep their original array positions from before Id/Family existed —
@@ -263,7 +285,13 @@ public static class ProfileThemePresets
         new ProfileThemePreset("Aurora", "Aurora", ThemeFamily.Gradient, "Teal to blue-violet, aurora-like",
             Rgb(0x0A, 0x3D, 0x2E), Rgb(0x4F, 0x6A, 0xE0), 120f, ProfileBackgroundTexture.Waves, 0.15f,
             Rgb(0xE8, 0xF5, 0xF0), Rgb(0x7A, 0xE8, 0xC2), Rgb(0x9A, 0xB8, 0xC2)).WithName(Rgb(0x8C, 0xF5, 0xD0), Rgb(0x07, 0x25, 0x1C), 0.55f),
+
+        // The Art Styles, after every Simple Theme (ArtSets).
+        .. ArtSets.Styles,
     ];
+
+    /// <summary>Every theme that sets colors only, in catalog order: all but the Art Styles.</summary>
+    public static readonly ProfileThemePreset[] SimpleThemes = Array.FindAll(All, preset => !preset.IsArtStyle);
 
     /// <summary>Quick-pick swatches for solid colors: neutrals, then a hue wheel of muted and
     /// saturated tones that read well behind light or dark profile text.</summary>
