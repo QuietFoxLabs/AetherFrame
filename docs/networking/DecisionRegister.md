@@ -1449,6 +1449,18 @@ P2 leaves open how a preview build reaches a second player, and NETWORK2's secti
 
 **Rationale.** The dev plugin route needs no account, signing, hosting or workflow change, so it adds no owner-only step beyond handing over a file. It keeps preview builds out of every channel P2 protects. A testing channel for preview builds, or networking in player builds, stays a later decision, for when sharing grows past a handful of testers.
 
+### Releases carry sharing. The owner's direction, October 1, 2026; its details APPROVED (Claude, under the owner's delegation of September 29, 2026), October 1, 2026
+
+**The owner's direction**, asked in chat how players should get sharing for the open alpha: "Testing channel gets sharing". The repository link players already add to Dalamud serves a build with sharing in it. This amends D9b and P2, which kept the networking code out of every release, and N2-11's tester kit, which was the only way a second player got it.
+
+**Its details, under the delegation:**
+- **The sharing flavour is the build.** `AetherFrame.csproj` builds it by default. `distribution/repository.json` names the first version released with it (`"sharingSince": "0.1.8"`), and the package check holds every release from then on to it: a release without the sharing code is refused, as one with it was before. Releases before it are still checked as the player builds they were, so a publication that verifies them again, a rollback included, still accepts them. Sharing stays off until a player turns it on for a character (V1). A player who never does sends nothing and looks nothing up, as NETWORK2's section 2, check 1, requires.
+- **The player flavour stays.** `-p:AetherFrameNetworkPreview=false` builds it, with no networking code at all, and CI keeps it compiling and held to its boundary. Releasing it again would first need the package check to take a version range or list, since moving `sharingSince` past such a release would make the sharing releases before it count as player releases.
+- **The installer says so.** The plugin's description, which Dalamud's installer shows, says that sharing is optional and off until turned on, and what it sends: the character's name, World, Lodestone id and Active Plate, and the name and World a viewer looks up. The plugin's own words follow: the tutorial and Help no longer say that nothing is sent, but that nothing is sent unless sharing is on, and `/af version` says "[sharing]" instead of "[network preview]".
+- **A release still waits** for the owner's pass of its build in game (AUTOPILOT.md) and for the owner's approval of its publication. 0.1.8's publication also waits for the server's opening (`OpenToEveryone`, "Opening the alpha"): until then a character not on the allowlist fails the Lodestone check with a message that doesn't say why. Tester kits are no longer needed, though `tools/New-TesterKit.ps1` still makes one.
+
+**Rationale.** One build for the testing channel, the testers and the owner's own game. Nothing a player hasn't turned on talks to the server, so shipping the code changes nothing for them, while turning it on no longer needs a dev plugin. The player flavour stays one property away, for a release without sharing if one is ever needed.
+
 ## Gates
 
 | Gate | Must be decided before |

@@ -2,9 +2,9 @@
 
 How AetherFrame reaches players without the official Dalamud plugin repository: a public custom repository, hosted from this GitHub repository, that Dalamud's plugin installer reads like any other. This page covers the format, the tooling that produces and checks it, how a release is validated and published, and how to undo a bad release.
 
-**Status:** the publication system is implemented and tested, and **nothing is published to the repository yet**. The repository URL is approved ([Permanent repository URL](#permanent-repository-url)), but the `plugin-repository` branch doesn't exist, so the address answers 404 and no player can add it. v0.1.6 passed its in-game smoke test and its GitHub Release is published; the first publication waits for the owner's settings below ([First publication](#first-publication), [Decisions still open](#decisions-still-open)).
+**Status:** the repository is live. The `plugin-repository` branch serves 0.1.7 as a testing-exclusive release (published September 30, 2026), so players with **Get plugin testing builds** on can add the [permanent address](#permanent-repository-url) and install it. From 0.1.8, releases carry sharing (`sharingSince` in `distribution/repository.json`). The sections below on the first publication are kept as the record of how it was set up.
 
-Principles this is built on: everything is local first, nothing in the plugin phones home, and the custom repository adds no networking to the plugin itself. Dalamud does the downloading, from GitHub Releases, exactly as it does for every plugin. GitHub stays the public source and release host. Approval into the official Dalamud repository is welcome but not required. No account or backend is involved in installing AetherFrame.
+Principles this is built on: everything is local first, nothing in the plugin phones home (sharing, since 0.1.8, talks to AetherFrame's server only for a character a player turns it on for), and the custom repository adds no networking to the plugin itself. Dalamud does the downloading, from GitHub Releases, exactly as it does for every plugin. GitHub stays the public source and release host. Approval into the official Dalamud repository is welcome but not required. No account or backend is involved in installing AetherFrame.
 
 ## In plain language
 
@@ -149,6 +149,7 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 - Assembly version `MAJOR.MINOR.PATCH.0` and file version equal to it.
 - Informational version `MAJOR.MINOR.PATCH+<40-character commit id>`: the SDK writes it when building from a Git checkout, so a build from a source archive or with a stale version never passes.
 - References `Dalamud` at a major version equal to the configured API level.
+- The flavour `sharingSince` gives its version: from that version on, the sharing build, holding the networking code; before it, a player build, holding none, as those versions were released. Without `sharingSince`, every release is a player build.
 
 **The manifest (`AetherFrame.json`)**
 - Strict JSON: no comments, trailing commas, duplicate keys or unknown keys. Keys Dalamud writes into installed plugins (`WorkingPluginId`, `InstalledFromUrl`, `Disabled`, `Testing`, `ScheduledForDeletion`) fail with an explanation.

@@ -18,7 +18,8 @@ namespace AetherFrame.Tests;
 /// API, and no protocol or persona code. The networking preview flavour (built with
 /// <c>AetherFrameNetworkPreview=true</c>) holds the protocol and persona code compiled in, and
 /// keeps every other boundary; CI tells these tests which flavour they are looking at through
-/// <c>AETHERFRAME_PLUGIN_FLAVOUR</c>. Checked against the DLL that ships (CI names it in
+/// <c>AETHERFRAME_PLUGIN_FLAVOUR</c>. Since October 1, 2026 the networking flavour is the default
+/// build (the sharing build), so these tests assume it unless the variable says <c>player</c>. Checked against the DLL that ships (CI names it in
 /// <c>AETHERFRAME_PLUGIN_ASSEMBLY</c>), or the local build output when there is one. The plugin's
 /// own sources are held to the same lines: local folders never name the networking code, nothing
 /// uses a networking API, and the configuration has no persona members.
@@ -99,7 +100,7 @@ public class PluginAssemblyBoundaryTests
     ];
 
     private static bool PreviewFlavour =>
-        string.Equals(Environment.GetEnvironmentVariable("AETHERFRAME_PLUGIN_FLAVOUR"), "preview", StringComparison.OrdinalIgnoreCase);
+        !string.Equals(Environment.GetEnvironmentVariable("AETHERFRAME_PLUGIN_FLAVOUR"), "player", StringComparison.OrdinalIgnoreCase);
 
     [Fact]
     public void ThePlugin_ReferencesNoNetworkingProtocolOrPersonaAssembly()

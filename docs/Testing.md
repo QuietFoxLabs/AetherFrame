@@ -3,17 +3,17 @@
 Thanks for helping test AetherFrame. This page covers how to install a test build, what to look at, and how to report what you find.
 
 > [!IMPORTANT]
-> **Current status:** AetherFrame is not in the Dalamud plugin installer yet. Test builds are published as [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases), starting with 0.1.5, the first tester build. Install one as a dev plugin: see [From a GitHub Release ZIP](#from-a-github-release-zip-dev-plugin). These builds **do not update themselves**.
+> **Current status:** AetherFrame is in testing through its own custom Dalamud repository: see [From the Dalamud plugin installer](#from-the-dalamud-plugin-installer-aetherframes-custom-repository). Dalamud installs it and keeps it up to date. Since 0.1.8, its builds carry sharing (alpha), which is off until you turn it on for a character.
 
 AetherFrame is an early alpha. Expect rough edges, and keep a backup of anything you care about (see [Before you start](#before-you-start)).
 
 ## Installing a test build
 
-There are two ways a test build can reach you. Right now only the GitHub Release ZIP is available. Use only one at a time.
+There are two ways a test build can reach you. The plugin installer is the main one. Use only one at a time.
 
 ### From a GitHub Release ZIP (dev plugin)
 
-This is the current route. Test builds are attached to [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases) and load through Dalamud's dev plugin loader. They **do not update themselves**: check the Releases page for newer builds.
+Test builds are attached to [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases) and load through Dalamud's dev plugin loader. They **do not update themselves**: check the Releases page for newer builds.
 
 1. Download `AetherFrame-<version>.zip` from the release.
 2. Optional: check it against the SHA-256 in the release notes. In PowerShell: `Get-FileHash .\AetherFrame-<version>.zip`.
@@ -25,13 +25,12 @@ To update, disable AetherFrame, replace the three files with the new ones, and e
 
 ### From the Dalamud plugin installer (AetherFrame's custom repository)
 
-**Not available yet.** This will become the main route once AetherFrame's own custom Dalamud repository is published; its address will be announced in the README and here. Dalamud then installs AetherFrame from it and updates it automatically.
+This is the main route. Dalamud installs AetherFrame from it and updates it automatically.
 
 1. Type `/xlsettings` in game and open the **Experimental** tab.
-2. Under **Custom Plugin Repositories**, add the repository address, make sure it is enabled, then **Save and Close**.
-3. Type `/xlplugins`, search for **AetherFrame**, and install it.
-
-If a build there is offered to testers only, also tick **Get plugin testing builds** in step 2.
+2. Tick **Get plugin testing builds**: AetherFrame is offered to testers only for now.
+3. Under **Custom Plugin Repositories**, add `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json`, make sure it is enabled, then **Save and Close**.
+4. Type `/xlplugins`, search for **AetherFrame**, and install it.
 
 ### Switching between the two
 
@@ -75,7 +74,7 @@ Ideas are welcome too, as a [feature request](https://github.com/QuietFoxLabs/Ae
 
 - Deleted Plates can't be restored from inside AetherFrame yet.
 - Imported images that are no longer used aren't cleaned up automatically.
-- Plates are local only. There's no sharing between players yet.
+- Sharing is an alpha. If the Lodestone check says it didn't pass although the code is on your Lodestone profile and saved, the server may not have reached the Lodestone: try again a little later, and report it if it keeps failing.
 - A hand-made Plate file with thousands of elements or megabytes of text is loaded as it is (the editor and packages stop at 256 elements) and can make the editor slow. Keep such experiments out of the `Profiles` folder.
 
 The [changelog](../CHANGELOG.md) lists what changed in each version. The reliability milestone's in-game checks, the ones no automated test can run, are listed in [ManualAcceptance-0.1.6.md](ManualAcceptance-0.1.6.md).

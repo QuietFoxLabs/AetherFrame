@@ -89,6 +89,7 @@ jobs:
     - name: Test
       env:
         AETHERFRAME_PLUGIN_ASSEMBLY: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame.dll
+        AETHERFRAME_PLUGIN_FLAVOUR: preview
       run: dotnet test AetherFrame.Tests/AetherFrame.Tests.csproj --configuration Release --no-build
 
     - name: Test the release tooling

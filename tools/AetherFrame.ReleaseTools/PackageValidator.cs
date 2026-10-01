@@ -58,8 +58,9 @@ public static class PackageValidator
     private static readonly Regex AbsolutePath = new(@"(?<![A-Za-z0-9])[A-Za-z]:[\\/]|\\\\[A-Za-z0-9]|(?<![A-Za-z0-9.])/(home|Users|root|mnt|tmp|var|opt)/", RegexOptions.CultureInvariant);
     private static readonly Regex Sha1 = new(@"^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant);
 
-    // The namespaces of the networking code, which only the plugin's networking preview flavour
-    // compiles in (docs/networking/DecisionRegister.md, D9b and P2). No package may hold them.
+    // The namespaces of the networking code, which the sharing build compiles in and the player
+    // flavour doesn't (docs/networking/DecisionRegister.md, D9b, P2 and "Releases carry sharing").
+    // Which a package must hold, or must not, depends on its version (sharingSince).
     private static readonly string[] NetworkingNamespaces = { "AetherFrame.Protocol", "AetherFrame.Personas" };
 
     public static PackageReport Validate(PackageValidationRequest request, CheckList checks)
@@ -144,16 +145,31 @@ public static class PackageValidator
                 $"compiled against Dalamud {dalamud.Version}, whose API level {dalamud.Version.Major} is not the configured {config.DalamudApiLevel}.");
         }
 
-        // The flavour: a player package holds none of the networking code. A networking preview
-        // build is never released and never handed over as a test build.
+        // The flavour distribution/repository.json gives the version: from sharingSince on (the
+        // owner's direction of October 1, 2026, "Testing channel gets sharing"), the sharing build,
+        // holding the networking code; before it, a player build, holding none of it. A release is
+        // never the other flavour by mistake, and an older release still checks as what it was.
         var networking = assembly.TypeNamespaces
             .Where(ns => NetworkingNamespaces.Any(n => ns == n || ns.StartsWith(n + ".", StringComparison.Ordinal)))
             .ToList();
-        checks.Require(
-            networking.Count == 0,
-            "plugin flavour",
-            "player build, no networking code",
-            $"the DLL holds types in {string.Join(", ", networking)}; it is a networking preview build, which is never packaged for players.");
+        if (config.FlavourOf(version) == ReleaseFlavour.Sharing)
+        {
+            checks.Require(
+                networking.Count > 0,
+                "plugin flavour",
+                "sharing build, with the sharing code",
+                $"the DLL holds no sharing code; distribution/repository.json says releases from {config.SharingSince} carry sharing (sharingSince).");
+        }
+        else
+        {
+            checks.Require(
+                networking.Count == 0,
+                "plugin flavour",
+                "player build, no networking code",
+                config.SharingSince is { } since
+                    ? $"the DLL holds types in {string.Join(", ", networking)}; it is a networking build, and releases before {since} carry none (sharingSince)."
+                    : $"the DLL holds types in {string.Join(", ", networking)}; it is a networking preview build, which is never packaged for players.");
+        }
 
         // The manifest.
         var manifest = checks.Attempt("manifest", () => PluginManifest.Parse(package.ManifestJson, PluginPackage.ManifestEntryName(internalName)), m => "parsed, all keys known");

@@ -4,7 +4,7 @@
 
 **Enhanced character Plates for Final Fantasy XIV.**
 
-**AetherFrame 0.1.7 Alpha** · [Changelog](CHANGELOG.md) · [Versioning](docs/Versioning.md)
+**AetherFrame 0.1.8 Alpha** · [Changelog](CHANGELOG.md) · [Versioning](docs/Versioning.md)
 
 AetherFrame is a [Dalamud](https://github.com/goatcorp/Dalamud) plugin for designing character Plates: profile cards that start from the familiar shape of the in-game Adventure Plate and can grow into fully freeform layouts.
 
@@ -103,7 +103,7 @@ Reusable decorative pieces you add to a Plate and restyle without redrawing anyt
 
 ## What’s coming
 
-AetherFrame 0.1.7 is still an early version. There is a lot more I want to build before I consider it finished.
+AetherFrame 0.1.8 is still an early version. There is a lot more I want to build before I consider it finished.
 
 ### More ways to design Plates
 
@@ -117,13 +117,9 @@ My Plates will grow beyond simply storing your Plates. I want better organizatio
 
 The Basic Editor is supposed to feel familiar if you already know FFXIV Adventure Plates. I want to give it more customization while keeping it simple enough that you do not have to use the Advanced Editor unless you want to.
 
-### Player sharing
+### Sharing (alpha)
 
-Eventually I want players to be able to share Plates directly with each other. AetherFrame will stay local first, so your own copy stays on your machine and sharing only happens when you choose to do it.
-
-### Viewing another player’s Plate
-
-One idea is being able to target another player and open their AetherFrame Plate if they have chosen to make one available. The exact interaction is not final yet, but I want viewing another player’s Plate to be something deliberate rather than something that happens automatically.
+Sharing is in the testing channel's build now, and off until you turn it on. Turn it on for a character in My Plates' **Sharing** window, prove the character is yours with a one-time code on your Lodestone profile, and its Active Plate becomes viewable by other players who share, like the game's Adventure Plates: from the game's right-click menu on your character, or by name and World. Saving your Active Plate updates what they see, and turning sharing off removes it from the server. Your own copy always stays on your PC. Next comes making it smoother and more reliable for more players.
 
 ### Optional RP details
 
@@ -139,7 +135,7 @@ The finished idea is simple: start with something that feels familiar to anyone 
 
 ## Local first
 
-Everything AetherFrame does today happens on your own machine.
+Everything AetherFrame does happens on your own machine, apart from sharing, which you turn on yourself.
 
 - No account is needed.
 - Editing is entirely local.
@@ -147,9 +143,9 @@ Everything AetherFrame does today happens on your own machine.
 - Import and export are file-based: you choose what to export and who you give it to.
 - No online service is required for any of the core experience.
 
-## Privacy direction
+## Privacy
 
-Sharing Plates with other players is a possible future direction, not a current feature. If it arrives, the intent is:
+Sharing is opt-in, one character at a time, and it keeps to these rules:
 
 - **Intentional sharing** rather than passive discovery.
 - No silent telemetry.
@@ -160,11 +156,14 @@ Sharing Plates with other players is a possible future direction, not a current 
 
 ## Installation
 
-AetherFrame is not in the Dalamud plugin installer yet.
+AetherFrame is in testing, through its own custom Dalamud repository:
 
-To test it now, download a test build from [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases), starting with 0.1.5, and load it as a Dalamud dev plugin. The [tester guide](docs/Testing.md) has the steps, what to look at, and how to report problems. Test builds from GitHub don't update themselves, so check the Releases page for newer ones.
+1. Type `/xlsettings` in game and open **Experimental**.
+2. Tick **Get plugin testing builds**.
+3. Under **Custom Plugin Repositories**, add `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json`, make sure it is enabled, then **Save and Close**.
+4. Type `/xlplugins`, search for **AetherFrame**, and install it.
 
-The plan is a public custom Dalamud repository hosted from GitHub: one URL to add under **Custom Plugin Repositories** in `/xlsettings`, after which AetherFrame installs and updates from `/xlplugins` like any other plugin. The URL will be announced here when the first release is published there. The releases themselves stay on GitHub Releases, and the plugin still never connects to anything: Dalamud does the downloading. Submission to the official Dalamud repository is welcome but not required for this.
+Dalamud then keeps it up to date. The releases themselves are on [GitHub Releases](https://github.com/QuietFoxLabs/AetherFrame/releases), and Dalamud does the downloading. The [tester guide](docs/Testing.md) has what to look at and how to report problems. Submission to the official Dalamud repository is welcome but not required for this.
 
 Developers can also build it from source and load it as a dev plugin (see below).
 

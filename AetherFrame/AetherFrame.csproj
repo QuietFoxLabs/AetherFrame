@@ -11,7 +11,7 @@
     <!-- The last sentence is the AI-generated asset disclosure (icon and bundled artwork) that the
          Dalamud AI Usage Policy requires in the plugin description
          (https://dalamud.dev/plugin-publishing/ai-policy). -->
-    <Description>Design character Plates: start from an Adventure Plate-style layout in the Basic Editor, or build freeform layouts with text, images and decorative Components in the Advanced Editor. The plugin icon is AI-generated, and the bundled Celestial Dream and Celestial Sakura Components use AI-assisted artwork.</Description>
+    <Description>Design character Plates: start from an Adventure Plate-style layout in the Basic Editor, or build freeform layouts with text, images and decorative Components in the Advanced Editor. Optional sharing (alpha), off until you turn it on for a character, sends that character's name, World, Lodestone id and Active Plate to AetherFrame's server so other players who share can view it; viewing a Plate sends the name and World you look up. The plugin icon is AI-generated, and the bundled Celestial Dream and Celestial Sakura Components use AI-assisted artwork.</Description>
     <RepoUrl>https://github.com/QuietFoxLabs/AetherFrame</RepoUrl>
     <Tags>aetherframe;plates;adventure-plate;profile;customization</Tags>
     <!-- Approved icon (images/icon.png, 512 x 512), pinned to the commit that added it. DalamudPackager
@@ -60,6 +60,15 @@
        server's client (Services/Network/Transport, decision R3), HTTP only, through Dalamud's connect
        callback; it exists so the networking increments have a place to be built and checked, and so
        a tester can tell the flavours apart (/af version). -->
+  <!-- Since the owner's direction of October 1, 2026 ("Testing channel gets sharing"), the sharing
+       flavour is the build: released from 0.1.8 on (distribution/repository.json's sharingSince),
+       tested and handed out. -p:AetherFrameNetworkPreview=false still builds the player flavour,
+       with no networking code at all, which CI keeps compiling. Warnings are errors in every
+       flavour, as they were for the networking code before it shipped. -->
+  <PropertyGroup>
+    <AetherFrameNetworkPreview Condition="'$(AetherFrameNetworkPreview)' == ''">true</AetherFrameNetworkPreview>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(AetherFrameNetworkPreview)' == 'true'">
     <DefineConstants>$(DefineConstants);AETHERFRAME_NETWORK_PREVIEW</DefineConstants>
   </PropertyGroup>

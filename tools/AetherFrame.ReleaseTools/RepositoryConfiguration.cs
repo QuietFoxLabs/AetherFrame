@@ -13,6 +13,20 @@ namespace AetherFrame.ReleaseTools;
 /// </summary>
 public sealed record PreviousAddress(string SourceRepositoryUrl, DownloadUrlTemplate DownloadUrlTemplate, ProductVersion LastVersion);
 
+/// <summary>Which flavour of the plugin a release carries (distribution/repository.json's sharingSince).</summary>
+public enum ReleaseFlavour
+{
+    /// <summary>No networking code at all: every release before sharingSince (decisions D9b and P2).</summary>
+    Player,
+
+    /// <summary>
+    /// The sharing build: the protocol, the personas and the sharing client compiled in, sharing off
+    /// until the player turns it on (V1). The owner's direction of October 1, 2026: "Testing channel
+    /// gets sharing".
+    /// </summary>
+    Sharing,
+}
+
 /// <summary>
 /// The explicit, reviewed facts the repository metadata is derived from (distribution/repository.json).
 /// Nothing about where a package is downloaded from or which plugin it is comes from anywhere else:
@@ -25,11 +39,12 @@ public sealed class RepositoryConfiguration
     private static readonly string[] KnownKeys =
     {
         "$comment", "internalName", "dalamudApiLevel", "sourceRepositoryUrl", "pluginMasterUrl", "downloadUrlTemplate",
-        "previousSourceRepositoryUrl", "previousDownloadUrlTemplate", "previousAddressLastVersion",
+        "previousSourceRepositoryUrl", "previousDownloadUrlTemplate", "previousAddressLastVersion", "sharingSince",
     };
 
-    private RepositoryConfiguration(string internalName, int dalamudApiLevel, string sourceRepositoryUrl, string pluginMasterUrl, DownloadUrlTemplate downloadUrlTemplate, PreviousAddress? previous)
+    private RepositoryConfiguration(string internalName, int dalamudApiLevel, string sourceRepositoryUrl, string pluginMasterUrl, DownloadUrlTemplate downloadUrlTemplate, PreviousAddress? previous, ProductVersion? sharingSince)
     {
+        SharingSince = sharingSince;
         InternalName = internalName;
         DalamudApiLevel = dalamudApiLevel;
         SourceRepositoryUrl = sourceRepositoryUrl;
@@ -60,6 +75,18 @@ public sealed class RepositoryConfiguration
     /// uses the current address; the previous one is accepted only where it is history.
     /// </summary>
     public PreviousAddress? Previous { get; }
+
+    /// <summary>
+    /// The first version released as the sharing build (the owner's direction of October 1, 2026,
+    /// "Testing channel gets sharing"), or null while every release is a player build. Releases
+    /// before it were player builds and are still checked as such, so a publication that verifies
+    /// an older release again, a rollback included, still accepts it.
+    /// </summary>
+    public ProductVersion? SharingSince { get; }
+
+    /// <summary>The flavour a release package of <paramref name="version"/> must be.</summary>
+    public ReleaseFlavour FlavourOf(ProductVersion version) =>
+        SharingSince is { } since && version >= since ? ReleaseFlavour.Sharing : ReleaseFlavour.Player;
 
     public static RepositoryConfiguration Load(string path)
     {
@@ -94,12 +121,14 @@ public sealed class RepositoryConfiguration
 
         var template = ParseTemplate(raw.DownloadUrlTemplate, what);
         var previous = ParsePrevious(raw, source, template, what);
-        return new RepositoryConfiguration(raw.InternalName, raw.DalamudApiLevel.Value, source, master.OriginalString, template, previous);
+        var sharingSince = raw.SharingSince is null ? (ProductVersion?)null : ProductVersion.Parse(raw.SharingSince, $"{what}: sharingSince");
+
+        return new RepositoryConfiguration(raw.InternalName, raw.DalamudApiLevel.Value, source, master.OriginalString, template, previous, sharingSince);
     }
 
     /// <summary>The same configuration with another download URL template, for dry runs.</summary>
     public RepositoryConfiguration WithDownloadUrlTemplate(DownloadUrlTemplate template) =>
-        new(InternalName, DalamudApiLevel, SourceRepositoryUrl, PluginMasterUrl, template, Previous);
+        new(InternalName, DalamudApiLevel, SourceRepositoryUrl, PluginMasterUrl, template, Previous, SharingSince);
 
     /// <summary>The release package's file name, as New-ReleasePackage.ps1 stages it.</summary>
     public string PackageFileName(ProductVersion version) => $"{InternalName}-{version}.zip";
@@ -169,6 +198,9 @@ public sealed class RepositoryConfiguration
 
         [JsonPropertyName("internalName")]
         public string? InternalName { get; set; }
+
+        [JsonPropertyName("sharingSince")]
+        public string? SharingSince { get; set; }
 
         [JsonPropertyName("dalamudApiLevel")]
         public int? DalamudApiLevel { get; set; }
