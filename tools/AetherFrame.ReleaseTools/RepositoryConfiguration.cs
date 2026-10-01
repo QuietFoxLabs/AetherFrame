@@ -13,6 +13,20 @@ namespace AetherFrame.ReleaseTools;
 /// </summary>
 public sealed record PreviousAddress(string SourceRepositoryUrl, DownloadUrlTemplate DownloadUrlTemplate, ProductVersion LastVersion);
 
+/// <summary>Which flavour of the plugin a release carries (distribution/repository.json's releaseFlavour).</summary>
+public enum ReleaseFlavour
+{
+    /// <summary>No sharing code at all (decisions D9b and P2 before October 1, 2026).</summary>
+    Player,
+
+    /// <summary>
+    /// The sharing build: the protocol, the personas and the sharing client compiled in, sharing off
+    /// until the player turns it on (V1). The owner's direction of October 1, 2026: "Testing channel
+    /// gets sharing".
+    /// </summary>
+    Sharing,
+}
+
 /// <summary>
 /// The explicit, reviewed facts the repository metadata is derived from (distribution/repository.json).
 /// Nothing about where a package is downloaded from or which plugin it is comes from anywhere else:
@@ -25,11 +39,12 @@ public sealed class RepositoryConfiguration
     private static readonly string[] KnownKeys =
     {
         "$comment", "internalName", "dalamudApiLevel", "sourceRepositoryUrl", "pluginMasterUrl", "downloadUrlTemplate",
-        "previousSourceRepositoryUrl", "previousDownloadUrlTemplate", "previousAddressLastVersion",
+        "previousSourceRepositoryUrl", "previousDownloadUrlTemplate", "previousAddressLastVersion", "releaseFlavour",
     };
 
-    private RepositoryConfiguration(string internalName, int dalamudApiLevel, string sourceRepositoryUrl, string pluginMasterUrl, DownloadUrlTemplate downloadUrlTemplate, PreviousAddress? previous)
+    private RepositoryConfiguration(string internalName, int dalamudApiLevel, string sourceRepositoryUrl, string pluginMasterUrl, DownloadUrlTemplate downloadUrlTemplate, PreviousAddress? previous, ReleaseFlavour flavour)
     {
+        Flavour = flavour;
         InternalName = internalName;
         DalamudApiLevel = dalamudApiLevel;
         SourceRepositoryUrl = sourceRepositoryUrl;
@@ -60,6 +75,9 @@ public sealed class RepositoryConfiguration
     /// uses the current address; the previous one is accepted only where it is history.
     /// </summary>
     public PreviousAddress? Previous { get; }
+
+    /// <summary>Which flavour every release package must be: <see cref="ReleaseFlavour.Player"/> when releaseFlavour is absent.</summary>
+    public ReleaseFlavour Flavour { get; }
 
     public static RepositoryConfiguration Load(string path)
     {
@@ -94,12 +112,19 @@ public sealed class RepositoryConfiguration
 
         var template = ParseTemplate(raw.DownloadUrlTemplate, what);
         var previous = ParsePrevious(raw, source, template, what);
-        return new RepositoryConfiguration(raw.InternalName, raw.DalamudApiLevel.Value, source, master.OriginalString, template, previous);
+        var flavour = raw.ReleaseFlavour switch
+        {
+            null or "player" => ReleaseFlavour.Player,
+            "sharing" => ReleaseFlavour.Sharing,
+            _ => throw new ReleaseCheckException($"{what}: releaseFlavour '{raw.ReleaseFlavour}' must be \"player\" or \"sharing\"."),
+        };
+
+        return new RepositoryConfiguration(raw.InternalName, raw.DalamudApiLevel.Value, source, master.OriginalString, template, previous, flavour);
     }
 
     /// <summary>The same configuration with another download URL template, for dry runs.</summary>
     public RepositoryConfiguration WithDownloadUrlTemplate(DownloadUrlTemplate template) =>
-        new(InternalName, DalamudApiLevel, SourceRepositoryUrl, PluginMasterUrl, template, Previous);
+        new(InternalName, DalamudApiLevel, SourceRepositoryUrl, PluginMasterUrl, template, Previous, Flavour);
 
     /// <summary>The release package's file name, as New-ReleasePackage.ps1 stages it.</summary>
     public string PackageFileName(ProductVersion version) => $"{InternalName}-{version}.zip";
@@ -169,6 +194,9 @@ public sealed class RepositoryConfiguration
 
         [JsonPropertyName("internalName")]
         public string? InternalName { get; set; }
+
+        [JsonPropertyName("releaseFlavour")]
+        public string? ReleaseFlavour { get; set; }
 
         [JsonPropertyName("dalamudApiLevel")]
         public int? DalamudApiLevel { get; set; }

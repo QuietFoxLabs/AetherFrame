@@ -45,6 +45,7 @@ jobs:
     - name: Test
       env:
         AETHERFRAME_PLUGIN_ASSEMBLY: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame.dll
+        AETHERFRAME_PLUGIN_FLAVOUR: preview
       run: dotnet test AetherFrame.Tests/AetherFrame.Tests.csproj --configuration Release --no-build
 
     # The release tooling's own tests, including the check that the package this build produced is a
@@ -102,22 +103,21 @@ jobs:
         if-no-files-found: error
         retention-days: 1
 
-    # The networking preview flavour (docs/networking/DecisionRegister.md, D9b and P2): the protocol
-    # and persona sources compiled into AetherFrame.dll, built once, on Windows, into a separate
-    # output. DalamudPackager still rewrites the player package under bin/ with the player DLL it
-    # finds there, so this runs last, after the package check and the stored artifact. It keeps the
-    # flavour compiling with the plugin's own settings and holds it to decision R3's boundary (HTTP
-    # only, through Dalamud's connect callback, from Services/Network alone), with the boundary tests
-    # told which flavour they are looking at. The test filter is load-bearing: the rest of the suite expects
-    # AetherFrame.json beside the DLL, which DalamudPackager writes under bin/, not here.
-    - name: Build and check the network preview flavour
+    # The player flavour (docs/networking/DecisionRegister.md, D9b, P2 and "Opening the alpha"): the
+    # build with no networking code at all, which the sharing build replaced as the default on
+    # October 1, 2026, built once, on Windows, into a separate output, and held to its boundary
+    # (no HTTP, no protocol or persona code). DalamudPackager still rewrites the package under bin/
+    # with the DLL it finds there, so this runs last, after the package check and the stored
+    # artifact. The test filter is load-bearing: the rest of the suite expects AetherFrame.json
+    # beside the DLL, which DalamudPackager writes under bin/, not here.
+    - name: Build and check the player flavour
       if: runner.os == 'Windows'
       shell: pwsh
       env:
-        AETHERFRAME_PLUGIN_FLAVOUR: preview
+        AETHERFRAME_PLUGIN_FLAVOUR: player
       run: |
-        $out = Join-Path $env:RUNNER_TEMP preview
-        dotnet build AetherFrame/AetherFrame.csproj --configuration Release -p:Platform=x64 -p:AetherFrameNetworkPreview=true -p:TreatWarningsAsErrors=true -p:OutDir="$out/"
+        $out = Join-Path $env:RUNNER_TEMP player
+        dotnet build AetherFrame/AetherFrame.csproj --configuration Release -p:Platform=x64 -p:AetherFrameNetworkPreview=false -p:TreatWarningsAsErrors=true -p:OutDir="$out/"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $env:AETHERFRAME_PLUGIN_ASSEMBLY = Join-Path $out AetherFrame.dll
         dotnet test AetherFrame.Tests/AetherFrame.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PluginAssemblyBoundaryTests"

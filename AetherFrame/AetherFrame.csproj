@@ -52,6 +52,13 @@
        server's client (Services/Network/Transport, decision R3), HTTP only, through Dalamud's connect
        callback; it exists so the networking increments have a place to be built and checked, and so
        a tester can tell the flavours apart (/af version). -->
+  <!-- Since the owner's direction of October 1, 2026 ("Testing channel gets sharing"), the sharing
+       flavour is the build: released (distribution/repository.json's releaseFlavour), tested and
+       handed out. -p:AetherFrameNetworkPreview=false still builds the player flavour, with no
+       networking code at all, which CI keeps compiling. -->
+  <PropertyGroup>
+    <AetherFrameNetworkPreview Condition="'$(AetherFrameNetworkPreview)' == ''">true</AetherFrameNetworkPreview>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(AetherFrameNetworkPreview)' == 'true'">
     <DefineConstants>$(DefineConstants);AETHERFRAME_NETWORK_PREVIEW</DefineConstants>
   </PropertyGroup>

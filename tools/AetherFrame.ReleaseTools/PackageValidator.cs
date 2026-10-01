@@ -144,16 +144,28 @@ public static class PackageValidator
                 $"compiled against Dalamud {dalamud.Version}, whose API level {dalamud.Version.Major} is not the configured {config.DalamudApiLevel}.");
         }
 
-        // The flavour: a player package holds none of the networking code. A networking preview
-        // build is never released and never handed over as a test build.
+        // The flavour distribution/repository.json names: a player package holds none of the
+        // networking code; a sharing package (the owner's direction of October 1, 2026, "Testing
+        // channel gets sharing") holds it, so a release is never the other flavour by mistake.
         var networking = assembly.TypeNamespaces
             .Where(ns => NetworkingNamespaces.Any(n => ns == n || ns.StartsWith(n + ".", StringComparison.Ordinal)))
             .ToList();
-        checks.Require(
-            networking.Count == 0,
-            "plugin flavour",
-            "player build, no networking code",
-            $"the DLL holds types in {string.Join(", ", networking)}; it is a networking preview build, which is never packaged for players.");
+        if (config.Flavour == ReleaseFlavour.Sharing)
+        {
+            checks.Require(
+                networking.Count > 0,
+                "plugin flavour",
+                "sharing build, with the sharing code",
+                "the DLL holds no sharing code; distribution/repository.json says releases carry sharing (releaseFlavour).");
+        }
+        else
+        {
+            checks.Require(
+                networking.Count == 0,
+                "plugin flavour",
+                "player build, no networking code",
+                $"the DLL holds types in {string.Join(", ", networking)}; it is a networking preview build, which is never packaged for players.");
+        }
 
         // The manifest.
         var manifest = checks.Attempt("manifest", () => PluginManifest.Parse(package.ManifestJson, PluginPackage.ManifestEntryName(internalName)), m => "parsed, all keys known");
