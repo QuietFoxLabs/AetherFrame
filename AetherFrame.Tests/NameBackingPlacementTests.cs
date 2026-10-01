@@ -46,9 +46,11 @@ public class NameBackingPlacementTests
         harness.Document.Components!.Add(follower);
         Assert.Equal(Placement(harness, follower.Id), rect);
 
-        // Around the name's text, narrower than its box (measured, like the renderer).
+        // Around the name's text, as wide as its measured text (like the renderer), not its box: a box
+        // as wide as the header region when the title was stacked, as wide as the name on one line.
         Assert.True(rect.Position.Y < name.Position.Y && rect.Position.Y + rect.Size.Y > name.Position.Y + name.Size.Y);
-        Assert.True(rect.Size.X < name.Size.X);
+        var text = Math.Min(name.Size.X, Measure(harness)(name)!.Value + (2f * TextProfileElement.LayoutPadding) + 2f);
+        Assert.Equal(text + (2f * ComponentPaintPlan.NameBackingPadX), rect.Size.X, 2);
     }
 
     [Theory]

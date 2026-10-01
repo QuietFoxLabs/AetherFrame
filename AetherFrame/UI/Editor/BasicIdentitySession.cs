@@ -199,15 +199,31 @@ internal sealed class BasicIdentitySession
         ctx.RequestLayout(force: true);
     });
 
-    /// <summary>Uses the chosen game title's own placement: Classic for titles shown before the name, Subtitle for after.</summary>
+    /// <summary>Uses the chosen game title's own placement, on the name's line: before the name for a
+    /// title the game shows before it, after the name otherwise.</summary>
     internal void UseGamePlacement()
     {
         var profile = profileService.CurrentProfile;
         if (profile?.BasicIdentity is { TitleSource: IdentityTitleSource.GameTitle, GameTitleId: > 0 } identity)
         {
-            SetLayout(identity.GameTitleIsPrefix ? IdentityTitleLayout.Classic : IdentityTitleLayout.Subtitle);
+            SetLayout(GamePlacement(identity.GameTitleIsPrefix));
         }
     }
+
+    /// <summary>
+    /// True for the layouts Basic offers: the title on the name's line, before or after it. The others
+    /// (the title above or below the name, Badge, Accent) are retired from Basic: a Plate saved with
+    /// one keeps it, and keeps looking exactly as it did, until the player picks an offered layout.
+    /// </summary>
+    internal static bool IsOffered(IdentityTitleLayout layout) => layout is IdentityTitleLayout.InlineBefore or IdentityTitleLayout.InlineAfter;
+
+    /// <summary>The offered layout keeping <paramref name="layout"/>'s order: the title first for one
+    /// that shows it before or above the name, the name first for every other.</summary>
+    internal static IdentityTitleLayout OneLineFor(IdentityTitleLayout layout) =>
+        layout is IdentityTitleLayout.Classic or IdentityTitleLayout.InlineBefore ? IdentityTitleLayout.InlineBefore : IdentityTitleLayout.InlineAfter;
+
+    /// <summary>A game title's own placement, on the name's line: before the name for a prefix title, after it otherwise.</summary>
+    internal static IdentityTitleLayout GamePlacement(bool isPrefix) => isPrefix ? IdentityTitleLayout.InlineBefore : IdentityTitleLayout.InlineAfter;
 
     // ---------------------------------------------------------------- name
 
