@@ -43,6 +43,7 @@ internal sealed class PlateViewerWindow : Window, IDisposable
     private string world = "";
     private PlateTarget? seenTarget;
     private Textures? shown;
+    private string? actionProblem;
 
     internal PlateViewerWindow(PlateViewing viewing, ITextureProvider textures, ProfileRenderResources resources, Func<IReadOnlyList<string>> worlds, Func<CharacterContext?> currentCharacter)
         : base("AetherFrame Plates##AetherFramePlateViewer", ImGuiWindowFlags.NoCollapse)
@@ -101,6 +102,7 @@ internal sealed class PlateViewerWindow : Window, IDisposable
             seenTarget = target;
             name = target.Name;
             world = target.World;
+            actionProblem = null;
         }
 
         DrawSearch();
@@ -113,6 +115,11 @@ internal sealed class PlateViewerWindow : Window, IDisposable
             {
                 shown = new Textures(textures, plate);
             }
+        }
+
+        if (actionProblem is not null)
+        {
+            AetherControls.Callout(AetherTone.Warning, actionProblem);
         }
 
         switch (view.Stage)
@@ -134,7 +141,7 @@ internal sealed class PlateViewerWindow : Window, IDisposable
                 Wrapped("You hid this player's Plate on this PC, so it isn't looked up.");
                 if (AetherControls.SecondaryButton("Show their Plate again##AetherFrameViewerUnhide") && !viewing.Unhide())
                 {
-                    viewing.Refresh();
+                    actionProblem = HideProblem();
                 }
 
                 break;
@@ -163,6 +170,7 @@ internal sealed class PlateViewerWindow : Window, IDisposable
         ViewFailure.TooMany => "You've looked up a lot of Plates in a short time. Try again in a little while.",
         ViewFailure.Unreachable => "AetherFrame's server couldn't be reached. Check your connection, then try again.",
         ViewFailure.KeyUnavailable => "Your shared character's key couldn't be opened on this PC. My Plates' Sharing window says why.",
+        ViewFailure.TakenOver => "Another AetherFrame's Lodestone check took over your shared character, so it can't look Plates up from here. My Plates' Sharing window says what to do.",
         _ => "The server refused the lookup, or sent something AetherFrame doesn't show.",
     };
 
@@ -239,7 +247,12 @@ internal sealed class PlateViewerWindow : Window, IDisposable
         var notes = new List<string>(plate.Notes);
         if (viewed.ImagesRefused > 0)
         {
-            notes.Add(viewed.ImagesRefused.ToString(CultureInfo.InvariantCulture) + (viewed.ImagesRefused == 1 ? " image didn't" : " images didn't") + " pass AetherFrame's checks, so it isn't shown.");
+            notes.Add(viewed.ImagesRefused.ToString(CultureInfo.InvariantCulture) + (viewed.ImagesRefused == 1 ? " image didn't pass AetherFrame's checks, so it isn't shown." : " images didn't pass AetherFrame's checks, so they aren't shown."));
+        }
+
+        if (viewed.ImagesMissing > 0)
+        {
+            notes.Add(viewed.ImagesMissing.ToString(CultureInfo.InvariantCulture) + (viewed.ImagesMissing == 1 ? " image" : " images") + " couldn't be loaded: the Plate may have changed while it loaded. Refresh to see it as it is now.");
         }
 
         // The Plate takes what the actions, the notes and the address line leave.
@@ -265,9 +278,9 @@ internal sealed class PlateViewerWindow : Window, IDisposable
         }
 
         ImGui.SameLine();
-        if (AetherControls.SecondaryButton("Hide this player##AetherFrameViewerHide", tooltip: "Never look this player's Plate up on this PC, until you show it again. Nothing is sent."))
+        if (AetherControls.SecondaryButton("Hide this player##AetherFrameViewerHide", tooltip: "Never look this player's Plate up on this PC, until you show it again. Nothing is sent.") && !viewing.Hide())
         {
-            viewing.Hide();
+            actionProblem = HideProblem();
         }
 
         ImGui.SameLine();
@@ -310,9 +323,18 @@ internal sealed class PlateViewerWindow : Window, IDisposable
         }
     }
 
+    private string HideProblem() => viewing.Hidden.Unreadable
+        ? "AetherFrame's list of hidden players (" + HiddenPlates.FileName + " in its configuration folder) can't be read, so nobody can be hidden or shown again until it's fixed or moved aside."
+        : "AetherFrame couldn't save its list of hidden players, so nothing changed. Try again.";
+
     private void Release()
     {
-        shown?.Dispose();
+        if (shown is { } released)
+        {
+            ServedPlatePainter.Forget(released.Plate.Plate);
+            released.Dispose();
+        }
+
         shown = null;
     }
 

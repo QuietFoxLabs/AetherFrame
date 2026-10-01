@@ -385,6 +385,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 () => characterIdentityService.CurrentCharacter?.ContentId,
                 sharingConnection.Client,
                 new HiddenPlates(configDirectory, log.Information),
+                characterSharing.ViewingTakenOver,
                 ownedOperations.Stopping,
                 log.Information);
             var worldNames = new Lazy<System.Collections.Generic.IReadOnlyList<string>>(() => ViewPlateMenu.PublicWorlds(DataManager));
@@ -593,6 +594,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         ClientState.Logout -= OnLogout;
 
         commands.Unregister();
+#if AETHERFRAME_NETWORK_PREVIEW
+        viewPlateMenu.Dispose();
+#endif
         WindowSystem.RemoveAllWindows();
         keyboardShortcutService.Dispose();
     }
@@ -612,7 +616,6 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         plateLibrary.PlateSaved -= livePublisher.PlateSaved;
         livePublisher.Dispose();
         sharingWindow.Dispose();
-        viewPlateMenu.Dispose();
         plateViewerWindow.Dispose();
 #endif
         imageTextureCache.Clear();

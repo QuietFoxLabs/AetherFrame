@@ -73,6 +73,9 @@ internal static class ProfileTextRenderer
     private static readonly Dictionary<int, Vector2[]> OutlineOffsetsByThickness = new();
     private static readonly Vector2[] ZeroOffset = [Vector2.Zero];
 
+    /// <summary>Drops what was laid out for the element with <paramref name="elementId"/>: its text isn't kept once nothing draws it. The render thread only.</summary>
+    internal static void Forget(Guid elementId) => Layouts.Remove(elementId);
+
     /// <summary>
     /// Draws <paramref name="element"/> into its screen box. When the element has no text,
     /// <paramref name="placeholder"/> (editor-only; always null for finished rendering) is drawn

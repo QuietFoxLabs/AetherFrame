@@ -7,6 +7,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using AetherFrame.Personas;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
 using AetherFrame.Services.Network.Sharing;
@@ -191,7 +192,7 @@ public partial class CharacterSharingTests
 
             work(harness.Personas);
             return true;
-        }, () => harness.Sharing.View, () => Aria, harness.Client, new HiddenPlates(harness.Root, harness.Log.Add), CancellationToken.None, harness.Log.Add);
+        }, () => harness.Sharing.View, () => Aria, harness.Client, new HiddenPlates(harness.Root, harness.Log.Add), harness.Sharing.ViewingTakenOver, CancellationToken.None, harness.Log.Add);
 
         viewing.Open("Bram Oakes", "Gilgamesh");
         viewing.OnFrame();
@@ -230,12 +231,98 @@ public partial class CharacterSharingTests
         Assert.Equal("{ not json", File.ReadAllText(path));
     }
 
-    private static PlateViewing Viewing(SharingHarness harness) =>
+
+    [Fact]
+    public void A410_RecordsTheTakeover_AsAnyRequestsDoes_AndNothingMoreIsLookedUp()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        harness.Server.Bytes["/v1/lookup"] = _ => (HttpStatusCode.Gone, null);
+        var viewing = Viewing(harness);
+        viewing.Open("Bram Oakes", "Gilgamesh");
+        viewing.OnFrame();
+
+        Assert.Equal((ViewStage.Failed, ViewFailure.TakenOver), (viewing.View.Stage, viewing.View.Failure));
+        Assert.Equal(SharingStage.TakenOver, harness.Sharing.View.Find(Aria)!.Stage);
+        Assert.Equal(SharingNoticeKind.TakenOver, harness.Sharing.View.Notice!.Kind);
+        Assert.False(viewing.CanView);
+    }
+
+    [Fact]
+    public void TheLoggedInCharactersKey_Signs_OrElseTheFirstThatShares_AndTheSelectionIsPutBack()
+    {
+        using var harness = new SharingHarness();
+        var aria = harness.Bound();
+        harness.Sharing.TryStart(Bram, newKey: false);
+        harness.Sharing.TryCheck(Bram, "23456789", "Bram Oakes", "Gilgamesh");
+        var bram = harness.Sharing.View.Find(Bram)!;
+        Assert.True(bram.IsBound);
+        harness.Server.Bytes["/v1/lookup"] = _ => (HttpStatusCode.NotFound, null);
+
+        harness.Personas.Select(aria.Slot);
+        var asBram = Viewing(harness, Bram);
+        asBram.Open("Cara Vell", "Gilgamesh");
+        asBram.OnFrame();
+        Assert.Equal(bram.Key, harness.Server.Actions.Last(action => action.Path == "/v1/lookup").Signer);
+        Assert.Equal(aria.Slot, harness.Personas.Active!.Slot);
+
+        harness.Personas.Deselect();
+        var asSomeoneElse = Viewing(harness, 0x0040_0000_0000_0001);
+        asSomeoneElse.Open("Cara Vell", "Gilgamesh");
+        asSomeoneElse.OnFrame();
+        Assert.Equal(aria.Key, harness.Server.Actions.Last(action => action.Path == "/v1/lookup").Signer);
+        Assert.Null(harness.Personas.Active);
+    }
+
+    [Fact]
+    public void ALookupStillRunning_WhenTheViewerClosesOrHides_ShowsNothing()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        var png = Png(4, 3);
+        harness.Server.Bytes["/v1/lookup"] = _ => (HttpStatusCode.OK, ServedBytes(png, out RevisionMarker _));
+        harness.Server.Bytes["/v1/image"] = _ => (HttpStatusCode.OK, png);
+        Action<PersonaManager>? started = null;
+        var viewing = new PlateViewing((_, work) =>
+        {
+            started = work;
+            return true;
+        }, () => harness.Sharing.View, () => Aria, harness.Client, new HiddenPlates(harness.Root, harness.Log.Add), harness.Sharing.ViewingTakenOver, CancellationToken.None, harness.Log.Add);
+
+        viewing.Open("Bram Oakes", "Gilgamesh");
+        viewing.OnFrame();
+        viewing.Close();
+        started!(harness.Personas);
+        Assert.Equal((ViewStage.Idle, (ViewedPlate?)null), (viewing.View.Stage, viewing.View.Plate));
+
+        viewing.Open("Bram Oakes", "Gilgamesh");
+        viewing.OnFrame();
+        Assert.True(viewing.Hide());
+        started!(harness.Personas);
+        Assert.Equal((ViewStage.Hidden, (ViewedPlate?)null), (viewing.View.Stage, viewing.View.Plate));
+    }
+
+    [Fact]
+    public void AnImageTheServerDidntSend_IsCountedApart_FromOneThatFailedItsChecks()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        harness.Server.Bytes["/v1/lookup"] = _ => (HttpStatusCode.OK, ServedBytes(Png(4, 3), out RevisionMarker _));
+        harness.Server.Bytes["/v1/image"] = _ => (HttpStatusCode.NotFound, null);
+        var viewing = Viewing(harness);
+        viewing.Open("Bram Oakes", "Gilgamesh");
+        viewing.OnFrame();
+
+        var plate = viewing.View.Plate!;
+        Assert.Equal((0, 1), (plate.ImagesRefused, plate.ImagesMissing));
+    }
+
+    private static PlateViewing Viewing(SharingHarness harness, ulong current = Aria) =>
         new((_, work) =>
         {
             work(harness.Personas);
             return true;
-        }, () => harness.Sharing.View, () => Aria, harness.Client, new HiddenPlates(harness.Root, harness.Log.Add), CancellationToken.None, harness.Log.Add);
+        }, () => harness.Sharing.View, () => current, harness.Client, new HiddenPlates(harness.Root, harness.Log.Add), harness.Sharing.ViewingTakenOver, CancellationToken.None, harness.Log.Add);
 
     /// <summary>A served profile with one image, as the server builds one.</summary>
     private static byte[] ServedBytes(byte[] png, out RevisionMarker marker)

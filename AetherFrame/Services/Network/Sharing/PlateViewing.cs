@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using AetherFrame.Personas;
 using AetherFrame.Protocol;
+using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
 using AetherFrame.Protocol.Requests;
 using AetherFrame.Services.Network.Transport;
@@ -54,6 +55,9 @@ internal enum ViewFailure
     /// <summary>The character's key couldn't sign.</summary>
     KeyUnavailable,
 
+    /// <summary>Another AetherFrame's Lodestone check took the signing character over (C1).</summary>
+    TakenOver,
+
     /// <summary>The server refused the request, or sent something this build refuses.</summary>
     Refused,
 }
@@ -72,9 +76,10 @@ internal sealed record PlateTarget(string Name, string World);
 
 /// <summary>
 /// A Plate as received: the served profile, drawn as <see cref="Plate"/>, and the bytes of each of its
-/// images that passed the checks, by index (null for one that didn't, which isn't drawn).
+/// images that passed the checks, by index (null for one that didn't, which isn't drawn): how many
+/// failed the checks, and how many the server didn't send (one changed while it loaded, say).
 /// </summary>
-internal sealed record ViewedPlate(ServedPlate Plate, IReadOnlyList<byte[]?> Images, int ImagesRefused);
+internal sealed record ViewedPlate(ServedPlate Plate, IReadOnlyList<byte[]?> Images, int ImagesRefused, int ImagesMissing = 0);
 
 /// <summary>What the viewer window reads each frame: one immutable value, replaced whole.</summary>
 internal sealed record PlateViewerView(PlateTarget? Target, ViewStage Stage, ViewFailure Failure, ViewedPlate? Plate, long Generation, ReportStage Report)
@@ -104,6 +109,7 @@ internal sealed class PlateViewing
     private readonly Func<ulong?> currentCharacter;
     private readonly SharingClient client;
     private readonly HiddenPlates hidden;
+    private readonly Action<ulong, PersonaId> takenOver;
     private readonly CancellationToken stopping;
     private readonly Action<string> log;
     private readonly object gate = new();
@@ -117,6 +123,7 @@ internal sealed class PlateViewing
         Func<ulong?> currentCharacter,
         SharingClient client,
         HiddenPlates hidden,
+        Action<ulong, PersonaId> takenOver,
         CancellationToken stopping,
         Action<string> log)
     {
@@ -125,6 +132,7 @@ internal sealed class PlateViewing
         this.currentCharacter = currentCharacter ?? throw new ArgumentNullException(nameof(currentCharacter));
         this.client = client ?? throw new ArgumentNullException(nameof(client));
         this.hidden = hidden ?? throw new ArgumentNullException(nameof(hidden));
+        this.takenOver = takenOver ?? throw new ArgumentNullException(nameof(takenOver));
         this.stopping = stopping;
         this.log = log ?? throw new ArgumentNullException(nameof(log));
     }
@@ -154,7 +162,8 @@ internal sealed class PlateViewing
     /// <summary>
     /// Asks for the Plate of the character named <paramref name="name"/> on <paramref name="world"/>:
     /// looked up when the sharing service is next free, unless the player hid it. False, with nothing
-    /// asked, for a name or a World that isn't one.
+    /// asked, for a name or a World that isn't one. The framework thread only: the character logged
+    /// in now, whose key signs when it shares, is read here, never on the session's thread.
     /// </summary>
     internal bool Open(string name, string world)
     {
@@ -182,8 +191,9 @@ internal sealed class PlateViewing
             }
 
             view = new PlateViewerView(target, ViewStage.Waiting, ViewFailure.None, null, generation, ReportStage.None);
+            var current = currentCharacter();
             pendingName = "sharing view";
-            pending = manager => Guarded(manager, generation, reporting: false, () => Look(manager, target, generation));
+            pending = manager => Guarded(manager, generation, reporting: false, () => Look(manager, target, generation, current));
         }
 
         return true;
@@ -215,7 +225,7 @@ internal sealed class PlateViewing
     /// <summary>Shows the shown player's Plate again, and looks it up. False when that couldn't be saved.</summary>
     internal bool Unhide() => view.Target is { } target && hidden.Show(target.Name, target.World) && Open(target.Name, target.World);
 
-    /// <summary>Reports the shown player's Plate with one of <see cref="Reasons"/>, when the sharing service is next free.</summary>
+    /// <summary>Reports the shown player's Plate with one of <see cref="Reasons"/>, when the sharing service is next free. The framework thread only.</summary>
     internal bool Report(string reason)
     {
         if (view.Target is not { } target || view.Stage != ViewStage.Shown || !System.Linq.Enumerable.Contains(Reasons, reason) || view.Report is ReportStage.Sending or ReportStage.Sent)
@@ -227,8 +237,9 @@ internal sealed class PlateViewing
         {
             var generation = view.Generation;
             view = view with { Report = ReportStage.Sending };
+            var current = currentCharacter();
             pendingName = "sharing report";
-            pending = manager => Guarded(manager, generation, reporting: true, () => SendReport(manager, target, reason, generation));
+            pending = manager => Guarded(manager, generation, reporting: true, () => SendReport(manager, target, reason, generation, current));
         }
 
         return true;
@@ -382,11 +393,11 @@ internal sealed class PlateViewing
         }
     }
 
-    private void Look(PersonaManager manager, PlateTarget target, long generation)
+    private void Look(PersonaManager manager, PlateTarget target, long generation, ulong? current)
     {
         Set(generation, v => v with { Stage = ViewStage.Looking });
         var body = Body(target, null, -1, null);
-        var response = Send(manager, RequestProofKind.Lookup, body, generation);
+        var response = Send(manager, RequestProofKind.Lookup, body, generation, current);
         if (response is null)
         {
             return;
@@ -421,6 +432,7 @@ internal sealed class PlateViewing
 
         var images = new byte[]?[profile.Images.Count];
         var refused = 0;
+        var missing = 0;
         var marker = profile.Marker.ToString();
         for (var index = 0; index < images.Length; index++)
         {
@@ -429,13 +441,18 @@ internal sealed class PlateViewing
                 return;
             }
 
-            var answer = Send(manager, RequestProofKind.Image, Body(target, marker, index, null), generation);
+            var answer = Send(manager, RequestProofKind.Image, Body(target, marker, index, null), generation, current);
             if (answer is null)
             {
                 return;
             }
 
-            if (answer.Status == HttpStatusCode.OK && Accepts(answer.Body, profile.Images[index]))
+            if (answer.Status != HttpStatusCode.OK)
+            {
+                // Most often a newer revision's marker: the player saved while this one loaded.
+                missing++;
+            }
+            else if (Accepts(answer.Body, profile.Images[index]))
             {
                 images[index] = answer.Body;
             }
@@ -445,12 +462,12 @@ internal sealed class PlateViewing
             }
         }
 
-        if (refused > 0)
+        if (refused + missing > 0)
         {
-            log($"Sharing: {refused.ToString(CultureInfo.InvariantCulture)} of a Plate's images weren't shown.");
+            log($"Sharing: of a Plate's images, {refused.ToString(CultureInfo.InvariantCulture)} were refused and {missing.ToString(CultureInfo.InvariantCulture)} weren't sent.");
         }
 
-        Set(generation, v => v with { Stage = ViewStage.Shown, Plate = new ViewedPlate(plate, images, refused), Failure = ViewFailure.None });
+        Set(generation, v => v with { Stage = ViewStage.Shown, Plate = new ViewedPlate(plate, images, refused, missing), Failure = ViewFailure.None });
     }
 
     /// <summary>An image's bytes are drawn only when section 8.2.1 allows them and they are the format and size their entry says (I1, section 8.6).</summary>
@@ -466,9 +483,9 @@ internal sealed class PlateViewing
         }
     }
 
-    private void SendReport(PersonaManager manager, PlateTarget target, string reason, long generation)
+    private void SendReport(PersonaManager manager, PlateTarget target, string reason, long generation, ulong? current)
     {
-        var response = Send(manager, RequestProofKind.Report, Body(target, null, -1, reason), generation, reporting: true);
+        var response = Send(manager, RequestProofKind.Report, Body(target, null, -1, reason), generation, current, reporting: true);
         if (response is null)
         {
             return;
@@ -479,13 +496,14 @@ internal sealed class PlateViewing
     }
 
     /// <summary>
-    /// Sends one request, signed by the key of the logged-in character when it shares, or else of
-    /// another of the player's shared characters; null, with the view updated, when nothing could
-    /// be sent or no answer came.
+    /// Sends one request, signed by the key of <paramref name="current"/>, the character logged in
+    /// when it was asked for, when it shares, or else of another of the player's shared characters;
+    /// null, with the view updated, when nothing could be sent, no answer came, or the answer was
+    /// that another key's check took the signer over (410), which is recorded as for any request.
     /// </summary>
-    private SharingResponse? Send(PersonaManager manager, RequestProofKind kind, byte[] body, long generation, bool reporting = false)
+    private SharingResponse? Send(PersonaManager manager, RequestProofKind kind, byte[] body, long generation, ulong? current, bool reporting = false)
     {
-        var signer = Signer();
+        var signer = Signer(current);
         if (signer is null || !manager.TryGet(signer.Slot, out var persona) || !persona!.PublicKey.Id.Equals(signer.Key))
         {
             log($"Sharing: {SharingClient.PathOf(kind)} wasn't sent: no shared character's key.");
@@ -507,6 +525,13 @@ internal sealed class PlateViewing
                 log($"Sharing: {SharingClient.PathOf(kind)} answered {((int)response.Status).ToString(CultureInfo.InvariantCulture)}.");
             }
 
+            if (response.Status == HttpStatusCode.Gone)
+            {
+                takenOver(signer.ContentId, signer.Key);
+                Fail(generation, ViewFailure.TakenOver, reporting);
+                return null;
+            }
+
             return response;
         }
         catch (SharingException exception)
@@ -523,11 +548,11 @@ internal sealed class PlateViewing
         }
     }
 
-    /// <summary>The shared character whose key signs: the one logged in when it shares, or else the first that does.</summary>
-    private SharingCharacter? Signer()
+    /// <summary>The shared character whose key signs: <paramref name="current"/> when it shares, or else the first that does.</summary>
+    private SharingCharacter? Signer(ulong? current)
     {
         var characters = sharing().Characters;
-        if (currentCharacter() is { } current)
+        if (current is not null)
         {
             foreach (var character in characters)
             {

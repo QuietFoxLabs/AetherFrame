@@ -31,7 +31,7 @@ internal static class ServedPlatePainter
         {
             var canvas = plate.Canvas * scale;
             drawList.AddRectFilled(origin, origin + canvas, ImGui.GetColorU32(BackdropColor));
-            ProfileBackgroundRenderer.Draw(drawList, plate.Background, origin, canvas, scale, resources, plate.BackgroundIndex >= 0 ? imageOf(plate.BackgroundIndex) : null);
+            ProfileBackgroundRenderer.Draw(drawList, plate.Background, origin, canvas, scale, resources, plate.BackgroundIndex >= 0 ? imageOf(plate.BackgroundIndex) : null, placeholderWhenMissing: false);
 
             foreach (var step in plate.Steps)
             {
@@ -54,6 +54,18 @@ internal static class ServedPlatePainter
         finally
         {
             drawList.PopClipRect();
+        }
+    }
+
+    /// <summary>Drops the text layouts drawing <paramref name="plate"/> made, once the viewer lets it go.</summary>
+    internal static void Forget(ServedPlate plate)
+    {
+        foreach (var step in plate.Steps)
+        {
+            if (step is ServedText text)
+            {
+                ProfileTextRenderer.Forget(text.Element.Id);
+            }
         }
     }
 
@@ -99,7 +111,13 @@ internal static class ServedPlatePainter
             case ServedShapeKind.Art:
                 // As ComponentRenderer: the level closest to the on-screen size, tinted by the vertex colour.
                 var screenPixels = MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d));
-                if (shape.Art is { } art && resources.Art.GetWrapOrNull(art, screenPixels) is { } artWrap)
+                if (shape.Art is null)
+                {
+                    // An artwork this build doesn't bundle: a placeholder, named in a note (section 8.5).
+                    drawList.AddQuadFilled(a, b, c, d, ImGui.GetColorU32(PlaceholderFill));
+                    drawList.AddQuad(a, b, c, d, ImGui.GetColorU32(PlaceholderBorder));
+                }
+                else if (resources.Art.GetWrapOrNull(shape.Art, screenPixels) is { } artWrap)
                 {
                     drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f), color);
                 }
