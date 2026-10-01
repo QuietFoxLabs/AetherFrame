@@ -467,6 +467,101 @@ public class ImageWorkerTests
         }
     }
 
+    [Fact]
+    public async Task EachRun_HasASocketOfItsOwn_ThatAnswersOneConnection_AndIsGoneOnceItHas()
+    {
+        // I2's per-job isolation: one socket on offer at a time, under a random name; it answers
+        // one connection, then it is deleted and closed, and a fresh one is offered for the next run.
+        using var folder = new TempFolder();
+        var runs = System.IO.Path.Combine(folder.Path, "runs");
+        Directory.CreateDirectory(runs);
+        var stale = System.IO.Path.Combine(runs, "run-0123456789abcdef0123456789abcdef.sock");
+        File.WriteAllText(stale, "an earlier server's");
+        using var client = NewRunsClient(runs);
+        using var stop = new CancellationTokenSource();
+        await client.StartAsync(stop.Token);
+        try
+        {
+            var first = await OfferedAsync(runs, except: stale);
+            Assert.False(File.Exists(stale));
+            Assert.Matches("^run-[0-9a-f]{32}\\.sock$", System.IO.Path.GetFileName(first));
+            Assert.Single(Directory.GetFiles(runs));
+
+            // A run connects and takes its job, through the one socket it was given.
+            var png = Images.Png(40, 30, withMetadata: true);
+            var worker = Task.Run(() => WorkerRun.RunOnceAsync(first, stop.Token));
+            var processed = await client.ProcessAsync(Images.Declared(ImageFormat.Png, 40, 30, png), png, default);
+            Assert.NotNull(processed.Bytes);
+            await worker.WaitAsync(TimeSpan.FromSeconds(10));
+
+            // Its socket is gone and answers nothing more: a run an exploit controls can't come back for another job.
+            Assert.False(File.Exists(first));
+            using var again = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified);
+            await Assert.ThrowsAnyAsync<System.Net.Sockets.SocketException>(() => again.ConnectAsync(new System.Net.Sockets.UnixDomainSocketEndPoint(first)));
+
+            // The next run gets a socket of its own.
+            var second = await OfferedAsync(runs, except: first);
+            Assert.NotEqual(first, second);
+            Assert.Single(Directory.GetFiles(runs));
+            var jpeg = Images.Jpeg(64, 48);
+            var next = Task.Run(() => WorkerRun.RunOnceAsync(second, stop.Token));
+            Assert.NotNull((await client.ProcessAsync(Images.Declared(ImageFormat.Jpeg, 64, 48, jpeg), jpeg, default)).Bytes);
+            await next.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await client.StopAsync(default);
+        }
+    }
+
+    [Fact]
+    public async Task ASecondConnectionToARunsSocket_GetsNothing_EvenWhileTheFirstIsOpen()
+    {
+        using var folder = new TempFolder();
+        var runs = System.IO.Path.Combine(folder.Path, "runs");
+        using var client = NewRunsClient(runs);
+        using var stop = new CancellationTokenSource();
+        await client.StartAsync(stop.Token);
+        try
+        {
+            var offered = await OfferedAsync(runs);
+            using var first = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified);
+            await first.ConnectAsync(new System.Net.Sockets.UnixDomainSocketEndPoint(offered));
+            await OfferedAsync(runs, except: offered);
+
+            using var second = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified);
+            await Assert.ThrowsAnyAsync<System.Net.Sockets.SocketException>(() => second.ConnectAsync(new System.Net.Sockets.UnixDomainSocketEndPoint(offered)));
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await client.StopAsync(default);
+        }
+    }
+
+    private static ImageWorkerClient NewRunsClient(string runs)
+    {
+        var options = Options.Create(new ServerOptions { ImageWorkerRuns = runs });
+        return new ImageWorkerClient(options, NullLogger<ImageWorkerClient>.Instance) { WorkerPatience = TimeSpan.FromSeconds(10), JobDeadline = TimeSpan.FromSeconds(10) };
+    }
+
+    /// <summary>The socket the server offers now, once there is one (other than <paramref name="except"/>).</summary>
+    private static async Task<string> OfferedAsync(string runs, string? except = null)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            if (Directory.Exists(runs) && Directory.GetFiles(runs, ImageWorkerClient.RunSocketPattern).FirstOrDefault(path => path != except) is { } offered)
+            {
+                return offered;
+            }
+
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException("No run socket was offered.");
+    }
+
     private static ImageWorkerClient NewClient(string folder)
     {
         var options = Options.Create(new ServerOptions { ImageWorkerSocket = System.IO.Path.Combine(folder, "images.sock") });

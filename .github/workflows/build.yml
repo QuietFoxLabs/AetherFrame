@@ -142,7 +142,8 @@ jobs:
         printf '{"AetherFrame":{"AllowedLodestoneIds":["12345678"]}}\n' > config/aetherframe.json
         printf 'AETHERFRAME_VERSION=ci\nAETHERFRAME_DOMAIN=plates.example.com\n' > .env
         docker compose -f compose.yaml -f compose.ci.yaml up -d
-        AETHERFRAME_ENV_FILE=.env AETHERFRAME_WORKER_LOG_DRIVER=json-file AETHERFRAME_WORKER_LIFE=8 nohup bash aetherframe-worker.sh > worker-loop.log 2>&1 &
+        # As root, as systemd runs it on the server: it reads the socket volume's folder.
+        sudo env AETHERFRAME_ENV_FILE=.env AETHERFRAME_WORKER_LOG_DRIVER=json-file AETHERFRAME_WORKER_LIFE=8 nohup bash aetherframe-worker.sh > worker-loop.log 2>&1 &
         echo $! > worker-loop.pid
 
     - name: Check it answers, and the worker is isolated
@@ -166,6 +167,9 @@ jobs:
         test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$worker")" = true
         test "$(docker inspect -f '{{.Config.User}}' "$worker")" = imageworker
         test "$(docker exec "$worker" ls /sys/class/net)" = lo
+        # I2's per-job isolation: the run's one mount is the single socket the server offered it.
+        test "$(docker inspect -f '{{len .Mounts}}' "$worker")" = 1
+        docker inspect -f '{{range .Mounts}}{{.Source}} {{.Destination}} {{.RW}}{{end}}' "$worker" | grep -Eq '/runs/run-[0-9a-f]{32}\.sock /run/aetherframe/images.sock false$'
         # A run is ended from outside after its life (8 s here, before the worker's own 15-second idle
         # timeout): still up a few seconds in, gone by its life, and a fresh run in its place.
         sleep 2
@@ -187,6 +191,6 @@ jobs:
       if: always()
       working-directory: deploy
       run: |
-        kill "$(cat worker-loop.pid)" 2>/dev/null || true
+        sudo kill "$(cat worker-loop.pid)" 2>/dev/null || true
         docker ps -q --filter name=aetherframe-worker | xargs -r docker rm -f
         docker compose -f compose.yaml -f compose.ci.yaml down -v

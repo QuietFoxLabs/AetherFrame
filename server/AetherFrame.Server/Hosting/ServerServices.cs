@@ -23,7 +23,9 @@ internal static class ServerJson
 
 /// <summary>
 /// The stage 1 allowlist of Lodestone ids (decision C8), read from the current configuration at
-/// every use, so removing an id takes effect as soon as the configuration reloads.
+/// every use, so removing an id takes effect as soon as the configuration reloads. With
+/// <see cref="ServerOptions.OpenToEveryone"/>, and I2's condition met, it allows every id (the
+/// open alpha).
 /// </summary>
 internal sealed class Allowlist(IOptionsMonitor<ServerOptions> options, ILogger<Allowlist> logger)
 {
@@ -32,7 +34,13 @@ internal sealed class Allowlist(IOptionsMonitor<ServerOptions> options, ILogger<
         IReadOnlyList<string> ids;
         try
         {
-            ids = options.CurrentValue.AllowedLodestoneIds;
+            var current = options.CurrentValue;
+            if (current.IsOpen)
+            {
+                return true;
+            }
+
+            ids = current.AllowedLodestoneIds;
         }
         catch (Exception e) when (e is InvalidOperationException or FormatException)
         {

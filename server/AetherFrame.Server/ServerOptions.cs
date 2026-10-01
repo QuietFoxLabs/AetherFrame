@@ -37,6 +37,17 @@ public sealed class ServerOptions
     public List<string> AllowedLodestoneIds { get; set; } = [];
 
     /// <summary>
+    /// The open alpha (the owner's direction of October 1, 2026): any character with a passing
+    /// Lodestone check may bind, publish and view, and <see cref="AllowedLodestoneIds"/> no longer
+    /// limits who. It takes effect only with I2's per-job isolation (<see cref="ImageWorkerRuns"/>),
+    /// or with no image worker at all, which refuses every image (<see cref="IsOpen"/>).
+    /// </summary>
+    public bool OpenToEveryone { get; set; }
+
+    /// <summary>Whether the server is open to everyone now: <see cref="OpenToEveryone"/>, with I2's condition met.</summary>
+    internal bool IsOpen => OpenToEveryone && (ImageWorkerRuns.Length > 0 || ImageWorkerSocket.Length == 0);
+
+    /// <summary>
     /// The addresses of the reverse proxy (Caddy, N2-8) whose forwarded headers are trusted. Only
     /// loopback when empty (decision R4).
     /// </summary>
@@ -53,6 +64,14 @@ public sealed class ServerOptions
     /// worker's container mounts read-only. Empty: no worker, and every image is refused.
     /// </summary>
     public string ImageWorkerSocket { get; set; } = "";
+
+    /// <summary>
+    /// A folder for one socket per worker run (decision I2's per-job isolation), in the volume the
+    /// worker host can see: the server offers exactly one fresh socket in it at a time, answers one
+    /// connection on it, then closes and deletes it, and the host mounts only that socket into the
+    /// next run. When set, it takes the place of <see cref="ImageWorkerSocket"/>.
+    /// </summary>
+    public string ImageWorkerRuns { get; set; } = "";
 
     /// <summary>The folder the daily backup is written to (N2-8), or empty for none.</summary>
     public string BackupFolder { get; set; } = "";
@@ -150,6 +169,11 @@ public sealed class ServerOptions
         if (AllowedLodestoneIds.Any(text => !Lodestone.LodestoneIds.TryParse(text, out _)))
         {
             throw new InvalidOperationException("AetherFrame:AllowedLodestoneIds holds a value that is not a Lodestone id.");
+        }
+
+        if (OpenToEveryone && !IsOpen)
+        {
+            throw new InvalidOperationException("AetherFrame:OpenToEveryone needs AetherFrame:ImageWorkerRuns: decision I2 opens a server only with per-job isolation of its image worker.");
         }
 
         if (KnownProxies.Any(text => !System.Net.IPAddress.TryParse(text, out _)))

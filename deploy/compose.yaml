@@ -41,7 +41,7 @@ services:
     environment:
       AetherFrame__DeploymentName: ${AETHERFRAME_DOMAIN}
       AetherFrame__DatabasePath: /data/server.db
-      AetherFrame__ImageWorkerSocket: /run/aetherframe/images.sock
+      AetherFrame__ImageWorkerRuns: /run/aetherframe/runs
       AetherFrame__BackupFolder: /backups
       AetherFrame__KnownProxies__0: 172.30.0.2
       AETHERFRAME_CONFIG_FILE: /config/aetherframe.json
