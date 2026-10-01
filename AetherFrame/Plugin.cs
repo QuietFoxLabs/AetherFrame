@@ -56,6 +56,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
 #if AETHERFRAME_NETWORK_PREVIEW
     [PluginService] internal static ITextureReadbackProvider TextureReadback { get; private set; } = null!;
+    [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
 #endif
 
     public PluginConfiguration Configuration { get; }
@@ -122,6 +123,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // and the Sharing window that shows it.
     private readonly LivePublisher livePublisher;
     private readonly SharingWindow sharingWindow;
+
+    // Viewing other players' Plates (N2-10): looked up only while one of the player's characters
+    // shares, from the game's right-click menu or the viewer's search, a request a frame at most.
+    private readonly PlateViewing plateViewing;
+    private readonly PlateViewerWindow plateViewerWindow;
+    private readonly ViewPlateMenu viewPlateMenu;
 #endif
 
     public Plugin()
@@ -369,6 +376,23 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             plateLibraryWindow.IsNotSharedYet = plateId => characterIdentityService.CurrentCharacter is { } shown
                 && characterSharing.View.Find(shown.ContentId) is { Stage: SharingStage.Shared } entry && entry.PublishedPlate != plateId
                 && plateLibrary.GetActivePlateId(shown.ContentId) == plateId;
+
+            // Viewing (N2-10): signed by a shared character's key, through the same session and
+            // connection, and held in memory only. The menu item shows only while a character shares.
+            plateViewing = new PlateViewing(
+                personaSession.TryRun,
+                () => characterSharing.View,
+                () => characterIdentityService.CurrentCharacter?.ContentId,
+                sharingConnection.Client,
+                new HiddenPlates(configDirectory, log.Information),
+                ownedOperations.Stopping,
+                log.Information);
+            var worldNames = new Lazy<System.Collections.Generic.IReadOnlyList<string>>(() => ViewPlateMenu.PublicWorlds(DataManager));
+            plateViewerWindow = new PlateViewerWindow(plateViewing, TextureProvider, renderResources, () => worldNames.Value, () => characterIdentityService.CurrentCharacter);
+            WindowSystem.AddWindow(plateViewerWindow);
+            sharingWindow.OpenViewer = plateViewerWindow.Open;
+            viewPlateMenu = new ViewPlateMenu(ContextMenu, plateViewing, plateViewerWindow.Open);
+            startup.OnFailure("view menu", viewPlateMenu.Dispose);
 #endif
 
             // Drawing starts last: the plugin is created off the framework thread, so a frame can
@@ -484,6 +508,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             tutorialOverlay.Update();
 #if AETHERFRAME_NETWORK_PREVIEW
             livePublisher.OnFrame();
+            plateViewing.OnFrame();
 #endif
             WindowSystem.Draw();
             editorPlateMenu.EndFrame();
@@ -587,6 +612,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         plateLibrary.PlateSaved -= livePublisher.PlateSaved;
         livePublisher.Dispose();
         sharingWindow.Dispose();
+        viewPlateMenu.Dispose();
+        plateViewerWindow.Dispose();
 #endif
         imageTextureCache.Clear();
         thumbnailTextures.Clear();

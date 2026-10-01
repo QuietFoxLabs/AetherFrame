@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using AetherFrame.Domain.Profiles;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Textures.TextureWraps;
 
 namespace AetherFrame.UI.Rendering;
 
@@ -20,7 +21,11 @@ internal static class ProfileBackgroundRenderer
     private const int MaxTileQuads = 4096;
     private const float MinTileScreenSize = 12f;
 
-    internal static void Draw(ImDrawListPtr drawList, ProfileBackground? background, Vector2 canvasOrigin, Vector2 canvasScreenSize, float scale, ProfileRenderResources resources)
+    internal static void Draw(ImDrawListPtr drawList, ProfileBackground? background, Vector2 canvasOrigin, Vector2 canvasScreenSize, float scale, ProfileRenderResources resources) =>
+        Draw(drawList, background, canvasOrigin, canvasScreenSize, scale, resources, background?.ImageAssetId is { } image ? resources.Images.GetWrapOrNull(image) : null);
+
+    /// <summary>Draws <paramref name="background"/> with <paramref name="image"/> as its image's texture, whichever cache that comes from.</summary>
+    internal static void Draw(ImDrawListPtr drawList, ProfileBackground? background, Vector2 canvasOrigin, Vector2 canvasScreenSize, float scale, ProfileRenderResources resources, IDalamudTextureWrap? image)
     {
         // Whether the background draws at all is PaintVisibility's rule, which a shared snapshot follows too.
         var opacity = PaintVisibility.BackgroundOpacity(background);
@@ -47,7 +52,7 @@ internal static class ProfileBackgroundRenderer
                 break;
 
             case ProfileBackgroundMode.Image:
-                DrawImage(drawList, background, canvasOrigin, canvasScreenSize, opacity, resources);
+                DrawImage(drawList, background, canvasOrigin, canvasScreenSize, opacity, image);
                 break;
         }
 
@@ -148,14 +153,13 @@ internal static class ProfileBackgroundRenderer
         drawList.PopClipRect();
     }
 
-    private static void DrawImage(ImDrawListPtr drawList, ProfileBackground background, Vector2 origin, Vector2 size, float opacity, ProfileRenderResources resources)
+    private static void DrawImage(ImDrawListPtr drawList, ProfileBackground background, Vector2 origin, Vector2 size, float opacity, IDalamudTextureWrap? wrap)
     {
-        if (background.ImageAssetId is not { } assetId)
+        if (background.ImageAssetId is null)
         {
             return;
         }
 
-        var wrap = resources.Images.GetWrapOrNull(assetId);
         if (wrap is null)
         {
             drawList.AddRectFilled(origin, origin + size, ImGui.GetColorU32(MissingImageColor));

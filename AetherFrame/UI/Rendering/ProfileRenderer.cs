@@ -4,6 +4,7 @@ using System.Numerics;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Textures.TextureWraps;
 
 namespace AetherFrame.UI.Rendering;
 
@@ -168,11 +169,17 @@ internal static class ProfileRenderer
         }
     }
 
-    private static void DrawImageElement(ImDrawListPtr drawList, ImageProfileElement imageElement, Vector2 canvasOrigin, float scale, ProfileRenderResources resources)
+    private static void DrawImageElement(ImDrawListPtr drawList, ImageProfileElement imageElement, Vector2 canvasOrigin, float scale, ProfileRenderResources resources) =>
+        DrawImageElement(drawList, imageElement, canvasOrigin, scale, resources.Images.GetWrapOrNull(imageElement.AssetId));
+
+    /// <summary>
+    /// Draws an image element from <paramref name="wrap"/>, its image's texture, or its placeholder
+    /// when there is none: the one path every surface draws an image element through, whichever
+    /// cache its texture comes from.
+    /// </summary>
+    internal static void DrawImageElement(ImDrawListPtr drawList, ImageProfileElement imageElement, Vector2 canvasOrigin, float scale, IDalamudTextureWrap? wrap)
     {
         var opacity = PaintVisibility.ImageOpacity(imageElement);
-        var wrap = resources.Images.GetWrapOrNull(imageElement.AssetId);
-
         if (wrap is null)
         {
             // Missing, still loading, or failed to decode: a visible placeholder rather than
