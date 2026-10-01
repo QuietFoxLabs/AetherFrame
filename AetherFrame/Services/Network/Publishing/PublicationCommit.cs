@@ -18,7 +18,7 @@ namespace AetherFrame.Services.Network.Publishing;
 /// </summary>
 internal sealed class PublishConsent
 {
-    internal PublishConsent(SnapshotCandidate candidate, PersonaSlotId shownSlot, PersonaPublicKey shownKey)
+    internal PublishConsent(SnapshotCandidate candidate, PersonaSlotId shownSlot, PersonaPublicKey shownKey, ProfileId? bindingProfile = null)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(shownKey);
@@ -32,9 +32,15 @@ internal sealed class PublishConsent
             throw new ArgumentException("The consent screen names a persona's slot.", nameof(shownSlot));
         }
 
+        if (bindingProfile is { IsEmpty: true })
+        {
+            throw new ArgumentException("A binding's profile id is never empty.", nameof(bindingProfile));
+        }
+
         Candidate = candidate;
         ShownSlot = shownSlot;
         ShownKey = shownKey;
+        BindingProfile = bindingProfile;
     }
 
     /// <summary>What is shared: everything but the profile id, the revision id and the time.</summary>
@@ -45,6 +51,14 @@ internal sealed class PublishConsent
 
     /// <summary>The public key of the persona the consent screen named.</summary>
     internal PersonaPublicKey ShownKey { get; }
+
+    /// <summary>
+    /// For a character's key, the profile id the server issued its binding (decision C4, amending
+    /// P1): every Plate the character publishes goes out under it, so the persona's index holds one
+    /// entry, for that profile, naming the Plate signed last. Null for the share check's personas,
+    /// whose Plates each keep a profile of their own.
+    /// </summary>
+    internal ProfileId? BindingProfile { get; }
 }
 
 /// <summary>What a commit came to.</summary>
@@ -228,14 +242,39 @@ internal static class PublicationCommit
             return PublishOutcome.Refused(PublishResult.IndexUnreadable, e);
         }
 
-        // 2. The Plate's live profile, or a new one.
-        var live = index.LiveFor(candidate.PlateId);
-        if (live is null && index.Entries.Count >= PublicationIndex.MaxEntries)
+        // 2. The Plate's live profile, or a new one; for a character's key, its binding's profile,
+        // whichever Plate it names now, and nothing else (C4). Entries for other profiles, from an
+        // earlier binding, are dropped with their waiting revisions once this is saved.
+        PublicationEntry? live;
+        ProfileId profile;
+        var dropped = new List<PublicationEntry>();
+        if (consent.BindingProfile is { } binding)
         {
-            return PublishOutcome.Refused(PublishResult.IndexFull);
-        }
+            live = null;
+            foreach (var existing in index.Entries)
+            {
+                if (existing.ProfileId == binding && existing.IsLive)
+                {
+                    live = existing;
+                }
+                else
+                {
+                    dropped.Add(existing);
+                }
+            }
 
-        var profile = live?.ProfileId ?? ProfileId.NewId();
+            profile = binding;
+        }
+        else
+        {
+            live = index.LiveFor(candidate.PlateId);
+            if (live is null && index.Entries.Count >= PublicationIndex.MaxEntries)
+            {
+                return PublishOutcome.Refused(PublishResult.IndexFull);
+            }
+
+            profile = live?.ProfileId ?? ProfileId.NewId();
+        }
 
         // 3. This attempt's revision, and the time.
         var revision = RevisionId.NewId();
@@ -271,7 +310,8 @@ internal static class PublicationCommit
         byte[] saved;
         try
         {
-            next = index.With(new PublicationEntry(candidate.PlateId, profile, revision, live?.State ?? PublicationState.Pending, live?.LastPublishedAt ?? 0, name));
+            var stored = new PublicationEntry(candidate.PlateId, profile, revision, live?.State ?? PublicationState.Pending, live?.LastPublishedAt ?? 0, name);
+            next = consent.BindingProfile is null ? index.With(stored) : new PublicationIndex([stored]);
             saved = PublicationIndexCodec.Encode(slot, next);
         }
         catch (Exception e) when (e is ArgumentException or PublicationFileException)
@@ -357,7 +397,7 @@ internal static class PublicationCommit
             long total = entry.Length;
             foreach (var existing in index.Entries)
             {
-                if (!existing.PendingEntry.IsNone && existing.PendingEntry != superseded)
+                if (!existing.PendingEntry.IsNone && existing.PendingEntry != superseded && !dropped.Contains(existing))
                 {
                     total += files.EntrySize(slot, existing.PendingEntry);
                 }
@@ -410,6 +450,14 @@ internal static class PublicationCommit
         if (!superseded.IsNone)
         {
             files.TryDeleteEntry(slot, superseded);
+        }
+
+        foreach (var gone in dropped)
+        {
+            if (!gone.PendingEntry.IsNone)
+            {
+                files.TryDeleteEntry(slot, gone.PendingEntry);
+            }
         }
 
         return PublishOutcome.Stored(next, profile, revision);

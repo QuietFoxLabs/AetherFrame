@@ -123,7 +123,7 @@ public class SharingWireTests
         {
             new SharingCharacter(1, PersonaSlotId.NewId(), Key, SharingStage.Off),
             new SharingCharacter(2, PersonaSlotId.NewId(), Key, SharingStage.Checking),
-            new SharingCharacter(3, slot, Key, SharingStage.Shared, "12345678", Profile, "Aria Starfall", "Gilgamesh"),
+            new SharingCharacter(3, slot, Key, SharingStage.Shared, "12345678", Profile, "Aria Starfall", "Gilgamesh", PublishedPlate: Guid.NewGuid()),
             new SharingCharacter(ulong.MaxValue, PersonaSlotId.NewId(), Key, SharingStage.Paused, "9", Profile, "Bram Oakes", "Cactuar"),
             new SharingCharacter(5, PersonaSlotId.NewId(), Key, SharingStage.TakenOver),
             new SharingCharacter(6, PersonaSlotId.NewId(), Key, SharingStage.Shared, "7", Profile, "Cid Nan", "Balmung", PersonaSlotId.NewId(), Key),
@@ -143,7 +143,8 @@ public class SharingWireTests
         string[] refused =
         [
             "{}",
-            "{\"version\":2,\"characters\":[]}",
+            "{\"version\":3,\"characters\":[]}",
+            "{\"version\":0,\"characters\":[]}",
             "{\"version\":1,\"characters\":[],\"more\":0}",
             "{\"version\":1,\"version\":1,\"characters\":[]}",
             $"{{\"version\":1,\"characters\":[{good},{good}]}}",
@@ -163,6 +164,16 @@ public class SharingWireTests
         }
 
         Assert.Throws<InvalidDataException>(() => SharingStateCodec.Decode(new byte[SharingStateCodec.MaxBytes + 1]));
+
+        // Version 2 adds the Plate the server shows: only a shared character has one, and version 1 never does.
+        var plate = Guid.NewGuid();
+        var shared = good + "X";
+        shared = shared[..^2] + $",\"publishedPlate\":\"{plate}\"}}";
+        Assert.Equal(plate, Assert.Single(SharingStateCodec.Decode(Utf8($"{{\"version\":2,\"characters\":[{shared}]}}"))).PublishedPlate);
+        Assert.Throws<InvalidDataException>(() => SharingStateCodec.Decode(Utf8($"{{\"version\":1,\"characters\":[{shared}]}}")));
+        Assert.Throws<InvalidDataException>(() => SharingStateCodec.Decode(Utf8($"{{\"version\":2,\"characters\":[{good}]}}")));
+        Assert.Throws<InvalidDataException>(() => SharingStateCodec.Decode(Utf8($"{{\"version\":2,\"characters\":[{shared.Replace("\"stage\":\"shared\"", "\"stage\":\"paused\"", StringComparison.Ordinal)}]}}")));
+        Assert.Throws<InvalidDataException>(() => SharingStateCodec.Decode(Utf8($"{{\"version\":2,\"characters\":[{shared.Replace(plate.ToString(), Guid.Empty.ToString(), StringComparison.Ordinal)}]}}")));
     }
 
     [Fact]

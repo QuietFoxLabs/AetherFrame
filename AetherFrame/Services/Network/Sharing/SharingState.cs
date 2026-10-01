@@ -34,7 +34,8 @@ internal enum SharingStage
 /// character), and, once bound, the Lodestone id, the profile id (C4), and the name and World the
 /// Lodestone showed. A bound character whose key can't be opened may also carry a new key being
 /// checked (<see cref="NewSlot"/>, <see cref="NewKey"/>): its binding stays recorded, under the old
-/// key, until a check with the new one passes (C1).
+/// key, until a check with the new one passes (C1). A shared character also records which Plate the
+/// server shows for it (<see cref="PublishedPlate"/>), the one My Plates marks Shared (C3).
 /// </summary>
 internal sealed record SharingCharacter(
     ulong ContentId,
@@ -46,7 +47,8 @@ internal sealed record SharingCharacter(
     string? Name = null,
     string? World = null,
     PersonaSlotId NewSlot = default,
-    PersonaId? NewKey = null)
+    PersonaId? NewKey = null,
+    Guid? PublishedPlate = null)
 {
     /// <summary>Whether the server binds the character (shared or paused).</summary>
     internal bool IsBound => Stage is SharingStage.Shared or SharingStage.Paused;
@@ -65,7 +67,7 @@ internal sealed record SharingCharacter(
 
     /// <summary>The same character with nothing bound, keeping its key.</summary>
     internal SharingCharacter Unbound(SharingStage stage) =>
-        this with { Stage = stage, LodestoneId = null, ProfileId = null, Name = null, World = null, NewSlot = default, NewKey = null };
+        this with { Stage = stage, LodestoneId = null, ProfileId = null, Name = null, World = null, NewSlot = default, NewKey = null, PublishedPlate = null };
 }
 
 /// <summary>
@@ -84,10 +86,12 @@ internal static class SharingStateCodec
     /// <summary>The longest name or World kept, in UTF-16 code units.</summary>
     internal const int MaxTextLength = 64;
 
-    private const int Version = 1;
+    /// <summary>The version this build writes: 2 adds the Plate the server shows. Version 1, which N2-9b wrote, is still read.</summary>
+    private const int Version = 2;
 
     private static readonly string[] RootProperties = ["version", "characters"];
-    private static readonly string[] CharacterProperties = ["contentId", "slot", "key", "stage", "lodestoneId", "profileId", "name", "world", "newSlot", "newKey"];
+    private static readonly string[] CharacterPropertiesV1 = ["contentId", "slot", "key", "stage", "lodestoneId", "profileId", "name", "world", "newSlot", "newKey"];
+    private static readonly string[] CharacterProperties = [.. CharacterPropertiesV1, "publishedPlate"];
 
     internal static byte[] Encode(IReadOnlyList<SharingCharacter> characters)
     {
@@ -112,6 +116,7 @@ internal static class SharingStateCodec
                 WriteOptional(writer, "world", character.World);
                 WriteOptional(writer, "newSlot", character.ReplacingKey ? character.NewSlot.ToString() : null);
                 WriteOptional(writer, "newKey", character.NewKey?.ToString());
+                WriteOptional(writer, "publishedPlate", character.PublishedPlate?.ToString("D"));
                 writer.WriteEndObject();
             }
 
@@ -151,7 +156,7 @@ internal static class SharingStateCodec
             var root = document.RootElement;
             RequireExactly(root, RootProperties);
             var version = root.GetProperty("version");
-            if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number != Version)
+            if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number is not (1 or Version))
             {
                 throw new InvalidDataException("The sharing file has a version this build doesn't read.");
             }
@@ -165,7 +170,7 @@ internal static class SharingStateCodec
             var characters = new List<SharingCharacter>();
             foreach (var item in list.EnumerateArray())
             {
-                characters.Add(ReadCharacter(item));
+                characters.Add(ReadCharacter(item, number));
             }
 
             Validate(characters);
@@ -202,9 +207,9 @@ internal static class SharingStateCodec
         return true;
     }
 
-    private static SharingCharacter ReadCharacter(JsonElement item)
+    private static SharingCharacter ReadCharacter(JsonElement item, int version)
     {
-        RequireExactly(item, CharacterProperties);
+        RequireExactly(item, version == 1 ? CharacterPropertiesV1 : CharacterProperties);
         var contentText = RequiredString(item, "contentId");
         if (contentText.Length is 0 or > 20 || !IsDigits(contentText) || (contentText.Length > 1 && contentText[0] == '0')
             || !ulong.TryParse(contentText, NumberStyles.None, CultureInfo.InvariantCulture, out var contentId) || contentId == 0)
@@ -260,7 +265,18 @@ internal static class SharingStateCodec
             newKey = parsedKey;
         }
 
-        return new SharingCharacter(contentId, slot, key, stage, OptionalString(item, "lodestoneId"), profileId, OptionalString(item, "name"), OptionalString(item, "world"), newSlot, newKey);
+        Guid? publishedPlate = null;
+        if (version > 1 && OptionalString(item, "publishedPlate") is { } plateText)
+        {
+            if (!Guid.TryParseExact(plateText, "D", out var plate) || plate == Guid.Empty)
+            {
+                throw new InvalidDataException("A character's shared Plate isn't one.");
+            }
+
+            publishedPlate = plate;
+        }
+
+        return new SharingCharacter(contentId, slot, key, stage, OptionalString(item, "lodestoneId"), profileId, OptionalString(item, "name"), OptionalString(item, "world"), newSlot, newKey, publishedPlate);
     }
 
     private static void Validate(IReadOnlyList<SharingCharacter> characters)
@@ -294,6 +310,11 @@ internal static class SharingStateCodec
             if (!character.IsBound && carries)
             {
                 throw new InvalidDataException("A character that isn't bound carries a binding's details.");
+            }
+
+            if (character.PublishedPlate is { } plate && (character.Stage != SharingStage.Shared || plate == Guid.Empty))
+            {
+                throw new InvalidDataException("Only a shared character's Plate can be shown by the server.");
             }
         }
     }

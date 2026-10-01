@@ -62,8 +62,23 @@ internal static class SharingText
 
     internal const string SharedLine = "Sharing is on for this character, as it appears on the Lodestone:";
 
-    internal const string PublishingLater =
-        "Your Active Plate will be shared when you save it. Publishing arrives in the next preview build, so nothing is shared yet.";
+    internal const string SavingShares =
+        "Saving this character's Active Plate shares the new version. My Plates marks it Shared. A Plate you haven't shared before is shown to you first.";
+
+    internal const string PausedLine = "Sharing is paused for this character: the server holds no Plate for it, and keeps its check.";
+
+    internal const string Building = "Preparing your Active Plate to share...";
+
+    internal const string CantShare = "Your Active Plate can't be shared as it is. The version shared before stays up. Change what is listed here and save it again:";
+
+    internal const string FirstShowingTitle = "Share this Plate?";
+
+    internal const string FirstShowing =
+        "This is exactly what other players who share will see of this Plate: its name, every text in full, and each image as it will be sent. From now on, saving it shares the new version without asking again.";
+
+    internal const string FirstShowingImages = "Every image has to be shown here before the Plate can be shared.";
+
+    internal const string Sending = "Sending your Active Plate...";
 
     internal const string TurnOffConfirm =
         "Turn off sharing for this character? The server deletes its Plate, its images and its check at once. To share again, you'll need a new Lodestone check.";
@@ -90,6 +105,31 @@ internal static class SharingText
         : left.TotalMinutes < 1.5 ? "The code runs out in about a minute."
         : "The code runs out in about " + ((int)Math.Round(left.TotalMinutes)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " minutes.";
 
+    /// <summary>What a notice means, in words, with the reason the server or the commit gave, when there is one.</summary>
+    internal static string Notice(SharingNotice notice) => notice.Kind switch
+    {
+        SharingNoticeKind.PublishRefused => "The sharing server refused this Plate: " + RefusalReason(notice.Detail) + " The version shared before stays up.",
+        SharingNoticeKind.PublishNotStored => "Your Plate couldn't be prepared for sharing on this PC, so nothing was sent. " + NotStoredReason(notice.Detail),
+        _ => Notice(notice.Kind),
+    };
+
+    /// <summary>A refused publish's reason code (ServerApi-v1.md, section 4), in words.</summary>
+    internal static string RefusalReason(string? reason) => reason switch
+    {
+        "clock-ahead" => "your PC's clock is ahead of the server's. Set your clock to the right time, then save the Plate again.",
+        "image-refused" => "one of its images couldn't be processed. Try another image, then save the Plate again.",
+        "not-bound" or "wrong-profile" => "the server doesn't have this character as shared from this PC any more. Open the Sharing window to check it again.",
+        "revision-conflict" => "it clashed with a version sent before. Save the Plate again.",
+        _ => "it isn't a Plate the server accepts. Save it again, and if it keeps happening, change what it holds.",
+    };
+
+    private static string NotStoredReason(string? result) => result switch
+    {
+        "OutboxFull" => "Too much is waiting to be sent from this PC; try again once the server is reachable.",
+        "NotAsShown" or "CandidateUsed" => "Save the Plate again to try again.",
+        _ => "Please try again.",
+    };
+
     /// <summary>What a notice means, in words.</summary>
     internal static string Notice(SharingNoticeKind kind) => kind switch
     {
@@ -111,10 +151,22 @@ internal static class SharingText
         SharingNoticeKind.Refused => "The sharing server refused that, or answered in a way AetherFrame doesn't understand. Please try again later.",
         SharingNoticeKind.SaveFailed => "AetherFrame couldn't save your sharing settings on this PC. Nothing else was changed.",
         SharingNoticeKind.Failed => "Something went wrong. Nothing was shared. Please try again.",
+        SharingNoticeKind.Published => "Your Active Plate is shared: other players who share can view it now.",
+        SharingNoticeKind.PublishWaiting => "The sharing server couldn't take your Plate just now. It waits on this PC, and is sent when you try again or save it again.",
+        SharingNoticeKind.PublishRefused => "The sharing server refused this Plate. The version shared before stays up.",
+        SharingNoticeKind.PublishStale => "A Plate waiting to be sent was signed more than a day ago, so it wasn't sent. Save the Plate again to share it.",
+        SharingNoticeKind.PublishNotStored => "Your Plate couldn't be prepared for sharing on this PC, so nothing was sent. Please try again.",
+        SharingNoticeKind.Paused => "Sharing is paused: the server deleted this character's Plate, and keeps its check. Resume to share again.",
+        SharingNoticeKind.Resumed => "Sharing is on again. Your Active Plate is being shared.",
+        SharingNoticeKind.Declined => "Nothing was sent. The Plate you shared before, if any, stays up until you share another or pause sharing.",
+        SharingNoticeKind.PublishUnrecorded => "Your Active Plate is shared, but this PC couldn't record it. It may be sent once more, which changes nothing.",
+        SharingNoticeKind.PublishStopped => "Sending was stopped. If the server had already received your Plate it may be shared; otherwise it waits on this PC, and is sent when you try again or save it again.",
+        SharingNoticeKind.PublishChanged => "Your Active Plate changed before it was shared, so nothing was sent. It is shown to you again once it's ready.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
     /// <summary>Whether a notice reports a problem, rather than progress.</summary>
     internal static bool IsProblem(SharingNoticeKind kind) =>
-        kind is not (SharingNoticeKind.CodeReady or SharingNoticeKind.CheckPassed or SharingNoticeKind.TurnedOff or SharingNoticeKind.TurnedOffAll or SharingNoticeKind.NewKeyDropped or SharingNoticeKind.Renamed);
+        kind is not (SharingNoticeKind.CodeReady or SharingNoticeKind.CheckPassed or SharingNoticeKind.TurnedOff or SharingNoticeKind.TurnedOffAll or SharingNoticeKind.NewKeyDropped or SharingNoticeKind.Renamed
+            or SharingNoticeKind.Published or SharingNoticeKind.Paused or SharingNoticeKind.Resumed or SharingNoticeKind.Declined);
 }

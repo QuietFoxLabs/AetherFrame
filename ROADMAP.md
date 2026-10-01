@@ -16,7 +16,7 @@ Verified September 30, 2026, at 21:48 UTC. **For the live status, see [issue #52
   - the 10 checks for preview build `febf0cb`, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)), in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5910883556). The game loaded it at 12:02 UTC. It supersedes `ae80c75`, whose 10 tutorial checks, posted by a second Claude session, still apply to it, as do the earlier preview posts' networking checks;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
   - the server's setup for its first deploy, now that the domain (`aetherframe.dev`) and the server are bought: the DNS record for `plates.aetherframe.dev`, `host-setup.sh` run on the server, and the production environment's reviewer, secrets and variable (steps in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5918214865)). A first deploy of `ffa428a` stopped before connecting to anything, because the domain variable isn't set yet.
-- **In progress:** N2-9b, opting characters in and out of sharing (this change). N2-9a, the plugin's transport, is done ([#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69)). N2-8, the deployment kit, is done ([#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68)), and so is N2-7, the server ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67)). The rest of the plugin's side (N2-9b, N2-9c, N2-10) comes next.
+- **In progress:** N2-9c, publishing the Active Plate (this change). N2-9b, opting characters in and out, is done ([#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70)), and so is N2-9a, the transport ([#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69)). N2-8, the deployment kit, is done ([#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68)), and so is N2-7, the server ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67)). The viewer (N2-10) and the test kit (N2-11) come next.
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
@@ -27,7 +27,7 @@ Verified September 30, 2026, at 21:48 UTC. **For the live status, see [issue #52
   - decision batch C, viewing by character ([#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61), merged as `f467032`);
   - the re-plan of sharing around the owner's decisions V1 to V5 ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), merged as `b75deba`, by a second Claude session): an opted-in player right-clicks another opted-in player's character, or searches their name and World, and views their Active Plate as a finished picture. Characters are proved by a Lodestone check, personas are hidden, and share codes are retired.
 - **Next, for the two-player test:**
-  1. N2-9: the sharing flow in the plugin: the transport (N2-9a, done, [#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69)), then opting in with the Lodestone check (N2-9b, this change), then publishing the Active Plate (N2-9c);
+  1. N2-9: the sharing flow in the plugin: the transport (N2-9a, done, [#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69)), then opting in with the Lodestone check (N2-9b, done, [#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70)), then publishing the Active Plate (N2-9c, this change);
   2. N2-10: the viewer, with the tutorial's chapter on sharing;
   3. N2-11: the test kit and the two-player checklist;
   4. the first deploy, once the owner's server setup is done.
@@ -47,8 +47,9 @@ Verified September 30, 2026, at 21:48 UTC. **For the live status, see [issue #52
 | N2-7: the server | done: [#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67) |
 | N2-8: deployment | done: [#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68); the first deploy waits on the owner's server setup |
 | N2-9a: the plugin's transport | done: [#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69) |
-| N2-9b: opting characters in and out | this change |
-| N2-9c to N2-11: publishing, the viewer, the test kit | planned |
+| N2-9b: opting characters in and out | done: [#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70) |
+| N2-9c: publishing the Active Plate | this change |
+| N2-10 and N2-11: the viewer, the test kit | planned |
 
 | Build | State |
 | --- | --- |
@@ -330,7 +331,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - the boundary tests enforce R3's exact allowlist on the compiled DLL: its referenced assemblies and types, that no type outside `Services/Network` names a networking type anywhere (the security review showed a source scan alone can be bypassed), that the only handler is SharingHandler's, through Dalamud's connect callback, and that it is never told anything R2 rules out; no process is started and no link opened. The source scan also refuses starting a process, a networking type named in a string, a networking `global using`, and line breaks only the compiler reads. The player flavour still references no networking at all;
   - a publish's body is streamed from the document and images, never copied whole, and each request names the plugin's version;
   - the server's tests compile the client and run it against the real server in memory: binding, publishing with an image, viewing, reporting and pausing, and a refused challenge.
-- NETWORK2 increment N2-9b, opting characters in and out: this change. In the preview flavour only:
+- NETWORK2 increment N2-9b, opting characters in and out: [#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70), after a security review and its recheck. In the preview flavour only:
   - My Plates gains a **Sharing** button. Its window, for the logged-in character, asks for consent with C3's, C5's, C7's, K2's and K4's statements, then makes the character's own key behind the scenes, gets a Lodestone code, and checks the character's Lodestone page from the address the player pastes. The plugin itself never contacts the Lodestone;
   - the check names the character logged in, and the server refuses a page that doesn't show it, so pasting another of your characters' pages binds nothing;
   - sharing can be turned off for one character or for all of them; the server then deletes what it holds, and the key is kept for next time;
@@ -338,6 +339,14 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - `sharing.afsh`, beside the persona registry, records which characters share, read strictly and written whole. The log names no character, code, id or key;
   - nothing is published yet: that is N2-9c. The order of consent and the rest are recorded as "N2-9b's opt-in" in the register;
   - its tests run the flow against a server answered in memory that checks every request's proof.
+- NETWORK2 increment N2-9c, publishing the Active Plate: this change. In the preview flavour only:
+  - saving a sharing character's Active Plate, making another Plate Active, or sharing starting or resuming builds the saved Plate into a candidate and signs and sends it under the binding's profile id (C3, C4);
+  - a Plate this character hasn't shared before is shown first, in the Sharing window, with a button to view it as drawn; nothing is sent unless the player agrees;
+  - a Plate that can't be shared says why, and the version shared before stays up; a refused revision is dropped with its reason in words, a busy server's is kept to send again, and one signed more than a day ago is dropped unsent;
+  - Pause and Resume in the Sharing window; turning sharing off, or a takeover, forgets what the key published;
+  - My Plates marks **Shared** the Plate the server shows, and **Not shared yet** an Active Plate that isn't it; the Personas window is gone, and the share check signs nothing (V4, C3), its old signings dropped;
+  - a re-read at login when the character was renamed (C1);
+  - the decisions are recorded as "N2-9c's live publishing".
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**
