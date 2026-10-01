@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Lodestone relay (docs/networking/Runbook.md, "The Lodestone relay"; the owner's direction of
+    October 1, 2026 in docs/networking/DecisionRegister.md). The Lodestone refuses the server's host,
+    so the server's Lodestone requests go through this relay, which runs on a home connection and is
+    reached over Tailscale. It opens HTTPS tunnels to na.finalfantasyxiv.com:443 and nowhere else, for
+    one client address only. TLS runs end to end, from the server to the Lodestone, so the relay
+    sees only encrypted bytes and can't change a page.
+
+    It never runs in the plugin or on the server, and nothing here is built into AetherFrame.dll.
+  -->
+
+  <Import Project="..\..\Version.props" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AetherFrame.LodestoneRelay</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AetherFrame.Server.Tests" />
+  </ItemGroup>
+
+</Project>

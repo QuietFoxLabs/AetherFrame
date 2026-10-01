@@ -1378,6 +1378,29 @@ It also made six smaller points, all applied as well:
 
 **Its second recheck** of `3633f0d` found one lost update left: the service's own clean-up after acting on a candidate moved the generation on too, so a save whose build started during another save's commit could be skipped. Only a withdrawal (the player declining, or the candidate going out of date) moves it on now, with a test. It confirmed `3bdd052` clean for merging.
 
+### Reaching the Lodestone through a relay. The owner's direction, October 1, 2026; its design APPROVED (Claude, under the owner's delegation of September 29, 2026), October 1, 2026
+
+**What happened.** On September 30, 2026, the Lodestone (`na.finalfantasyxiv.com`, behind CloudFront) answered 403 to the DigitalOcean server, for character pages and search alike, while the owner's home connection got 200. C2's check reads the page from the server, so no one could bind a character from there. CloudFront most likely turns away hosting providers in general, so another provider would probably meet the same answer. A page fetched by the plugin can't replace the server's own read, since a player could forge it.
+
+**The owner's direction.** Asked in chat on October 1, 2026, the owner chose "Relay via my home PC". The other choices were trying another host first, hosting the whole server at home, and deciding later. The droplet stays the server, and only its Lodestone requests go through a relay on the owner's PC, over Tailscale.
+
+**Its design, under the delegation:**
+- **The server** gains one setting, `LodestoneRelay` (`address:port`, empty by default), read at start and refused unless it is exactly an address and a port (no name, no scheme, no wildcard, broadcast or multicast address). When it is set, the Lodestone client alone uses it, as an HTTPS proxy: each connection is a `CONNECT` tunnel, TLS runs from the server to `na.finalfantasyxiv.com`, and the certificate is checked as .NET checks any, so the relay can neither read nor change a page. Everything else C2 sets stays: the fixed host and address, no redirect, 1 MiB, 10 seconds, the fetch budget. A relay that is off or broken makes a fetch fail, which C2 already treats as "try again later", and a re-read fails closed (C1).
+- **The relay** (`server/AetherFrame.LodestoneRelay`) is a console program the owner starts. It:
+  - listens on one address, never a wildcard: the PC's Tailscale address;
+  - serves one client address, the server's, and closes any other connection unanswered;
+  - accepts only `CONNECT na.finalfantasyxiv.com:443` (HTTP/1.0 or 1.1, the host's case aside), with the host and port fixed in code, and answers anything else `403` without connecting anywhere;
+  - reads at most 4 KiB of request head within 10 seconds, and keeps at most 8 tunnels;
+  - closes a tunnel after 30 seconds idle or 5 minutes in all, or past 1 MiB up or 16 MiB down;
+  - logs one line per connection, never what a tunnel carries.
+
+  The server's pooled connections through it are dropped after 15 seconds idle, before the relay would.
+- **Tailscale** joins the two machines with the owner's account, so nothing on the PC is reachable from the internet, and no port is forwarded. The owner installs it on both: it is a system change on the server and an account of the owner's, so Claude never does it.
+
+**Rationale.** It keeps C2's promise that the server reads the page itself, with nothing a player controls in between, at no cost, and it changes nothing for players. The price is the owner's PC: it must be on, with the relay running, whenever someone checks a character or a re-read is due. For the two-player test, that is when the owner plays. A host the Lodestone accepts, or another way to prove a character, can replace it later without changing the protocol.
+
+**Not settled:** a relay that runs unattended, such as a small always-on device at home, if sharing grows past the test.
+
 ## Gates
 
 | Gate | Must be decided before |

@@ -24,7 +24,8 @@ internal interface ILodestonePages
 /// <c>https://na.finalfantasyxiv.com/lodestone/character/&lt;id&gt;/</c>, which serves every region's
 /// characters, with a fixed User-Agent, no redirect followed, at most 1 MiB read, and one 10-second
 /// deadline over the whole fetch, the body included. The host is fixed here, never configured or
-/// taken from a request, so the server can't be used as a proxy.
+/// taken from a request, so the server can't be used as a proxy. When the Lodestone refuses the
+/// server's host, the fetch goes through the operator's Lodestone relay (<see cref="CreateHandler"/>).
 /// </summary>
 internal sealed class LodestoneHttpPages(IHttpClientFactory clients) : ILodestonePages
 {
@@ -75,16 +76,34 @@ internal sealed class LodestoneHttpPages(IHttpClientFactory clients) : ILodeston
         }
     }
 
-    /// <summary>The client's handler: no redirects, no cookies, no proxy from the environment.</summary>
-    public static SocketsHttpHandler CreateHandler() => new()
+    /// <summary>
+    /// The client's handler: no redirects, no cookies, no proxy from the environment. With a
+    /// <paramref name="relay"/> (<see cref="ServerOptions.LodestoneRelay"/>), each connection is an
+    /// HTTPS tunnel through it (<c>CONNECT</c>): TLS still runs to the Lodestone, and its certificate
+    /// is checked as before. Its connections are dropped when idle well before the relay drops them.
+    /// </summary>
+    public static SocketsHttpHandler CreateHandler(IPEndPoint? relay)
     {
-        AllowAutoRedirect = false,
-        UseCookies = false,
-        UseProxy = false,
-        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-        ConnectTimeout = TimeSpan.FromSeconds(10),
-        PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-    };
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            UseProxy = false,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            ConnectTimeout = TimeSpan.FromSeconds(10),
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+        };
+
+        if (relay is not null)
+        {
+            handler.UseProxy = true;
+            handler.Proxy = new WebProxy(new Uri("http://" + relay + "/", UriKind.Absolute)) { BypassProxyOnLocal = false, UseDefaultCredentials = false };
+            handler.PooledConnectionIdleTimeout = TimeSpan.FromSeconds(15);
+            handler.PooledConnectionLifetime = TimeSpan.FromMinutes(2);
+        }
+
+        return handler;
+    }
 }
 
 /// <summary>How a read of a character's page ended.</summary>

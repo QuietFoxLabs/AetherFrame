@@ -8,15 +8,15 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified October 1, 2026, at 00:29 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
+Verified October 1, 2026, at 00:53 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, and section 8 the task list.
 
 - **Waiting on the owner:**
-  - once this change is merged and tagged: the approval of 0.1.7's publication run in GitHub. The owner asked in chat on September 30 for the newest build on the repository link, and chose 0.1.7 from `master`, without a verdict on test build `01a14a5` (section 5);
+  - the approval of 0.1.7's publication run in GitHub. 0.1.7 is tagged at `d7de267` and published as a pre-release ([#72](https://github.com/QuietFoxLabs/AetherFrame/pull/72)); the owner chose on September 30 to release it from `master`, without a verdict on test build `01a14a5` (section 5);
   - the tutorial checks for preview build `a933c50` (Next held until you do what a step asks, [#60](https://github.com/QuietFoxLabs/AetherFrame/pull/60) and [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63)), given in chat;
   - the 10 checks for preview build `febf0cb`, the share check ([#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56)), in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5910883556). The game loaded it at 12:02 UTC. It supersedes `ae80c75`, whose 10 tutorial checks, posted by a second Claude session, still apply to it, as do the earlier preview posts' networking checks;
   - whether a reload while the game runs, announced 2 minutes ahead, is acceptable, or builds should wait for the game to close (asked in chat; section 5);
-  - the server's setup for its first deploy, now that the domain (`aetherframe.dev`) and the server are bought: the DNS record for `plates.aetherframe.dev`, `host-setup.sh` run on the server, and the production environment's reviewer, secrets and variable (steps in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5918214865)). A first deploy of `ffa428a` stopped before connecting to anything, because the domain variable isn't set yet.
-- **In progress:** N2-9c, publishing the Active Plate (this change). N2-9b, opting characters in and out, is done ([#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70)), and so is N2-9a, the transport ([#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69)). N2-8, the deployment kit, is done ([#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68)), and so is N2-7, the server ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67)). The viewer (N2-10) and the test kit (N2-11) come next.
+  - the server's setup for its first deploy, now that the domain (`aetherframe.dev`) and the server are bought: the DNS record for `plates.aetherframe.dev`, `host-setup.sh` run on the server, and the production environment's reviewer, secrets and variable (steps in the [Owner inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5918214865)). A first deploy of `ffa428a` stopped before connecting to anything, because the domain variable isn't set yet. The Lodestone refuses the server, so its setup also needs the relay (this change; the runbook's step 7): Tailscale on both machines, and the relay running on the owner's PC.
+- **In progress:** the Lodestone relay (this change), the owner's direction of October 1 for the Lodestone's 403 to the server. N2-9c, publishing the Active Plate, is done ([#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71)), and so is N2-9b, opting characters in and out ([#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70)), and so is N2-9a, the transport ([#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69)). N2-8, the deployment kit, is done ([#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68)), and so is N2-7, the server ([#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67)). The viewer (N2-10) and the test kit (N2-11) come next.
 - **Done today, besides NETWORK2:**
   - this status block ([#53](https://github.com/QuietFoxLabs/AetherFrame/pull/53), merged);
   - test builds that update in game by themselves ([#54](https://github.com/QuietFoxLabs/AetherFrame/pull/54), by a second Claude session): every test build now goes into `E:\AetherFrame Test Build\` through `tools/Install-TestBuild.ps1`, after each merge that changes the plugin;
@@ -45,19 +45,19 @@ Verified October 1, 2026, at 00:29 UTC. **For the live status, see [issue #52](h
 | N2-6c: the publication index, the outbox and the commit | done: [#55](https://github.com/QuietFoxLabs/AetherFrame/pull/55), [#56](https://github.com/QuietFoxLabs/AetherFrame/pull/56) |
 | N2-C: decision batch C, viewing by character (V1 to V5) | done: [#61](https://github.com/QuietFoxLabs/AetherFrame/pull/61) |
 | N2-7: the server | done: [#62](https://github.com/QuietFoxLabs/AetherFrame/pull/62), [#64](https://github.com/QuietFoxLabs/AetherFrame/pull/64), [#65](https://github.com/QuietFoxLabs/AetherFrame/pull/65), [#66](https://github.com/QuietFoxLabs/AetherFrame/pull/66), [#67](https://github.com/QuietFoxLabs/AetherFrame/pull/67) |
-| N2-8: deployment | done: [#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68); the first deploy waits on the owner's server setup |
+| N2-8: deployment | done: [#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68); the Lodestone relay: this change; the first deploy waits on the owner's server setup |
 | N2-9a: the plugin's transport | done: [#69](https://github.com/QuietFoxLabs/AetherFrame/pull/69) |
 | N2-9b: opting characters in and out | done: [#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70) |
-| N2-9c: publishing the Active Plate | this change |
+| N2-9c: publishing the Active Plate | done: [#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71) |
 | N2-10 and N2-11: the viewer, the test kit | planned |
 
 | Build | State |
 | --- | --- |
 | v0.1.6 | released to the testing channel |
-| v0.1.7 | prepared by this change, to be released to the testing channel at the owner's request (section 5) |
+| v0.1.7 | tagged at `d7de267` ([#72](https://github.com/QuietFoxLabs/AetherFrame/pull/72)) and published as a pre-release on October 1 at the owner's request (section 5); its publication to the testing channel waits for the owner's approval |
 | Test build `01a14a5` (player) | superseded by 0.1.7 without a verdict; staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\` |
-| Preview build `a933c50` (`master` after [#63](https://github.com/QuietFoxLabs/AetherFrame/pull/63)) | in `E:\AetherFrame Test Build\` since September 30, 17:07 UTC, installed after a two-minute notice, with a copy in `E:\AetherFrame Test Builds\2026-09-30 a933c50 preview\`. The game loaded it at 17:07 UTC, with no restart. It supersedes preview build `febf0cb`, whose checks still apply. |
-| `master` | `ffa428a` (after [#68](https://github.com/QuietFoxLabs/AetherFrame/pull/68), which changed no plugin code), CI green on both platforms |
+| Preview build `da6cc10` (`master` after [#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71): the whole sharing flow, which needs the server) | in `E:\AetherFrame Test Build\` since October 1, 00:05 UTC, installed after a two-minute notice, with a copy in `E:\AetherFrame Test Builds\2026-09-30 da6cc10 preview\`. The game reloaded it. It supersedes preview build `a933c50`, whose checks still apply. |
+| `master` | `d7de267` (after [#72](https://github.com/QuietFoxLabs/AetherFrame/pull/72), the 0.1.7 release prep), CI green on both platforms |
 
 ## 1. Goal and scope
 
@@ -341,7 +341,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - `sharing.afsh`, beside the persona registry, records which characters share, read strictly and written whole. The log names no character, code, id or key;
   - nothing is published yet: that is N2-9c. The order of consent and the rest are recorded as "N2-9b's opt-in" in the register;
   - its tests run the flow against a server answered in memory that checks every request's proof.
-- NETWORK2 increment N2-9c, publishing the Active Plate: this change. In the preview flavour only:
+- NETWORK2 increment N2-9c, publishing the Active Plate ([#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71), merged as `da6cc10`). In the preview flavour only:
   - saving a sharing character's Active Plate, making another Plate Active, or sharing starting or resuming builds the saved Plate into a candidate and signs and sends it under the binding's profile id (C3, C4);
   - a Plate this character hasn't shared before is shown first, in the Sharing window, with a button to view it as drawn; nothing is sent unless the player agrees;
   - a Plate that can't be shared says why, and the version shared before stays up; a refused revision is dropped with its reason in words, a busy server's is kept to send again, and one signed more than a day ago is dropped unsent;
@@ -349,6 +349,10 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
   - My Plates marks **Shared** the Plate the server shows, and **Not shared yet** an Active Plate that isn't it; the Personas window is gone, and the share check signs nothing (V4, C3), its old signings dropped;
   - a re-read at login when the character was renamed (C1);
   - the decisions are recorded as "N2-9c's live publishing".
+- The Lodestone relay, for the Lodestone's 403 to the server: this change. The owner chose the direction on October 1; the design is recorded as "Reaching the Lodestone through a relay" in the register:
+  - the server gains one setting, `LodestoneRelay`, used by its Lodestone client alone, as an HTTPS tunnel, so TLS and the certificate check still run to the Lodestone;
+  - `server/AetherFrame.LodestoneRelay`, a console program for the owner's PC, opens tunnels to `na.finalfantasyxiv.com:443` alone, for the server's Tailscale address alone, within fixed limits;
+  - the runbook's step 7 sets it up; nothing changes for players.
 - Superseded: NETWORK1 increment 4's name-only snapshot builder, which becomes N2-6 with the layout.
 
 **Next five:**

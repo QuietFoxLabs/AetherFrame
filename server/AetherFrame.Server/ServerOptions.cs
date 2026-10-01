@@ -60,6 +60,14 @@ public sealed class ServerOptions
     /// <summary>The oldest plugin version the server answers, told to plugins by <c>/v1/status</c>.</summary>
     public string MinimumPlugin { get; set; } = "0.1.6";
 
+    /// <summary>
+    /// The Lodestone relay (docs/networking/Runbook.md), as <c>address:port</c>, or empty to reach
+    /// the Lodestone directly. When set, every Lodestone request, and nothing else, goes through it as
+    /// an HTTPS tunnel, so TLS still runs from the server to the Lodestone and its certificate is
+    /// checked as before. It is read at start: changing it needs a restart.
+    /// </summary>
+    public string LodestoneRelay { get; set; } = "";
+
     /// <summary>Whether the daily re-read runs (decision C1). Only the tests turn it off, to drive it themselves.</summary>
     public bool RereadsEnabled { get; set; } = true;
 
@@ -71,6 +79,39 @@ public sealed class ServerOptions
 
     /// <summary>The checked deployment name.</summary>
     internal DeploymentName Deployment { get; private set; } = null!;
+
+    /// <summary>The checked Lodestone relay, or null to reach the Lodestone directly.</summary>
+    internal System.Net.IPEndPoint? Relay { get; private set; }
+
+    /// <summary>
+    /// Reads <see cref="LodestoneRelay"/>: empty is none; otherwise exactly an address and a port,
+    /// written as .NET writes them back (no name, no scheme, no path), and not a wildcard, broadcast
+    /// or multicast address.
+    /// </summary>
+    internal static bool TryParseRelay(string text, out System.Net.IPEndPoint? relay)
+    {
+        relay = null;
+        if (text.Length == 0)
+        {
+            return true;
+        }
+
+        if (!System.Net.IPEndPoint.TryParse(text, out var endPoint) || endPoint.Port == 0 || endPoint.ToString() != text)
+        {
+            return false;
+        }
+
+        var address = endPoint.Address;
+        if (address.Equals(System.Net.IPAddress.Any) || address.Equals(System.Net.IPAddress.IPv6Any) || address.Equals(System.Net.IPAddress.Broadcast)
+            || address.Equals(System.Net.IPAddress.None) || address.Equals(System.Net.IPAddress.IPv6None) || address.IsIPv6Multicast
+            || (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && address.GetAddressBytes()[0] is >= 224 and <= 239))
+        {
+            return false;
+        }
+
+        relay = endPoint;
+        return true;
+    }
 
     /// <summary>
     /// Refuses ASP.NET Core's own forwarded-headers switch, from any configuration source (the
@@ -127,6 +168,12 @@ public sealed class ServerOptions
             throw new InvalidOperationException("AetherFrame:Worlds holds a value that is not a World's name.");
         }
 
+        if (!TryParseRelay(LodestoneRelay, out var relay))
+        {
+            throw new InvalidOperationException("AetherFrame:LodestoneRelay is not an address and port, such as 100.101.102.103:8443.");
+        }
+
         Deployment = deployment;
+        Relay = relay;
     }
 }

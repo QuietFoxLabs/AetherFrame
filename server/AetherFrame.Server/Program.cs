@@ -122,7 +122,7 @@ builder.Services.AddHttpClient(LodestoneHttpPages.ClientName, (services, client)
         client.Timeout = TimeSpan.FromSeconds(10);
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"AetherFrame-Server/1 (+https://{options.DeploymentName}/)");
     })
-    .ConfigurePrimaryHttpMessageHandler(LodestoneHttpPages.CreateHandler)
+    .ConfigurePrimaryHttpMessageHandler(services => LodestoneHttpPages.CreateHandler(services.GetRequiredService<IOptions<ServerOptions>>().Value.Relay))
     .RemoveAllLoggers();
 
 builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>

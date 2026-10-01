@@ -8,6 +8,7 @@
   <Project Path="AetherFrame.Personas/AetherFrame.Personas.csproj" />
   <Project Path="AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj" />
   <Project Path="server/AetherFrame.ImageWorker/AetherFrame.ImageWorker.csproj" />
+  <Project Path="server/AetherFrame.LodestoneRelay/AetherFrame.LodestoneRelay.csproj" />
   <Project Path="server/AetherFrame.Server/AetherFrame.Server.csproj" />
   <Project Path="server/AetherFrame.Server.Tests/AetherFrame.Server.Tests.csproj" />
   <Project Path="tools/AetherFrame.ReleaseTools/AetherFrame.ReleaseTools.csproj" />

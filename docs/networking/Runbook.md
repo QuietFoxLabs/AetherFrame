@@ -55,6 +55,25 @@ The kit is in [`deploy/`](../../deploy):
    { "AetherFrame": { "AllowedLodestoneIds": [ "12345678", "23456789" ] } }
    ```
    The server reads the file again within a few seconds. Nothing else is needed. Taking an id out stops that character from checking, publishing and viewing at once (decision C8).
+7. **The Lodestone relay, when the Lodestone refuses the server.** The Lodestone turns away many hosting providers (it answered 403 to the DigitalOcean server on September 30, 2026). Then the server's Lodestone requests, and nothing else, go through a small relay on your home PC, over Tailscale ("Reaching the Lodestone through a relay" in the [decision register](DecisionRegister.md)). HTTPS still runs from the server to the Lodestone, so the relay passes only encrypted bytes and can't change a page. The relay opens tunnels to `na.finalfantasyxiv.com:443` alone, for the server's address alone.
+   1. **Tailscale on your PC:** install it from tailscale.com/download and sign in.
+   2. **Tailscale on the server,** as root or a sudo user, signing in with the same account at the address it prints:
+      ```
+      curl -fsSL https://tailscale.com/install.sh | sh
+      sudo tailscale up
+      ```
+   3. **Note both Tailscale addresses**, each starting with `100.`: `tailscale ip -4` on each machine, or the Tailscale admin console.
+   4. **Start the relay on your PC**, from the folder Claude names in the Owner inbox, or after `dotnet publish server/AetherFrame.LodestoneRelay -c Release -o <folder>`:
+      ```
+      AetherFrame.LodestoneRelay.exe --listen <your PC's Tailscale address>:8443 --client <the server's Tailscale address>
+      ```
+      If Windows asks whether to let it through the firewall, allow it. Leave the window open while testers check their characters: with the relay closed, a check says to try again later, and a re-read fails without removing anything.
+   5. **Check from the server** that the Lodestone answers through it with `200`:
+      ```
+      curl -sS -o /dev/null -w "%{http_code}\n" --proxy http://<your PC's Tailscale address>:8443 https://na.finalfantasyxiv.com/lodestone/character/<a tester's id>/
+      ```
+      The relay's window shows the tunnel. A timeout usually means Windows' firewall: allow `AetherFrame.LodestoneRelay.exe` in **Windows Security → Firewall & network protection → Allow an app through firewall**.
+   6. **Point the server at it:** add `"LodestoneRelay": "<your PC's Tailscale address>:8443"` to the `AetherFrame` section of `/opt/aetherframe/config/aetherframe.json`, beside the allowlist, then run `docker compose restart server` in `/opt/aetherframe`. The server reads this setting only when it starts, and refuses to start if it isn't an address and a port. To go back to reaching the Lodestone directly, remove the line and restart again.
 
 ## 3. Running it
 

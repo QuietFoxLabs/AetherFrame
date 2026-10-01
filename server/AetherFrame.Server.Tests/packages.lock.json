@@ -459,13 +459,16 @@
           "SixLabors.ImageSharp": "[3.1.12, )"
         }
       },
+      "aetherframe.lodestonerelay": {
+        "type": "Project"
+      },
       "aetherframe.protocol": {
         "type": "Project"
       },
       "aetherframe.server": {
         "type": "Project",
         "dependencies": {
-          "AetherFrame.Protocol": "[0.1.6, )",
+          "AetherFrame.Protocol": "[0.1.7, )",
           "AngleSharp": "[1.8.2, )",
           "Microsoft.Data.Sqlite": "[10.0.12, )"
         }
