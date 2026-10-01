@@ -58,8 +58,9 @@ public static class PackageValidator
     private static readonly Regex AbsolutePath = new(@"(?<![A-Za-z0-9])[A-Za-z]:[\\/]|\\\\[A-Za-z0-9]|(?<![A-Za-z0-9.])/(home|Users|root|mnt|tmp|var|opt)/", RegexOptions.CultureInvariant);
     private static readonly Regex Sha1 = new(@"^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant);
 
-    // The namespaces of the networking code, which only the plugin's networking preview flavour
-    // compiles in (docs/networking/DecisionRegister.md, D9b and P2). No package may hold them.
+    // The namespaces of the networking code, which the sharing build compiles in and the player
+    // flavour doesn't (docs/networking/DecisionRegister.md, D9b, P2 and "Releases carry sharing").
+    // Which a package must hold, or must not, depends on its version (sharingSince).
     private static readonly string[] NetworkingNamespaces = { "AetherFrame.Protocol", "AetherFrame.Personas" };
 
     public static PackageReport Validate(PackageValidationRequest request, CheckList checks)

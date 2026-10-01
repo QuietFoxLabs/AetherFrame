@@ -77,7 +77,7 @@ internal sealed class FirstRunPromptWindow : Window
         {
             using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextSecondary))
             {
-                ImGui.TextWrapped("AetherFrame designs Plates: character cards that start from the familiar Adventure Plate and can grow into anything you like. Everything stays on your PC.");
+                ImGui.TextWrapped("AetherFrame designs Plates: character cards that start from the familiar Adventure Plate and can grow into anything you like. Your Plates stay on your PC.");
                 ImGui.Spacing();
                 ImGui.TextWrapped("A short guided tour points at the real controls and walks you through creating, editing and saving your first Plate. It takes a few minutes, and you can leave it at any time.");
             }

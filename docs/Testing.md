@@ -74,7 +74,7 @@ Ideas are welcome too, as a [feature request](https://github.com/QuietFoxLabs/Ae
 
 - Deleted Plates can't be restored from inside AetherFrame yet.
 - Imported images that are no longer used aren't cleaned up automatically.
-- Plates are local only. There's no sharing between players yet.
+- Sharing is an alpha. If the Lodestone check says it didn't pass although the code is on your Lodestone profile and saved, the server may not have reached the Lodestone: try again a little later, and report it if it keeps failing.
 - A hand-made Plate file with thousands of elements or megabytes of text is loaded as it is (the editor and packages stop at 256 elements) and can make the editor slow. Keep such experiments out of the `Profiles` folder.
 
 The [changelog](../CHANGELOG.md) lists what changed in each version. The reliability milestone's in-game checks, the ones no automated test can run, are listed in [ManualAcceptance-0.1.6.md](ManualAcceptance-0.1.6.md).

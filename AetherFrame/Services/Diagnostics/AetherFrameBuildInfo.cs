@@ -76,11 +76,11 @@ internal sealed record AetherFrameBuildInfo(string Version, string? Revision)
     /// <summary>"AetherFrame 0.1.0".</summary>
     internal string DisplayName => $"AetherFrame {Version}";
 
-    /// <summary>"AetherFrame 0.1.0 (build 1bf26e1)", or just the display name without a revision; the preview flavour adds "[network preview]".</summary>
+    /// <summary>"AetherFrame 0.1.0 (build 1bf26e1)", or just the display name without a revision; the sharing build adds "[sharing]".</summary>
     internal string Describe()
     {
         var text = Revision is null ? DisplayName : $"{DisplayName} (build {Revision})";
-        return NetworkPreview ? text + " [network preview]" : text;
+        return NetworkPreview ? text + " [sharing]" : text;
     }
 
     private static bool IsCommitId(string text)

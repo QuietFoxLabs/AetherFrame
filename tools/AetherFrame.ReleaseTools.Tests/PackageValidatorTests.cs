@@ -566,7 +566,7 @@ public class PackageValidatorTests
     public void ASharingSinceThatIsNotAVersion_IsRefused(string value)
     {
         var json = TestPackages.ConfigJson().Replace("\"dalamudApiLevel\"", "\"sharingSince\": " + value + ",\n  \"dalamudApiLevel\"", StringComparison.Ordinal);
-        Assert.ThrowsAny<Exception>(() => TestPackages.Configuration(json));
+        Assert.Throws<ReleaseCheckException>(() => TestPackages.Configuration(json));
     }
 
     [Fact]

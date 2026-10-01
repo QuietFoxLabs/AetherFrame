@@ -15,7 +15,7 @@ Testers follow [Testing](Testing.md).
 ## Making a release
 
 1. Finish the milestone on `master` as [Versioning](Versioning.md) describes, with `Version.props` set to the new version.
-2. Move the `## [Unreleased]` notes in [CHANGELOG.md](../CHANGELOG.md) under `## [<version>] - <date>` and add its compare link. The release fails without that section, or with one over 16,384 characters (Dalamud's limit for the repository's changelog). Notes about code the release doesn't carry can stay under `[Unreleased]`, as 0.1.7's networking notes did. Since October 1, 2026, releases carry sharing: `distribution/repository.json`'s `sharingSince` is `"0.1.8"`, and the package check refuses a release from that version on without the sharing code, and one before it with any (DecisionRegister.md, "Releases carry sharing"). A release without networking code would need `sharingSince` moved past it and a build with `-p:AetherFrameNetworkPreview=false`.
+2. Move the `## [Unreleased]` notes in [CHANGELOG.md](../CHANGELOG.md) under `## [<version>] - <date>` and add its compare link. The release fails without that section, or with one over 16,384 characters (Dalamud's limit for the repository's changelog). Notes about code the release doesn't carry can stay under `[Unreleased]`, as 0.1.7's networking notes did. Since October 1, 2026, releases carry sharing: `distribution/repository.json`'s `sharingSince` is `"0.1.8"`, and the package check refuses a release from that version on without the sharing code, and one before it with any (DecisionRegister.md, "Releases carry sharing"). `sharingSince` is a single boundary, so a later release without networking code would need the check to take a version range or list first: moving `sharingSince` past it would make 0.1.8 and later count as player releases, and a publication that still lists them would fail.
 3. Regenerate the dry-run repository fixture for the new version and commit it with steps 1 and 2 ([command](../distribution/dry-run/README.md#regenerating)). The tooling tests fail while `distribution/dry-run/pluginmaster.json` describes another version or another CHANGELOG text, so the Build workflow and a tagged Release would fail without it, and a tag is never moved.
 4. Optional dry run: **Actions → Release → Run workflow** on `master`. It builds, tests and checks the package and keeps it as a workflow artifact, without creating a release.
 5. Tag and push the tag (only after the Build workflow passed on that commit):
@@ -152,7 +152,8 @@ Adds AetherFrame to testing/live.
 AetherFrame lets players design character Plates: an Adventure Plate-style Basic Editor, a freeform
 Advanced Editor, a local My Plates library, and a Plate Viewer (/af view). Editing is local, with
 no account and no data collection. Optional sharing, off until a player turns it on for a character,
-sends that character's Active Plate to AetherFrame's server so other players who share can view it.
+sends that character's name, World, Lodestone id and Active Plate to AetherFrame's server so other
+players who share can view it; viewing a Plate sends the name and World looked up.
 
 Source: https://github.com/QuietFoxLabs/AetherFrame
 Changelog: https://github.com/QuietFoxLabs/AetherFrame/blob/master/CHANGELOG.md

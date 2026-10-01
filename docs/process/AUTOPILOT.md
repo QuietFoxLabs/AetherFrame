@@ -110,9 +110,9 @@ On September 30, 2026 the owner asked, in chat, that whenever a milestone is com
 
 **When:** after each merge that changes the plugin, once that session's merges are done, so a batch of merges makes one build. A merge that only changes documents, tooling, tests or the server makes none. A newer build supersedes the one before it; say so in the new post.
 
-1. **Build.** Make a detached worktree at the `master` commit and run the full CI-equivalent checks. The player package is `AetherFrame/bin/x64/Release/AetherFrame/latest.zip` and holds three files. For a preview build, see [Preview test builds](#preview-test-builds).
-2. **Warn first when the game is running.** A reload closes AetherFrame's windows, and the plugin keeps no copy of an editor's unsaved changes when it unloads, so they are lost. If `ffxiv_dx11` is running, first send a PushNotification: `AetherFrame <sha> goes in game in 2 minutes: save any open Plate editor`. Then install with `-GraceSeconds 120`, which waits whenever a reload may happen, including when Dalamud's settings can't be read. Run it with the tool's longest timeout (600000 ms), so a timeout can never cut the DLL's copy short. The owner's September 29 confirmation that installing with the game open "doesn't affect it" dates from when nothing reloaded; it doesn't cover this.
-3. **Install** with `tools/Install-TestBuild.ps1 -Package <latest.zip or folder> -BuildId <short sha> -Flavour <Player or Preview> [-GraceSeconds 120]`, run with `powershell -NoProfile -ExecutionPolicy Bypass -File`. The script:
+1. **Build.** Make a detached worktree at the `master` commit and run the full CI-equivalent checks. The package is `AetherFrame/bin/x64/Release/AetherFrame/latest.zip` and holds three files. Since October 1, 2026 ("Releases carry sharing" in the register) the default build is the sharing build, which the script calls `Preview`; before that change reaches `master`, see [Preview test builds](#preview-test-builds).
+2. **No warning wait.** The owner said on October 1, 2026, in chat, "no need to wait 2 mins": install straight away, without `-GraceSeconds`, even while the game runs. A reload still closes AetherFrame's windows and loses an open editor's unsaved changes, so the PushNotification after the install says the build is in. Run the script with the tool's longest timeout (600000 ms), so a timeout can never cut the DLL's copy short.
+3. **Install** with `tools/Install-TestBuild.ps1 -Package <latest.zip or folder> -BuildId <short sha> -Flavour <Player or Preview>` (`Preview` for the sharing build), run with `powershell -NoProfile -ExecutionPolicy Bypass -File`. The script:
    - refuses a zip that isn't exactly the three plugin files, a folder missing one of them, and a DLL of the other flavour;
    - stages the build in `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>[ preview]\` with `SHA256SUMS.txt`;
    - backs up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder, which keeps a `.partial` name until it is complete. The backup:
@@ -137,9 +137,11 @@ On September 30, 2026 the owner asked, in chat, that whenever a milestone is com
 
 **Release candidates.** When a milestone is ready to ship:
 - First merge a release-prep PR: `Version.props`, CHANGELOG, and the dry-run fixture ([Releasing](../Releasing.md), steps 1 to 3).
-- Then build the test build from that merge, and call it the release candidate for `vX.Y.Z` in the post. It is a player build, and it holds the folder until the owner's verdict on it.
+- Then build the test build from that merge, and call it the release candidate for `vX.Y.Z` in the post. From 0.1.8 on it is the default build, the sharing build (the package check holds a release to the flavour `sharingSince` gives its version), installed with `-Flavour Preview`, and it holds the folder until the owner's verdict on it. The owner must pass that same build, so never a player build in its place.
 
 ## Preview test builds
+
+Since October 1, 2026 the sharing build is the default build, so on a `master` that has that change, a test build is simply the default build's `latest.zip`, installed with `-Flavour Preview`, and this section's separate preview build is no longer needed. It stays for older commits.
 
 A preview build is the networking preview flavour (`-p:AetherFrameNetworkPreview=true`): every player feature plus the networking increments merged so far, sending nothing until the transport exists. It replaces the player build in the folder, since two builds with one internal name must never run side by side: Dalamud would load both, and they would share the plugin's data. So:
 
