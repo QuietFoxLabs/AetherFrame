@@ -52,6 +52,11 @@ internal sealed class ServedPlatePresentation : IPlatePresentation, IDisposable
         get
         {
             var view = viewing.View;
+            if (!viewing.CanView)
+            {
+                return view.Failure == ViewFailure.TakenOver ? FailureText(ViewFailure.TakenOver) + "\n\n" + PlateViewerWindow.NotSharing : PlateViewerWindow.NotSharing;
+            }
+
             var who = view.Target is { } target ? target.Name + " (" + target.World + ")" : "That player";
             var text = view.Stage switch
             {
@@ -65,7 +70,7 @@ internal sealed class ServedPlatePresentation : IPlatePresentation, IDisposable
         }
     }
 
-    public string? MessageAction => viewing.View.Stage switch
+    public string? MessageAction => !viewing.CanView ? null : viewing.View.Stage switch
     {
         ViewStage.Hidden => "Show their Plate again",
         ViewStage.Failed when viewing.View.Failure is not (ViewFailure.NotSharing or ViewFailure.TakenOver) => "Try again",
@@ -98,8 +103,9 @@ internal sealed class ServedPlatePresentation : IPlatePresentation, IDisposable
 
     public bool TryGetBounds(out CanvasBounds bounds, out Vector2 canvasSize)
     {
+        // Viewing is part of sharing (V1): once no character shares, nothing received stays shown.
         var view = viewing.View;
-        if (view.Stage == ViewStage.Shown && view.Plate is { } viewed)
+        if (viewing.CanView && view.Stage == ViewStage.Shown && view.Plate is { } viewed)
         {
             if (!ReferenceEquals(shown?.Plate, viewed))
             {
@@ -122,7 +128,8 @@ internal sealed class ServedPlatePresentation : IPlatePresentation, IDisposable
     {
         if (shown is { } current)
         {
-            ServedPlatePainter.Draw(drawList, current.Plate.Plate, canvasOrigin, scale, clipMin, clipMax, resources, imageOf);
+            // As the Plate Viewer draws a local Plate: no workspace backdrop, so the game shows through.
+            ServedPlatePainter.Draw(drawList, current.Plate.Plate, canvasOrigin, scale, clipMin, clipMax, resources, imageOf, drawBackdrop: false);
         }
     }
 
