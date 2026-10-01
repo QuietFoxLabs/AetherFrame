@@ -65,7 +65,7 @@ if (args is ["admin", .. var command])
     }
 
     var adminDatabase = new ServerDatabase(Options.Create(adminOptions), Microsoft.Extensions.Logging.Abstractions.NullLogger<ServerDatabase>.Instance);
-    return await AdminCommands.RunAsync(command, adminDatabase, new BindingStore(adminDatabase, TimeProvider.System), Console.Out, adminOptions.AllowedLodestoneIds);
+    return await AdminCommands.RunAsync(command, adminDatabase, new BindingStore(adminDatabase, TimeProvider.System), Console.Out, adminOptions.AllowedLodestoneIds, adminOptions.IsOpen);
 }
 
 // Decision S5: nothing that logs a request's URL, address or headers. ASP.NET Core's hosting

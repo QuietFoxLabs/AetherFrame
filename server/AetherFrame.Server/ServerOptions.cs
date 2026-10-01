@@ -37,6 +37,17 @@ public sealed class ServerOptions
     public List<string> AllowedLodestoneIds { get; set; } = [];
 
     /// <summary>
+    /// The open alpha (the owner's direction of October 1, 2026): any character with a passing
+    /// Lodestone check may bind, publish and view, and <see cref="AllowedLodestoneIds"/> no longer
+    /// limits who. It takes effect only with I2's per-job isolation (<see cref="ImageWorkerRuns"/>),
+    /// or with no image worker at all, which refuses every image (<see cref="IsOpen"/>).
+    /// </summary>
+    public bool OpenToEveryone { get; set; }
+
+    /// <summary>Whether the server is open to everyone now: <see cref="OpenToEveryone"/>, with I2's condition met.</summary>
+    internal bool IsOpen => OpenToEveryone && (ImageWorkerRuns.Length > 0 || ImageWorkerSocket.Length == 0);
+
+    /// <summary>
     /// The addresses of the reverse proxy (Caddy, N2-8) whose forwarded headers are trusted. Only
     /// loopback when empty (decision R4).
     /// </summary>
@@ -158,6 +169,11 @@ public sealed class ServerOptions
         if (AllowedLodestoneIds.Any(text => !Lodestone.LodestoneIds.TryParse(text, out _)))
         {
             throw new InvalidOperationException("AetherFrame:AllowedLodestoneIds holds a value that is not a Lodestone id.");
+        }
+
+        if (OpenToEveryone && !IsOpen)
+        {
+            throw new InvalidOperationException("AetherFrame:OpenToEveryone needs AetherFrame:ImageWorkerRuns: decision I2 opens a server only with per-job isolation of its image worker.");
         }
 
         if (KnownProxies.Any(text => !System.Net.IPAddress.TryParse(text, out _)))
