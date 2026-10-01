@@ -129,8 +129,7 @@ internal sealed class ProfileFontService : IDisposable
     private IFontHandle GetHandleCore(string? familyId, float requestedPixelSize, bool bold, bool italic)
     {
         var descriptor = ProfileFontCatalog.Resolve(familyId);
-        var effectiveBold = bold && descriptor.SupportsBold;
-        var effectiveItalic = italic && descriptor.SupportsItalic;
+        var (effectiveBold, effectiveItalic) = FontLibrary.EffectiveStyle(descriptor.Id, bold, italic, descriptor.SupportsBold, descriptor.SupportsItalic);
 
         var tierIndex = FontTierPolicy.FindTierIndex(descriptor.Id, requestedPixelSize);
 
@@ -200,10 +199,11 @@ internal sealed class ProfileFontService : IDisposable
             }
 
             var descriptor = ProfileFontCatalog.Resolve(text.FontFamily);
-            var effectiveBold = text.Bold && descriptor.SupportsBold;
-            var effectiveItalic = text.Italic && descriptor.SupportsItalic;
+            var (effectiveBold, effectiveItalic) = FontLibrary.EffectiveStyle(descriptor.Id, text.Bold, text.Italic, descriptor.SupportsBold, descriptor.SupportsItalic);
 
-            if (warmedCombos.Add((descriptor.Id, effectiveBold, effectiveItalic)))
+            // A library family warms only the tier its text uses: a Plate (a shared one above all)
+            // may name dozens of library families, and six sizes of each would crowd the atlas.
+            if (!FontTierPolicy.UsesFallback(descriptor.Id) && warmedCombos.Add((descriptor.Id, effectiveBold, effectiveItalic)))
             {
                 // The common baseline (covers most zoom/view-scale variations of this combo)...
                 WarmSizes(descriptor.Id, effectiveBold, effectiveItalic, FontTierPolicy.CommonEditorSizes);
@@ -291,6 +291,16 @@ internal sealed class ProfileFontService : IDisposable
             toolkit.Font = resourceName is not null
                 ? toolkit.AddFontFromMemory(GetEmbeddedFontBytes(resourceName), config, resourceName)
                 : toolkit.AddDalamudDefaultFont(sizePx);
+
+            // A library family draws a character it lacks (an accented letter in a display face,
+            // say) in AetherFrame Sans of the same style, rather than as "?": ImGui merges only the
+            // codepoints the family doesn't map.
+            if (FontTierPolicy.UsesFallback(descriptor.Id))
+            {
+                var fallbackName = FaceResourceName("PTSans", bold, italic);
+                var fallback = new SafeFontConfig { SizePx = sizePx, GlyphRanges = FontTierPolicy.FallbackGlyphRanges, MergeFont = toolkit.Font };
+                toolkit.AddFontFromMemory(GetEmbeddedFontBytes(fallbackName), fallback, fallbackName);
+            }
         }));
 
     /// <summary>Maps a curated family id + real style to its embedded TTF's logical resource
@@ -301,6 +311,7 @@ internal sealed class ProfileFontService : IDisposable
         ProfileFontFamilies.AetherFrameSans => FaceResourceName("PTSans", bold, italic),
         ProfileFontFamilies.AetherFrameSerif => FaceResourceName("PTSerif", bold, italic),
         ProfileFontFamilies.AetherFrameMono => FaceResourceName("Cousine", bold, italic),
+        _ when FontLibrary.Find(familyId) is { } library => FontLibrary.ResourceName(library, FontLibrary.FaceStyle(library, bold, italic)),
         _ => null,
     };
 

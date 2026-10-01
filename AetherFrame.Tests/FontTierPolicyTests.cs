@@ -518,7 +518,7 @@ public class FontTierPolicyTests
     /// skyline bottom-left with the rects sorted by height, then width, both descending): each
     /// rect goes where it sits lowest, the leftmost such place on a tie.
     /// </summary>
-    private static int PackedHeight(IReadOnlyList<(int Width, int Height)> rects, int width)
+    internal static int PackedHeight(IReadOnlyList<(int Width, int Height)> rects, int width)
     {
         // The skyline: (x, y) steps, each running to the next one's x (the last to the width).
         var skyline = new List<(int X, int Y)> { (0, 0) };
@@ -574,7 +574,7 @@ public class FontTierPolicyTests
     /// (h + padding + oversample - 1) with padding 1 and oversample 1 (Dalamud's SafeFontConfig
     /// defaults).
     /// </summary>
-    private sealed class TrueTypeFace
+    internal sealed class TrueTypeFace
     {
         private readonly int ascentMinusDescent;
         private readonly (short X0, short Y0, short X1, short Y1)?[] boxes;
@@ -690,8 +690,32 @@ public class FontTierPolicyTests
                 }
             }
 
-            Assert.Equal(4, U16(b, sub));
             var map = new Dictionary<int, int>();
+            if (U16(b, sub) == 12)
+            {
+                // Some library faces carry a format 12 table (whole Unicode); within U+0001 to
+                // U+FFFE, which is all the ranges reach, it maps what a format 4 table would.
+                var groups = U32(b, sub + 12);
+                for (var group = 0; group < groups; group++)
+                {
+                    var at = sub + 16 + (12 * group);
+                    var first = U32(b, at);
+                    var last = U32(b, at + 4);
+                    var glyph0 = U32(b, at + 8);
+                    for (var c = first; c <= last && c <= 0xFFFE; c++)
+                    {
+                        var glyph = (int)(glyph0 + (c - first));
+                        if (glyph != 0 && glyph < numGlyphs)
+                        {
+                            map[(int)c] = glyph;
+                        }
+                    }
+                }
+
+                return new TrueTypeFace(ascent - descent, boxes, map);
+            }
+
+            Assert.Equal(4, U16(b, sub));
             var segX2 = U16(b, sub + 6);
             var seg = segX2 / 2;
             var endsAt = sub + 14;

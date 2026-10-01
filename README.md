@@ -270,7 +270,7 @@ Issues are public, so leave out character names and anything else you'd rather k
 
 AetherFrame is licensed under the [GNU Affero General Public License v3.0](LICENSE.md).
 
-Bundled fonts are licensed separately under the SIL Open Font License 1.1. See `AetherFrame/Fonts/THIRD-PARTY-FONT-LICENSES.txt`.
+Bundled fonts are licensed separately: AetherFrame's own three families under the SIL Open Font License 1.1 (`AetherFrame/Fonts/THIRD-PARTY-FONT-LICENSES.txt`), and the font library's Google Fonts families each under the SIL Open Font License 1.1 or the Apache License 2.0 (`AetherFrame/Fonts/Library/THIRD-PARTY-FONT-LICENSES.txt`).
 
 ## Links
 
