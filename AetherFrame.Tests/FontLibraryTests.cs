@@ -191,6 +191,57 @@ public partial class FontLibraryTests
     }
 
     [Fact]
+    public void EveryFace_CentresItsCapitals_WhereAetherFrameSansDoes()
+    {
+        // The owner's report of October 1, 2026: some library fonts sat high in the name box, out
+        // of line with the name backing. Each face's shift moves the middle of its capitals to
+        // where AetherFrame Sans of the same style has them, to within rounding, so the generated
+        // table can't drift from the files.
+        var moved = 0;
+        foreach (var family in FontLibrary.Families)
+        {
+            foreach (var style in Styles(family))
+            {
+                var (face, fallback, _) = Load(family, style);
+                var shift = family.Shifts.Of(style);
+                Assert.True(face.CapCentre is not null, $"{family.DisplayName} {style} has no 'H'");
+                var centred = face.CapCentre!.Value + shift;
+                Assert.True(Math.Abs(centred - fallback.CapCentre!.Value) <= 0.0006, $"{family.DisplayName} {style}: capitals centred at {centred:F4} of the line, AetherFrame Sans's at {fallback.CapCentre:F4}");
+                if (Math.Abs(shift) >= 0.03f)
+                {
+                    moved++;
+                }
+            }
+        }
+
+        // The faces the report was about: Josefin Sans, for one, sat its capitals 13% of the font size high.
+        Assert.True(FontLibrary.Find("gf-josefin-sans")!.Shifts.Regular > 0.1f);
+        Assert.True(moved > 50, $"only {moved} faces move by 3% of the font size or more");
+    }
+
+    [Fact]
+    public void TheShift_IsTheDrawnFaces_AndNoneForAetherFramesOwnFamilies()
+    {
+        // A style the family has no face for draws with the nearest face, and moves as that face does.
+        var cinzel = FontLibrary.Find("gf-cinzel")!;
+        Assert.Equal(cinzel.Shifts.Regular, FontLibrary.VerticalShift(cinzel.Id, false, true));
+        Assert.Equal(cinzel.Shifts.Bold, FontLibrary.VerticalShift(cinzel.Id, true, true));
+        var lora = FontLibrary.Find("gf-lora")!;
+        Assert.Equal(lora.Shifts.BoldItalic, FontLibrary.VerticalShift(lora.Id, true, true));
+        Assert.Equal(lora.Shifts.Italic, FontLibrary.VerticalShift(lora.Id, false, true));
+
+        // Every Plate made with AetherFrame's own families or Dalamud Default draws exactly as before.
+        foreach (var descriptor in ProfileFontCatalog.All.Where(d => FontLibrary.Find(d.Id) is null))
+        {
+            Assert.Equal(0f, FontLibrary.VerticalShift(descriptor.Id, true, true));
+            Assert.Equal(0f, FontLibrary.VerticalShift(descriptor.Id, false, false));
+        }
+
+        Assert.Equal(0f, FontLibrary.VerticalShift(null, false, false));
+        Assert.Equal(0f, FontLibrary.VerticalShift("gf-no-such-family", false, false));
+    }
+
+    [Fact]
     public void EveryFamilysNotice_CarriesItsCopyright()
     {
         // Apache's section 4 and the OFL both travel with the copyright notice: each family's

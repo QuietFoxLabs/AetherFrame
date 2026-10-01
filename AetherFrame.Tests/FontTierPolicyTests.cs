@@ -576,16 +576,28 @@ public class FontTierPolicyTests
     /// </summary>
     internal sealed class TrueTypeFace
     {
+        private readonly int ascent;
         private readonly int ascentMinusDescent;
         private readonly (short X0, short Y0, short X1, short Y1)?[] boxes;
         private readonly Dictionary<int, int> codepointToGlyph;
 
-        private TrueTypeFace(int ascentMinusDescent, (short, short, short, short)?[] boxes, Dictionary<int, int> map)
+        private TrueTypeFace(int ascent, int ascentMinusDescent, (short, short, short, short)?[] boxes, Dictionary<int, int> map)
         {
+            this.ascent = ascent;
             this.ascentMinusDescent = ascentMinusDescent;
             this.boxes = boxes;
             codepointToGlyph = map;
         }
+
+        /// <summary>
+        /// The middle of the capitals (the baseline to the top of 'H'), from the top of the box ImGui
+        /// draws the face in (ascent to descent, the font size tall), as a fraction of its height;
+        /// null when the face has no 'H'.
+        /// </summary>
+        internal double? CapCentre =>
+            codepointToGlyph.TryGetValue('H', out var glyph) && boxes[glyph] is { } box
+                ? (ascent - (box.Y1 / 2.0)) / ascentMinusDescent
+                : null;
 
         internal bool Maps(int codepoint) => codepointToGlyph.ContainsKey(codepoint);
 
@@ -712,7 +724,7 @@ public class FontTierPolicyTests
                     }
                 }
 
-                return new TrueTypeFace(ascent - descent, boxes, map);
+                return new TrueTypeFace(ascent, ascent - descent, boxes, map);
             }
 
             Assert.Equal(4, U16(b, sub));
@@ -751,7 +763,7 @@ public class FontTierPolicyTests
                 }
             }
 
-            return new TrueTypeFace(ascent - descent, boxes, map);
+            return new TrueTypeFace(ascent, ascent - descent, boxes, map);
         }
 
         private static int U16(byte[] b, int o) => (b[o] << 8) | b[o + 1];

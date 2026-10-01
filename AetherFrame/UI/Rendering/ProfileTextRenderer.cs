@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Domain.Rendering;
 using AetherFrame.Services.Fonts;
 using Dalamud.Bindings.ImGui;
 
@@ -476,7 +477,10 @@ internal static class ProfileTextRenderer
         var lines = layout.Lines;
         var blockHeight = ((lines.Count - 1) * lineHeight) + renderedFontSize;
 
-        var top = element.VerticalAlignment switch
+        // A library face sits its capitals where AetherFrame Sans would (FaceShifts), so a name
+        // lines up with what is drawn behind it whichever font it uses.
+        var shift = FontLibrary.VerticalShift(element.FontFamily, element.Bold, element.Italic) * renderedFontSize;
+        var top = shift + element.VerticalAlignment switch
         {
             TextVerticalAlignment.Middle => screenPos.Y + ((screenSize.Y - blockHeight) / 2f),
             TextVerticalAlignment.Bottom => screenPos.Y + screenSize.Y - padding - blockHeight,
@@ -492,9 +496,13 @@ internal static class ProfileTextRenderer
             : (Vector2?)null;
 
         // Clip to the element box, grown by whatever the effects extend past the glyphs, so an
-        // outline or shadow on text touching the box edge isn't sliced off.
+        // outline or shadow on text touching the box edge isn't sliced off, and by the shift on the
+        // side it moves the text towards, so a face's own descenders are cut no more than before.
         var effectMargin = outlineThickness + (shadowOffset is { } s ? Math.Max(Math.Abs(s.X), Math.Abs(s.Y)) : 0f);
-        drawList.PushClipRect(screenPos - new Vector2(effectMargin), screenPos + screenSize + new Vector2(effectMargin), true);
+        drawList.PushClipRect(
+            screenPos - new Vector2(effectMargin, effectMargin + Math.Max(0f, -shift)),
+            screenPos + screenSize + new Vector2(effectMargin, effectMargin + Math.Max(0f, shift)),
+            true);
 
         var context = new DrawContext(drawList, font, element, content, lines, screenPos, screenSize, scale, renderedFontSize, bakedFontSize, padding, lineHeight, top, layout.BlockWidth * scale);
         var outlineOffsets = outlineThickness > 0f ? GetOutlineOffsets(outlineThickness) : null;
