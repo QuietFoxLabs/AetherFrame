@@ -123,7 +123,7 @@ internal sealed class EditorActionBar
         var (stateText, stateColor) = SaveState();
         var buttonsWidth = ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
             + (style.ItemSpacing.X * 3f)
-            + (Help is null ? 0f : frame + style.ItemSpacing.X);
+            + (Help is null ? 0f : HelpMenu.ButtonWidth + style.ItemSpacing.X);
         var widestState = Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
 
         var rows = EditorActionBarLayout.ArrangeRows(

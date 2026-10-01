@@ -327,6 +327,30 @@ public sealed class ImagePreparationTests
         Assert.False(await ImagePreparer.SelfTestAsync(new FakeCodec { Encoder = (_, _, _, _) => null }, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task AFailedKnownAnswerCheck_IsDiagnosedStepByStep()
+    {
+        // A pipeline that passes says so at every step.
+        var healthy = await ImagePreparer.DiagnoseAsync(new FakeCodec(), CancellationToken.None);
+        Assert.Contains("known PNG decoded: 4x2, pitch 16, DXGI format 28", healthy, StringComparison.Ordinal);
+        Assert.Contains("as expected", healthy, StringComparison.Ordinal);
+        Assert.Contains("PNG encoded: ", healthy, StringComparison.Ordinal);
+        Assert.Contains("chunks IHDR(13)", healthy, StringComparison.Ordinal);
+        Assert.Contains("sniffed Png 4x2", healthy, StringComparison.Ordinal);
+        Assert.Contains("JPEG encoded: ", healthy, StringComparison.Ordinal);
+        Assert.Contains("markers D8 E0", healthy, StringComparison.Ordinal);
+        Assert.Contains("sniffed Jpeg 8x8", healthy, StringComparison.Ordinal);
+
+        // A decoder that premultiplies shows its pixels against the expected ones.
+        var premultiplied = await ImagePreparer.DiagnoseAsync(new FakeCodec { Premultiplies = true }, CancellationToken.None);
+        Assert.Contains(", expected ", premultiplied, StringComparison.Ordinal);
+
+        // An encoder that fails, or adds a chunk, says which.
+        Assert.Contains("PNG encoded: failed", await ImagePreparer.DiagnoseAsync(new FakeCodec { Encoder = (_, _, _, _) => null }, CancellationToken.None), StringComparison.Ordinal);
+        var chunk = await ImagePreparer.DiagnoseAsync(new FakeCodec { Encoder = (rgba, w, h, format) => format == ImageFormat.Png ? PngWith(Chunk("tEXt", KeyedText()), w, h, rgba) : Jpeg(w, h) }, CancellationToken.None);
+        Assert.Contains("tEXt(", chunk, StringComparison.Ordinal);
+    }
+
     private static readonly Guid Photo = Guid.NewGuid();
 
     private static int Premultiplied(int channel, int alpha) => ((2 * channel * alpha) + 255) / 510;

@@ -42,6 +42,13 @@ internal interface IImageCodec
     Task<byte[]?> EncodeAsync(ReadOnlyMemory<byte> rgba, int width, int height, ImageFormat format, CancellationToken cancellation);
 }
 
+/// <summary>A codec that can say, for the log, how its last failure ended: an exception's kind and HRESULT, never its text.</summary>
+internal interface IImageCodecFailures
+{
+    /// <summary>The last failure, or null when there was none.</summary>
+    string? LastFailure { get; }
+}
+
 /// <summary>The managed images' files, read whole.</summary>
 internal interface IManagedImages
 {
@@ -241,15 +248,7 @@ internal static class ImagePreparer
             return false;
         }
 
-        var expected = new byte[pixels.Length];
-        for (var index = 0; index < pixels.Length; index += 4)
-        {
-            var alpha = pixels[index + 3];
-            (expected[index], expected[index + 1], expected[index + 2], expected[index + 3]) =
-                (Clear(pixels[index], alpha), Clear(pixels[index + 1], alpha), Clear(pixels[index + 2], alpha), alpha);
-        }
-
-        if (!roundTrip.AsSpan().SequenceEqual(expected))
+        if (!roundTrip.AsSpan().SequenceEqual(Cleared(pixels)))
         {
             return false;
         }
@@ -384,6 +383,157 @@ internal static class ImagePreparer
         }
 
         return crc;
+    }
+
+    /// <summary>
+    /// Where the known-answer check went wrong, step by step, for the log once it has failed: each
+    /// step's formats, sizes, PNG chunks or JPEG segments, and the known image's own pixels, so one
+    /// failure in game says what the texture pipeline did. It holds nothing of a player's. A
+    /// codec failure is named by <see cref="IImageCodecFailures"/>: an exception's kind, never its
+    /// text.
+    /// </summary>
+    internal static async Task<string> DiagnoseAsync(IImageCodec codec, CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(codec);
+        var (width, height, pixels) = KnownImage();
+        var expected = Cleared(pixels);
+        var notes = new List<string>();
+
+        var decoded = await codec.DecodeAsync(KnownPng(), cancellation).ConfigureAwait(false);
+        var known = "known PNG decoded: " + Describe(decoded, codec);
+        if (decoded is not null && !ReferenceEquals(decoded, DecodedImage.ReadBackFailed))
+        {
+            known += ", first bytes " + Convert.ToHexString(decoded.Pixels.AsSpan(0, Math.Min(decoded.Pixels.Length, 32)));
+            known += TryCrop(decoded, PixelWindow.Whole(width, height), out var cropped, out _)
+                ? ", cleared " + Convert.ToHexString(cropped) + (cropped.AsSpan().SequenceEqual(expected) ? " as expected" : ", expected " + Convert.ToHexString(expected))
+                : ", its format refused";
+        }
+
+        notes.Add(known);
+        notes.Add(await DescribeEncodingAsync(expected, width, height, ImageFormat.Png, codec, cancellation).ConfigureAwait(false));
+
+        var opaque = new byte[8 * 8 * 4];
+        for (var index = 0; index < opaque.Length; index += 4)
+        {
+            (opaque[index], opaque[index + 1], opaque[index + 2], opaque[index + 3]) = (KnownJpegColour.R, KnownJpegColour.G, KnownJpegColour.B, 255);
+        }
+
+        notes.Add(await DescribeEncodingAsync(opaque, 8, 8, ImageFormat.Jpeg, codec, cancellation).ConfigureAwait(false));
+        return string.Join("; ", notes);
+    }
+
+    /// <summary>The known image's pixels as preparation clears them: what its copy must decode back to.</summary>
+    private static byte[] Cleared(byte[] pixels)
+    {
+        var cleared = new byte[pixels.Length];
+        for (var index = 0; index < pixels.Length; index += 4)
+        {
+            var alpha = pixels[index + 3];
+            (cleared[index], cleared[index + 1], cleared[index + 2], cleared[index + 3]) =
+                (Clear(pixels[index], alpha), Clear(pixels[index + 1], alpha), Clear(pixels[index + 2], alpha), alpha);
+        }
+
+        return cleared;
+    }
+
+    /// <summary>One encoding of the diagnosis: what the encoder wrote, whether its container and its sniffed header pass, and what it decodes back to.</summary>
+    private static async Task<string> DescribeEncodingAsync(byte[] rgba, int width, int height, ImageFormat format, IImageCodec codec, CancellationToken cancellation)
+    {
+        var name = format == ImageFormat.Png ? "PNG" : "JPEG";
+        if (await codec.EncodeAsync(rgba, width, height, format, cancellation).ConfigureAwait(false) is not { } encoded)
+        {
+            return name + " encoded: failed" + Failure(codec);
+        }
+
+        var text = name + " encoded: " + encoded.Length + " bytes, " + (format == ImageFormat.Png ? PngChunks(encoded) : JpegSegments(encoded));
+        if (PreparedContainer.Clean(encoded, format) is not { } copy)
+        {
+            return text + ", its container refused";
+        }
+
+        try
+        {
+            var sniffed = ImageSniffer.Sniff(copy);
+            text += ", sniffed " + sniffed.Format + " " + sniffed.Width + "x" + sniffed.Height;
+        }
+        catch (ProtocolException e)
+        {
+            return text + ", refused by the image rule (" + e.Error + ")";
+        }
+
+        var back = await codec.DecodeAsync(copy, cancellation).ConfigureAwait(false);
+        text += ", decoded back: " + Describe(back, codec);
+        if (back is not null && !ReferenceEquals(back, DecodedImage.ReadBackFailed) && TryCrop(back, PixelWindow.Whole(width, height), out var again, out _))
+        {
+            text += ", " + Convert.ToHexString(again.AsSpan(0, Math.Min(again.Length, 32)));
+        }
+
+        return text;
+    }
+
+    private static string Describe(DecodedImage? image, IImageCodec codec) =>
+        image is null ? "no" + Failure(codec)
+        : ReferenceEquals(image, DecodedImage.ReadBackFailed) ? "read-back failed" + Failure(codec)
+        : image.Width + "x" + image.Height + ", pitch " + image.Pitch + ", DXGI format " + image.DxgiFormat;
+
+    private static string Failure(IImageCodec codec) => codec is IImageCodecFailures { LastFailure: { } failure } ? " (" + failure + ")" : "";
+
+    /// <summary>A PNG's chunks in order, with their lengths: the first 24.</summary>
+    private static string PngChunks(byte[] png)
+    {
+        var chunks = new List<string>();
+        var at = 8;
+        while (at + 8 <= png.Length && chunks.Count < 24)
+        {
+            var length = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(at));
+            var type = new char[4];
+            for (var index = 0; index < 4; index++)
+            {
+                var value = png[at + 4 + index];
+                type[index] = value is (>= (byte)'A' and <= (byte)'Z') or (>= (byte)'a' and <= (byte)'z') ? (char)value : '?';
+            }
+
+            chunks.Add(new string(type) + "(" + length + ")");
+            if (length > (uint)(png.Length - at))
+            {
+                break;
+            }
+
+            at += 12 + (int)length;
+        }
+
+        return "chunks " + string.Join(" ", chunks);
+    }
+
+    /// <summary>A JPEG's markers up to its scan, and its last two bytes.</summary>
+    private static string JpegSegments(byte[] jpeg)
+    {
+        if (jpeg.Length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8)
+        {
+            return "no SOI";
+        }
+
+        var markers = new List<string> { "D8" };
+        var at = 2;
+        while (at + 4 <= jpeg.Length && markers.Count < 24)
+        {
+            if (jpeg[at] != 0xFF)
+            {
+                markers.Add("?");
+                break;
+            }
+
+            var marker = jpeg[at + 1];
+            markers.Add(marker.ToString("X2", System.Globalization.CultureInfo.InvariantCulture));
+            if (marker == 0xDA)
+            {
+                break;
+            }
+
+            at += 2 + BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 2));
+        }
+
+        return "markers " + string.Join(" ", markers) + ", ends " + Convert.ToHexString(jpeg.AsSpan(jpeg.Length - 2));
     }
 
     /// <summary>The known image, as the one managed image the check reads.</summary>

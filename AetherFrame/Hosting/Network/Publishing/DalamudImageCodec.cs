@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,10 +22,11 @@ namespace AetherFrame.Hosting.Network.Publishing;
 /// design sets it: a JPEG at quality 0.92 (a float, VT_R4) with 4:2:0 chroma and its JFIF APP0
 /// kept, or a PNG, not interlaced.</item>
 /// </list>
-/// Every failure is a null, never an exception, except a cancellation. Compiled only in the
-/// networking preview flavour.
+/// Every failure is a null, never an exception, except a cancellation, and is remembered by its
+/// exception's kind and HRESULT for the check's diagnosis. Compiled only in the networking preview
+/// flavour.
 /// </summary>
-internal sealed class DalamudImageCodec : IImageCodec
+internal sealed class DalamudImageCodec : IImageCodec, IImageCodecFailures
 {
     // WIC's container formats (wincodec.h): GUID_ContainerFormatPng and GUID_ContainerFormatJpeg.
     private static readonly Guid PngContainer = new("1b7cfaf4-713f-473c-bbcd-6137425faeaf");
@@ -46,12 +48,16 @@ internal sealed class DalamudImageCodec : IImageCodec
 
     private readonly ITextureProvider textures;
     private readonly ITextureReadbackProvider readback;
+    private volatile string? lastFailure;
 
     internal DalamudImageCodec(ITextureProvider textures, ITextureReadbackProvider readback)
     {
         this.textures = textures ?? throw new ArgumentNullException(nameof(textures));
         this.readback = readback ?? throw new ArgumentNullException(nameof(readback));
     }
+
+    /// <inheritdoc/>
+    public string? LastFailure => lastFailure;
 
     public async Task<DecodedImage?> DecodeAsync(ReadOnlyMemory<byte> file, CancellationToken cancellation)
     {
@@ -64,9 +70,10 @@ internal sealed class DalamudImageCodec : IImageCodec
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // The file doesn't decode, as the renderer finds it.
+            Remember("decode", e);
             return null;
         }
 
@@ -81,8 +88,9 @@ internal sealed class DalamudImageCodec : IImageCodec
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                Remember("read-back", e);
                 return DecodedImage.ReadBackFailed;
             }
         }
@@ -102,9 +110,13 @@ internal sealed class DalamudImageCodec : IImageCodec
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Remember("encode", e);
             return null;
         }
     }
+
+    private void Remember(string step, Exception e) =>
+        lastFailure = step + ": " + e.GetType().Name + " 0x" + e.HResult.ToString("X8", CultureInfo.InvariantCulture);
 }

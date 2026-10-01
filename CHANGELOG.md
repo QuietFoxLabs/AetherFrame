@@ -4,7 +4,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ## [Unreleased]
 
-Networking work, compiled only into the networking preview flavour, which is never released. Player builds contain none of it.
+Mostly networking work, compiled only into the networking preview flavour, which is never released. Player builds contain none of it, apart from entries marked "all builds".
 
 ### Added
 
@@ -25,6 +25,13 @@ Networking work, compiled only into the networking preview flavour, which is nev
 - The remote protocol's layout snapshot, which the plugin doesn't use yet (NETWORK2 increment N2-3a; decisions D8, D5, I1, N1 and N7 in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md), and the owner's advance approval of this signed-byte change). A published Plate is now described by ProfileSnapshot schema 2: the canvas size, the background, and the list of what a viewer draws, in order (texts with their resolved display text and style, images, filled quads and triangles, image quads and bundled-art quads), all in fixed-point integers with a limit on every count, length and value, and ranges that cover everything a local Plate can hold. Every image the snapshot carries is drawn and every drawn image is carried, and only PNG and JPEG are allowed. The metadata-only schema 1 stays for tests. The specification gains section 8.5 and Appendix A.
 - The remote protocol's request proof, which the plugin doesn't use yet (NETWORK2 increment N2-3b; decisions S1, D7 and L8 in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md), and the owner's advance approval of this signed-byte change). Submitting a Plate to a server will need a small proof signed by the Plate's own key, in its own signing context: it names the server's address, carries a one-time challenge the server issued, and fingerprints the exact document, so nobody else can submit a copy of a player's Plate, nothing sent to one server works on another, and nothing can be replayed. The specification states the rules every signing context follows, and the test vectors gain valid and rejected proofs.
 - The remote protocol's image rule, which the plugin doesn't use yet (NETWORK2 increment N2-6b, its first part; decisions I1, D5 and I2 in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md)). The publisher, the server and every viewer check a shared image's bytes by one rule before decoding anything: a non-animated, non-interlaced 8-bit truecolour PNG holding only the chunks decoders need, or a JPEG with one baseline, extended or progressive frame, at most 64 scans and only the markers such a JPEG needs, that ends where it says it ends, within the size limits. The specification's section 8.2.1 states the rule exactly, with test vectors.
+
+### Fixed
+
+- All builds: the Help button reads **Help** instead of a "?", which sat off centre in its button. In My Plates it moves to the window's top right corner, after the Plate count; in both editors it stays at the right end of the top bar.
+- From the first sharing test in game, in the networking preview flavour:
+  - AetherFrame no longer shows Dalamud's "error while rendering this plugin" when it starts. A frame could run before sharing's parts were made, so drawing now starts only once everything it uses exists.
+  - When image preparation's check fails, the log now says which step failed and what the game's texture pipeline did. It describes only the check's own test image.
 
 ## [0.1.7] - 2026-09-30
 

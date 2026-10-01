@@ -12,7 +12,7 @@ using Dalamud.Interface.Utility.Raii;
 namespace AetherFrame.Windows.Tutorial;
 
 /// <summary>
-/// The Help menu behind the "?" button in My Plates and both editors: the tutorial (start,
+/// The Help menu behind the Help button in My Plates and both editors: the tutorial (start,
 /// resume, restart, a chapter to jump to), the keyboard shortcuts, the chat commands and the
 /// running build. One instance, shared by every window that shows the button; each window draws
 /// the button (and the popup right after it, in the same id scope) with <see cref="DrawButton"/>.
@@ -22,6 +22,9 @@ namespace AetherFrame.Windows.Tutorial;
 internal sealed class HelpMenu
 {
     private const string PopupSuffix = "##AetherFrameHelpMenu";
+
+    /// <summary>The button's text: a word, which reads more clearly than a glyph and sits centred in its button.</summary>
+    internal const string Label = "Help";
 
     private static readonly string OpenCommandMeaning = "Open or close My Plates (also " + AetherFrameCommand.Name + ")";
     private static readonly string ViewCommand = AetherFrameCommand.Alias + " " + AetherFrameCommand.ViewArgument;
@@ -46,15 +49,18 @@ internal sealed class HelpMenu
         }
     }
 
+    /// <summary>The Help button's width, for a window that places it at its right edge.</summary>
+    internal static float ButtonWidth => ImGui.CalcTextSize(Label).X + (ImGui.GetStyle().FramePadding.X * 2f);
+
     /// <summary>
-    /// The "?" button and, when clicked, its popup. <paramref name="id"/> keeps the popup unique
+    /// The Help button and, when clicked, its popup. <paramref name="id"/> keeps the popup unique
     /// per window; <paramref name="target"/> marks the button for the tutorial (My Plates' is the
     /// one the tour points at).
     /// </summary>
     internal void DrawButton(string id, TutorialTarget target = TutorialTarget.None)
     {
         var popupId = id + PopupSuffix;
-        if (EditorWidgets.IconButton(id, FontAwesomeIcon.QuestionCircle, "Help: the tutorial, shortcuts and commands"))
+        if (AetherControls.SecondaryButton(Label + "##" + id, tooltip: "The tutorial, keyboard shortcuts and chat commands"))
         {
             ImGui.OpenPopup(popupId);
         }

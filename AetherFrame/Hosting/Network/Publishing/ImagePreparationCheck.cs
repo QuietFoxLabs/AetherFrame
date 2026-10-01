@@ -12,7 +12,9 @@ namespace AetherFrame.Hosting.Network.Publishing;
 /// copy is prepared. A failed check, or any exception, answers false, and preparing copies stays off
 /// until AetherFrame starts again. It runs as an owned operation, which unloading cancels, so
 /// nothing of it calls Dalamud's texture services once the plugin has unloaded; a check stopped
-/// that way answers false too. The log names the result and an exception's kind, never its text.
+/// that way answers false too. The log names the result and an exception's kind, never its text;
+/// a failed check adds its diagnosis (<see cref="ImagePreparer.DiagnoseAsync"/>), which describes
+/// only the check's own known image.
 /// Compiled only in the networking preview flavour.
 /// </summary>
 internal static class ImagePreparationCheck
@@ -32,10 +34,14 @@ internal static class ImagePreparationCheck
             try
             {
                 var passed = await ImagePreparer.SelfTestAsync(codec, operations.Stopping).ConfigureAwait(false);
-                log.Information(passed
-                    ? "Sharing: image preparation's check passed."
-                    : "Sharing: image preparation's check failed, so sharing is off for this session.");
-                return passed;
+                if (passed)
+                {
+                    log.Information("Sharing: image preparation's check passed.");
+                    return true;
+                }
+
+                log.Warning("Sharing: image preparation's check failed, so sharing is off for this session. " + await DiagnoseAsync(codec, operations).ConfigureAwait(false));
+                return false;
             }
             catch (OperationCanceledException) when (operations.Stopping.IsCancellationRequested)
             {
@@ -44,9 +50,22 @@ internal static class ImagePreparationCheck
             }
             catch (Exception e)
             {
-                log.Warning("Sharing: image preparation's check failed, so sharing is off for this session: " + PublishOutcome.Describe(e));
+                log.Warning("Sharing: image preparation's check failed, so sharing is off for this session: " + PublishOutcome.Describe(e) + ". " + await DiagnoseAsync(codec, operations).ConfigureAwait(false));
                 return false;
             }
+        }
+    }
+
+    /// <summary>The diagnosis, or why there is none: it must never turn a failed check into a failed load.</summary>
+    private static async Task<string> DiagnoseAsync(IImageCodec codec, OwnedOperations operations)
+    {
+        try
+        {
+            return "What happened: " + await ImagePreparer.DiagnoseAsync(codec, operations.Stopping).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            return "Its diagnosis failed too: " + PublishOutcome.Describe(e);
         }
     }
 }

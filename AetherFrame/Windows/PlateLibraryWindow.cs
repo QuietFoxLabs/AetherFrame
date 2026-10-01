@@ -316,12 +316,6 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         TutorialAnchorMarks.Mark(TutorialTarget.LibrarySearch);
         EditorWidgets.Tooltip("Filter the cards by name. Clear it to reorder cards again.");
 
-        if (Help is { } help)
-        {
-            ImGui.SameLine();
-            help.DrawButton("LibraryHelp", TutorialTarget.LibraryHelp);
-        }
-
         if (OpenSharing is { } openSharing)
         {
             ImGui.SameLine();
@@ -341,11 +335,19 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             EditorWidgets.Tooltip("You can still browse, preview, create, and edit Plates.\nLog in to a character to choose its Active Plate.");
         }
 
+        // Help sits in the window's top right corner, with the Plate count just before it.
+        var right = ImGui.GetWindowContentRegionMax().X - (Help is null ? 0f : HelpMenu.ButtonWidth + ImGui.GetStyle().ItemSpacing.X);
         if (plateCount > 0)
         {
             var countText = plateCount == 1 ? "1 Plate" : $"{plateCount} Plates";
-            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize(countText).X));
+            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), right - ImGui.CalcTextSize(countText).X));
             ImGui.TextDisabled(countText);
+        }
+
+        if (Help is { } help)
+        {
+            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - HelpMenu.ButtonWidth));
+            help.DrawButton("LibraryHelp", TutorialTarget.LibraryHelp);
         }
 
         var headerRight = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
