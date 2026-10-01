@@ -29,9 +29,10 @@ internal enum ServedShapeKind
 /// <summary>
 /// A shape in canvas units, clockwise from the top left (a triangle leaves <see cref="D"/> unused),
 /// in its colour or tint: an image quad names its served image's <see cref="Index"/>, and an art
-/// quad its artwork, which is null for an ident this build doesn't bundle.
+/// quad its artwork, which is null for an ident this build doesn't bundle, and the
+/// <see cref="Piece"/> of it the ident names.
 /// </summary>
-internal sealed record ServedShape(ServedShapeKind Kind, Vector2 A, Vector2 B, Vector2 C, Vector2 D, Vector4 Color, int Index = -1, BuiltInArtAsset? Art = null) : ServedStep;
+internal sealed record ServedShape(ServedShapeKind Kind, Vector2 A, Vector2 B, Vector2 C, Vector2 D, Vector4 Color, int Index = -1, BuiltInArtAsset? Art = null, ArtPiece Piece = ArtPiece.Whole) : ServedStep;
 
 /// <summary>
 /// A served profile (D6; the specification's section 8.6), turned into what AetherFrame's renderer
@@ -150,13 +151,13 @@ internal sealed class ServedPlate
                     break;
 
                 case LayoutArtQuad art:
-                    var found = BuiltInArtCatalog.Find(art.Art);
+                    var found = BuiltInArtCatalog.FindPiece(art.Art);
                     if (found is null)
                     {
                         Note(notes, "A piece of artwork this AetherFrame doesn't have (" + art.Art + ") shows as a box.");
                     }
 
-                    steps.Add(new ServedShape(ServedShapeKind.Art, Point(art.A), Point(art.B), Point(art.C), Point(art.D), Color(art.Tint), Art: found));
+                    steps.Add(new ServedShape(ServedShapeKind.Art, Point(art.A), Point(art.B), Point(art.C), Point(art.D), Color(art.Tint), Art: found?.Art, Piece: found?.Piece ?? ArtPiece.Whole));
                     break;
             }
         }

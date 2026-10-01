@@ -42,6 +42,36 @@ public sealed record BuiltInArtAsset(
     /// <summary>Width over height of the runtime artwork (1 for square art).</summary>
     public float AspectRatio => PixelHeight > 0 ? (float)PixelWidth / PixelHeight : 1f;
 
+    /// <summary>How the artwork stretches to any width, or null when it is always drawn whole at its
+    /// own aspect ratio. Only Name Backings and Dividers are sliced (see <c>ComponentPaintPlan</c>).</summary>
+    public ArtSlices? Slices { get; init; }
+
+    /// <summary>The horizontal span of <paramref name="piece"/> in texture coordinates (0 to 1);
+    /// the whole width for <see cref="ArtPiece.Whole"/> and for any piece of unsliced artwork.</summary>
+    public (float U0, float U1) Window(ArtPiece piece)
+    {
+        if (Slices is not { } slices || PixelWidth <= 0)
+        {
+            return (0f, 1f);
+        }
+
+        var (x0, x1) = piece switch
+        {
+            ArtPiece.LeftCap => (0, slices.CapLeft),
+            ArtPiece.LeftFill => (slices.CapLeft, slices.CenterLeft),
+            ArtPiece.Center => (slices.CenterLeft, slices.CenterRight),
+            ArtPiece.RightFill => (slices.CenterRight, slices.CapRight),
+            ArtPiece.RightCap => (slices.CapRight, PixelWidth),
+            _ => (0, PixelWidth),
+        };
+
+        return ((float)x0 / PixelWidth, (float)x1 / PixelWidth);
+    }
+
+    /// <summary>The ident a shared Plate names <paramref name="piece"/> by: <see cref="Id"/> for the whole
+    /// artwork, else the id and the piece's suffix ("[id].left-cap"). See <see cref="BuiltInArtCatalog.FindPiece"/>.</summary>
+    public string PieceIdent(ArtPiece piece) => piece == ArtPiece.Whole ? Id : Id + "." + ArtPieces.Suffix(piece);
+
     /// <summary>The visual family the artwork was designed in, shown with it wherever Components are
     /// browsed ("Celestial Sakura"); null for a standalone piece. Display and grouping only.</summary>
     public string? Family { get; init; }
@@ -75,6 +105,72 @@ public sealed record BuiltInArtAsset(
 
         return false;
     }
+}
+
+/// <summary>
+/// Where a horizontal artwork (a nameplate, a divider) is cut so it fits any width: five pieces,
+/// left to right — a left cap, a fill, a center piece, a fill, a right cap. The caps and the center
+/// piece are always drawn at the artwork's own proportions; only the two fills stretch, equally, so
+/// a short name gets a compact plaque and a long one a long plaque, and no ornament is ever
+/// distorted. A fill must therefore look the same in every column (plain rails and a plain band).
+/// Every value is an x position in the runtime PNG's pixels, in order:
+/// 0 &lt;= <paramref name="ContentLeft"/> &lt;= <paramref name="CapLeft"/> &lt;= <paramref name="CenterLeft"/>
+/// &lt;= <paramref name="CenterRight"/> &lt;= <paramref name="CapRight"/> &lt;= <paramref name="ContentRight"/>
+/// &lt;= the artwork's width. Artwork without a center piece has <paramref name="CenterLeft"/> equal
+/// to <paramref name="CenterRight"/>.
+/// </summary>
+/// <param name="ContentLeft">Where the text area starts: the anchor box (the name and title, padded)
+/// spans <paramref name="ContentLeft"/> to <paramref name="ContentRight"/>. 0 for a divider, which
+/// spans its whole width.</param>
+/// <param name="CapLeft">Where the left cap ends and the left fill starts.</param>
+/// <param name="CenterLeft">Where the left fill ends and the center piece starts.</param>
+/// <param name="CenterRight">Where the center piece ends and the right fill starts.</param>
+/// <param name="CapRight">Where the right fill ends and the right cap starts.</param>
+/// <param name="ContentRight">Where the text area ends.</param>
+public sealed record ArtSlices(int ContentLeft, int CapLeft, int CenterLeft, int CenterRight, int CapRight, int ContentRight)
+{
+    /// <summary>True when every value is in order inside an artwork <paramref name="pixelWidth"/> wide,
+    /// and both fills are at least a pixel wide (each stretches).</summary>
+    public bool IsValidFor(int pixelWidth) =>
+        ContentLeft >= 0 && ContentLeft <= CapLeft && CapLeft < CenterLeft && CenterLeft <= CenterRight
+        && CenterRight < CapRight && CapRight <= ContentRight && ContentRight <= pixelWidth;
+
+    /// <summary>The pixels that never stretch: the caps and the center piece.</summary>
+    public int FixedWidth(int pixelWidth) => CapLeft + (CenterRight - CenterLeft) + (pixelWidth - CapRight);
+
+    /// <summary>The pixels outside the text area, on both sides together.</summary>
+    public int OutsideContent(int pixelWidth) => ContentLeft + (pixelWidth - ContentRight);
+}
+
+/// <summary>A part of an artwork, as a primitive draws it. Not persisted.</summary>
+public enum ArtPiece
+{
+    /// <summary>The whole artwork (every unsliced artwork).</summary>
+    Whole,
+    LeftCap,
+    LeftFill,
+    Center,
+    RightFill,
+    RightCap,
+}
+
+/// <summary>The suffixes a shared Plate's art idents give the pieces of sliced artwork.</summary>
+public static class ArtPieces
+{
+    /// <summary>The pieces of sliced artwork, left to right.</summary>
+    public static readonly IReadOnlyList<ArtPiece> Sliced = [ArtPiece.LeftCap, ArtPiece.LeftFill, ArtPiece.Center, ArtPiece.RightFill, ArtPiece.RightCap];
+
+    /// <summary>The ident suffix of <paramref name="piece"/>: lower case letters and '-' only. Frozen once
+    /// shipped, like the art ids themselves (a viewer looks pieces up by them).</summary>
+    public static string Suffix(ArtPiece piece) => piece switch
+    {
+        ArtPiece.LeftCap => "left-cap",
+        ArtPiece.LeftFill => "left-fill",
+        ArtPiece.Center => "center",
+        ArtPiece.RightFill => "right-fill",
+        ArtPiece.RightCap => "right-cap",
+        _ => string.Empty,
+    };
 }
 
 /// <summary>How a corner drawing, designed for the top-left corner, is placed in the other corners.</summary>
@@ -147,11 +243,16 @@ public static class BuiltInArtCatalog
         CelestialSakuraPortraitFrame, "Celestial Sakura", PlateComponentKind.PortraitFrame, "CelestialSakura_PortraitFrame.png", 992, 1586, 1f,
         "frame", "portrait", "portrait frame", "border");
 
-    /// <summary>An ivory enamel plaque with blossom ends, behind the name. Its box is 1.5x the name
-    /// backing's (the plaque's rails and ornaments surround a text area about a third of its height).</summary>
+    /// <summary>An ivory enamel plaque with blossom ends, behind the name. 1.5x the name backing's height
+    /// (the plaque's rails and ornaments surround a text area about a third of its height), and as
+    /// wide as the name: sliced between the blossom ends and the crescent crest, where the plaque is
+    /// only its plain rails and band (see Assets/README.md for the measurements).</summary>
     public static readonly BuiltInArtAsset CelestialSakuraNameplateArt = CelestialSakura(
         CelestialSakuraNameplate, "Celestial Sakura", PlateComponentKind.NameBacking, "CelestialSakura_Nameplate.png", 2172, 724, 1.5f,
-        "nameplate", "name", "plaque", "banner");
+        "nameplate", "name", "plaque", "banner") with
+    {
+        Slices = new ArtSlices(ContentLeft: 340, CapLeft: 512, CenterLeft: 760, CenterRight: 1400, CapRight: 1672, ContentRight: 1840),
+    };
 
     /// <summary>The primary divider: curling gold with blossom clusters and a crescent-set gem. 3:1, in a
     /// band 3x the procedural Divider's height: its drawing fills two thirds of that band, which keeps
@@ -188,6 +289,36 @@ public static class BuiltInArtCatalog
 
     /// <summary>The artwork with this exact id, or null (ids are case-sensitive).</summary>
     public static BuiltInArtAsset? Find(string? id) => id is not null && ById.TryGetValue(id, out var art) ? art : null;
+
+    /// <summary>
+    /// The artwork and piece a shared Plate's art ident names (<see cref="BuiltInArtAsset.PieceIdent"/>):
+    /// an exact id is the whole artwork; an id followed by a piece's suffix is that piece of a sliced
+    /// artwork. Null for anything else, a piece of unsliced artwork included. Exact matches only,
+    /// like <see cref="Find"/>.
+    /// </summary>
+    public static (BuiltInArtAsset Art, ArtPiece Piece)? FindPiece(string? ident)
+    {
+        if (Find(ident) is { } whole)
+        {
+            return (whole, ArtPiece.Whole);
+        }
+
+        if (ident is null)
+        {
+            return null;
+        }
+
+        foreach (var piece in ArtPieces.Sliced)
+        {
+            var suffix = "." + ArtPieces.Suffix(piece);
+            if (ident.EndsWith(suffix, StringComparison.Ordinal) && Find(ident[..^suffix.Length]) is { Slices: not null } art)
+            {
+                return (art, piece);
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Every artwork of one family, in catalog order (display grouping; never used to resolve).</summary>
     public static IEnumerable<BuiltInArtAsset> OfFamily(string family)

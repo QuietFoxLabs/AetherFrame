@@ -372,7 +372,10 @@ public class CelestialSakuraTests(ITestOutputHelper output)
         var step = Assert.Single(PlanOf(document, BuiltInComponentCatalog.NameBackingCelestialSakura));
         var rect = step.Placement.Rect;
 
-        AssertAspect(3f, rect.Size);
+        // Sliced: 1.5x the padded name's height, and at least as wide as its caps and crest at that
+        // height (SlicedArtTests covers how it follows the name's measured width).
+        Assert.Equal((name.Size.Y + (2f * ComponentPaintPlan.NameBackingPadY)) * 1.5f, rect.Size.Y, 3);
+        Assert.True(rect.Size.X / rect.Size.Y >= 1652f / 724f, $"{rect} is narrower than the plaque's fixed pieces");
         Assert.InRange(rect.Size.X, 300f, 900f); // a useful width, whatever the name
         AssertInsideCanvas(document, rect);
         var center = rect.Position + (rect.Size / 2f);

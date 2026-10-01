@@ -109,17 +109,18 @@ internal static class ServedPlatePainter
                 break;
 
             case ServedShapeKind.Art:
-                // As ComponentRenderer: the level closest to the on-screen size, tinted by the vertex colour.
-                var screenPixels = MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d));
+                // As ComponentRenderer: the level closest to the on-screen size, tinted by the vertex
+                // colour, and only the piece the ident names.
                 if (shape.Art is null)
                 {
                     // An artwork this build doesn't bundle: a placeholder, named in a note (section 8.5).
                     drawList.AddQuadFilled(a, b, c, d, ImGui.GetColorU32(PlaceholderFill));
                     drawList.AddQuad(a, b, c, d, ImGui.GetColorU32(PlaceholderBorder));
                 }
-                else if (resources.Art.GetWrapOrNull(shape.Art, screenPixels) is { } artWrap)
+                else if (resources.Art.GetWrapOrNull(shape.Art, ComponentRenderer.ArtScreenPixels(shape.Art, shape.Piece, a, b, d)) is { } artWrap)
                 {
-                    drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f), color);
+                    var (u0, u1) = shape.Art.Window(shape.Piece);
+                    drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, 0f), new Vector2(u1, 0f), new Vector2(u1, 1f), new Vector2(u0, 1f), color);
                 }
 
                 break;

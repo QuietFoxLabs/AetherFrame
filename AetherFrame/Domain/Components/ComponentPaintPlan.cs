@@ -221,9 +221,10 @@ public static class ComponentPaintPlan
         SortBand(frameBand);
 
         var unit = Unit(profile);
+        var canvasWidth = CanvasRect(profile).Size.X;
 
         // Backgrounds: the whole canvas, under everything else.
-        AddBand(output, backgroundBand, CanvasRect(profile), 0f);
+        AddBand(output, backgroundBand, CanvasRect(profile), 0f, canvasWidth);
 
         // Anchors: the portrait element, and the identity elements (name, title).
         var portraitElement = BasicSections.Find(profile, ProfileElementRole.BasicPortrait);
@@ -238,21 +239,21 @@ public static class ComponentPaintPlan
         if (!hasIdentityElements && nameBand.Count > 0)
         {
             var region = AdventurePlateClassicLayout.GetGroupBounds(BasicSection.Identity, orientation, profile);
-            AddBand(output, nameBand, Pad(region, unit), 0f);
+            AddBand(output, nameBand, Pad(region, unit), 0f, canvasWidth);
         }
 
         foreach (var element in drawnElements)
         {
             if (ReferenceEquals(element, firstIdentity) && nameBand.Count > 0 && drawnIdentity is { } identityRect)
             {
-                AddBand(output, nameBand, Pad(identityRect, unit), 0f);
+                AddBand(output, nameBand, Pad(identityRect, unit), 0f, canvasWidth);
             }
 
             output.Add(ElementStep(element));
 
             if (ReferenceEquals(element, portraitElement) && portraitBand.Count > 0)
             {
-                AddBand(output, portraitBand, new ElementRect(element.Position, element.Size), RotationGeometry.GetRotationDegrees(element));
+                AddBand(output, portraitBand, new ElementRect(element.Position, element.Size), RotationGeometry.GetRotationDegrees(element), canvasWidth);
             }
         }
 
@@ -263,7 +264,7 @@ public static class ComponentPaintPlan
         if (portraitElement is null && portraitBand.Count > 0)
         {
             var fallback = AdventurePlateClassicLayout.GetRect(ProfileElementRole.BasicPortrait, orientation, profile) ?? CanvasRect(profile);
-            AddBand(output, portraitBand, fallback, 0f);
+            AddBand(output, portraitBand, fallback, 0f, canvasWidth);
         }
 
         foreach (var (component, definition, _) in decorationBand)
@@ -277,7 +278,7 @@ public static class ComponentPaintPlan
                 case PlateComponentKind.Divider:
                     var divider = FixedAnchorOf(component)
                         ?? DividerBox(drawnIdentity ?? AdventurePlateClassicLayout.GetGroupBounds(BasicSection.Identity, orientation, profile), unit);
-                    output.Add(ComponentStep(component, definition, ArtBand(divider, definition), 0f, false, false));
+                    output.Add(ComponentStep(component, definition, ArtBand(divider, definition, canvasWidth), 0f, false, false));
                     break;
 
                 case PlateComponentKind.SectionHeader:
@@ -311,13 +312,13 @@ public static class ComponentPaintPlan
     private static PaintStep ElementStep(ProfileElement element) =>
         new(element.Role == ProfileElementRole.BasicPortrait ? PlateLayer.Portrait : PlateLayer.Identity, element, null, null, default);
 
-    private static void AddBand(List<PaintStep> output, List<(PlateComponent Component, ComponentDefinition Definition, int Index)> band, ElementRect anchor, float anchorRotation)
+    private static void AddBand(List<PaintStep> output, List<(PlateComponent Component, ComponentDefinition Definition, int Index)> band, ElementRect anchor, float anchorRotation, float canvasWidth)
     {
         foreach (var (component, definition, _) in band)
         {
             // A fixed anchor replaces the followed one (only Name Backings have one in a band).
             var box = FixedAnchorOf(component) ?? anchor;
-            output.Add(ComponentStep(component, definition, ArtBand(box, definition), anchorRotation, false, false));
+            output.Add(ComponentStep(component, definition, ArtBand(box, definition, canvasWidth), anchorRotation, false, false));
         }
     }
 
@@ -384,17 +385,53 @@ public static class ComponentPaintPlan
     /// <see cref="ArtSizeFactor"/> around the same center (a plaque or an ornament needs room around
     /// the text or the line; the art is then fitted inside at its own aspect ratio, see
     /// <see cref="ComponentStep(PlateComponent, ComponentDefinition, ElementRect, float, bool, bool, bool)"/>).
-    /// Every other placement — and every procedural shape — keeps its box.
+    /// Sliced artwork (<see cref="BuiltInArtAsset.Slices"/>) grows only in height: it is then as wide as
+    /// <paramref name="box"/> needs (see <see cref="SlicedSize"/>), but never stretches past the Plate's
+    /// left or right edge (a name that long already fills its box; and the box is the whole name box
+    /// wherever the text can't be measured). Every other placement — and every procedural shape —
+    /// keeps its box.
     /// </summary>
-    private static ElementRect ArtBand(ElementRect box, ComponentDefinition definition)
+    private static ElementRect ArtBand(ElementRect box, ComponentDefinition definition, float canvasWidth)
     {
-        if (definition.Art is null || definition.Kind is not (PlateComponentKind.NameBacking or PlateComponentKind.Divider))
+        if (definition.Art is not { } art || definition.Kind is not (PlateComponentKind.NameBacking or PlateComponentKind.Divider))
         {
             return box;
         }
 
-        var size = box.Size * ArtSizeFactor(definition);
+        Vector2 size;
+        if (IsSliced(art))
+        {
+            size = SlicedSize(box.Size, art, ArtSizeFactor(definition));
+            var centerX = box.Position.X + (box.Size.X / 2f);
+            var onPlate = 2f * Math.Min(centerX, canvasWidth - centerX);
+            var fixedWidth = art.Slices!.FixedWidth(art.PixelWidth) * size.Y / art.PixelHeight;
+            size.X = Math.Max(fixedWidth, Math.Min(size.X, onPlate));
+        }
+        else
+        {
+            size = box.Size * ArtSizeFactor(definition);
+        }
+
         return new ElementRect(box.Position + ((box.Size - size) / 2f), size);
+    }
+
+    /// <summary>True when <paramref name="art"/> stretches to any width (valid <see cref="BuiltInArtAsset.Slices"/>).</summary>
+    public static bool IsSliced(BuiltInArtAsset art) => art.Slices is { } slices && slices.IsValidFor(art.PixelWidth) && art.PixelHeight > 0;
+
+    /// <summary>
+    /// The size sliced <paramref name="art"/> is drawn at around a <paramref name="box"/> it decorates:
+    /// <paramref name="heightFactor"/> times its height, and wide enough that the box spans the art's
+    /// text area (<see cref="ArtSlices.ContentLeft"/> to <see cref="ArtSlices.ContentRight"/>) — so a
+    /// short name gets a compact plaque and a long name a long one — but never narrower than the caps
+    /// and the center piece at that height.
+    /// </summary>
+    public static Vector2 SlicedSize(Vector2 box, BuiltInArtAsset art, float heightFactor)
+    {
+        var slices = art.Slices!;
+        var height = box.Y * heightFactor;
+        var perPixel = height / art.PixelHeight;
+        var width = Math.Max(box.X + (slices.OutsideContent(art.PixelWidth) * perPixel), slices.FixedWidth(art.PixelWidth) * perPixel);
+        return new Vector2(width, height);
     }
 
     private static void AddCorners(List<PaintStep> output, ProfileDocument profile, PlateComponent component, ComponentDefinition definition, float unit)
@@ -481,9 +518,9 @@ public static class ComponentPaintPlan
 
         var center = anchor.Position + (anchor.Size / 2f) + offset;
         var size = anchor.Size * scale;
-        if (definition.Art is { } art)
+        if (definition.Art is { } art && !(IsSliced(art) && definition.Kind is (PlateComponentKind.NameBacking or PlateComponentKind.Divider)))
         {
-            size = FitAspect(size, art.AspectRatio);
+            size = FitAspect(size, art.AspectRatio); // sliced art was already sized by ArtBand, and Scale keeps its shape
         }
 
         var rect = new ElementRect(center - (size / 2f), size);
