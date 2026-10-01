@@ -125,8 +125,8 @@ is 992 x 1586 (0.6255), which is 0.076% off, so it is drawn exactly over the por
 **Default placements** on the Adventure Plate Classic, in logical px, before any Scale or Offset:
 
 - Background and Plate Frame fill the canvas at (0, 0, 1280, 720). Art Plate Frames skip the
-  14 px inset of the procedural borders, because the drawing carries its own margin, and paint just
-  before the first text, so the name and every text draw over the frame, never under it.
+  14 px inset of the procedural borders, because the drawing carries its own margin, and paint
+  between the pictures and the text: over the portrait and its frame, under the name and every text.
 - Portrait Frame covers the portrait.
 - Nameplate: sliced (see above), 1.5x the padded name box's height and centered on the name. With
   the starter's 60 px name box, it is 108 px tall, and as wide as the name's text plus about 100 px

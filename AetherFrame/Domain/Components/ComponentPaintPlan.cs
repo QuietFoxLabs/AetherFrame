@@ -74,20 +74,23 @@ public enum ComponentStatus
 /// Turns a Plate's elements and components into one deterministic paint sequence. Pure logic
 /// (no rendering), shared by every surface that draws a Plate through <c>ProfileRenderer</c>.
 ///
-/// <para><b>Ordering.</b> Elements keep exactly the order <c>ProfilePaintOrder</c> gives them
-/// (ZIndex, ties by list order), so a Plate without components paints exactly as before. Components
-/// are placed by their <see cref="PlateLayer"/> relative to what they decorate:
-/// Backgrounds before everything (over the canvas), then Section Header backings (sliced Section
-/// Header artwork, behind every element; see <see cref="IsHeaderBacking"/>); Portrait Frames then
-/// Portrait Overlays immediately after the portrait element; Plate Frame artwork immediately before
-/// the first text element, so no text is ever under a frame drawn in from the edge; Name Backings
+/// <para><b>Ordering.</b> Elements keep the order <c>ProfilePaintOrder</c> gives them (ZIndex, ties
+/// by list order), so a Plate without components paints exactly as before. The one exception is
+/// Plate Frame artwork, which lies between the pictures and the text: while it paints, every picture
+/// paints first and every text after, each in its own order, so no text is ever under a frame drawn
+/// in from the edge and no picture ever over it. Components are placed by their
+/// <see cref="PlateLayer"/> relative to what they decorate: Backgrounds before everything (over the
+/// canvas), then Section Header backings (sliced Section Header artwork, behind every element; see
+/// <see cref="IsHeaderBacking"/>); Portrait Frames then Portrait Overlays immediately after the
+/// portrait element; Plate Frame artwork after the pictures and before the text; Name Backings
 /// immediately before the first identity element (name or title); then, after every element,
-/// Decorations, then procedural Plate Frames (and Plate Frame artwork on a Plate without text).
-/// Within one layer: ascending <see cref="PlateComponent.LayerOrder"/>,
-/// ties by list order. When the anchor element doesn't exist at all, the component uses the
-/// Adventure Plate Classic layout's placement: a Name Backing paints at the bottom of the element
-/// stack (still behind any text), a Portrait Frame or Overlay above every element (still over any
-/// picture there); when the anchor exists but is hidden, the component is hidden with it.</para>
+/// Decorations, then procedural Plate Frames. Within one layer: ascending
+/// <see cref="PlateComponent.LayerOrder"/>, ties by list order. When the anchor element doesn't exist
+/// at all, the component uses the Adventure Plate Classic layout's placement: a Name Backing paints
+/// at the bottom of the element stack (still behind any text), a Portrait Frame or Overlay above
+/// every element, or, while Plate Frame artwork paints, above every picture and under the artwork
+/// (still over any picture there); when the anchor exists but is hidden, the component is hidden
+/// with it.</para>
 ///
 /// <para><b>Failure isolation.</b> A component that can't be resolved (see <see cref="ComponentStatus"/>)
 /// is skipped on its own; nothing about it can stop the rest of the Plate from painting.</para>

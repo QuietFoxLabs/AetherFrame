@@ -282,14 +282,18 @@ public class ArtSetsTests
     }
 
     [Fact]
-    public void PlateFrameArtwork_OnAPlateWithoutText_PaintsOnTop()
+    public void PlateFrameArtwork_OnAPlateWithoutText_PaintsOverEveryPicture_UnderTheCorners()
     {
         var document = ComponentDocuments.WithAnchors();
         document.Elements.RemoveAll(e => e is TextProfileElement);
         var art = ComponentDocuments.Of("af.plate-frame.allagan-tech");
-        document.Components = [art];
+        var corner = ComponentDocuments.Of(BuiltInComponentCatalog.CornerOrnamentCelestialSakura);
+        document.Components = [corner, art];
 
-        Assert.Same(art, ComponentDocuments.Plan(document)[^1].Component);
+        var plan = ComponentDocuments.Plan(document);
+        var frame = plan.FindIndex(s => ReferenceEquals(s.Component, art));
+        Assert.True(frame > plan.FindLastIndex(s => s.IsElement), "over every picture");
+        Assert.True(frame < plan.FindIndex(s => ReferenceEquals(s.Component, corner)), "under the corners, as on the preview cards");
     }
 
     // ---- Applying a style -----------------------------------------------------------------------------
