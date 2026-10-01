@@ -1390,7 +1390,7 @@ It also made six smaller points, all applied as well:
   - listens on one address, never a wildcard: the PC's Tailscale address;
   - serves one client address, the server's, and closes any other connection unanswered;
   - accepts only `CONNECT na.finalfantasyxiv.com:443` (HTTP/1.0 or 1.1, the host's case aside), with the host and port fixed in code, and answers anything else `403` without connecting anywhere;
-  - reads the whole request head, at most 4 KiB within 10 seconds, before any answer, and keeps at most 8 tunnels at once and 120 an hour, twice C2's 60 fetches, so it holds even if the server didn't;
+  - reads the whole request head, at most 4 KiB within 10 seconds, before any answer, and keeps at most 8 tunnels at once and opens at most 120 an hour. That is a backstop behind C2's 60 fetches an hour, not the same limit: a tunnel left open can carry several requests;
   - closes a tunnel after 30 seconds idle or 5 minutes in all, or past 1 MiB up or 16 MiB down;
   - logs one line per connection, never what a tunnel carries, from a queue of its own, so a paused console window never pauses the relay.
 

@@ -218,7 +218,7 @@ public sealed class LodestoneRelayTests
         using var second = await harness.ConnectAsync();
         await Send(second.GetStream(), "CONNECT na.finalfantasyxiv.com:443 HTTP/1.1\r\n\r\n");
         Assert.StartsWith("HTTP/1.1 503 Service Unavailable\r\n", await ReadToEnd(second.GetStream()));
-        Assert.Equal(1, harness.Relay.OpenTunnels);
+        await harness.TunnelsOpen(1);
     }
 
     [Fact]
@@ -544,15 +544,18 @@ public sealed class LodestoneRelayTests
         }
 
         /// <summary>Waits until every tunnel the relay counted is counted out again.</summary>
-        public async Task NoTunnelOpen()
+        public Task NoTunnelOpen() => TunnelsOpen(0);
+
+        /// <summary>Waits until the relay counts <paramref name="expected"/> tunnels: a refused one is counted out just after its answer.</summary>
+        public async Task TunnelsOpen(int expected)
         {
             var until = DateTime.UtcNow + Wait;
-            while (Relay.OpenTunnels != 0 && DateTime.UtcNow < until)
+            while (Relay.OpenTunnels != expected && DateTime.UtcNow < until)
             {
                 await Task.Delay(20);
             }
 
-            Assert.Equal(0, Relay.OpenTunnels);
+            Assert.Equal(expected, Relay.OpenTunnels);
         }
 
         public async Task<TcpClient> ConnectAsync()

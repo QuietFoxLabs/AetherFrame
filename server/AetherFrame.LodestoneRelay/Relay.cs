@@ -170,23 +170,23 @@ internal sealed class Relay
 
             if (!IsLodestoneConnect(head.Value.Line))
             {
-                await SendQuietlyAsync(client, Forbidden, stop);
                 Log("refused a request that isn't CONNECT " + Host + ":" + Port.ToString(System.Globalization.CultureInfo.InvariantCulture) + ": answered 403");
+                await SendQuietlyAsync(client, Forbidden, stop);
                 return;
             }
 
             counted = true;
             if (Interlocked.Increment(ref open) > options.MaxTunnels)
             {
-                await SendQuietlyAsync(client, Busy, stop);
                 Log("too many tunnels open: answered 503");
+                await SendQuietlyAsync(client, Busy, stop);
                 return;
             }
 
             if (!TryTakeFromHour())
             {
-                await SendQuietlyAsync(client, Busy, stop);
                 Log("too many tunnels this hour: answered 503");
+                await SendQuietlyAsync(client, Busy, stop);
                 return;
             }
 
@@ -200,8 +200,8 @@ internal sealed class Relay
                 }
                 catch (Exception e) when (e is SocketException or IOException or OperationCanceledException && !stop.IsCancellationRequested)
                 {
-                    await SendQuietlyAsync(client, BadGateway, stop);
                     Log("couldn't reach the Lodestone (" + e.GetType().Name + "): answered 502");
+                    await SendQuietlyAsync(client, BadGateway, stop);
                     return;
                 }
             }
