@@ -40,11 +40,14 @@ internal static class PlateEndpoints
     /// <summary>How long a publish has to send its proof, before anything else is looked at.</summary>
     public static readonly TimeSpan ProofDeadline = TimeSpan.FromSeconds(10);
 
-    /// <summary>How long an authenticated publish has to send the rest: 43 MB at the minimum rate, and a margin.</summary>
-    public static readonly TimeSpan BodyDeadline = TimeSpan.FromMinutes(45);
+    /// <summary>
+    /// How long an authenticated publish has to send the rest: its challenge's life (rule 10), since a
+    /// body that takes longer fails when its challenge is consumed anyway, so no slot is held past it.
+    /// </summary>
+    public static readonly TimeSpan BodyDeadline = TimeSpan.FromSeconds(300);
 
     /// <summary>The slowest an authenticated publish may send, after a 10-second grace.</summary>
-    public static readonly MinDataRate MinBodyRate = new(bytesPerSecond: 16 * 1024, gracePeriod: TimeSpan.FromSeconds(10));
+    public static readonly MinDataRate MinBodyRate = new(bytesPerSecond: 64 * 1024, gracePeriod: TimeSpan.FromSeconds(10));
 
     private static readonly string[] CharacterFields = ["name", "world"];
     private static readonly string[] ImageFields = ["name", "world", "marker"];
@@ -194,12 +197,12 @@ internal static class PlateEndpoints
             return Refuse(http, "not-bound");
         }
 
-        if (!await slots.Gate.WaitAsync(0, http.RequestAborted))
+        using var slot = slots.TryTake(signer.LodestoneId, http.Connection.RemoteIpAddress);
+        if (slot is null)
         {
             return SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "publish:busy");
         }
 
-        try
         {
             byte[]? payloadBytes;
             using (var bodyDeadline = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted))
@@ -277,6 +280,14 @@ internal static class PlateEndpoints
                 return Refuse(http, "image-refused");
             }
 
+            // The worker is one pipeline for everyone (I2): a character whose images failed in it
+            // three times this hour waits the hour out, and each character has an hour's image budget.
+            var character = binding.LodestoneId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (imageBytes.Count > 0 && !limiter.HasRoom(ServerLimits.WorkerFailuresPerCharacter, character))
+            {
+                return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:publish/worker-failures");
+            }
+
             var stored = new List<StoredImage>(imageBytes.Count);
             for (var index = 0; index < imageBytes.Count; index++)
             {
@@ -290,6 +301,11 @@ internal static class PlateEndpoints
                     return Refuse(http, "image-refused");
                 }
 
+                if (!limiter.TryTake(ServerLimits.ImageJobsPerCharacter, character))
+                {
+                    return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:publish/images");
+                }
+
                 var processed = await processor.ProcessAsync(declared, imageBytes[index], http.RequestAborted);
                 if (processed.IsBusy)
                 {
@@ -298,6 +314,7 @@ internal static class PlateEndpoints
 
                 if (processed.Bytes is null || !ProcessedImages.Check(processed.Bytes, declared))
                 {
+                    limiter.TryTake(ServerLimits.WorkerFailuresPerCharacter, character);
                     return Refuse(http, "image-refused");
                 }
 
@@ -312,10 +329,6 @@ internal static class PlateEndpoints
                 PublishResult.Conflict => Refuse(http, "revision-conflict"),
                 _ => Refuse(http, "not-bound"),
             };
-        }
-        finally
-        {
-            slots.Gate.Release();
         }
     }
 
@@ -444,9 +457,66 @@ internal static class PlateEndpoints
 }
 
 /// <summary>Two publishes at a time at most, so buffered bodies stay bounded; a third is told to retry.</summary>
+/// <summary>
+/// The publish slots, held while a publish's body uploads: <see cref="Total"/> in all, and at most one
+/// per character and one per address range (an IPv4 address, or an IPv6 /64), so no one player can
+/// hold them all (the open alpha, October 1, 2026). A slot is released when its holder is disposed.
+/// </summary>
 internal sealed class PublishSlots
 {
-    public SemaphoreSlim Gate { get; } = new(2, 2);
+    /// <summary>The most publishes uploading at once.</summary>
+    public const int Total = 4;
+
+    private readonly object gate = new();
+    private readonly HashSet<string> holders = new(StringComparer.Ordinal);
+    private int held;
+
+    /// <summary>A slot for a publish by the character <paramref name="lodestoneId"/> from <paramref name="address"/>, or null when none may be taken.</summary>
+    public IDisposable? TryTake(long lodestoneId, System.Net.IPAddress? address)
+    {
+        var keys = new[]
+        {
+            "character/" + lodestoneId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "address/" + System.Linq.Enumerable.First(AetherFrame.Server.Limits.AddressGroups.Of(address)).Group,
+        };
+
+        lock (gate)
+        {
+            if (held >= Total || holders.Contains(keys[0]) || holders.Contains(keys[1]))
+            {
+                return null;
+            }
+
+            held++;
+            holders.Add(keys[0]);
+            holders.Add(keys[1]);
+        }
+
+        return new Slot(this, keys);
+    }
+
+    private void Release(string[] keys)
+    {
+        lock (gate)
+        {
+            held--;
+            holders.Remove(keys[0]);
+            holders.Remove(keys[1]);
+        }
+    }
+
+    private sealed class Slot(PublishSlots slots, string[] keys) : IDisposable
+    {
+        private int released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref released, 1) == 0)
+            {
+                slots.Release(keys);
+            }
+        }
+    }
 }
 
 /// <summary>

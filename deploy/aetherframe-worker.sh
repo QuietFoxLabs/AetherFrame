@@ -35,8 +35,9 @@ while true; do
     continue
   fi
 
-  # The socket the server offers now: there is at most one, and it answers one connection.
-  socket="$(ls -1 "$mount"/runs/run-*.sock 2>/dev/null | head -n 1)"
+  # The socket the server offers now: there is at most one, and it answers one connection. Only a
+  # socket counts, never a directory or a file of that name.
+  socket="$(find "$mount/runs" -maxdepth 1 -type s -name 'run-*.sock' -print -quit 2>/dev/null)"
   if [[ -z "$mount" || -z "$socket" ]]; then
     mount="$(docker volume inspect -f '{{ .Mountpoint }}' "$volume" 2>/dev/null)"
     sleep 0.5
@@ -51,7 +52,7 @@ while true; do
     --ulimit nofile=256:256 --ulimit core=0:0 \
     --env AETHERFRAME_IMAGE_SOCKET=/run/aetherframe/images.sock \
     --env DOTNET_GCHeapHardLimit=0x10000000 \
-    --volume "$socket:/run/aetherframe/images.sock:ro" \
+    --mount "type=bind,source=$socket,target=/run/aetherframe/images.sock,readonly" \
     --log-driver "${AETHERFRAME_WORKER_LOG_DRIVER:-journald}" \
     "aetherframe-worker:$version" &
   runner=$!

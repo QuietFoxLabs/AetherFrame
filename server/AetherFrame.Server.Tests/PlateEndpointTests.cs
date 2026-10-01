@@ -215,9 +215,11 @@ public class PlateEndpointTests
         var profile = ProfileId.Parse((await aria.BindAsync(Aria)).GetProperty("profileId").GetString()!);
         var slots = server.Services.GetRequiredService<PublishSlots>();
 
-        // Both slots held, as two slow uploads would hold them.
-        Assert.True(slots.Gate.Wait(0));
-        Assert.True(slots.Gate.Wait(0));
+        // Every slot held, as slow uploads by other characters from other addresses would hold them.
+        var held = Enumerable.Range(0, PublishSlots.Total)
+            .Select(index => slots.TryTake(90_000_000 + index, System.Net.IPAddress.Parse("198.51.100." + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture))))
+            .ToList();
+        Assert.All(held, Assert.NotNull);
         try
         {
             // A stranger is refused at its proof and signer, whatever the slots: it can never hold one.
@@ -241,7 +243,7 @@ public class PlateEndpointTests
         }
         finally
         {
-            slots.Gate.Release(2);
+            held.ForEach(slot => slot!.Dispose());
         }
 
         using var afterwards = await aria.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(profile, "Plate"), aria.Key));
