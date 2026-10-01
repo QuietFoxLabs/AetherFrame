@@ -91,6 +91,8 @@ The kit is in [`deploy/`](../../deploy):
       - The check in step 5 runs from the server's host. After the first real check in game, the relay's window should show a tunnel too, which confirms the server's container goes through it.
       - To go back to reaching the Lodestone directly, remove the line and restart again.
 
+8. **Opening the alpha to everyone** (the owner's direction of October 1, 2026; "Opening the alpha" in the [decision register](DecisionRegister.md)). Once a deployment with per-run worker sockets is running (`docker compose exec server env | grep ImageWorkerRuns` prints a line), add `"OpenToEveryone": true` to the `AetherFrame` section of `/opt/aetherframe/config/aetherframe.json`, beside the allowlist, then run `docker compose restart server` in `/opt/aetherframe`. `admin allowlist` then starts with "Open to everyone". To close it again, set it to `false` and restart: only the listed ids may then share and view.
+
 ## 3. Running it
 
 Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.

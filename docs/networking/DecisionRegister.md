@@ -1418,6 +1418,23 @@ The owner asked on October 1, 2026 for N2-10 and N2-11 "to be done asap", for a 
 
 **Rationale.** Each choice keeps C5 and D6 as written and costs the test nothing: drawing through the owner's own renderer is what makes "looks as it does for A" (NETWORK2, section 2, step 5) hold by construction, and every refusal leaves the rest of the Plate drawn.
 
+### Opening the alpha. The owner's direction, October 1, 2026; its details APPROVED (Claude, under the owner's delegation of September 29, 2026), October 1, 2026
+
+**The owner's direction.** After the two-player test passed, the owner wrote "it's time to just open this alpha to other players, we're ready for it i think", and chose, from Claude's questions: "Testing channel gets sharing" (the repository link players already use serves a build with sharing on), and "Keep my PC's relay" for the Lodestone check (C2 and "Reaching the Lodestone through a relay").
+
+**What opening needed first, decided under the delegation:**
+- **I2's per-job isolation, now met.** The worker host already ran one container per run, with no network, a read-only root, every capability dropped, and removed before the next starts. The gap I2 recorded (and N2-8's note repeated) was that a run an exploit controls could reconnect to the server's one socket during its life and be handed later jobs. Now each run has a socket of its own (`AetherFrame:ImageWorkerRuns`):
+  - the server offers one fresh socket at a time, under a random name, answers one connection on it, then closes and deletes it before it offers the next;
+  - the host (`aetherframe-worker.sh`, as root under systemd) mounts only the socket on offer into the run's container, read-only, as its one mount;
+  - so a run can take the job it was started for and no other: its socket answers no second connection, and it sees no other socket. The host still removes each container, and every process in it, before the next run starts.
+
+  CI's deployment-kit check asserts the one mount, and the server's tests that a run's socket answers once and is gone.
+- **The switch.** `AetherFrame:OpenToEveryone` lets every character with a passing Lodestone check bind, publish and view: C8's allowlist stops limiting who. The server refuses to start with it set unless the image worker uses per-run sockets (or there is no worker, which refuses every image), so I2's condition is enforced in code, and `admin allowlist` says when the server is open. Setting it back to false closes the server again at once, to the ids listed.
+- **S3's expiry, for the alpha: none.** A profile stays until its player turns sharing off, or the operator removes it on a request verified by a Lodestone check or out of band (S3's stage 1 path, which batch C restates). The alpha is small, each character holds one revision, and the consent screen already says how to remove a Plate. Expiry after long inactivity, disclosed in advance, is decided before the beta.
+- **What stays as it is:** C6's rate limits, the Lodestone budget of 60 reads an hour, and the relay on the owner's PC: while that PC or its relay is off, a new player's check answers "try again later", and nothing else changes.
+
+**Not settled here:** sharing in the testing channel's build (P2 keeps the preview flavour out of releases), which a change of its own settles, with the owner's release approval.
+
 ### N2-11's tester kit. APPROVED (Claude, under the owner's delegation of September 29, 2026), October 1, 2026
 
 P2 leaves open how a preview build reaches a second player, and NETWORK2's section 3 recommends a separately staged kit. Decided:
