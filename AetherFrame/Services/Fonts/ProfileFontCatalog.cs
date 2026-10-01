@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
@@ -11,7 +12,11 @@ namespace AetherFrame.Services.Fonts;
 /// <c>ProfileEditorWindow.DrawTypographySection</c> — rather than exposing a control that
 /// would silently do nothing, or worse, fake the style geometrically.
 /// </summary>
-internal sealed record ProfileFontFamilyDescriptor(string Id, string DisplayName, bool SupportsBold, bool SupportsItalic);
+internal sealed record ProfileFontFamilyDescriptor(string Id, string DisplayName, bool SupportsBold, bool SupportsItalic)
+{
+    /// <summary>The group the font pickers list it under.</summary>
+    internal FontCategory Category { get; init; } = FontCategory.AetherFrame;
+}
 
 /// <summary>
 /// The small, curated, portable set of font families AetherFrame ships with. Every curated
@@ -51,8 +56,10 @@ internal static class ProfileFontCatalog
 
     /// <summary>Display order for the Inspector's Family combo: AetherFrame's fully-styled
     /// families first (the ones a user should actually pick), legacy compatibility last.</summary>
-    internal static readonly IReadOnlyList<ProfileFontFamilyDescriptor> All =
-        [AetherFrameSans, AetherFrameSerif, AetherFrameMono, DalamudDefault];
+    internal static readonly IReadOnlyList<ProfileFontFamilyDescriptor> All = BuildAll();
+
+    // The library's descriptors by id, for Resolve (built once; a lookup allocates nothing).
+    private static readonly Dictionary<string, ProfileFontFamilyDescriptor> LibraryById = BuildLibraryIndex();
 
     /// <summary>Resolves a persisted family id to its descriptor, falling back to
     /// <see cref="DalamudDefault"/> for null/unrecognized ids (e.g. a legacy element, or one
@@ -65,6 +72,38 @@ internal static class ProfileFontCatalog
         ProfileFontFamilies.AetherFrameSans => AetherFrameSans,
         ProfileFontFamilies.AetherFrameSerif => AetherFrameSerif,
         ProfileFontFamilies.AetherFrameMono => AetherFrameMono,
+        not null when LibraryById.TryGetValue(familyId, out var library) => library,
         _ => DalamudDefault,
     };
+
+    /// <summary>A library family's descriptor: Bold and Italic are offered when it has either real face.</summary>
+    private static ProfileFontFamilyDescriptor Describe(LibraryFontFamily family) =>
+        new(family.Id, family.DisplayName, family.HasBold, family.HasItalic) { Category = family.Category };
+
+    /// <summary>AetherFrame's own families first, then the library by category and name, Dalamud Default last.</summary>
+    private static IReadOnlyList<ProfileFontFamilyDescriptor> BuildAll()
+    {
+        var all = new List<ProfileFontFamilyDescriptor> { AetherFrameSans, AetherFrameSerif, AetherFrameMono };
+        foreach (var family in FontLibrary.Families)
+        {
+            all.Add(Describe(family));
+        }
+
+        all.Add(DalamudDefault);
+        return all.AsReadOnly();
+    }
+
+    private static Dictionary<string, ProfileFontFamilyDescriptor> BuildLibraryIndex()
+    {
+        var index = new Dictionary<string, ProfileFontFamilyDescriptor>(StringComparer.Ordinal);
+        foreach (var descriptor in All)
+        {
+            if (descriptor.Category != FontCategory.AetherFrame)
+            {
+                index.Add(descriptor.Id, descriptor);
+            }
+        }
+
+        return index;
+    }
 }

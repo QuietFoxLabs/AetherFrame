@@ -38,16 +38,18 @@ public class ProfileFontCatalogTests
     [Fact]
     public void TheCatalog_ListsCuratedFamiliesFirst_AndLegacyLast()
     {
-        Assert.Equal(
-            [ProfileFontFamilies.AetherFrameSans, ProfileFontFamilies.AetherFrameSerif, ProfileFontFamilies.AetherFrameMono, ProfileFontFamilies.DalamudDefault],
-            ProfileFontCatalog.All.Select(d => d.Id).ToArray());
+        // The library's families sit between (FontLibraryTests checks them).
+        var ids = ProfileFontCatalog.All.Select(d => d.Id).ToArray();
+        Assert.Equal([ProfileFontFamilies.AetherFrameSans, ProfileFontFamilies.AetherFrameSerif, ProfileFontFamilies.AetherFrameMono], ids.Take(3));
+        Assert.Equal(ProfileFontFamilies.DalamudDefault, ids[^1]);
         Assert.Equal(ProfileFontCatalog.All.Count, ProfileFontCatalog.All.Select(d => d.Id).Distinct().Count());
     }
 
     [Fact]
     public void OnlyCuratedFamilies_OfferRealBoldAndItalicFaces()
     {
-        foreach (var descriptor in ProfileFontCatalog.All)
+        // AetherFrame's own and Dalamud Default; a library family offers what its files hold (FontLibraryTests).
+        foreach (var descriptor in ProfileFontCatalog.All.Where(d => d.Category == AetherFrame.Domain.Rendering.FontCategory.AetherFrame))
         {
             var curated = descriptor.Id != ProfileFontFamilies.DalamudDefault;
             Assert.Equal(curated, descriptor.SupportsBold);

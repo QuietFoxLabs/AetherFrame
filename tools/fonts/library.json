@@ -1,0 +1,2811 @@
+{
+  "families": [
+    {
+      "id": "gf-cinzel",
+      "name": "Cinzel",
+      "category": "Fantasy",
+      "prefix": "Cinzel",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/cinzel/OFL.txt",
+      "designers": [
+        "Natanael Gama"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cinzel/v26/8vIU7ww63mVu7gtR-kwKxNvkNOjw-tbnTYo.ttf",
+          "bytes": 45884,
+          "sha256": "a0242f6698ae0d3220a29986a09274f9d1eddb4a24da4e50faf387fd1804eb7b"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/cinzel/v26/8vIU7ww63mVu7gtR-kwKxNvkNOjw-jHgTYo.ttf",
+          "bytes": 46124,
+          "sha256": "2c6b1ff0d368efb73636700b69dbef707fa5602a06d085a4e91e5125082651f0"
+        }
+      ]
+    },
+    {
+      "id": "gf-cinzel-decorative",
+      "name": "Cinzel Decorative",
+      "category": "Fantasy",
+      "prefix": "CinzelDecorative",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/cinzeldecorative/OFL.txt",
+      "designers": [
+        "Natanael Gama"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cinzeldecorative/v19/daaCSScvJGqLYhG8nNt8KPPswUAPnh7U.ttf",
+          "bytes": 58440,
+          "sha256": "4c2d5e205f0898d558f7c348a459743d00a3a9bcb89ce584acb153fdd7567614"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/cinzeldecorative/v19/daaHSScvJGqLYhG8nNt8KPPswUAPniZoaelD.ttf",
+          "bytes": 60312,
+          "sha256": "33af29b321940453ee21556c041452d4a84337568505780e0d3c08a6cd1f16fd"
+        }
+      ]
+    },
+    {
+      "id": "gf-medievalsharp",
+      "name": "MedievalSharp",
+      "category": "Fantasy",
+      "prefix": "MedievalSharp",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/medievalsharp/OFL.txt",
+      "designers": [
+        "Wojciech Kalinowski"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/medievalsharp/v28/EvOJzAlL3oU5AQl2mP5KdgptAq8.ttf",
+          "bytes": 146116,
+          "sha256": "939290726652eb8c0b109e43ed0afbc17c5ffd31b94775084e3ad37ad2ac4266"
+        }
+      ]
+    },
+    {
+      "id": "gf-uncial-antiqua",
+      "name": "Uncial Antiqua",
+      "category": "Fantasy",
+      "prefix": "UncialAntiqua",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/uncialantiqua/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/uncialantiqua/v22/N0bM2S5WOex4OUbESzoESK-i-PfR.ttf",
+          "bytes": 61044,
+          "sha256": "54e842f2e54e3c07b3cb901ac008d92922c69506c0db669a0e5aa6d15987f29b"
+        }
+      ]
+    },
+    {
+      "id": "gf-unifrakturmaguntia",
+      "name": "UnifrakturMaguntia",
+      "category": "Fantasy",
+      "prefix": "UnifrakturMaguntia",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/unifrakturmaguntia/OFL.txt",
+      "designers": [
+        "j. 'mach' wust"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/unifrakturmaguntia/v22/WWXPlieVYwiGNomYU-ciRLRvEmK7oaVunw.ttf",
+          "bytes": 73352,
+          "sha256": "6fbbc8194b203645b9dea180f5c75afdcf4dead77be71ff6453c7772285863b8"
+        }
+      ]
+    },
+    {
+      "id": "gf-unifrakturcook",
+      "name": "UnifrakturCook",
+      "category": "Fantasy",
+      "prefix": "UnifrakturCook",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/unifrakturcook/OFL.txt",
+      "designers": [
+        "j. 'mach' wust"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/unifrakturcook/v25/IurA6Yli8YOdcoky-0PTTdkm56n05Uw1.ttf",
+          "bytes": 36444,
+          "sha256": "7cf8d0655fdcf5c99c74987dab43adb5dd295a878571941829f8d9f2e077cceb"
+        }
+      ]
+    },
+    {
+      "id": "gf-pirata-one",
+      "name": "Pirata One",
+      "category": "Fantasy",
+      "prefix": "PirataOne",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/pirataone/OFL.txt",
+      "designers": [
+        "Rodrigo Fuenzalida",
+        "Nicolas Massi"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/pirataone/v23/I_urMpiDvgLdLh0fAtoftig.ttf",
+          "bytes": 53672,
+          "sha256": "c0fd2a193661b242a02738a05f1d628fcb65e70be22b1e97d0f2129e7051b41f"
+        }
+      ]
+    },
+    {
+      "id": "gf-im-fell-english",
+      "name": "IM Fell English",
+      "category": "Fantasy",
+      "prefix": "IMFellEnglish",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/imfellenglish/OFL.txt",
+      "designers": [
+        "Igino Marini"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/imfellenglish/v14/Ktk1ALSLW8zDe0rthJysWrnLsAz3Fw.ttf",
+          "bytes": 189680,
+          "sha256": "725a44824e534dfb26af2bf135dd6fab577ec7f0781c5be17bd89e7ce22f035a"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/imfellenglish/v14/Ktk3ALSLW8zDe0rthJysWrnLsAzHFaOd.ttf",
+          "bytes": 197028,
+          "sha256": "ae0d17a0342d6ce0e07f491b9db04cab9e357e6f06859529f503b2303d0065e9"
+        }
+      ]
+    },
+    {
+      "id": "gf-im-fell-dw-pica",
+      "name": "IM Fell DW Pica",
+      "category": "Fantasy",
+      "prefix": "IMFellDWPica",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/imfelldwpica/OFL.txt",
+      "designers": [
+        "Igino Marini"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/imfelldwpica/v16/2sDGZGRQotv9nbn2qSl0TxXVYNw9ZA.ttf",
+          "bytes": 211184,
+          "sha256": "fbd7b037c592162a310309ed4dfad67d08dbe709bd4f0857c75968f46167f299"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/imfelldwpica/v16/2sDEZGRQotv9nbn2qSl0TxXVYNwNZgnQ.ttf",
+          "bytes": 238596,
+          "sha256": "20790d67d8a105d3b9cedfb572e19fd9f952d4db12512066b9b6e08af54387a1"
+        }
+      ]
+    },
+    {
+      "id": "gf-almendra",
+      "name": "Almendra",
+      "category": "Fantasy",
+      "prefix": "Almendra",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/almendra/OFL.txt",
+      "designers": [
+        "Ana Sanfelippo"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/almendra/v28/H4ckBXKAlMnTn0CskyY6.ttf",
+          "bytes": 57324,
+          "sha256": "b7737fc09aeb64e09d9595f3c4413806e5fb00873174459a1ed2b6edb32f212e"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/almendra/v28/H4cjBXKAlMnTn0Cskx6G7Zu4.ttf",
+          "bytes": 34224,
+          "sha256": "33f1f2b7e32d00401058ff19c4dd4ffee8dd6cd283274fdb5aeddd534cc26a37"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/almendra/v28/H4ciBXKAlMnTn0CskxY4yLs.ttf",
+          "bytes": 32876,
+          "sha256": "0c69c4f5924a69d291b0d6cfee74901555df9746e689a386eb92f2178432413d"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/almendra/v28/H4chBXKAlMnTn0CskxY48Ae9oqY.ttf",
+          "bytes": 32988,
+          "sha256": "299bf22d795fb456d3cf0934ea2099e8adf0f02827f196b9fb80c87441877d36"
+        }
+      ]
+    },
+    {
+      "id": "gf-metamorphous",
+      "name": "Metamorphous",
+      "category": "Fantasy",
+      "prefix": "Metamorphous",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/metamorphous/OFL.txt",
+      "designers": [
+        "James Grieshaber"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/metamorphous/v22/Wnz8HA03aAXcC39ZEX5y1330PA.ttf",
+          "bytes": 130328,
+          "sha256": "b778311d8b1fd83a0a1f531dac7342440be07749f74a933159d92733fc06938d"
+        }
+      ]
+    },
+    {
+      "id": "gf-grenze-gotisch",
+      "name": "Grenze Gotisch",
+      "category": "Fantasy",
+      "prefix": "GrenzeGotisch",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/grenzegotisch/OFL.txt",
+      "designers": [
+        "Omnibus-Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/grenzegotisch/v20/Fh4hPjjqNDz1osh_jX9YfjudpBJBNV5y5wf_k1i5Lz9UcA.ttf",
+          "bytes": 70476,
+          "sha256": "0a1576713c8cbd6cc82960474d9a015ab196035682dfcc216d923b6435cb35ad"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/grenzegotisch/v20/Fh4hPjjqNDz1osh_jX9YfjudpBJBNV5y5wf_k1i5yDhUcA.ttf",
+          "bytes": 70648,
+          "sha256": "e36f282a5db705c9f386a9bcc87431072a771d838588df8cbbbeacf2945e93d5"
+        }
+      ]
+    },
+    {
+      "id": "gf-new-rocker",
+      "name": "New Rocker",
+      "category": "Fantasy",
+      "prefix": "NewRocker",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/newrocker/OFL.txt",
+      "designers": [
+        "Impallari Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/newrocker/v17/MwQzbhjp3-HImzcCU_cJkGM.ttf",
+          "bytes": 167104,
+          "sha256": "432421714e308ca88f43b26ab79a83313b3c9fd11fa8330cb61c354dbbf14a45"
+        }
+      ]
+    },
+    {
+      "id": "gf-eagle-lake",
+      "name": "Eagle Lake",
+      "category": "Fantasy",
+      "prefix": "EagleLake",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/eaglelake/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/eaglelake/v26/ptRMTiqbbuNJDOiKj9wG5O4.ttf",
+          "bytes": 75888,
+          "sha256": "f93a43d3d03fff96fcb956525a1e7513da4eb731e7affec217dd9280ef71c80c"
+        }
+      ]
+    },
+    {
+      "id": "gf-macondo",
+      "name": "Macondo",
+      "category": "Fantasy",
+      "prefix": "Macondo",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/macondo/OFL.txt",
+      "designers": [
+        "John Vargas Beltr\u00e1n"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/macondo/v27/RrQQboN9-iB1IXmOS2U.ttf",
+          "bytes": 46432,
+          "sha256": "7c0d3263ad8842497eaa568fe975a2241ad3647f24d1ade9bf0acd5a827d4d57"
+        }
+      ]
+    },
+    {
+      "id": "gf-fondamento",
+      "name": "Fondamento",
+      "category": "Fantasy",
+      "prefix": "Fondamento",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/fondamento/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/fondamento/v22/4UaHrEJGsxNmFTPDnkaJx60.ttf",
+          "bytes": 83392,
+          "sha256": "bd032882aa756b53fa4cc19c870e91ca704906e5c18af48c68d79417ff7e138b"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/fondamento/v22/4UaFrEJGsxNmFTPDnkaJ96_p4g.ttf",
+          "bytes": 63904,
+          "sha256": "8c042fe310475fc8414d4bb3362066c2870bf6589124351f8864e4947e15dca6"
+        }
+      ]
+    },
+    {
+      "id": "gf-texturina",
+      "name": "Texturina",
+      "category": "Fantasy",
+      "prefix": "Texturina",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/texturina/OFL.txt",
+      "designers": [
+        "Guillermo Torres",
+        "Omnibus-Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/texturina/v32/c4mM1nxpEtL3pXiAulRTkY-HGmNEX1b9NspjMwhAgliHhVrXy2eYGvUg.ttf",
+          "bytes": 83600,
+          "sha256": "8f7ff21c96879531b2fe2ebff4e68a93ddc76a2ca32908b8246ddfdedbe16322"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/texturina/v32/c4mM1nxpEtL3pXiAulRTkY-HGmNEX1b9NspjMwhAgliHhVrXy2d_HfUg.ttf",
+          "bytes": 83560,
+          "sha256": "1690cba3d38c2a58bd1543738a6fdc78793ff2d573b65705085be88ed2b42a04"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/texturina/v32/c4mO1nxpEtL3pXiAulR5mL129FhZmLj7I4oiSUJyfYDu7sB5zHJQWR1j0Z4.ttf",
+          "bytes": 83984,
+          "sha256": "2aaee92560525f2386830dff338ceaaef8d6d855e9a0816197e627b6684900d2"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/texturina/v32/c4mO1nxpEtL3pXiAulR5mL129FhZmLj7I4oiSUJyfYDu7sB5zHJQWfpk0Z4.ttf",
+          "bytes": 84112,
+          "sha256": "3ca7713bf815cc014285898c49651cda5bc60f091ae227db66862b20cffaad0b"
+        }
+      ]
+    },
+    {
+      "id": "gf-marcellus",
+      "name": "Marcellus",
+      "category": "Fantasy",
+      "prefix": "Marcellus",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/marcellus/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/marcellus/v14/wEO_EBrOk8hQLDvIAF8FUQ.ttf",
+          "bytes": 43288,
+          "sha256": "2f6fa616f76102d81c4a935c3a8cd547a8db9de679ad9fda9cfd42f16e7f0743"
+        }
+      ]
+    },
+    {
+      "id": "gf-marcellus-sc",
+      "name": "Marcellus SC",
+      "category": "Fantasy",
+      "prefix": "MarcellusSC",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/marcellussc/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/marcellussc/v14/ke8iOgUHP1dg-Rmi6RWjbLEPgQ.ttf",
+          "bytes": 44448,
+          "sha256": "32cb01fde9e5bcb216f9ebaef2d821461c65acbdca72cd76adcb388d455fc31f"
+        }
+      ]
+    },
+    {
+      "id": "gf-germania-one",
+      "name": "Germania One",
+      "category": "Fantasy",
+      "prefix": "GermaniaOne",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/germaniaone/OFL.txt",
+      "designers": [
+        "John Vargas Beltr\u00e1n"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/germaniaone/v21/Fh4yPjrqIyv2ucM2qzBjeS3ezA.ttf",
+          "bytes": 29888,
+          "sha256": "a5c0676500ecee9afe8ad7dc9d5b3ec6aa64bc7dcf8a3cce4816463cafc810d4"
+        }
+      ]
+    },
+    {
+      "id": "gf-philosopher",
+      "name": "Philosopher",
+      "category": "Fantasy",
+      "prefix": "Philosopher",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/philosopher/OFL.txt",
+      "designers": [
+        "Jovanny Lemonad"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/philosopher/v21/vEFV2_5QCwIS4_Dhez5jcVBp.ttf",
+          "bytes": 109812,
+          "sha256": "5ae1084184ac0667de9df77d5990edef64244c888906ffdc3fae95da0ee7f514"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/philosopher/v21/vEFI2_5QCwIS4_Dhez5jcWjVamgc.ttf",
+          "bytes": 108404,
+          "sha256": "5b2bd1ca0ef9ed2869fbad9511ce3f9e5f08848712a0a94c0549fd4b360921fd"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/philosopher/v21/vEFX2_5QCwIS4_Dhez5jcWBrT0g.ttf",
+          "bytes": 116108,
+          "sha256": "3ab674f2744e24237d312f42d82c995ba105408bd75782555c0a523a3ba2c17d"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/philosopher/v21/vEFK2_5QCwIS4_Dhez5jcWBrd_QZ8tI.ttf",
+          "bytes": 116452,
+          "sha256": "72113378a39b4534e83bc5aef756df2966c3bc3d3845cc983168fb817fd290a6"
+        }
+      ]
+    },
+    {
+      "id": "gf-alegreya",
+      "name": "Alegreya",
+      "category": "Fantasy",
+      "prefix": "Alegreya",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/OFL.txt",
+      "designers": [
+        "Juan Pablo del Peral",
+        "HT Fonts"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/alegreya/v41/4UacrEBBsBhlBjvfkQjt71kZfyBzPgNG9hUI_A.ttf",
+          "bytes": 161856,
+          "sha256": "2f355df26680f857b950e338995b2945df5d5345dd4334fd61c60600d666fbb6"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/alegreya/v41/4UacrEBBsBhlBjvfkQjt71kZfyBzPgNGERII_A.ttf",
+          "bytes": 164508,
+          "sha256": "613bb372fa6f66a19ed652ea8eea88768ff4321d5eb03cf8b28a217ba8942fbf"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/alegreya/v41/4UaSrEBBsBhlBjvfkSLk3abBFkvpkARTPlbgv6qm.ttf",
+          "bytes": 160996,
+          "sha256": "6ab296ea2b6ea95302e1c3ffd9ed203483ce1e9a3b2ef23646e7780459f5cbd7"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/alegreya/v41/4UaSrEBBsBhlBjvfkSLk3abBFkvpkARTPlYHuKqm.ttf",
+          "bytes": 163568,
+          "sha256": "f53cdbe4db23177569d2002a7c77489982b4137b6e3442ed468b8d49d20bf55b"
+        }
+      ]
+    },
+    {
+      "id": "gf-great-vibes",
+      "name": "Great Vibes",
+      "category": "Script",
+      "prefix": "GreatVibes",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/greatvibes/OFL.txt",
+      "designers": [
+        "Robert Leuschke"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/greatvibes/v21/RWmMoKWR9v4ksMfaWd_JN-XC.ttf",
+          "bytes": 362736,
+          "sha256": "9d76b8c67f5289c310114c935c5c3831fc3c25bc2bb888a28210c1659d701b9e"
+        }
+      ]
+    },
+    {
+      "id": "gf-dancing-script",
+      "name": "Dancing Script",
+      "category": "Script",
+      "prefix": "DancingScript",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/dancingscript/OFL.txt",
+      "designers": [
+        "Impallari Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/dancingscript/v29/If2cXTr6YS-zF4S-kcSWSVi_sxjsohD9F50Ruu7BMSoHTQ.ttf",
+          "bytes": 76340,
+          "sha256": "cbf45d12702db573b174863d83fc137f29ac270240f289aa41942b36032d5201"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/dancingscript/v29/If2cXTr6YS-zF4S-kcSWSVi_sxjsohD9F50Ruu7B1i0HTQ.ttf",
+          "bytes": 76596,
+          "sha256": "d2b3a6ce8d91be38a76aa1a1696a9e184140ac5fb5c3aa6a1b8f03dabd9560ee"
+        }
+      ]
+    },
+    {
+      "id": "gf-caveat",
+      "name": "Caveat",
+      "category": "Script",
+      "prefix": "Caveat",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/caveat/OFL.txt",
+      "designers": [
+        "Impallari Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/caveat/v23/WnznHAc5bAfYB2QRah7pcpNvOx-pjfJ9SII.ttf",
+          "bytes": 251024,
+          "sha256": "012f33f9814bf9614973983335c3a375fe267c094e7c09a02a276cd1dcd4180a"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/caveat/v23/WnznHAc5bAfYB2QRah7pcpNvOx-pjRV6SII.ttf",
+          "bytes": 251256,
+          "sha256": "f4365d9874c1b64026aca48786cf835a5decf2c740c06de04dbb05ce8c93ff37"
+        }
+      ]
+    },
+    {
+      "id": "gf-pacifico",
+      "name": "Pacifico",
+      "category": "Script",
+      "prefix": "Pacifico",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/pacifico/OFL.txt",
+      "designers": [
+        "Vernon Adams",
+        "Jacques Le Bailly",
+        "Botjo Nikoltchev",
+        "Ani Petrova"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/pacifico/v23/FwZY7-Qmy14u9lezJ96A.ttf",
+          "bytes": 251232,
+          "sha256": "0adbdce4f5422e632945cc29001dc19f0bbda1336626ca7ea9c921d49bcc0bf4"
+        }
+      ]
+    },
+    {
+      "id": "gf-sacramento",
+      "name": "Sacramento",
+      "category": "Script",
+      "prefix": "Sacramento",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/sacramento/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/sacramento/v17/buEzpo6gcdjy0EiZMBUG0Co.ttf",
+          "bytes": 64108,
+          "sha256": "15597dce1d707e88a188f804fb927e526b2ad959d03e9df9c812492ceed0a4ab"
+        }
+      ]
+    },
+    {
+      "id": "gf-allura",
+      "name": "Allura",
+      "category": "Script",
+      "prefix": "Allura",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/allura/OFL.txt",
+      "designers": [
+        "Robert Leuschke"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/allura/v23/9oRPNYsQpS4zjuAPjA.ttf",
+          "bytes": 109252,
+          "sha256": "814c49d38316cfa0c3bc629ace488ea838b72996276c523b2cdceb31f88b044c"
+        }
+      ]
+    },
+    {
+      "id": "gf-parisienne",
+      "name": "Parisienne",
+      "category": "Script",
+      "prefix": "Parisienne",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/parisienne/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/parisienne/v14/E21i_d3kivvAkxhLEVZpcy8.ttf",
+          "bytes": 57588,
+          "sha256": "c392ecb4825fe6eaf091f69927c732379dd63b794b37f64e5ecc2745a729841e"
+        }
+      ]
+    },
+    {
+      "id": "gf-alex-brush",
+      "name": "Alex Brush",
+      "category": "Script",
+      "prefix": "AlexBrush",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/alexbrush/OFL.txt",
+      "designers": [
+        "Robert Leuschke"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/alexbrush/v23/SZc83FzrJKuqFbwMKk6EtUI.ttf",
+          "bytes": 113384,
+          "sha256": "76f8b9418a5622a65e293238f73b99a2b2697bd2d482bb0ff0edb301b20b5186"
+        }
+      ]
+    },
+    {
+      "id": "gf-pinyon-script",
+      "name": "Pinyon Script",
+      "category": "Script",
+      "prefix": "PinyonScript",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/pinyonscript/OFL.txt",
+      "designers": [
+        "Nicole Fally"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/pinyonscript/v24/6xKpdSJbL9-e9LuoeQiDRQR8aOI.ttf",
+          "bytes": 144584,
+          "sha256": "3683830e3bb3f1a2138b6098f8663ca5ceb66b1f397a4f30639aae139e344bb8"
+        }
+      ]
+    },
+    {
+      "id": "gf-tangerine",
+      "name": "Tangerine",
+      "category": "Script",
+      "prefix": "Tangerine",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/tangerine/OFL.txt",
+      "designers": [
+        "Toshi Omagari"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/tangerine/v18/IurY6Y5j_oScZZow4VOBDg.ttf",
+          "bytes": 59440,
+          "sha256": "bf122bc56965760a9d898341fa151db9bdde3aa0827bfe07373b52d943d03603"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/tangerine/v18/Iurd6Y5j_oScZZow4VO5srNpjA.ttf",
+          "bytes": 64284,
+          "sha256": "af0922afe25d5e6b470cacfd65db4831da8c6f3954e850a508196a8ab2ae3cfc"
+        }
+      ]
+    },
+    {
+      "id": "gf-satisfy",
+      "name": "Satisfy",
+      "category": "Script",
+      "prefix": "Satisfy",
+      "license": "apache",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/apache/satisfy/LICENSE.txt",
+      "designers": [
+        "Sideshow"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/satisfy/v22/rP2Hp2yn6lkG50LoOZQ.ttf",
+          "bytes": 46652,
+          "sha256": "d394db8f27c568545da4dc2cbb798c04d9c70cea9beb434039dcf3651a4cde7b"
+        }
+      ]
+    },
+    {
+      "id": "gf-kaushan-script",
+      "name": "Kaushan Script",
+      "category": "Script",
+      "prefix": "KaushanScript",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/kaushanscript/OFL.txt",
+      "designers": [
+        "Impallari Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/kaushanscript/v19/vm8vdRfvXFLG3OLnsO15WYS5DF7_.ttf",
+          "bytes": 179848,
+          "sha256": "423a2aa7c70d3e00312dfe35d3f6ba44ab6bf062ad4480437fc65dcc5d596c6e"
+        }
+      ]
+    },
+    {
+      "id": "gf-amatic-sc",
+      "name": "Amatic SC",
+      "category": "Script",
+      "prefix": "AmaticSC",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/amaticsc/OFL.txt",
+      "designers": [
+        "Vernon Adams",
+        "Ben Nathan",
+        "Thomas Jockin"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/amaticsc/v28/TUZyzwprpvBS1izr_vO0DQ.ttf",
+          "bytes": 141044,
+          "sha256": "cceb66482d8bfffa04e3769c961e07a1b5d2d1345975a9b91fa77f90a1c6f51d"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/amaticsc/v28/TUZ3zwprpvBS1izr_vOMscG6eQ.ttf",
+          "bytes": 144608,
+          "sha256": "3dbdd1cb02d77a0918f49914376fff2ec449ee8f4a433e021f00126e03f58eb0"
+        }
+      ]
+    },
+    {
+      "id": "gf-indie-flower",
+      "name": "Indie Flower",
+      "category": "Script",
+      "prefix": "IndieFlower",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/indieflower/OFL.txt",
+      "designers": [
+        "Kimberly Geswein"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/indieflower/v24/m8JVjfNVeKWVnh3QMuKkFcZlbg.ttf",
+          "bytes": 46456,
+          "sha256": "a33e8d2bcba4341d07bf2dc165a3af90984c99e38b7dd7dfcbd9bf1a13597f83"
+        }
+      ]
+    },
+    {
+      "id": "gf-shadows-into-light",
+      "name": "Shadows Into Light",
+      "category": "Script",
+      "prefix": "ShadowsIntoLight",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/shadowsintolight/OFL.txt",
+      "designers": [
+        "Kimberly Geswein"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/shadowsintolight/v22/UqyNK9UOIntux_czAvDQx_ZcHqZXBNQDcg.ttf",
+          "bytes": 39508,
+          "sha256": "9e22fccbcbd08bb567db3c25e97eb894aa96fb090ab61ebe78fb23a65a4fc7f6"
+        }
+      ]
+    },
+    {
+      "id": "gf-homemade-apple",
+      "name": "Homemade Apple",
+      "category": "Script",
+      "prefix": "HomemadeApple",
+      "license": "apache",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/apache/homemadeapple/LICENSE.txt",
+      "designers": [
+        "Font Diner"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/homemadeapple/v24/Qw3EZQFXECDrI2q789EKQZJob3x9.ttf",
+          "bytes": 108704,
+          "sha256": "9a97d4447953ab43ac279a8ea94a90749e809221586608b2ddd86b5159b5fa11"
+        }
+      ]
+    },
+    {
+      "id": "gf-cookie",
+      "name": "Cookie",
+      "category": "Script",
+      "prefix": "Cookie",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/cookie/OFL.txt",
+      "designers": [
+        "Ania Kruk"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cookie/v23/syky-y18lb0tSbfNlQ.ttf",
+          "bytes": 41620,
+          "sha256": "bd54a5cd291174539225e6bd450cf71230178df67c0ec9b949fac9a5050f3702"
+        }
+      ]
+    },
+    {
+      "id": "gf-marck-script",
+      "name": "Marck Script",
+      "category": "Script",
+      "prefix": "MarckScript",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/marckscript/OFL.txt",
+      "designers": [
+        "Denis Masharov"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/marckscript/v22/nwpTtK2oNgBA3Or78gapdwuCzw.ttf",
+          "bytes": 81208,
+          "sha256": "334d5b19adc74ad1a97bcc403deafa2df7cb338d05da95d67a4587ed0f7c329e"
+        }
+      ]
+    },
+    {
+      "id": "gf-courgette",
+      "name": "Courgette",
+      "category": "Script",
+      "prefix": "Courgette",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/courgette/OFL.txt",
+      "designers": [
+        "Karolina Lach"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/courgette/v19/wEO_EBrAnc9BLjLQAUkFUQ.ttf",
+          "bytes": 117596,
+          "sha256": "9950490ccc48d4acbf950a28709e8799bf06996a2e4feafc8ed29e248525acba"
+        }
+      ]
+    },
+    {
+      "id": "gf-yellowtail",
+      "name": "Yellowtail",
+      "category": "Script",
+      "prefix": "Yellowtail",
+      "license": "apache",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/apache/yellowtail/LICENSE.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/yellowtail/v25/OZpGg_pnoDtINPfRIlLotlw.ttf",
+          "bytes": 60864,
+          "sha256": "01418091041e0e73525b18416e3f9db9d63be7f9c0443c16465743bf3a9db48b"
+        }
+      ]
+    },
+    {
+      "id": "gf-italianno",
+      "name": "Italianno",
+      "category": "Script",
+      "prefix": "Italianno",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/italianno/OFL.txt",
+      "designers": [
+        "Robert Leuschke"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/italianno/v18/dg4n_p3sv6gCJkwzT6Rnjw.ttf",
+          "bytes": 124852,
+          "sha256": "8b9f528dfeccad7f1572ee10d50823cae5105b8ed69f71b124684c834b940a07"
+        }
+      ]
+    },
+    {
+      "id": "gf-rouge-script",
+      "name": "Rouge Script",
+      "category": "Script",
+      "prefix": "RougeScript",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/rougescript/OFL.txt",
+      "designers": [
+        "Sabrina Mariela Lopez"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/rougescript/v20/LYjFdGbiklMoCIQOw1Ep3S4PVA.ttf",
+          "bytes": 45052,
+          "sha256": "2b83d7bdc49de4cc4f9aa7ba0cebe1003e855ec557c8dca5e4e2c33274df1b4a"
+        }
+      ]
+    },
+    {
+      "id": "gf-lobster",
+      "name": "Lobster",
+      "category": "Script",
+      "prefix": "Lobster",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/lobster/OFL.txt",
+      "designers": [
+        "Impallari Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/lobster/v32/neILzCirqoswsqX9_oU.ttf",
+          "bytes": 392208,
+          "sha256": "dfdc22543e8a5188aa6d774aa2e9a1f3c9cb363dc814ba1e919ac9e379daec03"
+        }
+      ]
+    },
+    {
+      "id": "gf-kalam",
+      "name": "Kalam",
+      "category": "Script",
+      "prefix": "Kalam",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/kalam/OFL.txt",
+      "designers": [
+        "Indian Type Foundry"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/kalam/v18/YA9dr0Wd4kDdMuhW.ttf",
+          "bytes": 426488,
+          "sha256": "f20e9de66ca054e1d1376b3c811d2240b1b5ef831474bda9fbbaf28d67e67902"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/kalam/v18/YA9Qr0Wd4kDdMtDqHQLL.ttf",
+          "bytes": 460024,
+          "sha256": "7463b42e3630f003f355b3f37e1cf8e2c0b0855374d483aef580ff45fdac3ba4"
+        }
+      ]
+    },
+    {
+      "id": "gf-patrick-hand",
+      "name": "Patrick Hand",
+      "category": "Script",
+      "prefix": "PatrickHand",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/patrickhand/OFL.txt",
+      "designers": [
+        "Patrick Wagesreiter"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/patrickhand/v25/LDI1apSQOAYtSuYWp8ZhfYeMWQ.ttf",
+          "bytes": 152636,
+          "sha256": "8a384204c8ab3e9ed82954d46d8110a66fb5d7acf8f6b64c6f3980c1d0c01993"
+        }
+      ]
+    },
+    {
+      "id": "gf-cormorant-garamond",
+      "name": "Cormorant Garamond",
+      "category": "Serif",
+      "prefix": "CormorantGaramond",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/OFL.txt",
+      "designers": [
+        "Christian Thalmann"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cormorantgaramond/v21/co3umX5slCNuHLi8bLeY9MK7whWMhyjypVO7abI26QOD_v86GnM.ttf",
+          "bytes": 290236,
+          "sha256": "6d37a86241a25d63f8fe6018b4c083449886b7165c1acb15edd0f574f690ecf7"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/cormorantgaramond/v21/co3umX5slCNuHLi8bLeY9MK7whWMhyjypVO7abI26QOD_hg9GnM.ttf",
+          "bytes": 289992,
+          "sha256": "440daf036a35abd6d2bdfa92b14ab0f150cce690fe6d767ee5cab15a1a10a87f"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cormorantgaramond/v21/co3smX5slCNuHLi8bLeY9MK7whWMhyjYrGFEsdtdc62E6zd58jDOjw.ttf",
+          "bytes": 293036,
+          "sha256": "0b9a8a33cfaa624d30f70f9b6686da769b319b8c37a55af16e29fef690108bbf"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/cormorantgaramond/v21/co3smX5slCNuHLi8bLeY9MK7whWMhyjYrGFEsdtdc62E6zd5FTfOjw.ttf",
+          "bytes": 293116,
+          "sha256": "33b46553a852ffd5ee5d7c6301a135c779e1d97d8938cc67be14e4060edb6431"
+        }
+      ]
+    },
+    {
+      "id": "gf-cormorant",
+      "name": "Cormorant",
+      "category": "Serif",
+      "prefix": "Cormorant",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorant/OFL.txt",
+      "designers": [
+        "Christian Thalmann"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cormorant/v24/H4c2BXOCl9bbnla_nHIA47NMUjsNbCVrFhFTQ7Q.ttf",
+          "bytes": 177332,
+          "sha256": "55e68134d1481798fe19ca114b414a9ad181a54576e1aef9ffa2862245fdbc5c"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/cormorant/v24/H4c2BXOCl9bbnla_nHIA47NMUjsNbCVrFvZUQ7Q.ttf",
+          "bytes": 177304,
+          "sha256": "7481cadb66bd34014052e570170c330df8a1816e1a3c75b87789a2876be06271"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cormorant/v24/H4c0BXOCl9bbnla_nHIq6oGzilJm9otsA9kQq_dq6A.ttf",
+          "bytes": 175824,
+          "sha256": "4463e82197fa2a5f3af73b86e6e0cfdec42728d45e16932d47765d35916cbc75"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/cormorant/v24/H4c0BXOCl9bbnla_nHIq6oGzilJm9otsA9kQTPBq6A.ttf",
+          "bytes": 175752,
+          "sha256": "78ca69c709927c31333f31abb61b13d62850b9668f06a2a2a6f3346201241cbe"
+        }
+      ]
+    },
+    {
+      "id": "gf-playfair-display",
+      "name": "Playfair Display",
+      "category": "Serif",
+      "prefix": "PlayfairDisplay",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/OFL.txt",
+      "designers": [
+        "Claus Eggers S\u00f8rensen"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvUDQ.ttf",
+          "bytes": 123240,
+          "sha256": "1609a54fa3ad1abc8d0037132f73700333241ea0b65672079998e352f151dea7"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKeiukDQ.ttf",
+          "bytes": 123536,
+          "sha256": "adefc53e7b3d483f1fa5e85edd82b7689ca79db25a1f6786bd7949cdcfeec601"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTbtY.ttf",
+          "bytes": 110816,
+          "sha256": "6021680663c58b344d8404c289c755aadc662a02189ffe4f5ca79378f9e97840"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_k-UbtY.ttf",
+          "bytes": 111128,
+          "sha256": "954e20ee10ae685d0a5a6e6ee380165ea9c8eb329c0e22a58739496714f66991"
+        }
+      ]
+    },
+    {
+      "id": "gf-lora",
+      "name": "Lora",
+      "category": "Serif",
+      "prefix": "Lora",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/lora/OFL.txt",
+      "designers": [
+        "Cyreal"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/lora/v37/0QI6MX1D_JOuGQbT0gvTJPa787weuyJG.ttf",
+          "bytes": 132188,
+          "sha256": "1d37d1e34c77be80f0119754ad78df9aad30d5b1c78132a4cbdac0fe567f5d4f"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/lora/v37/0QI6MX1D_JOuGQbT0gvTJPa787z5vCJG.ttf",
+          "bytes": 132124,
+          "sha256": "ac3145cd8846b6ab3522ac0579a4f5378271f6a93896cb800d27f301fa9f7758"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/lora/v37/0QI8MX1D_JOuMw_hLdO6T2wV9KnW-MoFkqg.ttf",
+          "bytes": 137328,
+          "sha256": "26243fda8cd938cc2734f46d20d7464822d89378c7f375e187e39f9ed3f20907"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/lora/v37/0QI8MX1D_JOuMw_hLdO6T2wV9KnW-C0Ckqg.ttf",
+          "bytes": 138352,
+          "sha256": "467b540c3c722fc6b1eb483cbf18db45bcb54ab3cdafe07ceb90a55dfb03f779"
+        }
+      ]
+    },
+    {
+      "id": "gf-eb-garamond",
+      "name": "EB Garamond",
+      "category": "Serif",
+      "prefix": "EBGaramond",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/OFL.txt",
+      "designers": [
+        "Georg Duffner",
+        "Octavio Pardo"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/ebgaramond/v33/SlGDmQSNjdsmc35JDF1K5E55YMjF_7DPuGi-6_RUAw.ttf",
+          "bytes": 389868,
+          "sha256": "934aa932b4bc1a75d883f7c3d4d5bbc8278e5e7fcc96d5440bbffd61050cf958"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/ebgaramond/v33/SlGDmQSNjdsmc35JDF1K5E55YMjF_7DPuGi-DPNUAw.ttf",
+          "bytes": 392040,
+          "sha256": "40b4eb8a3c92f651728bc285ac3acacec1005ef5436cf33a337ab5ffe86daf29"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/ebgaramond/v33/SlGFmQSNjdsmc35JDF1K5GRwUjcdlttVFm-rI7e8QI96.ttf",
+          "bytes": 339240,
+          "sha256": "9d2ca86044b885d085059c7e3bed21d6e31456a81a47761e7ade8cd390ebe71d"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/ebgaramond/v33/SlGFmQSNjdsmc35JDF1K5GRwUjcdlttVFm-rI7dbR496.ttf",
+          "bytes": 341916,
+          "sha256": "0091630894dabe073cfaecc65c10425d9e74dbf242943ea11f1c3cb533695dff"
+        }
+      ]
+    },
+    {
+      "id": "gf-libre-baskerville",
+      "name": "Libre Baskerville",
+      "category": "Serif",
+      "prefix": "LibreBaskerville",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/OFL.txt",
+      "designers": [
+        "Impallari Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/librebaskerville/v24/kmKUZrc3Hgbbcjq75U4uslyuy4kn0olVQ-LglH6T17uj8Q4SCQ.ttf",
+          "bytes": 106728,
+          "sha256": "f5bc4341f15de5e877d8d95b6b14b33e9a3da1f8fef4ed0700ed407f096cffb6"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/librebaskerville/v24/kmKUZrc3Hgbbcjq75U4uslyuy4kn0olVQ-LglH6T17ujFgkSCQ.ttf",
+          "bytes": 106752,
+          "sha256": "8b008ffdae31b314657cb8e28d822da09893035d06bad9b1ab53ea762549cbd1"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/librebaskerville/v24/kmKWZrc3Hgbbcjq75U4uslyuy4kn0qNccR04_RUJeby2OU36SgNK.ttf",
+          "bytes": 109748,
+          "sha256": "b2149da8101de6ecbc0d5ea9616a0a0a45fbd01701f012a0ae9b0d0ed733c070"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/librebaskerville/v24/kmKWZrc3Hgbbcjq75U4uslyuy4kn0qNccR04_RUJeby2OU0dTQNK.ttf",
+          "bytes": 110032,
+          "sha256": "98ccff0ec50430e03ac0ec19c4e46bb15a90092bae861290f4464b39740228e8"
+        }
+      ]
+    },
+    {
+      "id": "gf-crimson-text",
+      "name": "Crimson Text",
+      "category": "Serif",
+      "prefix": "CrimsonText",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/crimsontext/OFL.txt",
+      "designers": [
+        "Sebastian Kosch"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/crimsontext/v19/wlp2gwHKFkZgtmSR3NB0oRJvaA.ttf",
+          "bytes": 98516,
+          "sha256": "72c4209c94de3e6ac6f4f2256ae604174102bbed26ec2a14948024cb86f5c10f"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/crimsontext/v19/wlppgwHKFkZgtmSR3NB0oRJX1C12Cw.ttf",
+          "bytes": 102364,
+          "sha256": "0613f2f47f8c76e8b7a99be0545b388c1ee87265952afa41b9a06ae64ecd7799"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/crimsontext/v19/wlpogwHKFkZgtmSR3NB0oRJfaghW.ttf",
+          "bytes": 100956,
+          "sha256": "83466d53467784622cc164f306e505695537aff9f5835310abbbf48b6b5c3c99"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/crimsontext/v19/wlprgwHKFkZgtmSR3NB0oRJfajDqDtNV.ttf",
+          "bytes": 104768,
+          "sha256": "0124cf8b8f770ba6e29bb16419aa1f0778e5e7dd858f81e18976ac8300da481d"
+        }
+      ]
+    },
+    {
+      "id": "gf-merriweather",
+      "name": "Merriweather",
+      "category": "Serif",
+      "prefix": "Merriweather",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/OFL.txt",
+      "designers": [
+        "Sorkin Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/merriweather/v33/u-4D0qyriQwlOrhSvowK_l5UcA6zuSYEqOzpPe3HOZJ5eX1WtLaQwmYiScCmDxhtNOKl8yDr3icqEw.ttf",
+          "bytes": 585976,
+          "sha256": "e029d3b71e5bae3877c73f4f2b15af28db16593d49b0aed2a328d37ff7075846"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/merriweather/v33/u-4D0qyriQwlOrhSvowK_l5UcA6zuSYEqOzpPe3HOZJ5eX1WtLaQwmYiScCmDxhtNOKl8yDrOSAqEw.ttf",
+          "bytes": 586052,
+          "sha256": "90b7db4460fcd1a5ca49575c2668a793f3cd6447664d312a068d690e1c01e6bc"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/merriweather/v33/u-4B0qyriQwlOrhSvowK_l5-eTxCVx0ZbwLvKH2Gk9hLmp0v5yA-xXPqCzLvPee1XYk_XSf-FmTCUF3w.ttf",
+          "bytes": 595652,
+          "sha256": "afff81272b7653417bb6f8bef57add055b1f9fda36f27eba5f32b40752bd08da"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/merriweather/v33/u-4B0qyriQwlOrhSvowK_l5-eTxCVx0ZbwLvKH2Gk9hLmp0v5yA-xXPqCzLvPee1XYk_XSf-FmQlV13w.ttf",
+          "bytes": 599500,
+          "sha256": "e9864a6790bf712a04e20f3662b206a1535186ed3e877fd859dd5fb9682335df"
+        }
+      ]
+    },
+    {
+      "id": "gf-spectral",
+      "name": "Spectral",
+      "category": "Serif",
+      "prefix": "Spectral",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/spectral/OFL.txt",
+      "designers": [
+        "Production Type"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/spectral/v15/rnCr-xNNww_2s0amA-M-.ttf",
+          "bytes": 164228,
+          "sha256": "a25b5c20bf44dacb3e1ed67a461b390ef5057cabc4b300d65fa9fa33e8bd590c"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/spectral/v15/rnCs-xNNww_2s0amA9uCt13G.ttf",
+          "bytes": 171476,
+          "sha256": "d14a1cd0f6bda798a6ca32a2c771a78bc1a9a2419be82d844c82516bf38171d1"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/spectral/v15/rnCt-xNNww_2s0amA9M8kn0.ttf",
+          "bytes": 173820,
+          "sha256": "2a0198c9448be38a8f90b4af9631d7697e8e64c1e4ea768a3eef81cd4b96b449"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/spectral/v15/rnCu-xNNww_2s0amA9M8qsHDafM.ttf",
+          "bytes": 181632,
+          "sha256": "86ea9814197fc76fd57d82d0e3f1681b3c93038c1c74695fadb6df39d6ef617b"
+        }
+      ]
+    },
+    {
+      "id": "gf-cardo",
+      "name": "Cardo",
+      "category": "Serif",
+      "prefix": "Cardo",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/cardo/OFL.txt",
+      "designers": [
+        "David Perry"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cardo/v21/wlp_gwjKBV1pqiv_.ttf",
+          "bytes": 386300,
+          "sha256": "2b86847db9b2737b09281cb404487b2d2c0c003d8db41b94abdac07d683d42ca"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/cardo/v21/wlpygwjKBV1pqhND-aQR.ttf",
+          "bytes": 339964,
+          "sha256": "58ea42a4bd3edc123fb1e876c07eacd2a3bfbd829d3473b0c53cec2ba1279bec"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/cardo/v21/wlpxgwjKBV1pqhv93IQ.ttf",
+          "bytes": 252620,
+          "sha256": "148086e3b40c970e2db79446c8b00cefc95cfd88c73f928caba731b4d4662bb6"
+        }
+      ]
+    },
+    {
+      "id": "gf-old-standard-tt",
+      "name": "Old Standard TT",
+      "category": "Serif",
+      "prefix": "OldStandardTT",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/oldstandardtt/OFL.txt",
+      "designers": [
+        "Alexey Kryukov"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/oldstandardtt/v22/MwQubh3o1vLImiwAVvYawgcf2eVurQ.ttf",
+          "bytes": 242700,
+          "sha256": "cf759c9617e8d9a74ccc3fcdc8670a25d1e016e6e4cf55c378e79f70bf45520b"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/oldstandardtt/v22/MwQrbh3o1vLImiwAVvYawgcf2eVWEX-dTA.ttf",
+          "bytes": 260156,
+          "sha256": "fcd2340207253ef61a6a02694b9a43cd54159867518edfd4788b0916f1fc92a3"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/oldstandardtt/v22/MwQsbh3o1vLImiwAVvYawgcf2eVer1q9.ttf",
+          "bytes": 267016,
+          "sha256": "722168792ee2dda09d07ab6443bdd4743469b86e3d233e5bf8e96e3951afb98c"
+        }
+      ]
+    },
+    {
+      "id": "gf-bodoni-moda",
+      "name": "Bodoni Moda",
+      "category": "Serif",
+      "prefix": "BodoniModa",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/bodonimoda/OFL.txt",
+      "designers": [
+        "Owen Earl"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/bodonimoda/v28/aFT67PxzY382XsXX63LUYL6GYFcan6NJrKp-VPjfJMShrpsGFUt8oU7awIA.ttf",
+          "bytes": 44752,
+          "sha256": "7bf8604bdeb63fe00278935c1a7e8595de56dfc053ab43581ca848ffd5ad11ba"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/bodonimoda/v28/aFT67PxzY382XsXX63LUYL6GYFcan6NJrKp-VPjfJMShrpsGFUt8oandwIA.ttf",
+          "bytes": 44844,
+          "sha256": "b8d14dc4cf4c0d27a502f531403f5a5638bd5ee349ec11de4bf38a25435ecfc6"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/bodonimoda/v28/aFT07PxzY382XsXX63LUYJSPUqb0pL6OQqxrZLnVbvZedvJtj-V7tIaZKMN4sQ.ttf",
+          "bytes": 47556,
+          "sha256": "04e9d8c1baad0a16a87663969fd26109c4a7796436264a71492c2477e9b76ff6"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/bodonimoda/v28/aFT07PxzY382XsXX63LUYJSPUqb0pL6OQqxrZLnVbvZedvJtj-V7tIaZz8R4sQ.ttf",
+          "bytes": 47724,
+          "sha256": "09a2d3f581282a95444d98addbae3f8c1ef4700d580e53149e81ee7fc4ac014a"
+        }
+      ]
+    },
+    {
+      "id": "gf-prata",
+      "name": "Prata",
+      "category": "Serif",
+      "prefix": "Prata",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/prata/OFL.txt",
+      "designers": [
+        "Cyreal"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/prata/v22/6xKhdSpbNNCT-vWI.ttf",
+          "bytes": 96016,
+          "sha256": "6bab61b8b8df3f5a24df69c742f6495060b36aec686f37e534ff91a3bffe40ad"
+        }
+      ]
+    },
+    {
+      "id": "gf-della-respira",
+      "name": "Della Respira",
+      "category": "Serif",
+      "prefix": "DellaRespira",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/dellarespira/OFL.txt",
+      "designers": [
+        "Nathan Willis"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/dellarespira/v24/RLp5K5v44KaueWI6iEJQBiGPRfk.ttf",
+          "bytes": 48232,
+          "sha256": "afdd1114963e63b60e38272d4cebeb45afbb51c1ce3d55cb7df2b30f050df463"
+        }
+      ]
+    },
+    {
+      "id": "gf-gilda-display",
+      "name": "Gilda Display",
+      "category": "Serif",
+      "prefix": "GildaDisplay",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/gildadisplay/OFL.txt",
+      "designers": [
+        "Eduardo Tunni"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/gildadisplay/v20/t5tmIRoYMoaYG0WEOh7HwMeR7Tk.ttf",
+          "bytes": 65160,
+          "sha256": "ee1c6ab3c8a735157d040202f5b7d086e18fab60898c742b42b271c6aaa7295e"
+        }
+      ]
+    },
+    {
+      "id": "gf-montserrat",
+      "name": "Montserrat",
+      "category": "Sans",
+      "prefix": "Montserrat",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/OFL.txt",
+      "designers": [
+        "Julieta Ulanovsky",
+        "Sol Matas",
+        "Juan Pablo del Peral",
+        "Jacques Le Bailly"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Ew-.ttf",
+          "bytes": 180068,
+          "sha256": "84f3d3275dfb159dd311c61828fd754a82ec31c377120518e2cd3e7d34394e96"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM70w-.ttf",
+          "bytes": 181028,
+          "sha256": "247f052d2f5b84a5bbe7831c3b08a71ca391ff54f1dfb9be88a3d3da569e3a38"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/montserrat/v31/JTUFjIg1_i6t8kCHKm459Wx7xQYXK0vOoz6jq6R9aX8.ttf",
+          "bytes": 181552,
+          "sha256": "afb8986a68a0d5189122bd11ed236bd4087abb2b4415b5df1e2bc2579f5d1241"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/montserrat/v31/JTUFjIg1_i6t8kCHKm459Wx7xQYXK0vOoz6jq0N6aX8.ttf",
+          "bytes": 182608,
+          "sha256": "24ffadc3cd172e73f8205c11b3136baf8daec40b97855eb710c8c5074747eb1b"
+        }
+      ]
+    },
+    {
+      "id": "gf-raleway",
+      "name": "Raleway",
+      "category": "Sans",
+      "prefix": "Raleway",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/raleway/OFL.txt",
+      "designers": [
+        "Matt McInerney",
+        "Pablo Impallari",
+        "Rodrigo Fuenzalida"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVvaooCP.ttf",
+          "bytes": 138808,
+          "sha256": "943300b002516feaf028c27aceaa2f473f2e1c0229ed913652a406d43277d9ba"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVs9pYCP.ttf",
+          "bytes": 138748,
+          "sha256": "6cd34aa42be80b5ae85cc8c816f241d46a6d77a3a3277a6a20962b134b567cea"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/raleway/v37/1Pt_g8zYS_SKggPNyCgSQamb1W0lwk4S4WjMPrQ.ttf",
+          "bytes": 136572,
+          "sha256": "947194506dcf722728b84075659c60350c6a730d1ef8bbfe03acb4980e0b165a"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/raleway/v37/1Pt_g8zYS_SKggPNyCgSQamb1W0lwk4S4Y_LPrQ.ttf",
+          "bytes": 136680,
+          "sha256": "4f8f9bad6e888d63aea502d11b85db15ac6b751bacb1198fb4ca5b722b1fbc68"
+        }
+      ]
+    },
+    {
+      "id": "gf-lato",
+      "name": "Lato",
+      "category": "Sans",
+      "prefix": "Lato",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/OFL.txt",
+      "designers": [
+        "\u0141ukasz Dziedzic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/lato/v25/S6uyw4BMUTPHvxk.ttf",
+          "bytes": 72312,
+          "sha256": "f43f1c7780d69792278f04b136c934a0298fc66f2e974bac13dd2e53adc52bde"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/lato/v25/S6u9w4BMUTPHh6UVew8.ttf",
+          "bytes": 70576,
+          "sha256": "02e8f4be57ddc47cb7882c41b60216b6085b1ceaf717514be2b88fa15396238d"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/lato/v25/S6u8w4BMUTPHjxswWw.ttf",
+          "bytes": 72936,
+          "sha256": "ae2f4abf0bf802b3710c474f05d1a34f086ef57001f5751d03e428e113f5a684"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/lato/v25/S6u_w4BMUTPHjxsI5wqPHA.ttf",
+          "bytes": 74836,
+          "sha256": "0c55b8d34d395c056230c7c5741244de73d0d3cf5fe01b5a0f54cb025fb942fd"
+        }
+      ]
+    },
+    {
+      "id": "gf-open-sans",
+      "name": "Open Sans",
+      "category": "Sans",
+      "prefix": "OpenSans",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/opensans/OFL.txt",
+      "designers": [
+        "Steve Matteson"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/opensans/v44/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsjZ0C4n.ttf",
+          "bytes": 122116,
+          "sha256": "47ed1cfaa7ffca04a04ab850b2938fd52c09d1b44cfa3e2980878e166b0cbd87"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/opensans/v44/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsg-1y4n.ttf",
+          "bytes": 122132,
+          "sha256": "75367e6da7d914eaed87883ba51b2a2b5816b5cdbb39f96ec5c81a5b032bfd5a"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/opensans/v44/memQYaGs126MiZpBA-UFUIcVXSCEkx2cmqvXlWq8tWZ0Pw86hd0Rk8ZkaVc.ttf",
+          "bytes": 127392,
+          "sha256": "1bc0594a83762b2c25d38915a34464b7fec6088298ca22d151757bf98d6700ec"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/opensans/v44/memQYaGs126MiZpBA-UFUIcVXSCEkx2cmqvXlWq8tWZ0Pw86hd0RkyFjaVc.ttf",
+          "bytes": 127156,
+          "sha256": "6d3884d0d57c1b67e9c50c54eca7b69c535c114e76bd7a9cfda0258588185553"
+        }
+      ]
+    },
+    {
+      "id": "gf-poppins",
+      "name": "Poppins",
+      "category": "Sans",
+      "prefix": "Poppins",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/OFL.txt",
+      "designers": [
+        "Indian Type Foundry",
+        "Jonny Pinhorn",
+        "Ninad Kale"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/poppins/v24/pxiEyp8kv8JHgFVrFJA.ttf",
+          "bytes": 154628,
+          "sha256": "cdedb1729acac414ed01744a11da7badb86adf13108e7bd3fa161b9323f7fe54"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLCz7V1s.ttf",
+          "bytes": 150292,
+          "sha256": "1984efdda0fbe207d7ac20feac2ba7c2768c92a90094b02a206c9d58cc30ff2e"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/poppins/v24/pxiGyp8kv8JHgFVrJJLedw.ttf",
+          "bytes": 178112,
+          "sha256": "d455310e3d1e4393723dbe5836cb27c351751123b89a74c7034ec60c861d5556"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/poppins/v24/pxiDyp8kv8JHgFVrJJLmy15lEA.ttf",
+          "bytes": 172720,
+          "sha256": "733b74494c0b5856045e34eea8b899f02458ca8e0b7ebd2a887a86b64d99b0d0"
+        }
+      ]
+    },
+    {
+      "id": "gf-nunito",
+      "name": "Nunito",
+      "category": "Sans",
+      "prefix": "Nunito",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/OFL.txt",
+      "designers": [
+        "Vernon Adams",
+        "Cyreal",
+        "Jacques Le Bailly"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/nunito/v32/XRXI3I6Li01BKofiOc5wtlZ2di8HDLshRTM.ttf",
+          "bytes": 125528,
+          "sha256": "9ecbdba35fa74f10a1a916c31649b802a12deb9e66c7b1fe4650afcfd4d16971"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/nunito/v32/XRXI3I6Li01BKofiOc5wtlZ2di8HDFwmRTM.ttf",
+          "bytes": 125464,
+          "sha256": "1a025dfce6e6e03bbe31ba82277ec5ed96df8b8dd58b3df6267269490b90b1dc"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/nunito/v32/XRXK3I6Li01BKofIMPyPbj8d7IEAGXNirXA3ig.ttf",
+          "bytes": 128400,
+          "sha256": "49a2a2cbe1e0b58a4313217cc74fc122c8a4e5ba1539e67f2a87e0832d881281"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/nunito/v32/XRXK3I6Li01BKofIMPyPbj8d7IEAGXNiSnc3ig.ttf",
+          "bytes": 128268,
+          "sha256": "4d6c0d42a74b753d33fba2c33f117264ca8c0e3f40df7a4313419ad5e6c95eae"
+        }
+      ]
+    },
+    {
+      "id": "gf-quicksand",
+      "name": "Quicksand",
+      "category": "Sans",
+      "prefix": "Quicksand",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/quicksand/OFL.txt",
+      "designers": [
+        "Andrew Paglinawan"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/quicksand/v37/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkP8o18E.ttf",
+          "bytes": 73224,
+          "sha256": "0977c1d9781e03adfc1b120b3b60b6c4db776b5261e801ec881549cd17894351"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/quicksand/v37/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkBgv18E.ttf",
+          "bytes": 72916,
+          "sha256": "8fb2148170b16156ad78d9d787a5d98a2c00752f91fc0fe88c9367c0809ecba3"
+        }
+      ]
+    },
+    {
+      "id": "gf-josefin-sans",
+      "name": "Josefin Sans",
+      "category": "Sans",
+      "prefix": "JosefinSans",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/josefinsans/OFL.txt",
+      "designers": [
+        "Santiago Orozco"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/josefinsans/v34/Qw3PZQNVED7rKGKxtqIqX5E-AVSJrOCfjY46_DjQXME.ttf",
+          "bytes": 57844,
+          "sha256": "51db65928e13442537cf58237592cb49aad1ac5e24345e11283d7ed5723e6793"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/josefinsans/v34/Qw3PZQNVED7rKGKxtqIqX5E-AVSJrOCfjY46_N_XXME.ttf",
+          "bytes": 57720,
+          "sha256": "03c22cfb3121845c2e3201ce354780011431564c496653d36a63f78005998355"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/josefinsans/v34/Qw3JZQNVED7rKGKxtqIqX5EUCGZ2dIn0FyA96fCTtIJhKg.ttf",
+          "bytes": 62100,
+          "sha256": "a9f68738c67579aab7aec946c11d43e74a2b93ab0868ef8beda76066a1a02951"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/josefinsans/v34/Qw3JZQNVED7rKGKxtqIqX5EUCGZ2dIn0FyA96fCTU4VhKg.ttf",
+          "bytes": 62012,
+          "sha256": "eaf5619429634f6baa7750ddb2ab4ed9b2d2183cc41b01d28886916f8e345dc2"
+        }
+      ]
+    },
+    {
+      "id": "gf-work-sans",
+      "name": "Work Sans",
+      "category": "Sans",
+      "prefix": "WorkSans",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/worksans/OFL.txt",
+      "designers": [
+        "Wei Huang"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/worksans/v24/QGY_z_wNahGAdqQ43RhVcIgYT2Xz5u32K0nXNig.ttf",
+          "bytes": 114144,
+          "sha256": "a131e7022b34ef1950a9d6bdda16f5d4509cc1fe1af5991a4552febd2a4027e5"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/worksans/v24/QGY_z_wNahGAdqQ43RhVcIgYT2Xz5u32K67QNig.ttf",
+          "bytes": 115632,
+          "sha256": "e8398b22225a1f971df9bb12fa8fb9dd4c76e80aa4d67d45bde60ebbc6c5ad81"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/worksans/v24/QGY9z_wNahGAdqQ43Rh_ebrnlwyYfEPxPoGU3msJow.ttf",
+          "bytes": 109088,
+          "sha256": "d38632ddd219dea11541e99bcbcf9b0569ca6aa3fcdb942fbddbaf79cc3a6a99"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/worksans/v24/QGY9z_wNahGAdqQ43Rh_ebrnlwyYfEPxPoGUOWwJow.ttf",
+          "bytes": 110364,
+          "sha256": "2907c2e697650caf6cd7dde599e3a7471d3e8713ce5c694f838a0296f464d6d6"
+        }
+      ]
+    },
+    {
+      "id": "gf-inter",
+      "name": "Inter",
+      "category": "Sans",
+      "prefix": "Inter",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt",
+      "designers": [
+        "Rasmus Andersson"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf",
+          "bytes": 324820,
+          "sha256": "1b08e7fc267a5c7e1d614100f604b83e7e8a0be241f0f288faa2b3ac93a683ba"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf",
+          "bytes": 326468,
+          "sha256": "b37284b5701b6b168dfc770aa1a4ac492106422fd3ba76bc7641e37434e8019c"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/inter/v20/UcCM3FwrK3iLTcvneQg7Ca725JhhKnNqk4j1ebLhAm8SrXTc2dthjQ.ttf",
+          "bytes": 328252,
+          "sha256": "ef8f755d933b9310804cc9152f1f18cb2ac460d6b05054ec913d889c9f11f79e"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/inter/v20/UcCM3FwrK3iLTcvneQg7Ca725JhhKnNqk4j1ebLhAm8SrXTcPtxhjQ.ttf",
+          "bytes": 330132,
+          "sha256": "c1811d32ac0f6eed1bbf57529f2ecdfc6c717d48a969dd864942436315a1b198"
+        }
+      ]
+    },
+    {
+      "id": "gf-source-sans-3",
+      "name": "Source Sans 3",
+      "category": "Sans",
+      "prefix": "SourceSans3",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/OFL.txt",
+      "designers": [
+        "Paul D. Hunt"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/sourcesans3/v19/nwpBtKy2OAdR1K-IwhWudF-R9QMylBJAV3Bo8Ky461EN.ttf",
+          "bytes": 234708,
+          "sha256": "b6f2cc8d9905e97b5cd7a294367bb529814385f299fb23057060394cbd6bbffb"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/sourcesans3/v19/nwpBtKy2OAdR1K-IwhWudF-R9QMylBJAV3Bo8Kxf7FEN.ttf",
+          "bytes": 234640,
+          "sha256": "e53acf3eb590b2ff183288401da9f3b829703e9716bc88e0da821e3a2ce9c175"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/sourcesans3/v19/nwpDtKy2OAdR1K-IwhWudF-R3woAa8opPOrG97lwqLlO9C4.ttf",
+          "bytes": 209376,
+          "sha256": "4c51c2a49d1bd7046376443c1577b76f251944a6366f5f7918a8377e20e50c1f"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/sourcesans3/v19/nwpDtKy2OAdR1K-IwhWudF-R3woAa8opPOrG97lwqF5J9C4.ttf",
+          "bytes": 209356,
+          "sha256": "3d685c1b7bc3660ab9d92a6e0c04cdf8605065f09c46617fe078b8f1c260d5f3"
+        }
+      ]
+    },
+    {
+      "id": "gf-oswald",
+      "name": "Oswald",
+      "category": "Sans",
+      "prefix": "Oswald",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/OFL.txt",
+      "designers": [
+        "Vernon Adams",
+        "Kalapi Gajjar",
+        "Cyreal"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/oswald/v57/TK3_WkUHHAIjg75cFRf3bXL8LICs1_FvgUE.ttf",
+          "bytes": 86068,
+          "sha256": "bd6ff5a83bcdc92d7aac6dbb16e4dd2b0b0320bec6402bb81f5dd9735b500e46"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/oswald/v57/TK3_WkUHHAIjg75cFRf3bXL8LICs1xZogUE.ttf",
+          "bytes": 86416,
+          "sha256": "a6ee8b91ec269a6f48631ba4ba1a3ab7e5039e5482dda8dc9672ee4620d7bd68"
+        }
+      ]
+    },
+    {
+      "id": "gf-comfortaa",
+      "name": "Comfortaa",
+      "category": "Sans",
+      "prefix": "Comfortaa",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/comfortaa/OFL.txt",
+      "designers": [
+        "Johan Aakerlund"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/comfortaa/v47/1Pt_g8LJRfWJmhDAuUsSQamb1W0lwk4S4WjMPrQ.ttf",
+          "bytes": 110000,
+          "sha256": "c5633dc8323c788158d456e461bacc78d251f713e33228527765a1f3fa84ec03"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/comfortaa/v47/1Pt_g8LJRfWJmhDAuUsSQamb1W0lwk4S4Y_LPrQ.ttf",
+          "bytes": 110172,
+          "sha256": "990742fd8ec75da91f4eabcce954f36316de713e1ff0140eeefda0db1c44f91f"
+        }
+      ]
+    },
+    {
+      "id": "gf-exo-2",
+      "name": "Exo 2",
+      "category": "Sans",
+      "prefix": "Exo2",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/exo2/OFL.txt",
+      "designers": [
+        "Natanael Gama"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/exo2/v26/7cH1v4okm5zmbvwkAx_sfcEuiD8jvvKcPg.ttf",
+          "bytes": 143780,
+          "sha256": "da4afb13d2fdc3c5a92ca1f68ea2c76d1fa465bbad986780eea396539dcad2d9"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/exo2/v26/7cH1v4okm5zmbvwkAx_sfcEuiD8jWfWcPg.ttf",
+          "bytes": 143896,
+          "sha256": "d29a80ec96f88b2ea92ad574b7ddf53044e77e7ee3498668a930a55add9efcb0"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/exo2/v26/7cH3v4okm5zmbtYtMeA0FKq0Jjg2drF0fdC6.ttf",
+          "bytes": 143740,
+          "sha256": "25d077a80bb1a792f2f44f0caece6be1d322c13c028fa0d36d79d1fccb58563f"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/exo2/v26/7cH3v4okm5zmbtYtMeA0FKq0Jjg2drGTetC6.ttf",
+          "bytes": 143880,
+          "sha256": "76a13f08d14a5b53dab85a2330e59380f33772ea17335f89ed56370baa9db2f2"
+        }
+      ]
+    },
+    {
+      "id": "gf-rajdhani",
+      "name": "Rajdhani",
+      "category": "Sans",
+      "prefix": "Rajdhani",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/rajdhani/OFL.txt",
+      "designers": [
+        "Indian Type Foundry"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/rajdhani/v17/LDIxapCSOBg7S-QT7q4A.ttf",
+          "bytes": 351464,
+          "sha256": "fd30002d951c14f9ca6322601720b73ef4a9877167a241ab9498cc9039c596e9"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FsOs.ttf",
+          "bytes": 372568,
+          "sha256": "8b2fbb04ed3af38ea941d7351fc5bcf917d239d0bfb64c9bb8916510d8774495"
+        }
+      ]
+    },
+    {
+      "id": "gf-kanit",
+      "name": "Kanit",
+      "category": "Sans",
+      "prefix": "Kanit",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/kanit/OFL.txt",
+      "designers": [
+        "Cadson Demak"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/kanit/v17/nKKZ-Go6G5tXcoaS.ttf",
+          "bytes": 168768,
+          "sha256": "0b101fdc1a77fb29137731819bf164b3e9b4da19b22a7b2295f0e233c53c486d"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/kanit/v17/nKKU-Go6G5tXcr4uPiWg.ttf",
+          "bytes": 171900,
+          "sha256": "72213d8d3b09dc14036b2efdcdbe12d2cdf0ed6f0389dff55f0c762ddae9104f"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/kanit/v17/nKKX-Go6G5tXcraQGwU.ttf",
+          "bytes": 170900,
+          "sha256": "3fe0ae6ba8135a5be6887e3828bb2c53406b067b3ef4490948210583b10c21d6"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/kanit/v17/nKKS-Go6G5tXcraQI7mlVaQ.ttf",
+          "bytes": 179332,
+          "sha256": "4b08f403fd98bf9b233b9ad70e24a6fb83816628de11d648cea0257ca2c1c469"
+        }
+      ]
+    },
+    {
+      "id": "gf-bebas-neue",
+      "name": "Bebas Neue",
+      "category": "Display",
+      "prefix": "BebasNeue",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/OFL.txt",
+      "designers": [
+        "Ryoichi Tsunekawa"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/bebasneue/v16/JTUSjIg69CK48gW7PXooxW4.ttf",
+          "bytes": 56136,
+          "sha256": "939fea723dad24504f40faadc34eeffadfbbee558754f70c3c736e13786b0ab6"
+        }
+      ]
+    },
+    {
+      "id": "gf-righteous",
+      "name": "Righteous",
+      "category": "Display",
+      "prefix": "Righteous",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/righteous/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/righteous/v18/1cXxaUPXBpj2rGoU7C9mjw.ttf",
+          "bytes": 40364,
+          "sha256": "82e2ac84900128219615a1e3a986a1821409e727e2bdb67714b2dcfe4447b946"
+        }
+      ]
+    },
+    {
+      "id": "gf-abril-fatface",
+      "name": "Abril Fatface",
+      "category": "Display",
+      "prefix": "AbrilFatface",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/abrilfatface/OFL.txt",
+      "designers": [
+        "TypeTogether"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/abrilfatface/v25/zOL64pLDlL1D99S8g8PtiKchm-A.ttf",
+          "bytes": 56308,
+          "sha256": "c426e1328c73a1d1c1c36809ead3353b487ae71d3b387ac8daca2d4b6d9124c0"
+        }
+      ]
+    },
+    {
+      "id": "gf-alfa-slab-one",
+      "name": "Alfa Slab One",
+      "category": "Display",
+      "prefix": "AlfaSlabOne",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/alfaslabone/OFL.txt",
+      "designers": [
+        "JM Sol\u00e9"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/alfaslabone/v21/6NUQ8FmMKwSEKjnm5-4v-4Jh6dU.ttf",
+          "bytes": 91272,
+          "sha256": "0e834ddadca6dc95b5502c01f8911b7a77f50a350ac7400a6e2d9a3bfb1cd02f"
+        }
+      ]
+    },
+    {
+      "id": "gf-bungee",
+      "name": "Bungee",
+      "category": "Display",
+      "prefix": "Bungee",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/bungee/OFL.txt",
+      "designers": [
+        "David Jonathan Ross"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/bungee/v17/N0bU2SZBIuF2PU_ECg.ttf",
+          "bytes": 110456,
+          "sha256": "ff0ad5d7496a911460625f9052ea50b05e289065be71a1cb21c71896585224d2"
+        }
+      ]
+    },
+    {
+      "id": "gf-fredoka",
+      "name": "Fredoka",
+      "category": "Display",
+      "prefix": "Fredoka",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/fredoka/OFL.txt",
+      "designers": [
+        "Milena Brand\u00e3o",
+        "Hafontia"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/fredoka/v17/X7nP4b87HvSqjb_WIi2yDCRwoQ_k7367_B-i2yQag0-mac3O8SLMFg.ttf",
+          "bytes": 48856,
+          "sha256": "7fe52d17e4c5c80ec74c9b26cb635d593e72cfc30cc189dab7a0babece57e153"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/fredoka/v17/X7nP4b87HvSqjb_WIi2yDCRwoQ_k7367_B-i2yQag0-mac3OFiXMFg.ttf",
+          "bytes": 48588,
+          "sha256": "a7d1d662d6afe2bc7f9ba11dc6247eb06d9587c2210fee04d9edb83d555670c2"
+        }
+      ]
+    },
+    {
+      "id": "gf-lilita-one",
+      "name": "Lilita One",
+      "category": "Display",
+      "prefix": "LilitaOne",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/lilitaone/OFL.txt",
+      "designers": [
+        "Juan Montoreano"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/lilitaone/v17/i7dPIFZ9Zz-WBtRtedDbUEY.ttf",
+          "bytes": 26332,
+          "sha256": "26ad0d77404141ff7af714353cdf23c980841829dd270fc26e6c2dfcf654bd6d"
+        }
+      ]
+    },
+    {
+      "id": "gf-russo-one",
+      "name": "Russo One",
+      "category": "Display",
+      "prefix": "RussoOne",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/russoone/OFL.txt",
+      "designers": [
+        "Jovanny Lemonad"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/russoone/v18/Z9XUDmZRWg6M1LvRYsH-yA.ttf",
+          "bytes": 36816,
+          "sha256": "7a022de179a466ad9711d5f2848123c5cba6eedf22e51a8dc04ed6e5d64b205d"
+        }
+      ]
+    },
+    {
+      "id": "gf-orbitron",
+      "name": "Orbitron",
+      "category": "Display",
+      "prefix": "Orbitron",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/orbitron/OFL.txt",
+      "designers": [
+        "Matt McInerney"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1nyGy6xpg.ttf",
+          "bytes": 17752,
+          "sha256": "59c2bc6487139f1b8c5754e0cc98ea431ab4c1c1ee142d9d2433ecabe444b59a"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf",
+          "bytes": 17708,
+          "sha256": "a24fe8031eefd8451d40e31882868d768ce6bed7c3659293281b3c5c7732a952"
+        }
+      ]
+    },
+    {
+      "id": "gf-audiowide",
+      "name": "Audiowide",
+      "category": "Display",
+      "prefix": "Audiowide",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/audiowide/OFL.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/audiowide/v22/l7gdbjpo0cum0ckerWCtkQ.ttf",
+          "bytes": 46972,
+          "sha256": "c42a74135f7f527e69a16826220cece45ec376776cfacdfd6cfd750053215146"
+        }
+      ]
+    },
+    {
+      "id": "gf-monoton",
+      "name": "Monoton",
+      "category": "Display",
+      "prefix": "Monoton",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/monoton/OFL.txt",
+      "designers": [
+        "Vernon Adams"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/monoton/v22/5h1aiZUrOngCibe4fkY.ttf",
+          "bytes": 49768,
+          "sha256": "c7ace162e95aa75817aad0963d23009190cd0a3a7cf80bf376d4de8f5200b376"
+        }
+      ]
+    },
+    {
+      "id": "gf-press-start-2p",
+      "name": "Press Start 2P",
+      "category": "Display",
+      "prefix": "PressStart2P",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/OFL.txt",
+      "designers": [
+        "CodeMan38"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/pressstart2p/v16/e3t4euO8T-267oIAQAu6jDQyK0nS.ttf",
+          "bytes": 115280,
+          "sha256": "7b939b816f8ce185dd8c2c59e85fb05d3dcd5cde0c0b0de4a1651cb5af9c2c2b"
+        }
+      ]
+    },
+    {
+      "id": "gf-creepster",
+      "name": "Creepster",
+      "category": "Display",
+      "prefix": "Creepster",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/creepster/OFL.txt",
+      "designers": [
+        "Sideshow"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/creepster/v13/AlZy_zVUqJz4yMrniH4hdQ.ttf",
+          "bytes": 60644,
+          "sha256": "f7ab5cc03cc3fb46c78414739b8469c1e344a46afe41f33f5d6649456d9d2a1f"
+        }
+      ]
+    },
+    {
+      "id": "gf-special-elite",
+      "name": "Special Elite",
+      "category": "Display",
+      "prefix": "SpecialElite",
+      "license": "apache",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/apache/specialelite/LICENSE.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/specialelite/v20/XLYgIZbkc4JPUL5CVArUVL0nhnc.ttf",
+          "bytes": 150524,
+          "sha256": "9f59e3a0e1c0008f2ef97b1c94e5d96c43748bbc92993570d1133454a484254c"
+        }
+      ]
+    },
+    {
+      "id": "gf-black-ops-one",
+      "name": "Black Ops One",
+      "category": "Display",
+      "prefix": "BlackOpsOne",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/blackopsone/OFL.txt",
+      "designers": [
+        "James Grieshaber",
+        "Eben Sorkin"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/blackopsone/v21/qWcsB6-ypo7xBdr6Xshe96H3WDw.ttf",
+          "bytes": 162480,
+          "sha256": "bd8a70e63df108745316c6ad277874cbe139bbb90cbcaf705810ecc089fe59f8"
+        }
+      ]
+    },
+    {
+      "id": "gf-bangers",
+      "name": "Bangers",
+      "category": "Display",
+      "prefix": "Bangers",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/bangers/OFL.txt",
+      "designers": [
+        "Vernon Adams"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/bangers/v25/FeVQS0BTqb0h60ACL5k.ttf",
+          "bytes": 91216,
+          "sha256": "a5ad3f06658ecd92705c3499cf000ff5b0c0c6f49641f7b3a6531dcee4bdb4c0"
+        }
+      ]
+    },
+    {
+      "id": "gf-luckiest-guy",
+      "name": "Luckiest Guy",
+      "category": "Display",
+      "prefix": "LuckiestGuy",
+      "license": "apache",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/apache/luckiestguy/LICENSE.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/luckiestguy/v25/_gP_1RrxsjcxVyin9l9n_j2RSg.ttf",
+          "bytes": 57792,
+          "sha256": "bde64ad70289579762149264eeaad6f2bf19b542eca5d62ca9fb0d9cb04a47b2"
+        }
+      ]
+    },
+    {
+      "id": "gf-permanent-marker",
+      "name": "Permanent Marker",
+      "category": "Display",
+      "prefix": "PermanentMarker",
+      "license": "apache",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/apache/permanentmarker/LICENSE.txt",
+      "designers": [
+        "Font Diner"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/permanentmarker/v16/Fh4uPib9Iyv2ucM6pGQMWimMp004Hao.ttf",
+          "bytes": 73276,
+          "sha256": "a73712ce4f3b32d3c7a1a657d56c6aaf50c719b7fa7fe0541905fe77f5a9906c"
+        }
+      ]
+    },
+    {
+      "id": "gf-staatliches",
+      "name": "Staatliches",
+      "category": "Display",
+      "prefix": "Staatliches",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/staatliches/OFL.txt",
+      "designers": [
+        "Brian LaRossa",
+        "Erica Carras"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/staatliches/v15/HI_OiY8KO6hCsQSoAPmtMbec.ttf",
+          "bytes": 57548,
+          "sha256": "0adb782fbca6fbf676753701097026d0a6f54a5ea9952ea6fef0189a6d332dd2"
+        }
+      ]
+    },
+    {
+      "id": "gf-syncopate",
+      "name": "Syncopate",
+      "category": "Display",
+      "prefix": "Syncopate",
+      "license": "apache",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/apache/syncopate/LICENSE.txt",
+      "designers": [
+        "Astigmatic"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/syncopate/v24/pe0sMIuPIYBCpEV5eFdyAg.ttf",
+          "bytes": 141680,
+          "sha256": "c15e610bacc736494e2dcdb9907b200e1e2ae9e6c22effb0db6ff3bc7e412860"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/syncopate/v24/pe0pMIuPIYBCpEV5eFdKvtKaAw.ttf",
+          "bytes": 61016,
+          "sha256": "17d45e01c6b8389c22313f6a03d4af93742e074c8f75b17baf75b1903efbb800"
+        }
+      ]
+    },
+    {
+      "id": "gf-space-mono",
+      "name": "Space Mono",
+      "category": "Mono",
+      "prefix": "SpaceMono",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/OFL.txt",
+      "designers": [
+        "Colophon Foundry"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/spacemono/v17/i7dPIFZifjKcF5UAWdDRUEY.ttf",
+          "bytes": 81124,
+          "sha256": "829aad32ab9525358de2a7ebc718d05a6b335e67421aad5e1e09cd1fa796af4e"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/spacemono/v17/i7dMIFZifjKcF5UAWdDRaPpZYFI.ttf",
+          "bytes": 79904,
+          "sha256": "5be2b984cdb8befc8ad1871d10f1aa8337f7d2bae3c6bf0ce720d0745ac1a8ec"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/spacemono/v17/i7dNIFZifjKcF5UAWdDRYER8QA.ttf",
+          "bytes": 100780,
+          "sha256": "71fc772fd07392d445baf8b3c374f71896909c6152b91d4f1d750ee4212d5c4a"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/spacemono/v17/i7dSIFZifjKcF5UAWdDRYERE_FeaGw.ttf",
+          "bytes": 92936,
+          "sha256": "7aa775015c59df6dc6e4d9bdb69917055c21889d3ac1c18bdabf96851b2043cb"
+        }
+      ]
+    },
+    {
+      "id": "gf-courier-prime",
+      "name": "Courier Prime",
+      "category": "Mono",
+      "prefix": "CourierPrime",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/courierprime/OFL.txt",
+      "designers": [
+        "Alan Dague-Greene"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/courierprime/v11/u-450q2lgwslOqpF_6gQ8kELWwY.ttf",
+          "bytes": 66444,
+          "sha256": "b03b41606b4469bd908aaa83146ba19d34cbeab1ce11fac0074d0d8fe9eba6cc"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/courierprime/v11/u-4k0q2lgwslOqpF_6gQ8kELY7pMf-c.ttf",
+          "bytes": 68080,
+          "sha256": "79d4be90ecb99d03ca5474a4e688e2fb45abcd4a9c348164c3aa9166c67cd53b"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/courierprime/v11/u-4n0q2lgwslOqpF_6gQ8kELawRpXw.ttf",
+          "bytes": 75488,
+          "sha256": "491b12db874ee76b6f96c1fe8259d081379de392a98666ff185b416d41073aaa"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/courierprime/v11/u-4i0q2lgwslOqpF_6gQ8kELawRR4-Lfrg.ttf",
+          "bytes": 76376,
+          "sha256": "df38461921897a3947fc986875f2a876ad13686a0270a16df06840af39c62b9a"
+        }
+      ]
+    },
+    {
+      "id": "gf-ibm-plex-mono",
+      "name": "IBM Plex Mono",
+      "category": "Mono",
+      "prefix": "IBMPlexMono",
+      "license": "ofl",
+      "licenseSource": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/OFL.txt",
+      "designers": [
+        "Mike Abbink",
+        "Bold Monday"
+      ],
+      "faces": [
+        {
+          "style": "Regular",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F63fjptAgt5VM-kVkqdyU8n5ig.ttf",
+          "bytes": 128812,
+          "sha256": "a7fdc993f9f0387caedba4e42521136fa97e4c0837ae6239bf0413ccf8af00c2"
+        },
+        {
+          "style": "Bold",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3pQP8lc.ttf",
+          "bytes": 131040,
+          "sha256": "5b2232ff598dd39860f606526399f64be06f0c286a638bad8a83e98c44c41ff6"
+        },
+        {
+          "style": "Italic",
+          "weight": 400,
+          "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6pfjptAgt5VM-kVkqdyU8n1ioq0g.ttf",
+          "bytes": 136412,
+          "sha256": "b8282cd74fb0321912a5f74aae7c0a50ef94af598fae65e6e8c4ad941d9a1fa9"
+        },
+        {
+          "style": "BoldItalic",
+          "weight": 700,
+          "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6sfjptAgt5VM-kVkqdyU8n1ioSblJFhw.ttf",
+          "bytes": 137020,
+          "sha256": "2eb90cf4f718e6e0f1e1e0c54ae35d6f479279cafcc941185109582f8ff23772"
+        }
+      ]
+    }
+  ]
+}
