@@ -1,9 +1,13 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Basic;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Persistence;
 using AetherFrame.UI.Editor;
+using AetherFrame.UI.Rendering;
 using Xunit;
 
 namespace AetherFrame.Tests;
@@ -173,6 +177,54 @@ public class TitleOnOneLineTests
         Assert.Equal(before, harness.Json());
     }
 
+    [Fact]
+    public async Task TypingIntoATitleSavedEmpty_OnAPlateSavedBefore_PutsItOnTheNamesLine()
+    {
+        var document = SavedWithoutATitle(IdentityTitleLayout.Subtitle);
+        var empty = IdentityHeaderRules.Create(ProfileElementRole.BasicTitle, document, null);
+        empty.ZIndex = 50;
+        document.Elements.Add(empty);
+        document.BasicIdentity!.TitleSource = IdentityTitleSource.Custom;
+        IdentityHeaderRules.Place(document, _ => 100f);
+
+        using var harness = await BasicHarness.OpenDocumentAsync(document);
+        harness.SimulateBasicFrame();
+        var before = harness.Json();
+
+        harness.Identity.SetCustomTitle("t");
+        harness.Identity.SetCustomTitle("the Brave");
+        harness.Identity.Commit();
+        harness.SimulateBasicFrame();
+
+        Assert.Equal(IdentityTitleLayout.InlineAfter, harness.Document.BasicIdentity!.Layout);
+        AssertOnTheNamesLine(harness.Document, IdentityTitleLayout.InlineAfter);
+
+        harness.Session.Undo();
+        Assert.Equal(before, harness.Json());
+    }
+
+    /// <summary>
+    /// A title source chosen but no text yet (FFXIV Title before a title is picked, Custom before
+    /// anything is typed) draws nothing, so the Name Backing and the Divider stay exactly where they were.
+    /// </summary>
+    [Theory]
+    [InlineData(IdentityTitleSource.GameTitle)]
+    [InlineData(IdentityTitleSource.Custom)]
+    public async Task ATitleWithNoTextYet_LeavesTheNameBackingAndDividerWhereTheyWere(IdentityTitleSource source)
+    {
+        using var harness = await BasicHarness.NewClassicAsync();
+        harness.Session.SetComponentSlot(PlateComponentKind.NameBacking, BuiltInComponentCatalog.NameBackingBar);
+        harness.Session.SetComponentSlot(PlateComponentKind.Divider, BuiltInComponentCatalog.DividerLine);
+        var before = BackingAndDivider(harness);
+
+        harness.Identity.SetTitleSource(source);
+        harness.SimulateBasicFrame();
+
+        Assert.True(Title(harness.Document).Visible);
+        Assert.Equal(string.Empty, Title(harness.Document).Text);
+        Assert.Equal(before, BackingAndDivider(harness));
+    }
+
     [Theory]
     [InlineData(IdentityTitleLayout.Classic, IdentityTitleLayout.InlineBefore)]
     [InlineData(IdentityTitleLayout.Subtitle, IdentityTitleLayout.InlineAfter)]
@@ -181,7 +233,9 @@ public class TitleOnOneLineTests
         using var harness = await BasicHarness.OpenDocumentAsync(Stacked(layout));
         harness.SimulateBasicFrame();
 
-        // A new text for a title already shown above or below the name: it stays there.
+        // A new text for a title already shown above or below the name, even cleared first in the
+        // same typing run: it stays there.
+        harness.Identity.SetCustomTitle(string.Empty);
         harness.Identity.SetCustomTitle("the Bold");
         harness.Identity.Commit();
         harness.SimulateBasicFrame();
@@ -207,6 +261,19 @@ public class TitleOnOneLineTests
         Assert.Equal(oneLine, harness.Document.BasicIdentity!.Layout);
         AssertOnTheNamesLine(harness.Document, oneLine);
         Assert.Equal("the Bold", Title(harness.Document).Text);
+    }
+
+    /// <summary>Where the Plate's Name Backing and Divider are drawn, measured as the renderer measures.</summary>
+    private static (ElementRect Backing, ElementRect Divider) BackingAndDivider(BasicHarness harness)
+    {
+        var drawn = new List<ProfileElement>();
+        ProfilePaintOrder.Fill(harness.Document, drawn, includeHidden: false);
+        var steps = new List<PaintStep>();
+        ComponentPaintPlan.Build(
+            harness.Document, drawn, BuiltInComponentCatalog.Instance, steps, element => harness.Measurer.TryMeasureNaturalWidth(element, out var width) ? width : null);
+        return (
+            steps.Single(s => s.Component?.Kind == PlateComponentKind.NameBacking).Placement.Rect,
+            steps.Single(s => s.Component?.Kind == PlateComponentKind.Divider).Placement.Rect);
     }
 
     private static TextProfileElement Name(ProfileDocument document) => BasicSections.FindText(document, ProfileElementRole.BasicName)!;

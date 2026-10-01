@@ -293,19 +293,29 @@ internal sealed class BasicIdentitySession
     });
 
     /// <summary>Live custom-title typing (capped at <see cref="BasicIdentityHeader.MaxCustomTitleLength"/>); commit with <see cref="Commit"/>.</summary>
-    internal void SetCustomTitle(string text) => EditContinuous(ctx =>
+    internal void SetCustomTitle(string text)
     {
-        var value = Limit(text.Replace('\n', ' '), BasicIdentityHeader.MaxCustomTitleLength);
-        var identity = ctx.Identity();
-        identity.TitleSource = IdentityTitleSource.Custom;
-        identity.CustomTitle = value;
+        // A typing run that starts with no title shown turns one on. Within a run, clearing the
+        // text and typing anew only changes the text.
+        var startsRun = !editorSession.HasPendingDocumentEdit;
+        EditContinuous(ctx =>
+        {
+            var value = Limit(text.Replace('\n', ' '), BasicIdentityHeader.MaxCustomTitleLength);
+            var identity = ctx.Identity();
+            identity.TitleSource = IdentityTitleSource.Custom;
+            identity.CustomTitle = value;
 
-        var title = ctx.EnsureElement(ProfileElementRole.BasicTitle);
-        title.Visible = true;
-        title.Text = value;
-        ctx.PutNewTitleOnOneLine();
-        ctx.RequestLayout(force: false);
-    });
+            var title = ctx.EnsureElement(ProfileElementRole.BasicTitle);
+            title.Visible = true;
+            title.Text = value;
+            if (startsRun)
+            {
+                ctx.PutNewTitleOnOneLine();
+            }
+
+            ctx.RequestLayout(force: false);
+        });
+    }
 
     internal void SetPrefix(string symbol) => Edit(ctx =>
     {
