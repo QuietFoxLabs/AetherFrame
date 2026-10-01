@@ -300,7 +300,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     /// </summary>
     private void DrawToolbar(ProfileDocument profile)
     {
-        actionBar.Draw(profile, editorSession.PreviewActive, () => EditorPreview.Enter(editorSession), EditorPreview.Tooltip, editorSession.ErrorMessage);
+        actionBar.Draw(profile, editorSession.PreviewActive, () => EditorPreview.Show(editorSession, profile.ProfileId, actionBar.PlateMenu.View), EditorPreview.Tooltip, editorSession.ErrorMessage);
 
         var toolbarMin = ImGui.GetCursorScreenPos();
         var atCapacity = profile.Elements.Count >= ProfileDocument.MaxElementCount;

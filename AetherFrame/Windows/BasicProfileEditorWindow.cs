@@ -280,7 +280,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         {
             // The shared action bar (My Plates, Basic | Advanced, Undo/Redo, Preview/Revert/Save),
             // outside every scrolling region so it's always in view.
-            actionBar.Draw(profile, editorSession.PreviewActive, () => EditorPreview.Enter(editorSession), EditorPreview.Tooltip, basicEditorSession.ErrorMessage);
+            actionBar.Draw(profile, editorSession.PreviewActive, () => EditorPreview.Show(editorSession, profile.ProfileId, actionBar.PlateMenu.View), EditorPreview.Tooltip, basicEditorSession.ErrorMessage);
             EditorWidgets.UnsupportedElementsNotice(profile);
             ImGui.Separator();
 

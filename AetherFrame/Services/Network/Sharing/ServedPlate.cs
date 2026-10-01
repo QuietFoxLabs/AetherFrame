@@ -53,6 +53,25 @@ internal sealed class ServedPlate
         BackgroundIndex = backgroundIndex;
         Steps = steps;
         Notes = notes;
+
+        // The canvas united with every shape: shapes are what Components paint, which may overflow
+        // the canvas on purpose, so this is the publisher's own visual bounds (ProfileVisualBounds).
+        var min = Vector2.Zero;
+        var max = canvas;
+        foreach (var step in steps)
+        {
+            if (step is ServedShape shape)
+            {
+                foreach (var point in shape.Kind == ServedShapeKind.Triangle ? new[] { shape.A, shape.B, shape.C } : new[] { shape.A, shape.B, shape.C, shape.D })
+                {
+                    min = Vector2.Min(min, point);
+                    max = Vector2.Max(max, point);
+                }
+            }
+        }
+
+        VisualMin = min;
+        VisualMax = max;
         var texts = new List<ProfileElement>();
         foreach (var step in steps)
         {
@@ -73,6 +92,12 @@ internal sealed class ServedPlate
 
     /// <summary>The canvas, in canvas units.</summary>
     internal Vector2 Canvas { get; }
+
+    /// <summary>The top left of what it shows: the canvas and everything its Components paint outside it.</summary>
+    internal Vector2 VisualMin { get; }
+
+    /// <summary>The bottom right of what it shows.</summary>
+    internal Vector2 VisualMax { get; }
 
     /// <summary>The background, or null when it draws nothing.</summary>
     internal ProfileBackground? Background { get; }

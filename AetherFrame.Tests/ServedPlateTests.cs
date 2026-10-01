@@ -201,6 +201,29 @@ public sealed class ServedPlateTests
     }
 
     [Fact]
+    public void AViewer_FitsThePublishersOwnVisualBounds_OverflowIncluded()
+    {
+        // The owner's request of October 1, 2026: another player's Plate shows as My Plates' View
+        // shows one, artwork past the Plate's edges included.
+        var plate = PlateFactory.Create(PlateStartingLayout.AdventurePlateClassic, Guid.NewGuid(), "Adventure Plate", Now, new PlateStarterContent(new BasicCharacterInfo("Visible Hero", "Phoenix", "Light", 19, "Paladin", 100, "ABC")));
+        var frame = ComponentDocuments.Of(BuiltInComponentCatalog.PlateFrameCelestialSakura);
+        frame.Scale = 1.3f;
+        plate.Components = [frame];
+        var expected = AetherFrame.UI.Rendering.ProfileVisualBounds.Compute(plate);
+        Assert.True(expected.Min.X < 0f || expected.Min.Y < 0f, "The frame should overflow the canvas.");
+
+        var served = Serve(plate);
+        Assert.Equal(expected.Min.X, served.VisualMin.X, 1);
+        Assert.Equal(expected.Min.Y, served.VisualMin.Y, 1);
+        Assert.Equal(expected.Max.X, served.VisualMax.X, 1);
+        Assert.Equal(expected.Max.Y, served.VisualMax.Y, 1);
+
+        // Without overflow, it is the canvas.
+        var blank = Serve(Blank());
+        Assert.Equal((Vector2.Zero, blank.Canvas), (blank.VisualMin, blank.VisualMax));
+    }
+
+    [Fact]
     public void AFontOrArtworkThisBuildLacks_IsNamedInANote_AndNeverLookedFor()
     {
         var marker = RevisionMarker.NewMarker();

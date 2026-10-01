@@ -128,6 +128,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // shares, from the game's right-click menu or the viewer's search, a request a frame at most.
     private readonly PlateViewing plateViewing;
     private readonly PlateViewerWindow plateViewerWindow;
+    private readonly ServedPlatePresentation servedPlate;
     private readonly ViewPlateMenu viewPlateMenu;
 #endif
 
@@ -389,10 +390,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 ownedOperations.Stopping,
                 log.Information);
             var worldNames = new Lazy<System.Collections.Generic.IReadOnlyList<string>>(() => ViewPlateMenu.PublicWorlds(DataManager));
-            plateViewerWindow = new PlateViewerWindow(plateViewing, TextureProvider, renderResources, () => worldNames.Value, () => characterIdentityService.CurrentCharacter);
+            // Another player's Plate opens in the Plate Viewer, presented as any Plate is.
+            servedPlate = new ServedPlatePresentation(plateViewing, TextureProvider, renderResources);
+            void ShowServedPlate() => profileViewWindow.ShowPresentation(servedPlate);
+            plateViewerWindow = new PlateViewerWindow(plateViewing, () => worldNames.Value, () => characterIdentityService.CurrentCharacter, ShowServedPlate);
             WindowSystem.AddWindow(plateViewerWindow);
             sharingWindow.OpenViewer = plateViewerWindow.Open;
-            viewPlateMenu = new ViewPlateMenu(ContextMenu, plateViewing, plateViewerWindow.Open);
+            viewPlateMenu = new ViewPlateMenu(ContextMenu, plateViewing, ShowServedPlate);
             startup.OnFailure("view menu", viewPlateMenu.Dispose);
 #endif
 
@@ -616,7 +620,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         plateLibrary.PlateSaved -= livePublisher.PlateSaved;
         livePublisher.Dispose();
         sharingWindow.Dispose();
-        plateViewerWindow.Dispose();
+        servedPlate.Dispose();
 #endif
         imageTextureCache.Clear();
         thumbnailTextures.Clear();

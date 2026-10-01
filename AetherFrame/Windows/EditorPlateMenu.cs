@@ -71,6 +71,9 @@ internal sealed class EditorPlateMenu
 
     internal PlateMenu Menu => menu;
 
+    /// <summary>Shows the Plate with <paramref name="plateId"/> in the Plate Viewer: the open one shows its live document.</summary>
+    internal void View(Guid plateId) => view(plateId);
+
     /// <summary>
     /// Applies a finished action and draws the Export file dialog, once a frame whichever editor
     /// calls it. Call at the start of an editor's Draw, before it reads the open Plate, so an
