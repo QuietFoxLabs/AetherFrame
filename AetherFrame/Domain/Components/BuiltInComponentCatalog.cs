@@ -90,6 +90,9 @@ public static class BuiltInComponentCatalog
 
         new(SectionHeaderUnderline, PlateComponentKind.SectionHeader, "Underline", "A fine line under each section heading.", ComponentShape.Underline, ComponentColorSource.ThemeAccent, 0.6f),
         new(SectionHeaderTick, PlateComponentKind.SectionHeader, "Accent Mark", "A short mark under each section heading.", ComponentShape.AccentTick, ComponentColorSource.ThemeAccent, 0.9f),
+
+        // The art sets (ArtSets): seven pieces each, and Celestial Sakura's Section Header.
+        .. ArtSets.Definitions,
     ];
 
     /// <summary>The catalog view of the built-ins (the one <see cref="IComponentCatalog"/> in use today).</summary>

@@ -36,6 +36,7 @@ internal sealed partial class BasicProfileEditorWindow
         Subheading("Pattern");
         using (ImRaii.PushId("Pattern"))
         {
+            DrawBackgroundArtworkNote(profile);
             backgroundPanel.DrawPatternPresets(profile);
         }
 
@@ -44,6 +45,7 @@ internal sealed partial class BasicProfileEditorWindow
         if (ImGui.CollapsingHeader("Customize Background##CustomizeBackground"))
         {
             using var id = ImRaii.PushId("Background");
+            DrawBackgroundArtworkNote(profile);
             backgroundPanel.Draw(profile, applyTheme: null);
         }
 

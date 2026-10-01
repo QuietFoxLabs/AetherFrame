@@ -17,12 +17,15 @@ public enum ComponentPrimitiveKind
     Image,
 
     /// <summary>The definition's bundled artwork (<see cref="ComponentDefinition.Art"/>) over quad A-B-C-D,
-    /// like <see cref="Image"/>; the color tints it (white/greyscale artwork takes the color exactly).</summary>
+    /// like <see cref="Image"/>; the color tints it (white/greyscale artwork takes the color exactly).
+    /// For sliced artwork, one primitive per piece (<see cref="ComponentPrimitive.Piece"/>).</summary>
     Art,
 }
 
-/// <summary>One procedural drawing primitive in logical canvas coordinates.</summary>
-public readonly record struct ComponentPrimitive(ComponentPrimitiveKind Kind, Vector2 A, Vector2 B, Vector2 C, Vector2 D, Vector4 Color);
+/// <summary>One procedural drawing primitive in logical canvas coordinates. <paramref name="Piece"/> is
+/// the part of the artwork an <see cref="ComponentPrimitiveKind.Art"/> primitive draws (see
+/// <see cref="BuiltInArtAsset.Window"/>); always <see cref="ArtPiece.Whole"/> otherwise.</summary>
+public readonly record struct ComponentPrimitive(ComponentPrimitiveKind Kind, Vector2 A, Vector2 B, Vector2 C, Vector2 D, Vector4 Color, ArtPiece Piece = ArtPiece.Whole);
 
 /// <summary>
 /// The procedural shapes behind every built-in <see cref="ComponentShape"/>, as plain filled quads
@@ -138,6 +141,10 @@ public static class ComponentGeometry
                 box.Image(ComponentPrimitiveKind.Image, color);
                 break;
 
+            case ComponentShape.Art when definition.Art is { Slices: { } slices } art && slices.IsValidFor(art.PixelWidth) && art.PixelHeight > 0:
+                Sliced(box, art, slices, w, h, color);
+                break;
+
             case ComponentShape.Art when definition.Art is not null:
                 box.Image(ComponentPrimitiveKind.Art, color);
                 break;
@@ -215,6 +222,30 @@ public static class ComponentGeometry
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// Sliced artwork over a w x h box: the caps and the center piece at the artwork's own proportions
+    /// for the box's height, and the two fills sharing the rest equally. A box narrower than the fixed
+    /// pieces (never one the paint plan makes) squeezes them to fit, with no fill.
+    /// </summary>
+    private static void Sliced(Box box, BuiltInArtAsset art, ArtSlices slices, float w, float h, Vector4 color)
+    {
+        var perPixel = h / art.PixelHeight;
+        var fixedWidth = slices.FixedWidth(art.PixelWidth) * perPixel;
+        var squeeze = fixedWidth > w ? w / fixedWidth : 1f;
+        var fill = Math.Max(0f, (w - (fixedWidth * squeeze)) / 2f);
+
+        // Each boundary is computed once, so neighboring pieces share their edge exactly.
+        var x1 = slices.CapLeft * perPixel * squeeze;
+        var x2 = x1 + fill;
+        var x3 = x2 + ((slices.CenterRight - slices.CenterLeft) * perPixel * squeeze);
+        var x4 = x3 + fill;
+        box.Slice(0f, x1, ArtPiece.LeftCap, color);
+        box.Slice(x1, x2, ArtPiece.LeftFill, color);
+        box.Slice(x2, x3, ArtPiece.Center, color);
+        box.Slice(x3, x4, ArtPiece.RightFill, color);
+        box.Slice(x4, w, ArtPiece.RightCap, color);
     }
 
     private static Vector4 WithAlpha(Vector4 color, float factor) => new(color.X, color.Y, color.Z, color.W * Math.Clamp(factor, 0f, 1f));
@@ -304,6 +335,21 @@ public static class ComponentGeometry
             output.Add(new ComponentPrimitive(
                 kind,
                 Map(Vector2.Zero), Map(new Vector2(w, 0f)), Map(new Vector2(w, h)), Map(new Vector2(0f, h)), color));
+        }
+
+        /// <summary>One piece of sliced artwork over the full-height strip x0 to x1 (nothing when it is
+        /// empty); its texture window is fixed to A-B-C-D like <see cref="Image"/>'s.</summary>
+        internal void Slice(float x0, float x1, ArtPiece piece, Vector4 color)
+        {
+            if (!(x1 > x0))
+            {
+                return;
+            }
+
+            var h = max.Y - min.Y;
+            output.Add(new ComponentPrimitive(
+                ComponentPrimitiveKind.Art,
+                Map(new Vector2(x0, 0f)), Map(new Vector2(x1, 0f)), Map(new Vector2(x1, h)), Map(new Vector2(x0, h)), color, piece));
         }
 
         private Vector2 Map(Vector2 local)

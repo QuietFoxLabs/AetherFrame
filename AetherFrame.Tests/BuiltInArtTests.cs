@@ -434,9 +434,10 @@ public class BuiltInArtTests
             Assert.Equal([(false, false), (true, false), (false, true), (true, true)], steps.Select(s => (s.Placement.MirrorX, s.Placement.MirrorY)));
         }
 
-        Assert.Equal(26, BuiltInComponentCatalog.All.Count); // 18 procedural, the Astrolabe Pivot, 7 Celestial Sakura
+        // 18 procedural, the Astrolabe Pivot, 7 Celestial Sakura, then the art sets (seven each, and Sakura's Section Header).
+        Assert.Equal(26 + ArtSets.Definitions.Count, BuiltInComponentCatalog.All.Count);
         Assert.Equal(18, BuiltInComponentCatalog.All.Count(d => d.Art is null));
-        Assert.Equal(4, BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Count());
+        Assert.Equal(4 + ArtSetData.Sets.Length, BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Count());
     }
 
     [Fact]

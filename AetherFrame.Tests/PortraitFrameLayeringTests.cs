@@ -74,20 +74,24 @@ public class PortraitFrameLayeringTests
         var image = plan.FindIndex(s => ReferenceEquals(s.Element, picture));
         var frame = plan.FindIndex(s => s.Layer == PlateLayer.PortraitFrame);
         var overlay = plan.FindIndex(s => s.Layer == PlateLayer.PortraitOverlay);
-        var lastElement = plan.FindLastIndex(s => s.IsElement);
 
         Assert.True(frame > image, "the frame must paint over the picture");
-        Assert.True(frame > lastElement && overlay > frame);
+        Assert.True(overlay > frame);
         Assert.True(plan.FindIndex(s => s.Layer == PlateLayer.Decorations) > overlay);
-        Assert.Equal(PlateLayer.PlateFrame, plan[^1].Layer);
+        Assert.Equal(PlateLayer.Decorations, plan[^1].Layer);
         Assert.Equal(PlateLayer.Background, plan[0].Layer);
+
+        // The Plate Frame artwork paints over the portrait band, as over a portrait element's and on the
+        // preview cards, and under every text.
+        var plateFrame = plan.FindIndex(s => s.Layer == PlateLayer.PlateFrame);
+        Assert.True(plateFrame > overlay && plateFrame < plan.FindIndex(s => s.Element is TextProfileElement));
 
         var layout = Domain.Basic.AdventurePlateClassicLayout.GetRect(ProfileElementRole.BasicPortrait, AdventurePlateOrientation.Normal, document)!.Value;
         Assert.Equal(layout, plan[frame].Placement.Rect); // Offset and Scale still move it onto the picture
     }
 
     [Fact]
-    public void TheSemanticOrder_BackgroundPortraitFrameOverlayContentDecorationsPlateFrame()
+    public void TheSemanticOrder_BackgroundPortraitFrameOverlayPlateFrameArtContentDecorations()
     {
         var document = ComponentDocuments.WithAnchors();
         document.Components =
@@ -106,9 +110,9 @@ public class PortraitFrameLayeringTests
             [
                 PlateLayer.Background,
                 PlateLayer.Portrait, PlateLayer.PortraitFrame, PlateLayer.PortraitOverlay,
+                PlateLayer.PlateFrame, // artwork: under every text, so it never covers the name
                 PlateLayer.NameBacking, PlateLayer.Identity, PlateLayer.Identity, PlateLayer.Identity, PlateLayer.Identity, PlateLayer.Identity,
                 PlateLayer.Decorations,
-                PlateLayer.PlateFrame,
             ],
             layers);
     }

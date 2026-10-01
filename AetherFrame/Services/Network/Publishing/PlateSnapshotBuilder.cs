@@ -447,9 +447,11 @@ internal static class PlateSnapshotBuilder
                         break;
 
                     case ComponentPrimitiveKind.Art:
+                        // A piece of sliced artwork is named by its own ident, so the art quad's
+                        // corners still carry the whole of what it names (section 8.5).
                         if (definition.Art is { } art)
                         {
-                            steps.Add(new ResolvedShape(primitive, null, art.Id, component));
+                            steps.Add(new ResolvedShape(primitive, null, art.PieceIdent(primitive.Piece), component));
                         }
 
                         break;

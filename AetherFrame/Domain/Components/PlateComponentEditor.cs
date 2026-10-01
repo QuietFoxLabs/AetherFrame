@@ -14,22 +14,17 @@ namespace AetherFrame.Domain.Components;
 /// </summary>
 public static class PlateComponentEditor
 {
-    /// <summary>The Basic editor's Component slots, in display order.</summary>
+    /// <summary>The Basic editor's Component slots, in display order. Background is one, so an Art
+    /// Style's background artwork can be changed or taken away in Basic too.</summary>
     public static readonly PlateComponentKind[] BasicSlots =
     [
-        PlateComponentKind.PlateFrame, PlateComponentKind.PortraitFrame, PlateComponentKind.PortraitOverlay, PlateComponentKind.NameBacking,
+        PlateComponentKind.Background, PlateComponentKind.PlateFrame, PlateComponentKind.PortraitFrame, PlateComponentKind.PortraitOverlay, PlateComponentKind.NameBacking,
     ];
 
     /// <summary>The Basic editor's decoration slots, in display order.</summary>
     public static readonly PlateComponentKind[] BasicDecorations =
     [
         PlateComponentKind.CornerOrnament, PlateComponentKind.Divider, PlateComponentKind.SectionHeader,
-    ];
-
-    /// <summary>Kinds only the Advanced editor adds (no Basic slot), in display order, listed before the Basic ones.</summary>
-    public static readonly PlateComponentKind[] AdvancedOnlyKinds =
-    [
-        PlateComponentKind.Background,
     ];
 
     /// <summary>
