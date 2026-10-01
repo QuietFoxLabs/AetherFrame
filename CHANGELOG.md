@@ -32,7 +32,7 @@ Mostly networking work, compiled only into the networking preview flavour, which
 - From the first sharing test in game, in the networking preview flavour:
   - AetherFrame no longer shows Dalamud's "error while rendering this plugin" when it starts. A frame could run before sharing's parts were made, so drawing now starts only once everything it uses exists.
   - When image preparation's check fails, the log now says which step failed and what the game's texture pipeline did. It describes only the check's own test image.
-  - Image preparation's check passes in game. Dalamud hands decoded images back with their colour premultiplied by alpha, which preparation now makes straight again, so a copy looks as the Plate draws. A 16-bit image with translucent pixels is refused for now.
+  - Image preparation's check should now pass in game (to be confirmed in the next test). Dalamud hands decoded images back with their colour premultiplied by alpha, which preparation now makes straight again, so a copy looks as the Plate draws. A 16-bit image with translucent pixels is refused for now.
 
 ## [0.1.7] - 2026-09-30
 
