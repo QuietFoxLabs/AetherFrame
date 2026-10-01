@@ -342,6 +342,45 @@ internal sealed class PlateViewerPlacement
 }
 
 /// <summary>
+/// Everything the Plate Viewer's window asks for so that nothing but the Plate, its artwork and the
+/// close control is drawn, and the colors of AetherFrame's shared Close control
+/// (<c>PresentationControls</c>). Kept here, free of ImGui types, so the choices are testable.
+/// </summary>
+internal static class PlateViewerPresentation
+{
+    /// <summary>The Plate as authored, without the renderer's opaque workspace backdrop under it.</summary>
+    internal static readonly ProfileRenderOptions RenderOptions = ProfileRenderOptions.Finished with { HideCanvasBackdrop = true };
+
+    /// <summary>No window padding, so the window is exactly the layout's rectangle.</summary>
+    internal static readonly Vector2 WindowPadding = Vector2.Zero;
+
+    /// <summary>No window border.</summary>
+    internal const float WindowBorderSize = 0f;
+
+    /// <summary>Fully transparent: the root and any child background colors while the Plate is shown
+    /// (on top of the window's NoBackground flag, so no theme or Dalamud style can paint one).</summary>
+    internal static readonly Vector4 BackgroundColor = Vector4.Zero;
+
+    /// <summary>Dalamud's optional background blur stays off: it would frost the window's whole rectangle.</summary>
+    internal const bool AllowBackgroundBlur = false;
+
+    // The close control: a translucent dark disc with a light ring and a light X, readable on bright
+    // and dark Plates alike; its backing covers the control only.
+    internal static readonly Vector4 CloseBacking = new(0.05f, 0.05f, 0.07f, 0.62f);
+    internal static readonly Vector4 CloseBackingHovered = new(0.70f, 0.14f, 0.14f, 0.85f);
+
+    /// <summary>Close while pressed: a deeper red than hover.</summary>
+    internal static readonly Vector4 CloseBackingPressed = new(0.52f, 0.08f, 0.08f, 0.95f);
+
+    // The Plate Viewer's short usage hint pill (see PlateViewerHint).
+    internal static readonly Vector4 HintBacking = new(0.05f, 0.05f, 0.07f, 0.72f);
+    internal static readonly Vector4 HintText = new(1f, 1f, 1f, 0.95f);
+    internal static readonly Vector4 CloseRing = new(1f, 1f, 1f, 0.85f);
+    internal static readonly Vector4 CloseShadow = new(0f, 0f, 0f, 0.45f);
+    internal static readonly Vector4 CloseGlyph = new(1f, 1f, 1f, 0.95f);
+}
+
+/// <summary>
 /// The Plate Viewer's short usage hint ("Drag to move | Ctrl + Scroll to resize | Right-click for
 /// options"): shown once per session, when the viewer first shows a Plate, for a few seconds,
 /// fading out at the end; any interaction with the viewer dismisses it early. Never permanent

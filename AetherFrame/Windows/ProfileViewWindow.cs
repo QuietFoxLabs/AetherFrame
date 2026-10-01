@@ -3,7 +3,6 @@ using System.Numerics;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Plates;
-using AetherFrame.UI.Editor;
 using AetherFrame.UI.Rendering;
 using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
@@ -29,9 +28,9 @@ namespace AetherFrame.Windows;
 /// logged-in character's Active Plate, always as last saved (never the editors' unsaved state). With
 /// no Active Plate it shows an intentional empty state pointing at My Plates, never some other Plate.</para>
 ///
-/// <para><b>Presentation.</b> Like Clean Preview, the Plate floats directly over the game: the
-/// window is exactly the Plate's composition (its fitted visual bounds — canvas plus any
-/// intentional Component overflow) and draws nothing of its own (<see cref="CleanPreviewPresentation"/>).
+/// <para><b>Presentation.</b> The Plate floats directly over the game: the window is exactly the
+/// Plate's composition (its fitted visual bounds — canvas plus any intentional Component overflow)
+/// and draws nothing of its own (<see cref="PlateViewerPresentation"/>).
 /// The Plate's own background is drawn as authored. The only chrome is an always-visible Close
 /// control; only the composition and that control take mouse input.</para>
 ///
@@ -207,13 +206,13 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             ImGui.SetNextWindowPos(computed.WindowPos, ImGuiCond.Always);
             ImGui.SetNextWindowSize(computed.WindowSize, ImGuiCond.Always);
             Flags = PresentationFlags;
-            AllowBackgroundBlur = CleanPreviewPresentation.AllowBackgroundBlur;
+            AllowBackgroundBlur = PlateViewerPresentation.AllowBackgroundBlur;
 
             // Popped in PostDraw (Dalamud calls it after End on every frame PreDraw ran).
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, CleanPreviewPresentation.WindowPadding);
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, CleanPreviewPresentation.WindowBorderSize);
-            ImGui.PushStyleColor(ImGuiCol.WindowBg, CleanPreviewPresentation.BackgroundColor);
-            ImGui.PushStyleColor(ImGuiCol.ChildBg, CleanPreviewPresentation.BackgroundColor);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, PlateViewerPresentation.WindowPadding);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, PlateViewerPresentation.WindowBorderSize);
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, PlateViewerPresentation.BackgroundColor);
+            ImGui.PushStyleColor(ImGuiCol.ChildBg, PlateViewerPresentation.BackgroundColor);
             presenting = true;
             AetherWindowChrome.ApplyPolicy(this);
             return true;
@@ -378,7 +377,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         }
         else if (presentedDocument is { } profile)
         {
-            ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, windowPos + current.CanvasOffset, current.Scale, renderResources, CleanPreviewPresentation.RenderOptions);
+            ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, windowPos + current.CanvasOffset, current.Scale, renderResources, PlateViewerPresentation.RenderOptions);
         }
 
         if (PresentationControls.Close("##ViewerClose", windowPos + current.CloseOffset, current.ControlSize, "Close (Esc)"))
@@ -456,7 +455,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         var min = bottomCenter - new Vector2(size.X / 2f, size.Y + (12f * ImGuiHelpers.GlobalScale));
 
         var drawList = ImGui.GetForegroundDrawList();
-        drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(CleanPreviewPresentation.HintBacking with { W = CleanPreviewPresentation.HintBacking.W * opacity }), size.Y / 2f);
-        drawList.AddText(min + padding, ImGui.GetColorU32(CleanPreviewPresentation.HintText with { W = CleanPreviewPresentation.HintText.W * opacity }), PlateViewerHint.Text);
+        drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(PlateViewerPresentation.HintBacking with { W = PlateViewerPresentation.HintBacking.W * opacity }), size.Y / 2f);
+        drawList.AddText(min + padding, ImGui.GetColorU32(PlateViewerPresentation.HintText with { W = PlateViewerPresentation.HintText.W * opacity }), PlateViewerHint.Text);
     }
 }

@@ -49,7 +49,7 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 28. **Basic editor.** The selected category's title is a small accent label with a rule, its summary lines are in the secondary tone, and each group inside the category (Theme, Portrait, Name…) has the same small accent label; the navigator's selected row is the accent; sliders and choices keep the tooltips they had; the live Plate renders exactly as in v0.1.6 (compare a screenshot of the same Plate).
 29. **Advanced editor.** Layers, canvas and Inspector share the themed chrome and read as one workspace; the action bar ends with the Help button; the Inspector's collapsible sections and their tooltips are unchanged in content; the canvas rendering of a saved Plate is identical to v0.1.6.
 30. **Prompts.** The unsaved-changes, open-another-Plate, revert, rename and delete prompts use the shared button row: the destructive choice red, Save or Rename accent, Cancel a quiet ghost; Escape and Enter behave as before.
-31. **Clean Preview and the Plate Viewer** show only the Plate over the game, as before; the close control is unchanged.
+31. **The Plate Viewer** (View, and both editors' Preview) shows only the Plate over the game, as before; the close control is unchanged.
 32. **Scale.** Everything above at 100 %, 150 % and 200 %.
 33. **Performance.** With the tour running and My Plates holding 100 Plates, the frame time does not visibly change when the tour is closed versus open (compare with a frame-time overlay); no per-frame GC spikes in the log's memory counters.
 34. **Fonts.** Headings appear in the game's Axis face within a second of loading; before that they draw in the default font with no error in the log.

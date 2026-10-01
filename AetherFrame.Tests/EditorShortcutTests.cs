@@ -113,7 +113,7 @@ public class EditorShortcutTests
         shortcuts.OnUiHidden();
 
         // A stale focus report (e.g. a draw racing with the hide) can't re-enable shortcuts.
-        shortcuts.SetEditorFocusState(editorFocused: true, textInputActive: false, previewActive: false, canvasInteractionActive: false);
+        shortcuts.SetEditorFocusState(editorFocused: true, textInputActive: false, canvasInteractionActive: false);
 
         Assert.Empty(Press(shortcuts, keys, ShortcutKey.Delete));
         Assert.Empty(Press(shortcuts, keys, ShortcutKey.Control, ShortcutKey.S));
@@ -230,7 +230,7 @@ public class EditorShortcutTests
     }
 
     private static void FocusAdvanced(EditorShortcutInterpreter shortcuts) =>
-        shortcuts.SetEditorFocusState(editorFocused: true, textInputActive: false, previewActive: false, canvasInteractionActive: false);
+        shortcuts.SetEditorFocusState(editorFocused: true, textInputActive: false, canvasInteractionActive: false);
 
     /// <summary>Presses the keys together for one tick, releases them for another, and returns what was queued.</summary>
     private static List<EditorShortcutAction> Press(EditorShortcutInterpreter shortcuts, FakeKeyboard keys, params ShortcutKey[] chord)

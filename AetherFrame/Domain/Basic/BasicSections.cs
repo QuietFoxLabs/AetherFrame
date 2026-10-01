@@ -229,7 +229,7 @@ public static class BasicSections
     public static bool IsRetired(ProfileElementRole role) => role == ProfileElementRole.BasicLevel;
 
     /// <summary>
-    /// Finished rendering (Plate Viewer, Clean Preview, the Basic preview) skips a section heading
+    /// Finished rendering (the Plate Viewer, the Basic preview) skips a section heading
     /// whose section has nothing to show, so an empty or hidden section never leaves a stray caption
     /// behind. Every other element — including all non-Basic elements — is unaffected. Editor
     /// canvases draw headings regardless, so they stay findable and selectable.

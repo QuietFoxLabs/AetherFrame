@@ -62,12 +62,6 @@ internal sealed partial class EditorSession
     /// <summary>Runtime-only: snapping while moving/resizing (default on; Alt bypasses it temporarily).</summary>
     internal bool SnapEnabled { get; set; } = true;
 
-    /// <summary>
-    /// Runtime-only Clean Preview state: the editor shows only the finished profile, exactly as
-    /// Profile View renders it. Never persisted in the <see cref="ProfileDocument"/>.
-    /// </summary>
-    internal bool PreviewActive { get; set; }
-
     internal ElementInteractionKind ActiveInteraction { get; private set; } = ElementInteractionKind.None;
 
     internal ResizeHandle ActiveResizeHandle { get; private set; } = ResizeHandle.None;

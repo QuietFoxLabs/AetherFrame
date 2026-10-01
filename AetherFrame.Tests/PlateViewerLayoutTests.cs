@@ -11,7 +11,8 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// The Plate Viewer's transparent presentation (<see cref="PlateViewerLayout"/>), its session
+/// The Plate Viewer's transparent presentation (<see cref="PlateViewerLayout"/>,
+/// <see cref="PlateViewerPresentation"/>), its session
 /// placement (<see cref="PlateViewerPlacement"/>), usage hint (<see cref="PlateViewerHint"/>), and
 /// title bar ordering (<see cref="TitleBarOrder"/>).
 /// </summary>
@@ -565,14 +566,51 @@ public class PlateViewerLayoutTests
     [Fact]
     public void Viewer_UsesTheTransparentPresentation_AndTheSharedCloseLook()
     {
-        Assert.True(CleanPreviewPresentation.RenderOptions.HideCanvasBackdrop);
-        Assert.Equal(Vector4.Zero, CleanPreviewPresentation.BackgroundColor);
-        Assert.False(CleanPreviewPresentation.AllowBackgroundBlur);
+        Assert.True(PlateViewerPresentation.RenderOptions.HideCanvasBackdrop);
+        Assert.Equal(Vector4.Zero, PlateViewerPresentation.BackgroundColor);
+        Assert.False(PlateViewerPresentation.AllowBackgroundBlur);
 
         // Close: dark backing, red on hover, a deeper, more opaque red while pressed.
-        Assert.True(CleanPreviewPresentation.CloseBackingHovered.X > 0.5f && CleanPreviewPresentation.CloseBackingHovered.Y < 0.3f);
-        Assert.True(CleanPreviewPresentation.CloseBackingPressed.X < CleanPreviewPresentation.CloseBackingHovered.X);
-        Assert.True(CleanPreviewPresentation.CloseBackingPressed.W >= CleanPreviewPresentation.CloseBackingHovered.W);
+        Assert.True(PlateViewerPresentation.CloseBackingHovered.X > 0.5f && PlateViewerPresentation.CloseBackingHovered.Y < 0.3f);
+        Assert.True(PlateViewerPresentation.CloseBackingPressed.X < PlateViewerPresentation.CloseBackingHovered.X);
+        Assert.True(PlateViewerPresentation.CloseBackingPressed.W >= PlateViewerPresentation.CloseBackingHovered.W);
+    }
+
+    [Fact]
+    public void Presentation_RequestsATransparentRootAndChild_NoBorderPaddingOrBlur()
+    {
+        Assert.Equal(Vector4.Zero, PlateViewerPresentation.BackgroundColor);
+        Assert.Equal(Vector2.Zero, PlateViewerPresentation.WindowPadding);
+        Assert.Equal(0f, PlateViewerPresentation.WindowBorderSize);
+        Assert.False(PlateViewerPresentation.AllowBackgroundBlur);
+    }
+
+    [Fact]
+    public void Presentation_DrawsTheFinishedPlate_WithoutTheWorkspaceBackdrop()
+    {
+        var options = PlateViewerPresentation.RenderOptions;
+
+        Assert.True(options.HideCanvasBackdrop);
+        Assert.Equal(ProfileRenderOptions.Finished with { HideCanvasBackdrop = true }, options);
+        Assert.False(options.ShowElementBounds);
+        Assert.False(options.ShowEmptySectionHeadings);
+        Assert.Null(options.PlaceholderProvider);
+
+        // Every other surface keeps the backdrop.
+        Assert.False(ProfileRenderOptions.Finished.HideCanvasBackdrop);
+        Assert.False(EditorPlaceholders.CanvasOptions.HideCanvasBackdrop);
+        Assert.False(EditorPlaceholders.CanvasOptionsWithoutGuides.HideCanvasBackdrop);
+    }
+
+    [Fact]
+    public void CloseControl_Colors_ReadOnBrightAndDarkPlates()
+    {
+        // A dark translucent backing under a light glyph and ring: the glyph contrasts with its own
+        // backing, whatever the Plate behind it is.
+        Assert.InRange(PlateViewerPresentation.CloseBacking.W, 0.4f, 0.9f);
+        Assert.True(Luminance(PlateViewerPresentation.CloseBacking) < 0.1f);
+        Assert.True(Luminance(PlateViewerPresentation.CloseGlyph) > 0.9f && PlateViewerPresentation.CloseGlyph.W > 0.9f);
+        Assert.True(Luminance(PlateViewerPresentation.CloseRing) > 0.9f && PlateViewerPresentation.CloseRing.W > 0.7f);
     }
 
     [Fact]
@@ -670,6 +708,8 @@ public class PlateViewerLayoutTests
         var old = TitleBarOrder.LeftToRight(new[] { ("Minimize", 0), ("Close", int.MaxValue), ("Menu", TitleBarOrder.DalamudMenu) });
         Assert.Equal(["Minimize", "Close", "Menu"], old);
     }
+
+    private static float Luminance(Vector4 c) => (0.2126f * c.X) + (0.7152f * c.Y) + (0.0722f * c.Z);
 
     private static void AssertInsideWindow(PlateViewerLayout layout, Vector2 min, Vector2 max)
     {

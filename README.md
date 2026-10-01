@@ -55,7 +55,7 @@ Freeform control over text, images, Components, layering, placement, scaling, ro
 - **My Plates.** Browse, search, preview, rename, duplicate and delete Plates, and choose which Plate is Active for each character. Duplicating a Plate is an easy way to keep several variations of a look side by side.
 - **Plate previews.** Plate cards in My Plates and a preview pane show each Plate at a glance.
 - **Plate Viewer.** A dedicated window that shows a Plate fitted to its size.
-- **Clean Preview.** Hide the editor UI and see the Plate exactly as it will look.
+- **Preview.** Both editors' Preview opens the Plate in the Plate Viewer, exactly as it will look, and it follows your edits.
 
 ### Basic Editor
 
@@ -242,7 +242,7 @@ AetherFrame.Tests/      pure-logic tests that build without Dalamud
 - **Advanced Editor.** Direct manipulation of every element on the canvas, with layers, snapping and undo.
 - **Templates.** Starting points for new Plates: built-in ones compiled into the plugin, plus user Templates saved locally.
 - **Components.** Decorations described by a stable definition id and per-instance settings. Procedural ones are drawn in code, graphical ones use embedded artwork. Plates store only ids, never the art itself.
-- **Rendering.** One renderer draws a Plate for the editors, the Plate Viewer, Clean Preview and My Plates previews, so all of them match.
+- **Rendering.** One renderer draws a Plate for the editors, the Plate Viewer and My Plates previews, so all of them match.
 - **Assets.** User images are copied into a local asset store, checked on import and tracked by reference. Unused images are not cleaned up automatically in this version.
 - **Packages.** `.aetherframe` files are ZIP-based packages containing a manifest, the Plate document and its images. They are validated in a staging area before anything is imported.
 
