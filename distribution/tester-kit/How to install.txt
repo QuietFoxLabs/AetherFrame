@@ -1,0 +1,76 @@
+AetherFrame sharing test: how to install
+========================================
+
+This is a test build of AetherFrame with sharing turned on. It is not a release. Use it only for
+the sharing test you were invited to, and remove it afterwards.
+
+What you need
+-------------
+- FFXIV on Windows with Dalamud (XIVLauncher). Mac and Linux, including Wine and Proton, aren't
+  supported yet: the key that proves your character is yours is protected by Windows.
+- Your character's Lodestone page. Send its address to the person who invited you before you
+  start. The test's server only accepts the characters on its list, and can add yours only once it
+  has the number at the end of that address.
+
+1. Unpack
+---------
+Unzip this kit somewhere it can stay, for example C:\AetherFrame test\. You'll get a folder named
+AetherFrame holding three files: AetherFrame.dll, AetherFrame.json and AetherFrame.deps.json.
+SHA256SUMS.txt lists their checksums if you want to check them.
+
+2. Turn off any other AetherFrame
+---------------------------------
+If you installed AetherFrame from a plugin repository, open /xlplugins, find AetherFrame under
+Installed Plugins, and disable it. Two copies running at once would share the same Plates.
+
+3. Add the test build to Dalamud
+--------------------------------
+1. Type /xlsettings in chat and open the Experimental tab.
+2. Under Dev Plugin Locations, paste the full path of the DLL itself, for example
+   C:\AetherFrame test\AetherFrame\AetherFrame.dll, and press the + button. Make sure its box is
+   ticked.
+3. Press Save and Close.
+4. Type /xlplugins, open Dev Tools, then Installed Dev Plugins, and enable AetherFrame.
+5. Type /af version. It should say "network preview".
+
+Your Plates, Templates and settings are the same ones any AetherFrame on this PC uses.
+
+4. Share your Plate
+-------------------
+1. Type /af to open My Plates, then press Sharing.
+2. Read what sharing means, tick the box, and turn sharing on for the character you're logged in as.
+3. AetherFrame shows a one-time code. Sign in to the Lodestone, open your character's Character
+   Profile in its settings, paste the code anywhere in it, and save.
+4. Paste your Lodestone page's address into AetherFrame and press Check. When it passes, you can
+   delete the code from your profile.
+5. AetherFrame shows your Active Plate exactly as others will see it. Press Share this Plate.
+   From then on, saving your Active Plate updates what others see.
+
+5. View other players' Plates
+-----------------------------
+Once your character shares, right-click another tester's character in game (in the world, the
+party list, the friend list or chat) and choose View AetherFrame Plate. You can also search for
+them by full name and World: My Plates, Sharing, then Find a player's Plate.
+
+You can only see players who share too. You can hide a player's Plate on your PC, or report one.
+
+6. Stop sharing, and remove the test build
+------------------------------------------
+- To stop sharing, open My Plates, Sharing, and turn sharing off. The server then deletes your
+  shared Plate and your character's link to it.
+- To remove the test build, turn sharing off first. Then untick or remove its line in
+  /xlsettings, Experimental, Dev Plugin Locations, and delete the folder you unzipped. Your
+  Plates stay where they are.
+
+What the server keeps
+---------------------
+For each character that shares: its Lodestone id, name and World, a key that proves the character
+is yours, and your latest shared Plate. It sees the network address of anyone who shares or views,
+and doesn't store it. It keeps no record of who viewed whom. Your Plates themselves stay on your
+PC: the server only has the picture you shared.
+
+If something goes wrong
+-----------------------
+Tell the person who invited you what you did and what you saw. If they ask for your log, type
+/xllog, filter by AetherFrame, and copy those lines. AetherFrame's log lines never include names,
+Worlds, codes or keys.

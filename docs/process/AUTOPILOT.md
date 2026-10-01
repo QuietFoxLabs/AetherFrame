@@ -150,6 +150,15 @@ A preview build is the networking preview flavour (`-p:AetherFrameNetworkPreview
    - that it sends nothing, and where it writes its persona files (the plugin's configuration directory, `Network\Personas\`);
    - how to go back: install the player build again. The persona files stay where they are, and a later preview build finds them; removing that folder loses those personas for good (K4), apart from the copies in the acceptance backups.
 
+## Tester kits
+
+A tester kit is how a preview build reaches another player for the sharing test (NETWORK2's N2-11; "N2-11's tester kit" in docs/networking/DecisionRegister.md). It is never a release and never a test build, and it never goes into `E:\AetherFrame Test Build\`.
+
+1. **When.** Only when the owner asks for one, and only from a preview build of a `master` commit the owner has already run in their own game, so a tester never gets something the owner hasn't seen start.
+2. **Build.** Use the staged preview build of that commit (`E:\AetherFrame Test Builds\<date> <short sha> preview\`), or make one as [Preview test builds](#preview-test-builds) says. Then run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/New-TesterKit.ps1 -Package "<that folder>" -BuildId <short sha>`. It checks the DLL is the preview flavour, then writes `E:\AetherFrame Test Builds\<date> <short sha> tester kit\AetherFrame-tester-kit-<short sha>.zip`, holding the three files, `How to install.txt` (from `distribution/tester-kit/`) and their checksums, with the zip's own checksum beside it. It never writes over a kit.
+3. **Post** in the Owner inbox: the kit's path and checksum, the commit, and [docs/networking/TwoPlayerTest.md](../networking/TwoPlayerTest.md) for the checks. The owner gives the zip to testers. Claude never sends it anywhere.
+4. **The allowlist.** For each tester's Lodestone page the owner sends, give the owner one command for the droplet's console that adds the id to `AllowedLodestoneIds` in `/opt/aetherframe/config/aetherframe.json` and prints the ids it holds afterwards. The owner runs it: server changes are the owner's.
+
 **Persona keys in backups.** Every data backup holds copies of the persona key files. They stay protected for the owner's Windows account (K2), but the plugin can't delete them, so deleting a persona in game doesn't remove them from backups. Restore `Network\Personas\keys\` only by adding files back, never by replacing the folder. A registry restored from an older backup doesn't name newer keys, and the audit then reports them as unused; replacing the folder would lose those keys for good.
 
 ## Owner replies

@@ -1416,6 +1416,16 @@ The owner asked on October 1, 2026 for N2-10 and N2-11 "to be done asap", for a 
 
 **Rationale.** Each choice keeps C5 and D6 as written and costs the test nothing: drawing through the owner's own renderer is what makes "looks as it does for A" (NETWORK2, section 2, step 5) hold by construction, and every refusal leaves the rest of the Plate drawn.
 
+### N2-11's tester kit. APPROVED (Claude, under the owner's delegation of September 29, 2026), October 1, 2026
+
+P2 leaves open how a preview build reaches a second player, and NETWORK2's section 3 recommends a separately staged kit. Decided:
+- **The kit** is a zip of the preview build's three files in an `AetherFrame` folder, with `How to install.txt` (`distribution/tester-kit/`) and checksums. A tester adds the DLL under Dalamud's Dev Plugin Locations, as the owner's own test build is loaded. `tools/New-TesterKit.ps1` makes it, refuses a player build, and never writes over a kit. It is staged as `E:\AetherFrame Test Builds\<date> <commit> tester kit\`, never in the folder the owner's game loads, and never published: no release, tag, repository or channel carries it (P2).
+- **What goes in a kit:** only a preview build of a `master` commit the owner has run in their own game, and only when the owner asks for one. The owner hands it to testers. Claude never sends it anywhere.
+- **The allowlist (C8):** the owner sends Claude each tester's Lodestone page, and runs the one command Claude gives back on the server. Testers are named nowhere in the repository.
+- **The checklist** is [TwoPlayerTest.md](TwoPlayerTest.md): NETWORK2's section 2, step by step, for each pair of players and both ways round, with C5's hide and report.
+
+**Rationale.** The dev plugin route needs no account, signing, hosting or workflow change, so it adds no owner-only step beyond handing over a file. It keeps preview builds out of every channel P2 protects. A testing channel for preview builds, or networking in player builds, stays a later decision, for when sharing grows past a handful of testers.
+
 ## Gates
 
 | Gate | Must be decided before |
