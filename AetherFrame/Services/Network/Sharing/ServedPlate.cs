@@ -53,6 +53,28 @@ internal sealed class ServedPlate
         BackgroundIndex = backgroundIndex;
         Steps = steps;
         Notes = notes;
+
+        // The canvas united with every shape: shapes are what Components paint, which may overflow
+        // the canvas on purpose. The publisher's ProfileVisualBounds unites each Component's
+        // placement box instead, which a served layout doesn't carry: for artwork, fitted to its box,
+        // the two are the same; a procedural shape sits inside its box, so these can be tighter, and
+        // never cut anything off.
+        var min = Vector2.Zero;
+        var max = canvas;
+        foreach (var step in steps)
+        {
+            if (step is ServedShape shape)
+            {
+                foreach (var point in shape.Kind == ServedShapeKind.Triangle ? new[] { shape.A, shape.B, shape.C } : new[] { shape.A, shape.B, shape.C, shape.D })
+                {
+                    min = Vector2.Min(min, point);
+                    max = Vector2.Max(max, point);
+                }
+            }
+        }
+
+        VisualMin = min;
+        VisualMax = max;
         var texts = new List<ProfileElement>();
         foreach (var step in steps)
         {
@@ -73,6 +95,12 @@ internal sealed class ServedPlate
 
     /// <summary>The canvas, in canvas units.</summary>
     internal Vector2 Canvas { get; }
+
+    /// <summary>The top left of what it shows: the canvas and every shape its Components paint, overflow included (within the publisher's own visual bounds).</summary>
+    internal Vector2 VisualMin { get; }
+
+    /// <summary>The bottom right of what it shows.</summary>
+    internal Vector2 VisualMax { get; }
 
     /// <summary>The background, or null when it draws nothing.</summary>
     internal ProfileBackground? Background { get; }
