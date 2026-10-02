@@ -49,6 +49,23 @@ public class BackgroundSettingsTests
         Assert.NotNull(Covering(harness.Document));
     }
 
+    /// <summary>Artwork the player chose stays through a Simple Theme (only an Art Style's own pieces
+    /// leave with it), so the way back that always works is taking the artwork away.</summary>
+    [Fact]
+    public async Task ArtworkThePlayerChose_StaysThroughASimpleTheme_UntilItIsTakenAway()
+    {
+        using var harness = await BasicHarness.NewClassicAsync();
+        harness.Basic.ApplyTheme(ProfileThemePresets.Find("Dark")!);
+        harness.Session.SetComponentSlot(PlateComponentKind.Background, BuiltInComponentCatalog.BackgroundCelestialSakura);
+        Assert.NotNull(Covering(harness.Document));
+
+        harness.Basic.ApplyTheme(ProfileThemePresets.Find("Light")!);
+        Assert.NotNull(Covering(harness.Document));
+
+        harness.Session.SetComponentSlot(PlateComponentKind.Background, null);
+        Assert.Null(Covering(harness.Document));
+    }
+
     [Theory]
     [InlineData(AdventurePlateOrientation.Normal)]
     [InlineData(AdventurePlateOrientation.Mirrored)]

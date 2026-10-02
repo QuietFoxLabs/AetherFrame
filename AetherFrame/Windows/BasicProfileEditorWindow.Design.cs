@@ -39,8 +39,15 @@ internal sealed partial class BasicProfileEditorWindow
         if (PlateComponentEditor.CoveringBackground(profile, BuiltInComponentCatalog.Instance) is not null)
         {
             // Background artwork covers the Plate's own background, so its settings would change
-            // nothing here. They are kept, and come back with the background.
-            Hint("Pattern and Customize Background are hidden while background artwork covers the Plate. To use them, choose a Simple Theme, or set Background to None under Frame & Decorations.");
+            // nothing here. They are kept, and come back with the background: taking the artwork away
+            // is one undo step, here or under Frame & Decorations.
+            Hint("Pattern and Customize Background are hidden while background artwork covers the Plate.");
+            if (ImGui.SmallButton("Remove the Artwork"))
+            {
+                editorSession.SetComponentSlot(PlateComponentKind.Background, null);
+            }
+
+            ToolTip("Takes the background artwork away (undoable), so your own background shows, with its Pattern and Customize Background.\nYou can choose artwork again under Frame & Decorations.");
         }
         else
         {
