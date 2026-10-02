@@ -2,7 +2,9 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.NetworkInformation;
+using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.ImageWorker;
 using AetherFrame.Protocol.Documents;
@@ -71,7 +73,7 @@ public class OperationsTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            // No pool is cleared first: nothing holds a copy open, or Windows wouldn't delete it.
             Directory.Delete(folder, recursive: true);
         }
     }
@@ -129,7 +131,109 @@ public class OperationsTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RequestsWhileTheBackupCopies_Succeed_AndThePoolKeepsTheirConnectionsOpen()
+    {
+        // Known bug 12: each copy was followed by SqliteConnection.ClearAllPools, which closed every
+        // pooled connection in the process, and could close one that a request had just opened.
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using var bram = server.NewPlayer();
+        using var cara = server.NewPlayer();
+        var profile = ProfileId.Parse((await aria.BindAsync(12345678)).GetProperty("profileId").GetString()!);
+        await bram.BindAsync(23456789, "Bram Oakes", "Gilgamesh");
+        await cara.BindAsync(34567890, "Cara Lindqvist", "Gilgamesh");
+        using (var published = await aria.PublishAsync(Plates.Snapshot(profile, "Plate")))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, published.StatusCode);
+        }
+
+        var folder = Path.Combine(Path.GetTempPath(), "afb-" + Guid.NewGuid().ToString("N")[..12]);
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var options = Options.Create(new ServerOptions { BackupFolder = folder, DatabasePath = server.DatabasePath });
+            var database = server.Services.GetRequiredService<ServerDatabase>();
+            var health = new ServerHealth(options, server.Time);
+            using var backups = new Backups(options, database, health, server.Time, NullLogger<Backups>.Instance);
+            var today = Path.Combine(folder, "server-20260930.db");
+
+            // A request has the database open, in a read transaction, while the backup copies: it
+            // carries on, and its connection goes back to the pool still open.
+            SQLitePCL.sqlite3 pooled;
+            await using (var request = await database.OpenAsync(default))
+            {
+                pooled = request.Handle!;
+                await ServerDatabase.ExecuteAsync(request, "BEGIN;", default);
+                Assert.Equal(3L, await CountAsync(request, "SELECT COUNT(*) FROM bindings;"));
+                await backups.RunOnceAsync(default);
+                Assert.True(File.Exists(today));
+                Assert.Equal(3L, await CountAsync(request, "SELECT COUNT(*) FROM bindings;"));
+                await ServerDatabase.ExecuteAsync(request, "COMMIT;", default);
+            }
+
+            Assert.False(pooled.IsClosed);
+
+            // Two players look Aria up, over and over, while the backup copies again and again: every
+            // lookup and every copy succeeds.
+            using var copied = new CancellationTokenSource();
+            // Asynchronous continuations, so the copies below don't run inline on whichever player
+            // signals last and stall that player's lookups for the whole loop.
+            var bramLooking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var caraLooking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var lookups = new[] { Task.Run(() => LookUpAsync(bram, bramLooking)), Task.Run(() => LookUpAsync(cara, caraLooking)) };
+            try
+            {
+                await Task.WhenAll(bramLooking.Task, caraLooking.Task);
+                for (var run = 0; run < 10; run++)
+                {
+                    File.Delete(today);
+                    await backups.RunOnceAsync(default);
+                    Assert.True(File.Exists(today));
+                }
+            }
+            finally
+            {
+                copied.Cancel();
+            }
+
+            Assert.All(await Task.WhenAll(lookups), count => Assert.InRange(count, 1, 100));
+            Assert.True(health.Current.Backup);
+            Assert.False(pooled.IsClosed);
+            await using (var copy = new SqliteConnection("Data Source=" + today + ";Mode=ReadOnly;Pooling=False"))
+            {
+                await copy.OpenAsync();
+                Assert.Equal(3L, await CountAsync(copy, "SELECT COUNT(*) FROM bindings;"));
+            }
+
+            async Task<int> LookUpAsync(Player viewer, TaskCompletionSource looking)
+            {
+                var count = 0;
+                try
+                {
+                    // Until the copies are done, and well within the hourly limit on lookups.
+                    while (!copied.IsCancellationRequested && count < 100)
+                    {
+                        using var lookup = await viewer.SendAsync("/v1/lookup", RequestProofKind.Lookup, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}");
+                        Assert.Equal(HttpStatusCode.OK, lookup.StatusCode);
+                        count++;
+                        looking.TrySetResult();
+                    }
+                }
+                finally
+                {
+                    looking.TrySetResult();
+                }
+
+                return count;
+            }
+        }
+        finally
+        {
             Directory.Delete(folder, recursive: true);
         }
     }
@@ -194,5 +298,13 @@ public class OperationsTests
         Assert.True(WorkerRun.HasNoNetwork([]));
         Assert.False(WorkerRun.HasNoNetwork([NetworkInterfaceType.Loopback, NetworkInterfaceType.Ethernet]));
         Assert.False(WorkerRun.HasNoNetwork([NetworkInterfaceType.Tunnel]));
+    }
+
+    /// <summary>Runs a query that answers one number, on <paramref name="connection"/>.</summary>
+    private static async Task<long> CountAsync(SqliteConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 }

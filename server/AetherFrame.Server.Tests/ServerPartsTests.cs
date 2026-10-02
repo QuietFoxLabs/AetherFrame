@@ -201,6 +201,32 @@ public class ServerPartsTests
     }
 
     [Fact]
+    public async Task ATestServersTeardown_ClosesItsOwnPooledConnections_AndNoOtherServers()
+    {
+        // Known bug 12: the teardown cleared every pool in the process, under the servers of the test
+        // classes running beside it.
+        using var other = new TestServer();
+        using var otherClient = other.CreateClient();
+        SQLitePCL.sqlite3 othersConnection;
+        await using (var connection = await other.Services.GetRequiredService<ServerDatabase>().OpenAsync(default))
+        {
+            othersConnection = connection.Handle!;
+        }
+
+        SQLitePCL.sqlite3 ownConnection;
+        using (var server = new TestServer())
+        {
+            using var client = server.CreateClient();
+            await using var connection = await server.Services.GetRequiredService<ServerDatabase>().OpenAsync(default);
+            ownConnection = connection.Handle!;
+        }
+
+        // Its own, back in its pool, is closed, so that its folder can be deleted; the other's is still open.
+        Assert.True(ownConnection.IsClosed);
+        Assert.False(othersConnection.IsClosed);
+    }
+
+    [Fact]
     public async Task TheCheckpoint_RetriesWhileAReaderBlocksIt()
     {
         using var server = new TestServer();

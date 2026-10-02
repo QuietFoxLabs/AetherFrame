@@ -7,7 +7,6 @@ using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Server.Storage;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -137,7 +136,9 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
                 await command.ExecuteNonQueryAsync(cancellation);
             }
 
-            SqliteConnection.ClearAllPools();
+            // VACUUM INTO closes the copy when its statement ends, so no connection holds it open and it
+            // moves even on Windows. No pool is cleared: clearing them all (known bug 12) closed every
+            // pooled connection in the process, and could close one that a request had just opened.
             File.Move(partial, today);
         }
         catch
