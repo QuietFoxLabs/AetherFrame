@@ -76,4 +76,15 @@ internal enum TutorialTarget
     AdvancedLayerOrder,
     AdvancedBackground,
     AdvancedCanvasSize,
+
+    // ---- sharing: drawn only by the sharing build (a player build has none of these controls)
+    LibrarySharing,
+    SharingWindow,
+    SharingConsent,
+    SharingLodestoneCheck,
+    SharingStatus,
+    SharingPauseAndTurnOff,
+    SharingFindPlayer,
+    PlateSearch,
+    ViewerOtherPlayersPlate,
 }

@@ -35,6 +35,9 @@ internal enum TutorialCondition
 
     /// <summary>The Create Plate chooser is open, or a Plate is open in an editor (the player created one, or opened one they had).</summary>
     CreatingOrEditingPlate,
+
+    /// <summary>The Sharing window is open (the sharing build only; never true in a player build, which has none).</summary>
+    SharingWindowOpen,
 }
 
 /// <summary>
@@ -95,7 +98,11 @@ internal sealed record TutorialStep(
 /// <param name="Title">As listed in the chapter picker.</param>
 /// <param name="Summary">One line: what the chapter teaches.</param>
 /// <param name="Steps">In order; at least one.</param>
-internal sealed record TutorialChapter(string Id, string Title, string Summary, IReadOnlyList<TutorialStep> Steps)
+/// <param name="SharingOnly">
+/// The chapter teaches sharing, which only the sharing build has: a player build, with no sharing
+/// code at all, leaves it out (<see cref="TutorialScript.ForBuild"/>).
+/// </param>
+internal sealed record TutorialChapter(string Id, string Title, string Summary, IReadOnlyList<TutorialStep> Steps, bool SharingOnly = false)
 {
     /// <summary>What must be true for the chapter to be worth entering (the first step's requirement, if any).</summary>
     internal TutorialCondition Requires => Steps.Count > 0 ? Steps[0].Requires : TutorialCondition.None;
@@ -189,7 +196,7 @@ internal static class TutorialScriptValidation
 /// <summary>
 /// What the tutorial can see of the interface this frame. Filled in by the plugin from state that
 /// already exists (which windows are open, whether a Plate is open, what's selected); the tutorial
-/// only reads it, so navigating the tutorial can never change a Plate.
+/// only reads it, so navigating the tutorial can never change a Plate, nor anything about sharing.
 /// </summary>
 internal readonly record struct TutorialContextSnapshot(
     bool MyPlatesOpen = false,
@@ -199,7 +206,8 @@ internal readonly record struct TutorialContextSnapshot(
     bool PlateOpen = false,
     int PlateCount = 0,
     bool ElementSelected = false,
-    bool TextElementSelected = false)
+    bool TextElementSelected = false,
+    bool SharingWindowOpen = false)
 {
     internal bool Satisfies(TutorialCondition condition) => condition switch
     {
@@ -215,6 +223,7 @@ internal readonly record struct TutorialContextSnapshot(
         TutorialCondition.ElementSelected => ActiveEditor == EditorSurfaceKind.Advanced && PlateOpen && ElementSelected,
         TutorialCondition.TextElementSelected => ActiveEditor == EditorSurfaceKind.Advanced && PlateOpen && TextElementSelected,
         TutorialCondition.CreatingOrEditingPlate => TemplateChooserOpen || (ActiveEditor is not null && PlateOpen),
+        TutorialCondition.SharingWindowOpen => SharingWindowOpen,
         _ => false,
     };
 }

@@ -4,7 +4,9 @@ using System.Numerics;
 using AetherFrame.Services.Network.Sharing;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Theme;
+using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -77,6 +79,9 @@ internal sealed class PlateViewerWindow : Window
             ImGui.Spacing();
             Muted(Address);
         }
+
+        // The tutorial points at the search only while it can be used (it never searches).
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.PlateSearch);
     }
 
     private static void Muted(string text)

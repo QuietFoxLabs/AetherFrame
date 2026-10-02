@@ -6,7 +6,9 @@ using AetherFrame.Services;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Rendering;
 using AetherFrame.UI.Theme;
+using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -381,6 +383,9 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         if (presentation is { } shown)
         {
             shown.Draw(ImGui.GetWindowDrawList(), windowPos + current.CanvasOffset, current.Scale, windowPos, windowPos + current.WindowSize);
+
+            // Another player's Plate (the sharing build's): the tutorial explains its right-click menu.
+            TutorialAnchorMarks.MarkRect(TutorialTarget.ViewerOtherPlayersPlate, windowPos, windowPos + current.WindowSize);
         }
         else if (presentedDocument is { } profile)
         {
