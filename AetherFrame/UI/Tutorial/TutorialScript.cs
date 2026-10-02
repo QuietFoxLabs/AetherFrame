@@ -1,14 +1,18 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace AetherFrame.UI.Tutorial;
 
 /// <summary>
-/// The first-time tutorial: twelve short chapters over the controls that exist, in the words the
-/// interface uses. Content only; the session (<see cref="TutorialSession"/>) decides how each
-/// step shows. Every target here is a control a window marks (<see cref="TutorialTarget"/>); a
-/// step whose control is off screen says so rather than pointing at nothing, and a step that
-/// needs an editor open explains how to get there and offers to open it. No step creates,
-/// changes, saves, imports, exports or deletes anything on the player's behalf.
+/// The first-time tutorial: fourteen short chapters over the controls that exist, in the words the
+/// interface uses (twelve in a player build, which has no sharing to teach; see
+/// <see cref="ForBuild"/>). Content only; the session (<see cref="TutorialSession"/>) decides how
+/// each step shows. Every target here is a control a window marks (<see cref="TutorialTarget"/>);
+/// a step whose control is off screen says so rather than pointing at nothing, and a step that
+/// needs an editor open explains how to get there and offers to open it. No step creates, changes,
+/// saves, imports, exports or deletes anything on the player's behalf, and none sends anything:
+/// the sharing chapters point at sharing's controls and explain them, and leave every one of them
+/// to the player.
 ///
 /// <para>Bump <see cref="Version"/> when the chapters change enough that a player who completed
 /// the old tour should see Help say the tutorial was updated. Authoring conventions:
@@ -16,13 +20,15 @@ namespace AetherFrame.UI.Tutorial;
 /// </summary>
 internal static class TutorialScript
 {
-    internal const int Version = 2;
+    internal const int Version = 3;
 
     private const string OpenAPlate = "Open a Plate first: double-click one in My Plates, or use Create Plate. Then this chapter continues on its own.";
     private const string SwitchToBasic = "Switch to the Basic Editor: the Basic | Advanced switch at the top of the editor moves this Plate between the two without losing anything.";
     private const string SwitchToAdvanced = "Switch to the Advanced Editor: the Basic | Advanced switch at the top of the editor moves this Plate between the two without losing anything.";
     private const string OpenMyPlates = "Open My Plates to continue: the button below brings it forward.";
+    private const string OpenSharing = "Open the Sharing window to continue: click Sharing at the top of My Plates. The button below brings My Plates forward.";
 
+    /// <summary>Every chapter, as the sharing build shows them.</summary>
     internal static readonly IReadOnlyList<TutorialChapter> Chapters =
     [
         new TutorialChapter("welcome", "Welcome to AetherFrame", "What AetherFrame is, what a Plate is, and the two ways to edit one.",
@@ -89,7 +95,7 @@ internal static class TutorialScript
                 "This is your Plate as it will look. Click a part of it to jump to that section. Use the zoom buttons above it to look closer; at 150% and 200% you can scroll or drag to look around.",
                 TutorialTarget.BasicPreview, Requires: TutorialCondition.BasicEditorOpen, FallbackBody: SwitchToBasic, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenBasicEditor),
             new TutorialStep("basic.style", "Style",
-                "Style is the fastest way to a good-looking Plate: pick a Theme (background and text colours together), then a Pattern. Customize Background opens the colour, gradient and image controls.",
+                "Style is the fastest way to a good-looking Plate: pick a Theme. An Art Style sets the background artwork, frames, decorations and text colours together; a Simple Theme sets the colours. Pattern and Customize Background (colour, gradient and image) show while no background artwork covers the Plate.",
                 TutorialTarget.BasicNavigatorStyle, TutorialStepMode.Interact, Requires: TutorialCondition.BasicEditorOpen, FallbackBody: SwitchToBasic, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenBasicEditor),
             new TutorialStep("basic.identity", "Identity and details",
                 "Identity holds your character's name and title. Details holds Home World, Favorite Jobs, Free Company, Playstyle and Active Hours; Message is free text. Each section of the Plate can be hidden without losing what you typed.",
@@ -204,6 +210,51 @@ internal static class TutorialScript
                 TutorialTarget.LibraryImport, Requires: TutorialCondition.MyPlatesOpen, FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates),
         ]),
 
+        // Sharing online. Every step points and explains: the controls that send anything (Turn on
+        // sharing, Check, Pause, Turn off, View, Hide, Report) are only ever looked at, behind the
+        // spotlight's cover, and the two the player may use from here only open a window. A step
+        // whose control belongs to another state of sharing (the consent, once the character
+        // shares; the check, before it starts) says its control isn't in view, and Next goes on.
+        new TutorialChapter("online", "Sharing online", "Turning sharing on for a character, and how its Active Plate is shared.",
+        [
+            new TutorialStep("online.open", "Sharing",
+                "Sharing lets players who use AetherFrame, and have turned sharing on, view each other's Active Plates, like the game's Adventure Plates. It's off until you turn it on, one character at a time, and the tour never turns it on or off for you.\n\nClick Sharing to open the Sharing window.",
+                TutorialTarget.LibrarySharing, TutorialStepMode.Interact, Requires: TutorialCondition.MyPlatesOpen, AdvanceWhen: TutorialCondition.SharingWindowOpen,
+                FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates,
+                WaitsForAction: true, WaitHint: "Click Sharing to continue: it opens the Sharing window."),
+            new TutorialStep("online.window", "The Sharing window",
+                "This window shows the sharing of the character you're logged in as: log in to one to turn its sharing on or off. Each character shares on its own, and what other players see of it is its Active Plate. When something happens, such as a check passing or a Plate being shared, this window says so.",
+                TutorialTarget.SharingWindow, Requires: TutorialCondition.SharingWindowOpen, FallbackBody: OpenSharing, FallbackTarget: TutorialTarget.LibrarySharing, FallbackAction: TutorialAction.OpenMyPlates),
+            new TutorialStep("online.consent", "Turning sharing on",
+                "For a character that doesn't share yet, the window first lists what sharing means: what other players see, what the server keeps, and what turning it off deletes. Tick the box only if you agree, then press Turn on sharing. Nothing is sent for this character before that, and the tour never presses it for you.",
+                TutorialTarget.SharingConsent, Requires: TutorialCondition.SharingWindowOpen, FallbackBody: OpenSharing, FallbackTarget: TutorialTarget.LibrarySharing, FallbackAction: TutorialAction.OpenMyPlates),
+            new TutorialStep("online.check", "Proving the character is yours",
+                "Next comes the Lodestone check. Copy the code shown here (Get a code asks for one), paste it into your character's Character Profile on the Lodestone and save, then paste the address of your character's Lodestone page here and press Check. Once the check passes, delete the code from your profile. Cancel stops the check.",
+                TutorialTarget.SharingLodestoneCheck, Requires: TutorialCondition.SharingWindowOpen, FallbackBody: OpenSharing, FallbackTarget: TutorialTarget.LibrarySharing, FallbackAction: TutorialAction.OpenMyPlates),
+            new TutorialStep("online.shared", "Sharing is on",
+                "While this character shares, its Active Plate is shared without asking: saving it shares the new version, and making another Plate Active shares that one. My Plates marks the shared Plate Shared. A small window shows how sharing is going, and if it couldn't finish, why, with Try again.",
+                TutorialTarget.SharingStatus, Requires: TutorialCondition.SharingWindowOpen, FallbackBody: OpenSharing, FallbackTarget: TutorialTarget.LibrarySharing, FallbackAction: TutorialAction.OpenMyPlates),
+            new TutorialStep("online.stop", "Pausing or turning it off",
+                "Pause sharing deletes this character's Plate from the server and keeps its check, so Resume sharing shares again without a new one. Turn off sharing for this character deletes its Plate, its images and its check, after asking you; sharing again then needs a new Lodestone check. Turn off sharing for every character does that for each character on this PC.",
+                TutorialTarget.SharingPauseAndTurnOff, Requires: TutorialCondition.SharingWindowOpen, FallbackBody: OpenSharing, FallbackTarget: TutorialTarget.LibrarySharing, FallbackAction: TutorialAction.OpenMyPlates),
+            new TutorialStep("online.preview", "What would be shared",
+                "To see what sharing a Plate would send, right-click its card and choose Check what would be shared (preview); the editor's Plate menu has it too. It shows the Plate's name, texts and images as they would be sent, from its saved state, or why it can't be shared yet. It sends nothing.",
+                TutorialTarget.LibraryPlateGrid, Requires: TutorialCondition.MyPlatesOpen, FallbackBody: OpenMyPlates, FallbackAction: TutorialAction.OpenMyPlates),
+        ], SharingOnly: true),
+
+        new TutorialChapter("viewing", "Other players' Plates", "Viewing the Plates of other players who share, and hiding or reporting one.",
+        [
+            new TutorialStep("viewing.find", "Finding a player's Plate",
+                "Viewing is part of sharing: once one of your characters shares, you can view other players who share too. Right-click their character in game, in your party or friend list, or their name in chat, and choose View AetherFrame Plate. Or click Find a player's Plate here to search for them.",
+                TutorialTarget.SharingFindPlayer, TutorialStepMode.Interact, Requires: TutorialCondition.SharingWindowOpen, FallbackBody: OpenSharing, FallbackTarget: TutorialTarget.LibrarySharing, FallbackAction: TutorialAction.OpenMyPlates),
+            new TutorialStep("viewing.search", "Searching by name",
+                "AetherFrame Plates finds a player by their character's full name and World: type the name, pick the World, and press View. Their Plate opens in the Plate Viewer, over the game, like your own. A lookup sends your network address to AetherFrame's server, which doesn't store it and keeps no record of who viewed whom.",
+                TutorialTarget.PlateSearch),
+            new TutorialStep("viewing.viewer", "Hide or report",
+                "Right-click another player's Plate in the Plate Viewer to see whose it is, and to Refresh it, Hide this player or Report it. Hiding is kept on this PC: their Plate isn't looked up again until you choose Show their Plate again. Report sends AetherFrame's server the reason you pick.",
+                TutorialTarget.ViewerOtherPlayersPlate),
+        ], SharingOnly: true),
+
         new TutorialChapter("done", "You're all set", "Where to find the tutorial again.",
         [
             new TutorialStep("done.finish", "That's the tour",
@@ -211,4 +262,15 @@ internal static class TutorialScript
                 Mode: TutorialStepMode.Narrative),
         ]),
     ];
+
+    // After Chapters: static fields are set in the order they're written.
+    private static readonly IReadOnlyList<TutorialChapter> WithoutSharing = [.. Chapters.Where(chapter => !chapter.SharingOnly)];
+
+    /// <summary>
+    /// The chapters a build shows: every one in the sharing build; in a player build, which has no
+    /// sharing code and so no sharing control to point at, all but the chapters that teach sharing
+    /// (<see cref="TutorialChapter.SharingOnly"/>). The chapters before those keep their places in
+    /// both builds.
+    /// </summary>
+    internal static IReadOnlyList<TutorialChapter> ForBuild(bool sharing) => sharing ? Chapters : WithoutSharing;
 }

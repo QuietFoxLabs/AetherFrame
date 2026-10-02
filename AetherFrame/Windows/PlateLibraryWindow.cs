@@ -323,6 +323,8 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             {
                 openSharing();
             }
+
+            TutorialAnchorMarks.Mark(TutorialTarget.LibrarySharing);
         }
 
         // Never the character's name or World (see MyPlatesCharacterText): only whether one is

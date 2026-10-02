@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Hosting;
@@ -288,12 +289,18 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             startup.OnFailure("interface fonts", fonts.Dispose);
 
             // The tutorial: its state lives in the configuration beside the guidance flag; its
-            // windows go after every other AetherFrame window, so the spotlight sees this frame's
-            // anchors. Whether to offer it is decided once the Library has loaded (see LoadAsync).
-            onboarding = new OnboardingCoordinator(new ConfigurationTutorialStore(Configuration, log), TutorialScript.Chapters, TutorialScript.Version);
+            // windows go after every other AetherFrame window (below, once the sharing build has
+            // added its own), so the spotlight sees this frame's anchors. Its chapters are this
+            // build's: the sharing chapters only where sharing is compiled in. Whether to offer it
+            // is decided once the Library has loaded (see LoadAsync).
+            onboarding = new OnboardingCoordinator(
+                new ConfigurationTutorialStore(Configuration, log), TutorialScript.ForBuild(AetherFrameBuildInfo.NetworkPreview), TutorialScript.Version);
             var tutorialHost = new TutorialHost(this);
-            tutorialOverlay = new TutorialOverlay(
-                onboarding, tutorialHost, [plateLibraryWindow, basicProfileEditorWindow, profileEditorWindow, profileViewWindow, packageImportWindow]);
+
+            // What the tutorial's dim covers: AetherFrame's own windows. The sharing build adds its
+            // sharing windows below, so a step pointing into one dims the rest of it too.
+            var dimmedWindows = new List<Window> { plateLibraryWindow, basicProfileEditorWindow, profileEditorWindow, profileViewWindow, packageImportWindow };
+            tutorialOverlay = new TutorialOverlay(onboarding, tutorialHost, dimmedWindows);
 
             // A player taking the tour is being shown both editors: the one-time Basic suggestion
             // would only get in the way of a step, so it counts as handled once the tour starts.
@@ -309,11 +316,6 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             plateLibraryWindow.Help = helpMenu;
             basicProfileEditorWindow.Help = helpMenu;
             profileEditorWindow.Help = helpMenu;
-            foreach (var window in tutorialOverlay.Windows)
-            {
-                WindowSystem.AddWindow(window);
-            }
-
             startup.OnFailure("windows", WindowSystem.RemoveAllWindows);
 
             // /aetherframe and its /af alias, both on this one handler.
@@ -432,7 +434,19 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             sharingWindow.OpenViewer = plateViewerWindow.Open;
             viewPlateMenu = new ViewPlateMenu(ContextMenu, plateViewing, ShowServedPlate);
             startup.OnFailure("view menu", viewPlateMenu.Dispose);
+
+            // The tutorial's sharing chapters point into these windows (it never uses what they send).
+            dimmedWindows.Add(sharingWindow);
+            dimmedWindows.Add(plateViewerWindow);
+            dimmedWindows.Add(shareCheckWindow);
 #endif
+
+            // The tutorial's windows, after every other AetherFrame window (the sharing build's
+            // included), so the spotlight reads the anchors those windows marked this frame.
+            foreach (var window in tutorialOverlay.Windows)
+            {
+                WindowSystem.AddWindow(window);
+            }
 
             // Drawing starts last: the plugin is created off the framework thread, so a frame can
             // run while this constructor does, and every frame's work must find all it uses made.
@@ -733,7 +747,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             }
 
             var library = plugin.plateLibraryWindow;
-            return new TutorialContextSnapshot(
+            var snapshot = new TutorialContextSnapshot(
                 MyPlatesOpen: library.IsOpen,
                 TemplatesViewOpen: library.IsOpen && library.TemplatesViewShowing,
                 TemplateChooserOpen: library.IsOpen && library.TemplateChooserShowing,
@@ -742,6 +756,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 PlateCount: plugin.plateLibrary.IsLoaded ? plugin.plateLibrary.GetOrderedPlates().Count : 0,
                 ElementSelected: selected is not null,
                 TextElementSelected: selected is TextProfileElement);
+#if AETHERFRAME_NETWORK_PREVIEW
+            // Whether the window is open, and nothing else of sharing: the tutorial only points.
+            snapshot = snapshot with { SharingWindowOpen = plugin.sharingWindow.IsOpen };
+#endif
+            return snapshot;
         }
 
         public void Perform(TutorialAction action)
