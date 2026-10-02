@@ -579,8 +579,8 @@ internal sealed class BasicPlateEditor
     /// with a custom color, which keeps it (see <see cref="BasicNameColor"/>). Only copies values —
     /// every one stays editable, and nothing references the preset afterwards. An Art Style also
     /// places its pieces (<see cref="ApplyStylePieces"/>): its background artwork covers the Plate's
-    /// own background, image included, until it is taken away under Frame &amp; Decorations or where
-    /// the background is edited; the background itself is kept under it.
+    /// own background, image included, until it is taken away (under Frame &amp; Decorations, or with
+    /// Style's Remove the Artwork); the background itself is kept under it.
     /// </summary>
     internal void ApplyTheme(ProfileThemePreset preset)
     {
