@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Numerics;
 using AetherFrame.Domain.Basic;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
 using Dalamud.Bindings.ImGui;
@@ -14,6 +15,8 @@ namespace AetherFrame.Windows;
 /// first-class visual browsers), Customize Background (detailed color/mode tuning, collapsed by
 /// default), Text (the shared section heading size), the Plate Frame and decoration Components,
 /// then Layout: the orientation together with the layout actions that apply to every Basic section.
+/// Pattern and Customize Background show only while the Plate's own background does: background
+/// artwork that covers it (an Art Style's) leaves them out, with one line saying how to bring them back.
 /// </summary>
 internal sealed partial class BasicProfileEditorWindow
 {
@@ -33,20 +36,27 @@ internal sealed partial class BasicProfileEditorWindow
         Hint("A theme sets the background and every Basic text color at once. Each value stays editable.");
 
         ImGui.Spacing();
-        Subheading("Pattern");
-        using (ImRaii.PushId("Pattern"))
+        if (PlateComponentEditor.CoveringBackground(profile, BuiltInComponentCatalog.Instance) is not null)
         {
-            DrawBackgroundArtworkNote(profile);
-            backgroundPanel.DrawPatternPresets(profile);
+            // Background artwork covers the Plate's own background, so its settings would change
+            // nothing here. They are kept, and come back with the background.
+            Hint("Pattern and Customize Background are hidden while background artwork covers the Plate. To use them, choose a Simple Theme, or set Background to None under Frame & Decorations.");
         }
-
-        // Fine tuning — mode, exact colors, gradient, image — out of the way until wanted.
-        ImGui.Spacing();
-        if (ImGui.CollapsingHeader("Customize Background##CustomizeBackground"))
+        else
         {
-            using var id = ImRaii.PushId("Background");
-            DrawBackgroundArtworkNote(profile);
-            backgroundPanel.Draw(profile, applyTheme: null);
+            Subheading("Pattern");
+            using (ImRaii.PushId("Pattern"))
+            {
+                backgroundPanel.DrawPatternPresets(profile);
+            }
+
+            // Fine tuning — mode, exact colors, gradient, image — out of the way until wanted.
+            ImGui.Spacing();
+            if (ImGui.CollapsingHeader("Customize Background##CustomizeBackground"))
+            {
+                using var id = ImRaii.PushId("Background");
+                backgroundPanel.Draw(profile, applyTheme: null);
+            }
         }
 
         DrawSectionHeadingSize(profile);

@@ -28,28 +28,6 @@ internal sealed partial class BasicProfileEditorWindow
         Hint("Colors follow your theme. Fine-tune placement and color in the Advanced Editor (Canvas tab, Components).");
     }
 
-    /// <summary>
-    /// Background artwork (an Art Style's, or one chosen under Frame &amp; Decorations) covers the
-    /// Plate's own background, so where that background is edited, this says so and offers to take the
-    /// artwork away (one undo step). The background's own settings are kept under it either way.
-    /// </summary>
-    private void DrawBackgroundArtworkNote(ProfileDocument profile)
-    {
-        if (PlateComponentEditor.FindSlot(profile, PlateComponentKind.Background) is not { Visible: true } artwork
-            || ComponentPaintPlan.Resolve(artwork, BuiltInComponentCatalog.Instance, out var definition) != ComponentStatus.Ready)
-        {
-            return;
-        }
-
-        ImGui.TextColored(EditorWidgets.WarningColor, $"Background artwork ({definition!.Name}) covers these settings.");
-        if (ImGui.SmallButton("Remove the Artwork"))
-        {
-            editorSession.SetComponentSlot(PlateComponentKind.Background, null);
-        }
-
-        ToolTip("Takes the background artwork away (undoable), so your own background shows.\nYou can choose artwork again under Frame & Decorations.");
-    }
-
     /// <summary>One slot: a label and a style combo. Choosing is one undo step.</summary>
     private void DrawComponentSlot(ProfileDocument profile, PlateComponentKind kind)
     {
