@@ -16,6 +16,8 @@ public static class PlateNaming
 
     private const string CopySuffix = " Copy";
 
+    private const string KeptChangesSuffix = " (kept changes)";
+
     /// <summary>
     /// Trims the name and folds control characters (e.g. a pasted newline) and Unicode format
     /// characters (zero-width spaces and joiners, byte order marks, bidirectional overrides, tag
@@ -89,6 +91,27 @@ public static class PlateNaming
         for (var n = 2; taken.Contains(candidate); n++)
         {
             candidate = Fit(name, $" {n}");
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// The name of a Plate restored from unsaved changes AetherFrame kept: "Name (kept changes)", or
+    /// "Name (kept changes) 2", "... 3", ... when taken (case-insensitively), the name shortened to
+    /// keep the suffix within the length cap. A name kept in an edited file is folded as
+    /// <see cref="TryNormalizeName"/> folds one.
+    /// </summary>
+    public static string MakeKeptChangesName(string sourceName, IEnumerable<string> existingNames)
+    {
+        var source = sourceName ?? string.Empty;
+        var baseName = TryNormalizeName(source.Length > MaxNameLength ? source[..MaxNameLength] : source, out var normalized, out _) ? normalized : DefaultName;
+        var taken = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
+
+        var candidate = Fit(baseName, KeptChangesSuffix);
+        for (var n = 2; taken.Contains(candidate); n++)
+        {
+            candidate = Fit(baseName, $"{KeptChangesSuffix} {n}");
         }
 
         return candidate;

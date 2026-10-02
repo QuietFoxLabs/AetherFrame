@@ -74,6 +74,18 @@ internal static class PersistenceSchemas
         minimumVersion: 1,
         []);
 
+    /// <summary>
+    /// The envelope of an editor's unsaved changes kept when AetherFrame unloaded (see
+    /// <c>DraftDocuments</c>), versioned independently of its embedded Plate document, exactly as a
+    /// Template's is. Version 1 is the first.
+    /// </summary>
+    internal static readonly SchemaDefinition Draft = new(
+        "Unsaved changes",
+        currentVersion: Domain.Plates.PlateDraft.CurrentSchemaVersion,
+        missingVersionMeans: 1,
+        minimumVersion: 1,
+        []);
+
     private static void MigrateBindingV1ToV2(JsonObject json)
     {
         var ids = json["ProfileIds"] as JsonArray;

@@ -719,6 +719,33 @@ internal sealed class PlateLibraryService
         });
 
     /// <summary>
+    /// Restore as New Plate, for unsaved changes AetherFrame kept when it unloaded (see
+    /// <see cref="DraftStore"/>): the kept document as a brand-new Plate first in the Library, made as
+    /// Use Template makes one (a fresh id, created and modified now, revision 0, no character owner),
+    /// unbound and never Active, named "<paramref name="plateName"/> (kept changes)", made unique.
+    /// <paramref name="documentRaw"/> is copied whole, unknown data included. The Plate the changes
+    /// came from is never read or written, whatever state it is in.
+    /// </summary>
+    internal Task<PlateCreationResult> CreatePlateFromKeptChangesAsync(JsonObject documentRaw, string plateName) =>
+        RunExclusiveAsync(async () =>
+        {
+            RequireLoaded();
+
+            var now = utcNow();
+            var plateId = Guid.NewGuid();
+            string uniqueName;
+            lock (gate)
+            {
+                uniqueName = PlateNaming.MakeKeptChangesName(plateName, plates.Values.Select(p => p.Name));
+            }
+
+            var raw = PlateDocuments.CreateDuplicate(documentRaw, plateId, uniqueName, now);
+            var result = await InsertNewPlateAsync(plateId, raw, character: null, now).ConfigureAwait(false);
+            log.Information($"AetherFrame restored kept unsaved changes as new Plate {plateId}.");
+            return result;
+        });
+
+    /// <summary>
     /// The shared tail of every "add a brand-new Plate" operation: writes the document, inserts it
     /// first in the Library, and applies the usual character-association rules — associated with
     /// <paramref name="character"/> if given, and Active only if this is that character's very
@@ -1254,7 +1281,8 @@ internal sealed class PlateLibraryService
     /// <summary>
     /// Every asset referenced by any saved Plate and any Plate in the trash (restorable, so its
     /// images stay protected). Incomplete — and so unusable for cleanup — if any document can't
-    /// be read or was saved by a newer version.
+    /// be read or was saved by a newer version. Unsaved changes kept when AetherFrame unloaded
+    /// count too, waiting to be offered or answered (see <see cref="DraftStore"/>).
     /// </summary>
     internal Task<AssetReferenceScan> ScanAssetReferencesAsync() =>
         RunExclusiveAsync(async () =>
@@ -1342,6 +1370,51 @@ internal sealed class PlateLibraryService
                     // failure's text — which may name a local path — stays in the log.
                     log.Error(ex, $"AetherFrame could not read trashed Plate {Path.GetFileName(path)} while scanning image references.");
                     problems.Add($"Trashed Plate {Path.GetFileName(path)} is unreadable ({ex.GetType().Name}).");
+                }
+            }
+
+            // Unsaved changes kept when AetherFrame unloaded (see DraftStore), waiting to be offered
+            // or answered and in the trash: an image added while editing may be used by nothing else.
+            // Every GUID string in one counts, as for a stray file in the Plates folder (a draft is
+            // named for its Plate and holds its own id, which only ever protects more). One that
+            // can't be read, whose bytes aren't all valid text (the offer reads such a draft from its
+            // backup copy, so what it would restore may name images this text doesn't), or that a
+            // newer version wrote, leaves the scan incomplete.
+            foreach (var path in store.ListFiles(paths.DraftsDirectory, "*.json").Concat(store.ListFiles(paths.DraftTrashDirectory, "*.json")))
+            {
+                try
+                {
+                    var runs = 0;
+                    var newer = false;
+                    await store.ReadTextAsync(path, text =>
+                    {
+                        if (++runs > 1)
+                        {
+                            throw new InvalidDataException("Only its backup copy could be read.");
+                        }
+
+                        if (text.HasInvalidBytes)
+                        {
+                            throw new InvalidDataException("Its bytes aren't all valid text.");
+                        }
+
+                        using (var json = JsonDocument.Parse(text.Text))
+                        {
+                            AssetReferenceScanner.CollectAllGuidStrings(json.RootElement, referenced);
+                        }
+
+                        newer = DraftDocuments.Parse(text.Text).Status == DraftTextStatus.NewerVersion;
+                    }).ConfigureAwait(false);
+
+                    if (newer)
+                    {
+                        problems.Add($"Kept changes {Path.GetFileName(path)} were saved by a newer version.");
+                    }
+                }
+                catch (Exception ex) when (!IsInterruption(ex))
+                {
+                    log.Error(ex, $"AetherFrame could not read kept changes {Path.GetFileName(path)} while scanning image references.");
+                    problems.Add($"Kept changes {Path.GetFileName(path)} are unreadable ({ex.GetType().Name}).");
                 }
             }
 

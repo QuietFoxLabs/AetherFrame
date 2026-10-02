@@ -68,10 +68,10 @@ internal sealed class TestServer : WebApplicationFactory<Program>
     /// <summary>The image worker: by default, it returns what it's given.</summary>
     public FakeImages Images { get; } = new();
 
-    /// <summary>Runs a query that answers one number, on the server's database.</summary>
+    /// <summary>Runs a query that answers one number, on the server's database, with a connection no pool keeps.</summary>
     public async Task<long> CountAsync(string sql)
     {
-        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + DatabasePath);
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + DatabasePath + ";Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
@@ -127,7 +127,15 @@ internal sealed class TestServer : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+        // The server's pooled connections keep its database open, and Windows won't delete an open
+        // file. Only this server's pool is cleared: ClearAllPools cleared every pool in the process,
+        // under the servers of the test classes running beside this one (known bug 12).
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(AetherFrame.Server.Storage.ServerDatabase.ConnectionStringFor(DatabasePath)))
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearPool(connection);
+        }
+
         foreach (var path in new[] { folder, Path.GetDirectoryName(ImageWorkerSocket)! })
         {
             try

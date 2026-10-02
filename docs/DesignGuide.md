@@ -1,6 +1,6 @@
 # AetherFrame design guide
 
-How AetherFrame's interface looks, how it is built, and how to extend it without breaking either. This covers the plugin's own windows (My Plates, both editors, the Plate Viewer, prompts and the tutorial); it does not cover how a Plate itself renders, which is the renderer's business and unchanged by any of this.
+How AetherFrame's interface looks, how it is built, and how to extend it without breaking either. This covers the plugin's own windows (My Plates, both editors, the Plate Viewer, prompts, the offer of unsaved changes kept at unload, and the tutorial); it does not cover how a Plate itself renders, which is the renderer's business and unchanged by any of this.
 
 ## The identity
 
@@ -64,6 +64,7 @@ Dalamud calls `PostDraw` whenever it called `PreDraw`, including the frame in wh
 - **The Basic editor** is a navigator rail (Style, Portrait, Identity, Details, Message), the selected category's controls with its title and summary pinned, and the live Plate. Narrow windows fold the rail into a strip.
 - **The Advanced editor** is Layers, the canvas and the Inspector side by side, with a tool row above and a status bar below.
 - **Prompts** (unsaved changes, revert, delete, rename) are modal popups with the question, one line of consequence in the muted tone, and a right-aligned button row: the destructive choice red, the safe one primary or secondary, Cancel ghost.
+- **Unsaved changes kept** (`KeptChangesWindow`, worded and run by `KeptChangesOffer`) is a small centered window like the first-run offer, shown at a load once a character is logged in when AetherFrame kept an editor's unsaved changes as it unloaded. It names the Plate, the editor and the time, adds what changed meanwhile (saved again, can't be opened by this version, deleted, couldn't be opened just now) in the warning tone, then one consequence line in the muted tone and a right-aligned row of 120 px buttons, wider only for a label that needs it: Restore or Restore as New Plate primary, Discard red, Decide Later ghost. Several kept changes come one at a time, newest first, with "1 of N" beside the title, and errors show under the text in the error colour. When the open Plate has unsaved changes of its own, the row gives way to My Plates' Save, Discard or Cancel question. The window isn't modal, so that question goes away, with a line saying so, once that Plate isn't open with those changes. Closing it keeps everything, and My Plates shows a reminder under its header, in the tutorial reminder's style, with Review.
 
 ## The tutorial
 

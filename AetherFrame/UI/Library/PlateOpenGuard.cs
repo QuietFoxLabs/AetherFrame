@@ -53,11 +53,14 @@ internal sealed class PlateOpenGuard
     /// <summary>
     /// Asks to open <paramref name="plateId"/>. Commits an edit still in progress first, so it
     /// counts as unsaved. On <see cref="PlateOpenDecision.Ask"/>, <see cref="Pending"/> holds the
-    /// request until the player answers.
+    /// request until the player answers. With <paramref name="askEvenIfOpen"/>, the Plate that is
+    /// already open asks too when it has unsaved changes: what comes next replaces them (restoring
+    /// the unsaved changes AetherFrame kept, see <see cref="KeptChangesOffer"/>).
     /// </summary>
-    internal PlateOpenDecision Request(Guid plateId, bool basic)
+    internal PlateOpenDecision Request(Guid plateId, bool basic, bool askEvenIfOpen = false)
     {
-        if (profileService.OpenPlateId == plateId)
+        var alreadyOpen = profileService.OpenPlateId == plateId;
+        if (alreadyOpen && !askEvenIfOpen)
         {
             return PlateOpenDecision.AlreadyOpen;
         }
@@ -70,7 +73,7 @@ internal sealed class PlateOpenGuard
             return PlateOpenDecision.Ask;
         }
 
-        return PlateOpenDecision.Open;
+        return alreadyOpen ? PlateOpenDecision.AlreadyOpen : PlateOpenDecision.Open;
     }
 
     /// <summary>Save and Discard are unavailable while any save is being written.</summary>

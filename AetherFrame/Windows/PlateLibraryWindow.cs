@@ -166,6 +166,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
     internal HelpMenu? Help { get; set; }
 
+    /// <summary>Unsaved changes AetherFrame kept when it last unloaded: a reminder under the header while they wait for an answer.</summary>
+    internal KeptChangesOffer? KeptChanges { get; set; }
+
     /// <summary>Opens the sharing window, when this build has one; the header shows a Sharing button only then.</summary>
     internal Action? OpenSharing { get; set; }
 
@@ -272,6 +275,11 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         AetherBrand.Header("My Plates");
         DrawHeader(character, allPlates.Count);
         ImGui.Separator();
+        if (KeptChanges is { } keptChanges)
+        {
+            KeptChangesWindow.DrawReminder(keptChanges);
+        }
+
         Help?.DrawReminder();
 
         // Two plain text lines now (status/info, then the right-click hint) — no button row.
