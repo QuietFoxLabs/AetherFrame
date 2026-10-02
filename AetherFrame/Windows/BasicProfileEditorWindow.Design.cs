@@ -125,7 +125,7 @@ internal sealed partial class BasicProfileEditorWindow
             basicEditorSession.SetOrientation((AdventurePlateOrientation)clicked);
         }
 
-        Hint("Adventure Plate Classic: a portrait beside your details. Mirrored puts the portrait on the right.");
+        Hint("Adventure Plate Classic: a portrait beside your details. Mirrored puts the portrait on the right, and mirrors an Art Style's background with it.");
         ImGui.Spacing();
 
         var customized = BasicEditorSession.CustomizedSections(profile);

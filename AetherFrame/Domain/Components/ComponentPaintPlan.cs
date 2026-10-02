@@ -80,7 +80,7 @@ public enum ComponentStatus
 /// paints first and every text after, each in its own order, so no text is ever under a frame drawn
 /// in from the edge and no picture ever over it. Components are placed by their
 /// <see cref="PlateLayer"/> relative to what they decorate: Backgrounds before everything (over the
-/// canvas), then Section Header backings (sliced Section Header artwork, behind every element; see
+/// canvas, mirrored on a Mirrored Plate; see <see cref="AddBackgrounds"/>), then Section Header backings (sliced Section Header artwork, behind every element; see
 /// <see cref="IsHeaderBacking"/>); Portrait Frames then Portrait Overlays immediately after the
 /// portrait element; Plate Frame artwork after the pictures and before the text; Name Backings
 /// immediately before the first identity element (name or title); then, after every element,
@@ -238,9 +238,10 @@ public static class ComponentPaintPlan
 
         var unit = Unit(profile);
         var canvasWidth = CanvasRect(profile).Size.X;
+        var orientation = profile.BasicPlate?.Orientation ?? AdventurePlateOrientation.Normal;
 
-        // Backgrounds: the whole canvas, under everything else.
-        AddBand(output, backgroundBand, CanvasRect(profile), 0f, canvasWidth);
+        // Backgrounds: the whole canvas, under everything else, mirrored on a Mirrored Plate.
+        AddBackgrounds(output, backgroundBand, CanvasRect(profile), orientation == AdventurePlateOrientation.Mirrored);
 
         // Section header artwork: a backing around each drawn heading's measured text, at the bottom
         // of the element stack, so every text draws over it, and an end reaching past the heading's
@@ -263,7 +264,6 @@ public static class ComponentPaintPlan
             || BasicSections.Find(profile, ProfileElementRole.BasicTitle) is not null;
 
         var drawnIdentity = IdentityExtent(drawnElements, measureText, out var firstIdentity);
-        var orientation = profile.BasicPlate?.Orientation ?? AdventurePlateOrientation.Normal;
 
         // A missing name and title: the layout's placement, at the bottom of the element stack (a
         // backing belongs behind whatever text is there). A missing portrait: see after the elements.
@@ -382,6 +382,23 @@ public static class ComponentPaintPlan
     /// from above it, after every element, as they always have.</summary>
     public static bool IsHeaderBacking(ComponentDefinition definition) =>
         definition.Kind == PlateComponentKind.SectionHeader && definition.Art is { } art && IsSliced(art);
+
+    /// <summary>
+    /// Background artwork over the whole canvas. On a Mirrored Plate it is mirrored with the Plate:
+    /// the picture, and its Offset and Rotation with it. An Art Style's background is drawn calm
+    /// behind the details and busy behind the portrait, so the details then sit over the same part of
+    /// the art as in Normal, and read as well: a Mirrored Plate is the Normal one seen in a mirror,
+    /// its text aside. Only Backgrounds turn: every Plate Frame and Portrait Frame is drawn
+    /// symmetric, and Corner Ornaments already mirror per corner.
+    /// </summary>
+    private static void AddBackgrounds(List<PaintStep> output, List<(PlateComponent Component, ComponentDefinition Definition, int Index)> band, ElementRect canvas, bool mirrored)
+    {
+        foreach (var (component, definition, _) in band)
+        {
+            var step = ComponentStep(component, definition, canvas, 0f, mirrored, false);
+            output.Add(mirrored ? step with { Placement = step.Placement with { RotationDegrees = -step.Placement.RotationDegrees } } : step);
+        }
+    }
 
     private static void AddFrames(List<PaintStep> output, List<(PlateComponent Component, ComponentDefinition Definition, int Index)> band, ProfileDocument profile, float unit)
     {
