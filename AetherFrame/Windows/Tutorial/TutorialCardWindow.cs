@@ -114,7 +114,7 @@ internal sealed class TutorialCardWindow : Window
 
     public override void Draw()
     {
-        escape.Update(this);
+        using var popupEscape = escape.Update(this);
         frame.CardSize = ImGui.GetWindowSize();
         if (frame.View is not { } view || frame.Frame != ImGui.GetFrameCount())
         {

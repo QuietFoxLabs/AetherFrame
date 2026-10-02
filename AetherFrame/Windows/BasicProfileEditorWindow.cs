@@ -209,7 +209,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     public override void Draw()
     {
-        escape.Update(this);
+        using var popupEscape = escape.Update(this);
 
         // Drawn unconditionally so an in-progress file pick isn't stranded if the Plate
         // becomes unavailable (e.g. it's deleted from My Plates) while the dialog is open.

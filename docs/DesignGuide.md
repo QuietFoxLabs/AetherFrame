@@ -130,7 +130,7 @@ Once the Library has loaded, `FirstRunDetector` decides once, without touching a
 - No per-frame allocations beyond ImGui's own: cache ids and glyph strings, avoid LINQ and interpolation in `Draw`.
 - Sizes in unscaled pixels times the global scale.
 - A window that must not be closed by Escape sets `RespectCloseHotkey = false`; one that must make no sound sets `DisableWindowSounds = true`.
-- Escape on a popup closes that popup, never the window behind it. Dalamud counts a popup as part of the window that opened it, and ImGui doesn't close popups on Escape here, so a window that opens popups (menus, lists, color pickers, prompts) owns a `PopupEscapeGuard` and calls its `Update(this)` first thing in Draw. It closes the menus, lists and pickers on Escape, and keeps the window's `RespectCloseHotkey` off from a press its popup took until Escape is released; the rule itself is `PopupEscape`, in `UI/Editor/`, tested without Dalamud. A prompt answers Escape itself, as its Cancel (above).
+- Escape on a popup closes that popup, never the window behind it. Dalamud closes a focused window on the game's Escape key and counts a popup as part of the window that opened it, and it hands ImGui the key only while `io.WantTextInput` is set (below), so on its own ImGui never sees Escape. A window that opens popups (menus, lists, color pickers, prompts) owns a `PopupEscapeGuard` and starts its Draw with `using var popupEscape = escape.Update(this);`. While one of the window's popups has focus, the guard claims the keyboard: it sets `io.WantTextInput` every frame (ImGui.NewFrame clears it), and again once the window's content is drawn, for a popup opened during that Draw. Escape then reaches the popup and never the game: the guard closes the menus, lists and pickers, and a prompt answers Escape itself, as its Cancel (above). The claim, and the window's `RespectCloseHotkey` held off as a second line of defence, last until Escape is released; a press the game already holds (the one that closed an editor, which then asks about unsaved changes) stays the game's. Every other key goes to the popup too, so the character doesn't move while one is open. The rule itself is `PopupEscape`, in `UI/Editor/`, tested without Dalamud against a reproduction of Dalamud's key routing and close check.
 
 ## Compromises forced by Dalamud or ImGui
 
@@ -140,6 +140,7 @@ Once the Library has loaded, `FirstRunDetector` decides once, without touching a
 - A modal popup blocks every other window, the tutorial card included, so a step whose control is inside a modal (the Create Plate chooser) explains and waits rather than being clicked through.
 - ImGui has no letter-spacing, so small-caps section labels use the Axis face rather than tracking.
 - Font handles are built asynchronously by Dalamud; until then headings draw in the default font.
+- Dalamud hands ImGui a key other than Shift, Ctrl and Alt only while `io.WantTextInput` is set, and keeps it from the game then. So `ImGui.IsKeyPressed` on such a key fires only while a text field is in use or a window claims the keyboard, as `PopupEscapeGuard` does for a focused popup; the editors' shortcuts read the game's key state instead (`KeyboardShortcutService`).
 
 ## Manual acceptance in FFXIV
 

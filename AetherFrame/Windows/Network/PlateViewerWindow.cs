@@ -67,7 +67,7 @@ internal sealed class PlateViewerWindow : Window
 
     public override void Draw()
     {
-        escape.Update(this);
+        using var popupEscape = escape.Update(this);
         var width = EditorWidgets.Scaled(520f);
         using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + width))
         {

@@ -14,7 +14,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ### Fixed
 
-- **Escape closes only the menu or prompt in front.** Escape on a card's menu, the Help menu, a list, a color picker, the Create Plate chooser or a prompt used to close the whole window behind it, and in an editor with unsaved changes it asked you to save. Now it closes the menu, list or picker, or cancels the prompt, and the window stays. With nothing open, Escape closes the window as before. Help's **Esc** line says so.
+- **Escape closes only the menu or prompt in front.** Escape on a card's menu, the Help menu, a list, a color picker, the Create Plate chooser or a prompt went to the game, and the whole window behind it closed (or, in an editor with unsaved changes, asked you to save). Now it closes the menu, list or picker, or cancels the prompt, and the window stays. While a menu or prompt is open, your keys go to it and not to the game, so your character doesn't move until it closes. With nothing open, Escape closes the window as before. Help's **Esc** line says so.
 - **Use Template from a Template's right-click menu in Create Plate closes the chooser**, as its **Use Template** button does. Before, the chooser stayed open over your new Plate.
 - **The Basic editor fits the screen the first time it opens.** At a large UI scale it opened taller than the screen (at 150% on a 1080p screen, say); now it opens within the screen, as the Advanced editor and My Plates do. A Basic editor you have already opened keeps the size you left it at.
 

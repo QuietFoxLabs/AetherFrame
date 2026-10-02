@@ -206,7 +206,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
 
     public override void Draw()
     {
-        escape.Update(this);
+        using var popupEscape = escape.Update(this);
 
         // Drawn unconditionally so an in-progress file pick isn't stranded if the profile
         // becomes unavailable (e.g. character logs out) while the dialog is open.

@@ -220,7 +220,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
     public override void Draw()
     {
-        escape.Update(this);
+        using var popupEscape = escape.Update(this);
         runner.Advance();
         plateMenu.AdvanceOpenGuard();
 

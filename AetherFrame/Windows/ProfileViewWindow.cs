@@ -246,7 +246,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
     public override void Draw()
     {
-        escape.Update(this);
+        using var popupEscape = escape.Update(this);
         if (presenting && layout is { } current && (presentation is not null || presentedDocument is not null))
         {
             DrawPresentation(current);
