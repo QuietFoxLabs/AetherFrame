@@ -163,6 +163,9 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
+    // Escape on the right-click menu closes only the menu, never the viewer.
+    private readonly PopupEscapeGuard escape = new();
+
     public override void OnClose()
     {
         placement.EndDrag();
@@ -243,6 +246,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
     public override void Draw()
     {
+        escape.Update(this);
         if (presenting && layout is { } current && (presentation is not null || presentedDocument is not null))
         {
             DrawPresentation(current);

@@ -70,7 +70,7 @@ internal static class EditorClosePrompt
         EditorWidgets.Tooltip("Go back to the last saved version, then close.");
 
         ImGui.SameLine();
-        if (AetherControls.GhostButton("Cancel", buttonSize))
+        if (AetherControls.GhostButton("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
         {
             guard.Cancel();
             ImGui.CloseCurrentPopup();

@@ -248,7 +248,7 @@ internal sealed class EditorActionBar
         }
 
         ImGui.SameLine();
-        if (AetherControls.GhostButton("Cancel", buttonSize))
+        if (AetherControls.GhostButton("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }

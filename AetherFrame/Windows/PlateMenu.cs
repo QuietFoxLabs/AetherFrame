@@ -359,7 +359,7 @@ internal sealed class PlateMenu
         }
 
         ImGui.SameLine();
-        if (AetherControls.GhostButton("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (AetherControls.GhostButton("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }
@@ -412,7 +412,7 @@ internal sealed class PlateMenu
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }
@@ -492,7 +492,7 @@ internal sealed class PlateMenu
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
         {
             pendingOverwrite = null;
             ImGui.CloseCurrentPopup();
@@ -563,7 +563,7 @@ internal sealed class PlateMenu
         }
 
         ImGui.SameLine();
-        if (AetherControls.GhostButton("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (AetherControls.GhostButton("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }
@@ -629,7 +629,7 @@ internal sealed class PlateMenu
         }
 
         ImGui.SameLine();
-        if (AetherControls.GhostButton("Cancel", buttonSize))
+        if (AetherControls.GhostButton("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
         {
             guard.Cancel();
             ImGui.CloseCurrentPopup();

@@ -67,6 +67,11 @@ internal sealed partial class PlateLibraryWindow
     private bool pendingTemplateChooserPopup;
     private Guid chosenTemplateId = BuiltInTemplateCatalog.AdventurePlateClassicId;
 
+    // Use Template chosen in a row's right-click menu. That menu is a popup inside the chooser, so
+    // closing from it would close only the menu: the chooser takes the request in its own scope
+    // instead, and closes as it does for its Use Template button.
+    private Guid? chooserUseRequestedId;
+
     // The right pane's preview document is regenerated only when the selection actually changes
     // (never every frame): a built-in's document is freshly generated each time it's resolved,
     // and re-running that — plus the renderer's per-instance font prewarming — every single frame
@@ -456,6 +461,7 @@ internal sealed partial class PlateLibraryWindow
             pendingTemplateChooserPopup = false;
             chosenTemplateId = BuiltInTemplateCatalog.AdventurePlateClassicId;
             chooserPreviewedTemplateId = null;
+            chooserUseRequestedId = null;
         }
 
         ImGui.SetNextWindowSize(new Vector2(ChooserWidth, ChooserHeight) * ImGuiHelpers.GlobalScale, ImGuiCond.Appearing);
@@ -501,6 +507,15 @@ internal sealed partial class PlateLibraryWindow
 
         ImGui.Separator();
         DrawTemplateChooserFooter();
+
+        // A row menu's Use Template, taken here in the chooser's own scope, where closing closes
+        // the chooser, exactly as its Use Template button does.
+        if (chooserUseRequestedId is { } requestedId)
+        {
+            chooserUseRequestedId = null;
+            UseTemplate(requestedId);
+            ImGui.CloseCurrentPopup();
+        }
 
         // Drawn here (nested inside the chooser's own popup scope), not from the top-level Draw(),
         // whenever a row's context menu requested one — see the call site in PlateLibraryWindow.cs
@@ -619,15 +634,12 @@ internal sealed partial class PlateLibraryWindow
     /// as buttons). No Preview entry: selecting the row already shows its preview in the chooser's
     /// right pane. Rename/Delete defer to the existing popups (same pending-flag pattern Manage
     /// Templates' own buttons use) so confirmation, name validation, and duplicate-name policy are
-    /// never reimplemented. Must be called between a matching BeginPopup/EndPopup.
+    /// never reimplemented, and Use Template defers to the chooser, which closes as for its own
+    /// button. Must be called between a matching BeginPopup/EndPopup.
     /// </summary>
     private void DrawUserTemplateContextMenuItems(Guid templateId, string displayName)
     {
-        if (ImGui.MenuItem("Use Template"))
-        {
-            UseTemplate(templateId);
-            ImGui.CloseCurrentPopup();
-        }
+        DrawUseTemplateMenuItem(templateId);
 
         if (ImGui.MenuItem("Rename"))
         {
@@ -658,12 +670,21 @@ internal sealed partial class PlateLibraryWindow
     /// <summary>Built-ins are immutable: their context menu (right-click is optional for them —
     /// left-click plus Use Template already covers the common case) offers only Use Template,
     /// never Rename/Duplicate/Delete.</summary>
-    private void DrawBuiltInTemplateContextMenuItems(Guid templateId)
+    private void DrawBuiltInTemplateContextMenuItems(Guid templateId) => DrawUseTemplateMenuItem(templateId);
+
+    /// <summary>
+    /// A row menu's Use Template: available when the chooser's button is, and asking the chooser to
+    /// use the Template, so the chooser closes with the menu (the menu item closes only the menu).
+    /// </summary>
+    private void DrawUseTemplateMenuItem(Guid templateId)
     {
-        if (ImGui.MenuItem("Use Template"))
+        using (ImRaii.Disabled(IsBusy))
         {
-            UseTemplate(templateId);
-            ImGui.CloseCurrentPopup();
+            if (ImGui.MenuItem("Use Template"))
+            {
+                chosenTemplateId = templateId;
+                chooserUseRequestedId = templateId;
+            }
         }
     }
 
@@ -748,7 +769,7 @@ internal sealed partial class PlateLibraryWindow
         var rightWidth = (buttonSize.X * 2f) + ImGui.GetStyle().ItemSpacing.X;
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - rightWidth));
 
-        if (ImGui.Button("Cancel", buttonSize))
+        if (ImGui.Button("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }
@@ -855,7 +876,7 @@ internal sealed partial class PlateLibraryWindow
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }
@@ -913,7 +934,7 @@ internal sealed partial class PlateLibraryWindow
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))))
+        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }

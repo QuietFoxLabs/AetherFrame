@@ -8,6 +8,12 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 - **Unsaved changes are kept when AetherFrame closes.** If AetherFrame closes while an editor has unsaved changes (an update, turning it off, or closing the game), it keeps them beside your Plates, in its `Drafts` folder, and never in the Plate itself. The next time it loads, once a character is logged in, **Unsaved changes kept** offers them back. **Restore** opens the Plate with them in the editor you were using. Nothing is saved until you choose **Save**, and one Undo or Revert to Saved goes back to the saved Plate. **Discard** moves them to AetherFrame's Trash folder, and **Decide Later** keeps them: My Plates reminds you, with **Review**, and AetherFrame asks again next time. If the Plate was saved again since, was deleted, or can't be opened, they can be restored as a new Plate instead, named after the Plate followed by "(kept changes)", and the saved Plate stays as it is. A crash still loses unsaved changes, since nothing is written while you edit.
 
+### Fixed
+
+- **Escape closes only the menu or prompt in front.** Escape on a card's menu, the Help menu, a list, a color picker, the Create Plate chooser or a prompt used to close the whole window behind it, and in an editor with unsaved changes it asked you to save. Now it closes the menu, list or picker, or cancels the prompt, and the window stays. With nothing open, Escape closes the window as before. Help's **Esc** line says so.
+- **Use Template from a Template's right-click menu in Create Plate closes the chooser**, as its **Use Template** button does. Before, the chooser stayed open over your new Plate.
+- **The Basic editor fits the screen the first time it opens.** At a large UI scale it opened taller than the screen (at 150% on a 1080p screen, say); now it opens within the screen, as the Advanced editor and My Plates do. A Basic editor you have already opened keeps the size you left it at.
+
 ## [0.1.9] - 2026-10-02
 
 Art Styles download from GitHub the first time you use them, so the plugin is about 75 MB smaller, and there are 20 more, for 40 in all. For a character that shares, making a Plate Active shares it at once, with a small window that shows how it is going. Also frames that fit what they frame, mirrored backgrounds that follow a Mirrored Plate, and a tutorial for sharing.

@@ -92,6 +92,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
+    // Escape on a menu, list, color picker or prompt closes only that, never the editor.
+    private readonly PopupEscapeGuard escape = new();
+
     // Which category is shown, and the live view's zoom: view state only, never part of the Plate.
     private readonly BasicEditorNavigation navigation = new();
 
@@ -122,11 +125,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     {
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(520, 560),
+            MinimumSize = BasicEditorView.MinimumWindowSize,
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
-        Size = new Vector2(1180, 760);
-        SizeCondition = ImGuiCond.FirstUseEver;
         RespectCloseHotkey = true;
 
         this.profileService = profileService;
@@ -155,9 +156,11 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// <summary>One editing surface at a time: the Advanced editor hands over if it's open.</summary>
     public override void OnOpen() => surfaces.NotifyOpened(EditorSurfaceKind.Basic);
 
+    /// <summary>The first-open size, kept within the screen as the Advanced editor's and My Plates' are.</summary>
     public override void PreDraw()
     {
         chrome.PushStyle();
+        EditorWidgets.SetFirstUseSize(BasicEditorView.FirstUseSize, BasicEditorView.MinimumWindowSize);
         AetherWindowChrome.ApplyPolicy(this);
     }
 
@@ -206,6 +209,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     public override void Draw()
     {
+        escape.Update(this);
+
         // Drawn unconditionally so an in-progress file pick isn't stranded if the Plate
         // becomes unavailable (e.g. it's deleted from My Plates) while the dialog is open.
         fileDialogManager.Draw();
@@ -852,7 +857,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel", buttonSize))
+        if (ImGui.Button("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
         {
             ImGui.CloseCurrentPopup();
         }

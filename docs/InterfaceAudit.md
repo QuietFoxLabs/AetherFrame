@@ -4,6 +4,8 @@
 
 Section 7 adds a second, deeper pass (September 30, 2026): every journey counted step by step, defects, tasks 7 to 16, and the owner's decision to merge the editors into one window. Apart from that decision, everything below is a proposal, not a decision. Nothing here changes what players see. The audit is posted in the Owner inbox before the first proposal is built, and each proposal that is built gets its own pull request, reviews and in-game checks. Section 4 lists what only an in-game check can confirm.
 
+`[updated 2026-10-02: refreshed against the windows at 9dfc4f7 (0.1.9's plugin code), before interface task 7 and then task 2, the tasks the owner chose on October 2 (ROADMAP.md, section 8, task 5). Both passes stay as written; the notes dated 2026-10-02 say what has changed since, what a later change settled or superseded, and where task 7 and task 2 now start. Task 7 is built by the pull request that adds these notes.]`
+
 ## 1. The windows today
 
 | Window | What it holds | How players reach it |
@@ -19,6 +21,8 @@ Section 7 adds a second, deeper pass (September 30, 2026): every journey counted
 AetherFrame has no settings window: Dalamud's settings button toggles My Plates.
 
 `[updated 2026-09-30: this table is the audit's snapshot. Since then, task 1 ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)) gave both editors a Plate menu under the Plate's name, and the card menu's Preview became View; section 7.5 records the choices.]`
+
+`[updated 2026-10-02: also since then: the editors' Preview opens the Plate Viewer, the same floating view as View ([#78](https://github.com/QuietFoxLabs/AetherFrame/pull/78)), and Clean Preview, which nothing reached after that, is gone ([#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79)). The tour has 14 chapters in the sharing build, which every release since 0.1.8 is, and 12 in the player build ([#93](https://github.com/QuietFoxLabs/AetherFrame/pull/93)). The sharing build adds My Plates' Sharing button and its window ([#70](https://github.com/QuietFoxLabs/AetherFrame/pull/70)), the AetherFrame Plates search for another player's Plate ([#76](https://github.com/QuietFoxLabs/AetherFrame/pull/76)), and a small window that follows each share ([#95](https://github.com/QuietFoxLabs/AetherFrame/pull/95)). The Personas window was removed in N2-9c ([#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71)).]`
 
 ## 2. Tasks and the trips they take
 
@@ -65,6 +69,8 @@ Each is the smallest change that removes a trip or makes a hidden action findabl
 
    Which of those choices each action makes is decided in its pull request, and shown to the player, never left implicit.
 2. **Open another Plate... and New Plate... in the editors' Plate menu** (tasks 8 and 9). The first lists the Plates in My Plates' own order, since nothing records recent Plates today, and switching goes through today's unsaved-changes prompt. The second opens the template chooser. The chooser is a popup drawn inside My Plates, and Use Template runs through My Plates' operation runner and open guard; the tutorial also reads the chooser's state from My Plates. So New Plate... first moves the chooser and Use Template into the shared component; until then it would only bring My Plates forward with the chooser open, which is still a trip. It is lower priority, since switching Plates is a trip players expect.
+
+   `[updated 2026-10-02: where interface task 2 starts, at 9dfc4f7 with task 7 in. The editors' Plate menu is Windows/EditorPlateMenu.cs (its control and menu, :121-196) over Windows/PlateMenu.cs's DrawEditorItems (:178-223), built once for both editors (Plugin.cs:264-271). Task 1 moved the Plate actions and their prompts into that shared component (PlateMenu, over PlateActions), so what is left to move is the chooser: DrawTemplateChooserPopup (Windows/PlateLibraryWindow.Templates.cs:455-529), and Use Template through My Plates' runner and open guard (UseTemplate, :417-438, then RequestOpen, Windows/PlateLibraryWindow.Actions.cs:89-107). The tutorial reads whether the chooser shows from My Plates (Plugin.cs:836-839), and the steps to rewrite are saving.plate-menu (UI/Tutorial/TutorialScript.cs:185-187), first.template (:76-80) and the Templates chapter (:193-201). Since task 7, a row menu's Use Template asks the chooser to act (chooserUseRequestedId), so the chooser closes as for its button; a chooser moved out of My Plates keeps that.]`
 3. **A "..." button on the selected card in My Plates** (task 13) that opens the same card menu. The persistent action row was removed on purpose in favour of the menu, so this finds the menu without bringing the row back. Each card is one invisible button that handles click, double-click, right-click and drag, so the "..." button overlapping it must not select, open or start dragging the card.
 4. **Finding Template management** (task 11). The chooser's rows already have a right-click menu for Rename, Duplicate and Delete Template, and Manage Templates has visible buttons for them behind a quiet link. A line in the chooser says so, each saved row gets a "..." button, or the Manage Templates link becomes easier to see. Templates stay out of My Plates' top level, as designed. It removes no trip, only makes the actions findable.
 5. **A notice when My Plates holds Plates but the logged-in character has no Active Plate** (optional, for the owner to decide). A character's first Plate is Active automatically, so this helps in four cases: a character with no Plates of its own, such as an alt, while My Plates holds another character's Plates (every new character starts that way, which is also where the notice is most likely to be noise); after the Active Plate is deleted; for Plates made while logged out (which no character is linked to); and after a failed link. The notice goes in My Plates' header, pointing to Set Active; it is never automatic.
@@ -83,6 +89,8 @@ The tutorial moves with the interface. Every control a proposal adds or moves ge
 - The editors' Plate menu (proposal 1) and the card menu are where **Share...** and **Unpublish** go when N2-9 adds them. Sharing then needs no trip either, and the consent screen opens from either place.
 - A Plate's sharing state (not shared, shared, or changed since sharing) belongs on its card and next to its name in the editor bar, from N2-6 and N2-9.
 - The persona window (N2-5) is reached from My Plates' header and from the share flow.
+
+`[updated 2026-10-02: superseded by sharing as built. The sharing re-plan ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58)) made sharing follow each character's Active Plate (the owner's V1 to V5), with no share codes (R5), and since [#95](https://github.com/QuietFoxLabs/AetherFrame/pull/95) a Plate is shared as soon as it is Active, so no Plate menu has Share... or Unpublish. Sharing is turned on and off per character in the Sharing window, opened from My Plates' header; a card shows Shared or Not shared yet; and the persona window was removed in N2-9c ([#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71)).]`
 
 ## 6. Not proposed
 
@@ -103,7 +111,7 @@ A second session audited the same code at `714cf5c` (at `beca12a` the plugin sou
   - A **window switch** is each time the player's work moves to a different top-level window: My Plates, the Basic editor, the Advanced editor, the Plate Viewer, Import Plate, or a file dialog. Opening, raising or returning to one counts, whether the player does it or the plugin does it for them.
     - A slash command and the window it opens count as one switch.
     - A file dialog counts once. Its closing back to the window it came from is not counted.
-    - Basic to Advanced counts 1 today, because it swaps windows. Clean Preview counts 0, because it is the same window.
+    - Basic to Advanced counts 1 today, because it swaps windows. Clean Preview counts 0, because it is the same window. `[updated 2026-10-02: Clean Preview is gone ([#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79)): Preview opens the Plate Viewer, another window.]`
     - The tutorial card and the Welcome offer are never window switches.
   - A **menu** is a context menu, a submenu, a combo used as the route, a color picker, the Create Plate chooser, the title picker, Help or a naming modal (Rename, Save as Template).
   - A **prompt** is a confirmation or a question: Unsaved Changes, Delete, Replace File?, Import as New Plate, the Welcome offer, or a save-first question. A conditional prompt, one that appears only in some cases, is marked in the steps of [InterfaceAudit-Journeys.md](InterfaceAudit-Journeys.md) but not counted.
@@ -162,11 +170,11 @@ The findings are ranked by impact. Findings 1, 3, 4 and 10 give the evidence for
 6. **Create Plate asks too little, and asks too late (medium).**
    - The chooser has no name field (Templates.cs:729-774).
    - The Plate is saved before the Unsaved Changes question, so Cancel leaves a stray Plate behind (Templates.cs:422-438).
-   - From code, Use Template in a row's right-click menu leaves the modal open over the new editor (Templates.cs:597-608, 632-636). This needs an in-game check.
+   - From code, Use Template in a row's right-click menu leaves the modal open over the new editor (Templates.cs:597-608, 632-636). This needs an in-game check. `[updated 2026-10-02: task 7 has the chooser act on the row menu's Use Template in its own scope, so the chooser closes as for its button.]`
    - With an editor already open, the tour passes over "Choose a Template" (UI/Tutorial/TutorialSession.cs:367-369).
-7. **Escape on a popup probably closes the window behind it too (medium; needs an in-game check).** In the decompiled Dalamud, a popup counts as focus on its owner window. Escape closes a focused window whose RespectCloseHotkey is on. For an editor with unsaved edits, the close guard turns that into the Save, Discard or Cancel question (UI/Editor/CloseGuard.cs:66-79). Only Clean Preview and a running import turn that setting off (CleanPreviewPresenter.cs:116; PackageImportWindow.cs:95, 103). The tutorial's overlay and shades keep it off, but they hold no popups (Windows/Tutorial/TutorialOverlayWindow.cs:53; Windows/Tutorial/TutorialShadeWindow.cs:43).
-8. **Basic's Preview may leave an invisible area that catches clicks (medium; needs an in-game check).** Dalamud re-applies Basic's `Window.Size` after PreDraw, so it overrides Clean Preview's size. That size is also not clamped to the screen (BasicProfileEditorWindow.cs:127-128; Windows/EditorWidgets.cs:43-51).
-9. **Late in the tour, the spotlight probably points at My Plates while it is under the editor (medium; needs an in-game check).** While a step shows, My Plates, the editors, the Plate Viewer and Import Plate can't be raised (Windows/Theme/AetherStyle.cs:316-326). Chapters 10 and 11 require only that My Plates is open (Plugin.cs:533; TutorialScript.cs:181-199). No step shows the player how to view a Plate or set it Active. The tour only lists them among the card menu's actions (TutorialScript.cs:50, 177). If the player declines the Welcome offer, My Plates doesn't open, and the offer never names /af. Only Help, inside My Plates and the editors, and Dalamud's command help name it (Windows/Tutorial/FirstRunPromptWindow.cs:80-111; UI/Tutorial/OnboardingCoordinator.cs:107-125; Windows/Tutorial/HelpMenu.cs:203-206).
+7. **Escape on a popup probably closes the window behind it too (medium; needs an in-game check).** In the decompiled Dalamud, a popup counts as focus on its owner window. Escape closes a focused window whose RespectCloseHotkey is on. For an editor with unsaved edits, the close guard turns that into the Save, Discard or Cancel question (UI/Editor/CloseGuard.cs:66-79). Only Clean Preview and a running import turn that setting off (CleanPreviewPresenter.cs:116; PackageImportWindow.cs:95, 103). The tutorial's overlay and shades keep it off, but they hold no popups (Windows/Tutorial/TutorialOverlayWindow.cs:53; Windows/Tutorial/TutorialShadeWindow.cs:43). `[updated 2026-10-02: confirmed from Dalamud 15.0.3.6's WindowHost.DrawInternal, which closes a focused window on the game's Escape key once per press, through a latch every window shares that is set only when a window closes. It also showed that ImGui closes no popup on Escape here, since Dalamud leaves ImGui's keyboard navigation off, so the popup went with its window. Since [#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79) both editors keep RespectCloseHotkey on, and Clean Preview is gone. Task 7 fixes it.]`
+8. **Basic's Preview may leave an invisible area that catches clicks (medium; needs an in-game check).** Dalamud re-applies Basic's `Window.Size` after PreDraw, so it overrides Clean Preview's size. That size is also not clamped to the screen (BasicProfileEditorWindow.cs:127-128; Windows/EditorWidgets.cs:43-51). `[updated 2026-10-02: moot: Clean Preview is gone ([#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79)), and Preview opens the Plate Viewer. Basic's first size was still Window.Size, which Dalamud scales and doesn't keep on the screen; task 7 moves it to EditorWidgets.SetFirstUseSize.]`
+9. **Late in the tour, the spotlight probably points at My Plates while it is under the editor (medium; needs an in-game check).** While a step shows, My Plates, the editors, the Plate Viewer and Import Plate can't be raised (Windows/Theme/AetherStyle.cs:316-326). Chapters 10 and 11 require only that My Plates is open (Plugin.cs:533; TutorialScript.cs:181-199). No step shows the player how to view a Plate or set it Active. The tour only lists them among the card menu's actions (TutorialScript.cs:50, 177). If the player declines the Welcome offer, My Plates doesn't open, and the offer never names /af. Only Help, inside My Plates and the editors, and Dalamud's command help name it (Windows/Tutorial/FirstRunPromptWindow.cs:80-111; UI/Tutorial/OnboardingCoordinator.cs:107-125; Windows/Tutorial/HelpMenu.cs:203-206). `[updated 2026-10-02: since [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57), the window a step explains is brought in front of AetherFrame's other windows, with the dim and the card in front of it (task 14, in part).]`
 10. **Templates are managed in two places that work differently (medium).** Chooser rows use a right-click menu, as Plate cards do (Templates.cs:590-609; Actions.cs:103-182). Manage Templates' cards look like Plate cards but have no right-click menu. They use a button bar instead (Templates.cs:179-233, 330-391). Manage Templates' cards show only a color or an icon. No thumbnail generator exists (Plugin.cs:163, 171), and unlike Plate cards, they don't fall back to drawing the Plate (Templates.cs:238-296; PlateLibraryWindow.cs:487-518).
 11. **Import stops one step short (low).** There is no Open button. After a rejection, the window can't pick another file itself, so the player goes back to Import in My Plates (PackageImportWindow.cs:262-287; Windows/PlateLibraryWindow.Packages.cs:35-42).
 12. **Some controls sit away from where the player is working (low).** A new category keeps the previous category's scroll position (BasicProfileEditorWindow.cs:576-582). Orientation is set in Style, not Portrait (Design.cs:115-126). Any click on an element pulls the Element tab forward (Windows/ProfileEditorWindow.Canvas.cs:295-302).
@@ -215,7 +223,7 @@ Each difference is chosen, and recorded, in the pull request of the task named. 
 
 The second pass's direction is "the Plate in hand": wherever a Plate is (in the editor, on a card, in the viewer), one Plate menu offers every action on it, with the same words in the same order. Its target structure, which tasks 1 and 2 build towards:
 
-- **Windows:** My Plates, one AetherFrame Editor with Basic and Advanced as modes, the Plate Viewer, and Import Plate. The tutorial windows and file dialogs stay. Preview builds add the persona window, which N2-5c built, and one Sharing window.
+- **Windows:** My Plates, one AetherFrame Editor with Basic and Advanced as modes, the Plate Viewer, and Import Plate. The tutorial windows and file dialogs stay. Preview builds add the persona window, which N2-5c built, and one Sharing window. `[updated 2026-10-02: the persona window was removed in N2-9c ([#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71)). Every release since 0.1.8 is the sharing build, which adds the Sharing window, the AetherFrame Plates search and the small window that follows each share.]`
 - **Plate menu:** one component, drawn by the editor's name button, by a card's right-click and by the viewer's right-click. Its items, in order:
   - Open in Basic or Advanced (cards only);
   - View;
@@ -235,7 +243,7 @@ The second pass's direction is "the Plate in hand": wherever a Plate is (in the 
 - **Viewer:** the Plate menu above its size items. In the viewer, its first item is Edit, and it adds Show in My Plates. The No Active Plate state lets the player choose a Plate in place.
 - **Import Plate:** Choose File, then Open in Editor.
 - **Plumbing:** one Library operation runner, pumped from Plugin.DrawUi (Plugin.cs:367-378), and one prompt host that draws each prompt where the player asked.
-- **Words:** Preview happens inside the editor. View shows the Plate over the game.
+- **Words:** Preview happens inside the editor. View shows the Plate over the game. `[updated 2026-10-02: since [#78](https://github.com/QuietFoxLabs/AetherFrame/pull/78), the editors' Preview opens the Plate Viewer too, with the open Plate as it is being edited.]`
 
 Its twelve tasks were named UI-1 to UI-12, and the journeys file uses those names. Here is where each goes in the queue:
 
@@ -253,26 +261,37 @@ Its twelve tasks were named UI-1 to UI-12, and the journeys file uses those name
 | UI-11 one look and a keyboard path | Task 15, beside proposal 3 |
 | UI-12 sharing seams | Task 16, before N2-9 |
 
+`[updated 2026-10-02: task 16 is superseded (below), and task 14 is done in part by [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57).]`
+
 **Counts.** Today the journeys take 52 window switches, 26 menus and 5 prompts. After UI-1 to UI-12, they take 33, 26 and 5: 19 switches fewer, about a third. The Plate menu replaces trips to My Plates with a menu where the player already is, so menus stay at 26. By the same count, tasks 1 and 2 remove the switches UI-2, UI-3 and UI-6's New Plate remove, except J09's, which needs the View item of section 7.5.
 
 The tasks below follow the queue's tasks 1 to 6. Each is one pull request and meets the Done list in [CLAUDE.md](../CLAUDE.md). A task that changes step text bumps `TutorialScript.Version` (UI/Tutorial/TutorialScript.cs:19) and keeps the tutorial at 12 chapters of 1 to 7 steps (AetherFrame.Tests/TutorialSessionTests.cs:375-382, from the repository root). A bare `:line` refers to UI/Tutorial/TutorialScript.cs.
 
+`[updated 2026-10-02: the script has grown since beca12a (the Plate menu's step and the sharing chapters, among others), so the bare :line references in tasks 8 to 15 have moved. At 9dfc4f7, by step: library.home :49-51 (was :44), library.grid :55-57 (was :50), library.card :58-60 (was :53), library.search :61-63 (was :55-56), first.template :76-80 (was :69-72), images.background :156-158 (was :147-149), saving.library :188-190 (was :176-178), templates.own :198-200 (was :187), sharing.import :208-210 (was :196-198) and done.finish :260-262 (was :204). Version is at :23, now 3. The tour has 14 chapters of 1 to 7 steps in the sharing build, which every release since 0.1.8 is, and 12 in the player build (AetherFrame.Tests/TutorialSessionTests.cs:395-410).]`
+
 **Interface task 7 (UI-1): Stop the stray trips (S).**
 - *Changes:*
   - Basic uses EditorWidgets.SetFirstUseSize instead of `Window.Size`.
-  - Each window turns RespectCloseHotkey off for the frame after one in which its popup was open. This is combined with Clean Preview's and Import's own rules.
-  - The chooser row menu's Use Template sets a flag, and the chooser acts on it in its own scope (Templates.cs:632-636, 669-673).
+  - Each window turns RespectCloseHotkey off for the frame after one in which its popup was open. This is combined with Clean Preview's and Import's own rules. `[updated 2026-10-02: Clean Preview is gone, and Import, which turns the hotkey off while it imports, opens no popup, so neither needs combining.]`
+  - The chooser row menu's Use Template sets a flag, and the chooser acts on it in its own scope (Templates.cs:632-636, 669-673). `[updated 2026-10-02: at 9dfc4f7, Templates.cs:626-629 and 663-666.]`
   - Help says what Esc does.
-- *Improves:* 0 counted. From code, it removes Basic's click-catching area, the 2-switch recovery after Esc on a menu, and a modal left open over the editor. All three need an in-game check.
+- *Improves:* 0 counted. From code, it removes Basic's click-catching area, the 2-switch recovery after Esc on a menu, and a modal left open over the editor. All three need an in-game check. `[updated 2026-10-02: the click-catching area is moot, since Clean Preview went ([#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79)).]`
 - *Risk:* none to saved work.
 - *Tutorial:* none.
 - *Acceptance:* a unit test of the close rule.
 - *In game:*
-  - In Basic's Preview, clicks to the right of and below the Plate reach the game.
+  - In Basic's Preview, clicks to the right of and below the Plate reach the game. `[updated 2026-10-02: dropped: moot since Clean Preview went.]`
   - At 150% scale on a 1080p screen, the first Basic window fits.
   - Esc on a card menu, Help or the chooser closes only that.
   - A row menu's Use Template closes the chooser.
   - Note what Esc does while typing in Message.
+
+`[updated 2026-10-02]` Task 7 is built by the pull request that adds this note. As built, where it differs from the plan above:
+- The rule (UI/Editor/PopupEscape.cs, tested in AetherFrame.Tests/PopupEscapeTests.cs against Dalamud's own check, reproduced) holds RespectCloseHotkey off from the frame Escape goes down while one of the window's popups has focus, or had it the frame before, until Escape is up again, not for one frame. Dalamud's latch is set only when a window closes, so a window that respected the hotkey again while Escape was still held would close then.
+- ImGui closes no popup on Escape here, so the rule closes it too (Windows/PopupEscapeGuard.cs): a menu, list or color picker as a click outside it would, and a prompt as its own Cancel, the chooser's included. The Basic Editor suggestion, which has no Cancel, takes Escape as its close button. One press answers one popup, so Escape on a row menu leaves the chooser open.
+- Every AetherFrame window with popups has the rule: My Plates, both editors, the Plate Viewer, the AetherFrame Plates search and the tutorial card.
+- The row menus ask with chooserUseRequestedId (Windows/PlateLibraryWindow.Templates.cs:675-689), and the chooser takes the request after its footer (:511-518). A row menu's Use Template is greyed out while an action runs, as the chooser's button is.
+- Help's Esc line reads "Close the open menu, or cancel the open prompt. With neither open, close the window; an editor with unsaved changes asks first."
 
 **Interface task 8 (UI-4): One editor window (L).**
 - *Changes:*
@@ -281,7 +300,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
   - Each mode keeps its own minimum size, and Basic returns to its own width after Advanced.
   - Zoom and pan reset only when a different Plate opens.
   - Selection and category carry across a mode switch.
-  - One close guard, one preview presenter, one shortcut owner and one file dialog manager (Plugin.cs:159-160).
+  - One close guard, one preview presenter, one shortcut owner and one file dialog manager (Plugin.cs:159-160). `[updated 2026-10-02: Clean Preview's presenter is gone ([#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79)): both editors' Preview opens the Plate Viewer.]`
 - *Improves:* J01 and J03 to J06 by 1 each, and J07 2 to 0: 7 switches.
 - *Risk:* medium, with no change to data. One session already holds the document and its history (EditorSurfaceCoordinator.cs:42-49). The editor's saved window placement resets once.
 - *Tutorial:* the dim list names one editor (Plugin.cs:231-232). The open actions set the mode (Plugin.cs:550-555). Re-run steps 11 to 25 and 28 to 30 of [ManualAcceptance-UI-Onboarding.md](ManualAcceptance-UI-Onboarding.md).
@@ -371,7 +390,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
   - Open in Editor opens the new Plate, and it isn't Active.
   - After a bad file, another file can be chosen in the same window.
 
-**Interface task 14 (UI-10): The tour catches up (M).**
+**Interface task 14 (UI-10): The tour catches up (M).** `[updated 2026-10-02: done in part by [#57](https://github.com/QuietFoxLabs/AetherFrame/pull/57): for every step, the window it explains is brought in front of AetherFrame's other windows, then the dim and the card, which is what BringForward was for. The Welcome offer's answers, Help following the editor mode and appearing in Import Plate, and the card's two exits are still to do.]`
 - *Changes:*
   - A BringForward step action raises the target window, then the shades and the card. It is used for chapters 10 and 11 and for Finish.
   - Every answer to the Welcome offer leaves My Plates open, and the offer names /af.
@@ -401,7 +420,7 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
   - No stale "Deleted" line remains.
   - Prompts match at 100%, 150% and 200% scale.
 
-**Interface task 16 (UI-12): Sharing seams, preview builds only (S; best after interface task 1).**
+**Interface task 16 (UI-12): Sharing seams, preview builds only (S; best after interface task 1).** `[updated 2026-10-02: superseded. Sharing shipped through N2-9 and N2-10 with seams of its own; there are no share codes and no per-Plate Share or Unpublish; and since 0.1.8 the released build is the sharing build (ROADMAP.md, section 8).]`
 - *Changes:* hooks that do nothing by default, for Share, Open Code, Sharing, a Delete note, a viewer source and the dim list. Only the preview composition root fills them (AetherFrame/AetherFrame.csproj:46-64, from the repository root).
 - *When:* before N2-9, which adds Share. If it lands before task 1, the Share hook sits in today's card menu.
 - *Risk:* network types could leak into player builds. A test asserts that the player DLL has no Sharing type.
@@ -409,6 +428,8 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
 - *In game:* a player build has no Share item. Share follows Export in a preview build, checked once N2-11's tester kit exists (UNRESOLVED).
 
 ### 7.7 Sharing, in more detail
+
+`[updated 2026-10-02: superseded. The sharing re-plan ([#58](https://github.com/QuietFoxLabs/AetherFrame/pull/58), the owner's V1 to V5, and R5's no share codes) replaced share codes, the This Plate page, My Shares and Open Code with sharing each character's Active Plate, which other players who share view from the game's right-click menu or a name search ([#76](https://github.com/QuietFoxLabs/AetherFrame/pull/76)). Since [#95](https://github.com/QuietFoxLabs/AetherFrame/pull/95), a Plate is shared as soon as it is Active, with no screen before it. The persona window was removed in N2-9c ([#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71)). The decision register ([DecisionRegister.md](networking/DecisionRegister.md)) holds the rules as built.]`
 
 This adds to section 5. Section 5's Share... and Unpublish in the Plate and card menus open the This Plate page below. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through hooks that the preview composition root fills: the persona window already does, through My Plates' `OpenPersonas` (Windows/PlateLibraryWindow.cs:144, 290-297, at `5d6e3e2`), and the others would use task 16's. No tutorial step anchors to them, and every local feature works without an account or a network. N2-5 has built the persona window; the rest is a proposal for N2-9 and N2-10 to weigh.
 

@@ -33,6 +33,9 @@ internal sealed class PlateViewerWindow : Window
     private readonly Func<CharacterContext?> currentCharacter;
     private readonly Action showPlate;
     private readonly AetherWindowChrome chrome = new();
+
+    // Escape on the World list closes only the list, never the search.
+    private readonly PopupEscapeGuard escape = new();
     private string name = "";
     private string world = "";
 
@@ -64,6 +67,7 @@ internal sealed class PlateViewerWindow : Window
 
     public override void Draw()
     {
+        escape.Update(this);
         var width = EditorWidgets.Scaled(520f);
         using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + width))
         {

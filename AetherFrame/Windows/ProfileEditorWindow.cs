@@ -74,6 +74,9 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
+    // Escape on a menu, list, color picker or prompt closes only that, never the editor.
+    private readonly PopupEscapeGuard escape = new();
+
     // Inspector tab and focus requests, raised by canvas/layers interactions.
     private bool selectElementTabPending;
     private bool focusTextContentPending;
@@ -203,6 +206,8 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
 
     public override void Draw()
     {
+        escape.Update(this);
+
         // Drawn unconditionally so an in-progress file pick isn't stranded if the profile
         // becomes unavailable (e.g. character logs out) while the dialog is open.
         fileDialogManager.Draw();
