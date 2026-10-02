@@ -168,6 +168,13 @@ internal sealed partial class PlateLibraryWindow
                     answer = BasicGuidanceAnswer.ContinueToAdvanced;
                     ImGui.CloseCurrentPopup();
                 }
+
+                // Escape is its close button.
+                if (answer is null && PopupEscapeGuard.CancelsPrompt())
+                {
+                    open = false;
+                    ImGui.CloseCurrentPopup();
+                }
             }
         }
 

@@ -40,6 +40,9 @@ internal sealed class TutorialCardWindow : Window
     private readonly AetherWindowChrome chrome = new();
     private readonly FramePushes pushes = new();
 
+    // Escape on the chapter list closes only the list; the tour carries on.
+    private readonly PopupEscapeGuard escape = new();
+
     // Built once: the chapter line and the picker's rows, so the card allocates nothing per frame.
     private readonly string[] chapterLines;
     private readonly string[] chapterRows;
@@ -111,6 +114,7 @@ internal sealed class TutorialCardWindow : Window
 
     public override void Draw()
     {
+        using var popupEscape = escape.Update(this);
         frame.CardSize = ImGui.GetWindowSize();
         if (frame.View is not { } view || frame.Frame != ImGui.GetFrameCount())
         {

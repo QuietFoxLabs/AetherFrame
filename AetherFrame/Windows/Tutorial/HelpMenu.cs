@@ -27,6 +27,10 @@ internal sealed class HelpMenu
     /// <summary>The button's text: a word, which reads more clearly than a glyph and sits centred in its button.</summary>
     internal const string Label = "Help";
 
+    // What Escape does in AetherFrame's windows (see PopupEscapeGuard).
+    private const string EscapeMeaning =
+        "Close the open menu, or cancel the open prompt. With neither open, close the window; an editor with unsaved changes asks first.";
+
     private static readonly string OpenCommandMeaning = "Open or close My Plates (also " + AetherFrameCommand.Name + ")";
     private static readonly string ViewCommand = AetherFrameCommand.Alias + " " + AetherFrameCommand.ViewArgument;
     private static readonly string VersionCommand = AetherFrameCommand.Alias + " " + AetherFrameCommand.VersionArgument;
@@ -206,7 +210,7 @@ internal sealed class HelpMenu
         Shortcut("Arrows", "Nudge by 1 px (Shift: 10 px)");
         Shortcut("F", "Fit the canvas to the window");
         Shortcut("Alt", "Hold to move without snapping");
-        Shortcut("Esc", "Close the Plate Viewer (Preview)");
+        Shortcut("Esc", EscapeMeaning, wrap: true);
         Shortcut("Wheel", "Zoom the canvas; middle-drag pans");
 
         // ---- commands
@@ -226,14 +230,22 @@ internal sealed class HelpMenu
         AetherControls.Muted("Your Plates stay on your PC. Nothing goes to AetherFrame's server unless you turn on sharing for a character, and an Art Style's artwork downloads from GitHub the first time you use it. Bugs and ideas: the AetherFrame repository's issue tracker.");
     }
 
-    private static void Shortcut(string keys, string meaning)
+    /// <summary>A key and what it does; with <paramref name="wrap"/>, a meaning too long for the menu's width wraps under itself.</summary>
+    private static void Shortcut(string keys, string meaning, bool wrap = false)
     {
         AetherControls.KeyHint(keys);
         ImGui.SameLine(112f * ImGuiHelpers.GlobalScale);
         ImGui.AlignTextToFramePadding();
         using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextSecondary))
         {
-            ImGui.TextUnformatted(meaning);
+            if (wrap)
+            {
+                ImGui.TextWrapped(meaning);
+            }
+            else
+            {
+                ImGui.TextUnformatted(meaning);
+            }
         }
     }
 }

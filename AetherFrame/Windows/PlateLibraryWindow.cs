@@ -86,6 +86,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     // AetherFrame's style around this window's frame, and the tutorial's window policy.
     private readonly AetherWindowChrome chrome = new();
 
+    // Escape on a card menu, Help, the Create Plate chooser or a prompt closes only that.
+    private readonly PopupEscapeGuard escape = new();
+
     // This window's Library operations, a card's menu with its prompts, and the unsaved-changes
     // question before another Plate opens.
     private readonly PlateOperationRunner runner;
@@ -217,6 +220,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
     public override void Draw()
     {
+        using var popupEscape = escape.Update(this);
         runner.Advance();
         plateMenu.AdvanceOpenGuard();
 

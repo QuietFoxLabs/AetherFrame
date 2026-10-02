@@ -121,6 +121,16 @@ internal static class BasicEditorView
 {
     internal static readonly BasicEditorCategory[] Categories = Enum.GetValues<BasicEditorCategory>();
 
+    /// <summary>The window's minimum size, in unscaled pixels (Dalamud scales it).</summary>
+    internal static readonly Vector2 MinimumWindowSize = new(520f, 560f);
+
+    /// <summary>
+    /// The window's size the first time it opens, in unscaled pixels, kept within the screen (see
+    /// <see cref="FirstUseWindowSize"/>), as the Advanced editor's and My Plates' are. At 150% UI
+    /// scale it would be 1770 x 1140, taller than a 1080p screen.
+    /// </summary>
+    internal static readonly Vector2 FirstUseSize = new(1180f, 760f);
+
     /// <summary>Each category's panels, in order.</summary>
     private static readonly Dictionary<BasicEditorCategory, BasicEditorPanel[]> Panels = new()
     {

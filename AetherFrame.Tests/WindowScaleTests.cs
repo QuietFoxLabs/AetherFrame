@@ -52,4 +52,32 @@ public class WindowScaleTests
         Assert.Equal(expectedWidth, size.X, 3);
         Assert.Equal(expectedHeight, size.Y, 3);
     }
+
+    // Interface task 7: the Basic editor opened at Window.Size, which Dalamud scales and doesn't keep
+    // on the screen, so its first window was taller than a 1080p screen at 150%.
+    [Theory]
+    [InlineData(1f, 1920f, 1080f, 1180f, 760f)] // fits: the preferred size as is
+    [InlineData(1.5f, 1920f, 1080f, 1728f, 972f)] // 1770 x 1140 wouldn't fit: held to 90% of the screen
+    [InlineData(2f, 1920f, 1080f, 1728f, 1120f)] // 2360 x 1520: held to the screen, but never below the minimum (1040 x 1120)
+    [InlineData(1.5f, 0f, 0f, 1770f, 1140f)] // screen size unknown: the preferred size
+    public void BasicEditor_FirstUseSize_FitsTheScreen_ButNeverBelowTheMinimum(float scale, float screenWidth, float screenHeight, float expectedWidth, float expectedHeight)
+    {
+        var size = FirstUseWindowSize.Compute(BasicEditorView.FirstUseSize, BasicEditorView.MinimumWindowSize, new Vector2(screenWidth, screenHeight), scale);
+
+        Assert.Equal(expectedWidth, size.X, 3);
+        Assert.Equal(expectedHeight, size.Y, 3);
+    }
+
+    [Fact]
+    public void BasicEditor_AtOneHundredFiftyPercent_OpensWithinA1080pScreen()
+    {
+        var screen = new Vector2(1920f, 1080f);
+
+        // Window.Size, as Dalamud applied it: too tall for the screen.
+        Assert.True(BasicEditorView.FirstUseSize.Y * 1.5f > screen.Y);
+
+        var size = FirstUseWindowSize.Compute(BasicEditorView.FirstUseSize, BasicEditorView.MinimumWindowSize, screen, 1.5f);
+        Assert.True(size.X <= screen.X && size.Y <= screen.Y);
+        Assert.True(size.X >= BasicEditorView.MinimumWindowSize.X * 1.5f && size.Y >= BasicEditorView.MinimumWindowSize.Y * 1.5f);
+    }
 }
