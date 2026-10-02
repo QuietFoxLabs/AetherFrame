@@ -311,7 +311,7 @@ internal sealed partial class ProfileEditorWindow
 
     private static string AnchorDescription(PlateComponentKind kind) => kind switch
     {
-        PlateComponentKind.Background => "the whole Plate, under the portrait and text",
+        PlateComponentKind.Background => "the whole Plate, under the portrait and text (on a Mirrored Plate it is mirrored, with its Offset and Rotation)",
         PlateComponentKind.PortraitFrame or PlateComponentKind.PortraitOverlay => "the portrait (it follows the portrait's position, size, and rotation)",
         PlateComponentKind.NameBacking => "the name and title",
         PlateComponentKind.Divider => "the space under the name and title",
