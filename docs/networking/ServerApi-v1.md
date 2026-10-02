@@ -2,18 +2,18 @@
 
 What `server/AetherFrame.Server` answers, and how the plugin (N2-9 and N2-10) talks to it. It carries the protocol of [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) over HTTPS and applies decision batches B and C ([DecisionRegister.md](DecisionRegister.md)). It is a draft, like the protocol, until the owner's two-player test (NETWORK2.md, section 2) has passed.
 
-**Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed.
+**Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed. `[updated 2026-10-02: and the health check, GET /v1/health (section 3; known bug 14).]`
 
 ## 1. Transport
 
 - **HTTPS only**, to the one deployment name the plugin is configured with (section 14.1 of the specification; decision R2). Caddy terminates TLS in front of the server (N2-8), and the server trusts forwarded headers from Caddy's address alone.
-- **Every request is a `POST`**, except `GET /v1/status`. Paths carry no identifier, name, code or marker: those travel only in bodies (decisions R4, S5 and C7), since paths reach logs.
+- **Every request is a `POST`**, except `GET /v1/status` and `GET /v1/health`. Paths carry no identifier, name, code or marker: those travel only in bodies (decisions R4, S5 and C7), since paths reach logs.
 - **Request bodies** are `application/octet-stream`, bounded before they are read (section 5).
 - **Responses** are `application/octet-stream`, `application/json` (a closed set of small objects, section 4), `image/png` or `image/jpeg`, each with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. A failure is a status with no body, except where section 3 says otherwise.
 
 ## 2. Signed requests
 
-Every request but `status` and `challenge` is signed. Its body is:
+Every request but `status`, `health` and `challenge` is signed. Its body is:
 
 | Field | Size | Value |
 |---|---|---|
@@ -74,6 +74,14 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 |---|---|
 | `GET /v1/status` | `200` `{"protocolVersion": 32769, "api": 1, "minimumPlugin": "0.1.6"}` |
 | `POST /v1/challenge`, empty body | `200` the 32 challenge bytes |
+| `GET /v1/health`, no body | `200` `{"worker": true, "images": true, "backup": true}`, with each `true` or `false`; `413` for a body |
+
+`GET /v1/health` is for the operator's monitor (known bug 14). The plugin never calls it, since it sends nothing in the background (R2). It answers `200` with exactly those three booleans, however they stand: a server that answers at all is up, and one that answers `5xx`, or nothing, isn't. It never carries a count, a time, a version, an identifier, an address or an error's text. It reads only what the server holds in memory, so a request does no database, worker, Lodestone or relay work, and many requests change nothing. Any other method gets `405`.
+- **`worker`**: an image worker run connected to the server within the last 2 minutes. It has no grace after a start: it is `false` until the first run connects, which takes seconds on a healthy host. (`images` and `backup` do have one: they read `true` for the server's first 15 minutes, while their first results come in.) While the worker host is up, a run connects at least every 20 seconds or so (a run with no job ends after 15 seconds, and the host starts the next), so a host that starts none (known bug 13) shows here from the start, and within 2 minutes of its last run otherwise.
+- **`images`**: an image went through the worker and passed the server's check (section 8) within the last 3 hours. The server sends its own canary, a fixed 2 by 2 PNG, along a publish image's whole path, on its own timer: a minute after it starts, then every hour, and 5 minutes after a failure. The answer is discarded, and the canary touches no database, character, limit or budget. It is `false` after two failed canaries in a row (refused, or an answer the check refuses). A worker that is busy, or doesn't come in time, counts neither way, and the next canary comes 5 minutes later. Before any canary has finished, it is `true` for the server's first 15 minutes.
+- **`backup`**: the last daily backup run, the copy and the deletion of copies past the retention both, succeeded within the last 26 hours. It is `false` when the last run failed, and when no run has succeeded once the server is 15 minutes old. A failed run is tried again an hour later, and the deletion runs even when the copy fails, so no copy outlives the 7 days (D1).
+
+`worker` and `images` are always `false` on a server with no image worker configured, and `backup` on one with no backup folder. The server also logs a warning each time one of the three changes, naming only which one.
 
 ## 4. Closed values
 
@@ -84,7 +92,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 
 | Request | Largest body |
 |---|---|
-| `challenge` | 0 bytes |
+| `challenge`, `health` | 0 bytes |
 | an action | 2 + 454 + 4,096 = 4,552 bytes |
 | `publish` | 2 + 454 + 4 + 1,048,576 + 1 + 8 × 4 + 41,943,040 = 42,992,109 bytes; the bound is 43,000,000 |
 
@@ -92,7 +100,7 @@ A body over its bound is refused with `413` before it is buffered: Kestrel's own
 
 ## 6. What the server keeps
 
-Decision batch C, C7, says it: for each binding, the Lodestone id, the name and World, the key's identity and the profile id, the latest revision's document, served profile and images, and N2's revision records; and reports, for 30 days or until the operator acts. It keeps no lookup log, no address, and no copy of a Lodestone page. A day number is kept only while a binding's Lodestone page shows "not found", for C1's two re-reads a day apart.
+Decision batch C, C7, says it: for each binding, the Lodestone id, the name and World, the key's identity and the profile id, the latest revision's document, served profile and images, and N2's revision records; and reports, for 30 days or until the operator acts. It keeps no lookup log, no address, and no copy of a Lodestone page. The health check keeps nothing either: its three signals live in memory only, the canary's image is discarded, and a request to it writes nothing. A day number is kept only while a binding's Lodestone page shows "not found", for C1's two re-reads a day apart.
 
 ## 7. Choices batch C left to N2-7
 
@@ -108,12 +116,13 @@ Recorded in DecisionRegister.md as "N2-7b's server details":
   - challenges: 600 an hour per address, counting those a `409` carries;
   - opting out: 10 an hour per key and 30 per address;
   - images: 8 times the lookup limits, since a Plate has up to 8.
+  - status and health: no limit, since neither does any I/O: each answers from memory.
   - An address limit applies to an IPv6 address's /64, /56 and /48 at 1, 4 and 16 times the limit.
 - **An unhandled error** answers `500`, and logs only the exception's type.
 - **Pausing** is the opting-out kind with `{"mode": "pause"}` in its signed body, so it adds no request kind (C9). It deletes what is served and keeps the binding and the revision records (N2), so an old revision can't come back.
 - **Retractions.** Publishing accepts only a schema 2 snapshot: a `ProfileRetraction` is refused (`not-a-layout`). In stage 1, opting out and pausing take its place, and there are no tombstones (C4).
 - **A key whose character another key took over** is remembered, by its identity alone, until it binds again or opts out, so that its plugin gets `410` and can say what happened (C1).
-- **Publishing** is also limited to 120 an hour per address, besides C6's 60 per character, and to two at a time: a third gets `503`, so buffered bodies stay bounded. A publish is authenticated before it waits for a slot (section 2.2), and its body is read once, into a buffer of its declared length.
+- **Publishing** is also limited to 120 an hour per address, besides C6's 60 per character, and to four at a time, at most one per character and one per address range (section 2.2): one more gets `503`, so buffered bodies stay bounded. `[updated 2026-10-02: four since the open alpha of October 1, 2026; it was two.]` A publish is authenticated before it waits for a slot (section 2.2), and its body is read once, into a buffer of its declared length.
 - **Resuming after a pause** takes a new revision: resending the revision that was live before the pause is an exact resubmission (rule 4), answered `204`, and shows nothing. N2-9 signs a new revision to resume.
 - **Reports** are limited to 60 a day per address as well as C6's 20 per key, and an hourly sweep drops those past 30 days whether or not another arrives (C5).
 - **Viewing's limits** are taken once the requester is found bound and allowed, before the target is looked for: a key with no character costs nothing, and a "not found" counts as a find (C6).

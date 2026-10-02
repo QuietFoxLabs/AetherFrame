@@ -73,12 +73,14 @@ jobs:
           ssh_opts=(-i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
           docker save "aetherframe-server:$COMMIT" "aetherframe-worker:$COMMIT" | gzip | ssh "${ssh_opts[@]}" "$target" 'gunzip | docker load'
           scp "${ssh_opts[@]}" deploy/compose.yaml deploy/Caddyfile deploy/aetherframe-worker.sh "$target:/opt/aetherframe/"
-          # Start the new version: Caddy is pulled and recreated so its image and Caddyfile are current,
-          # the worker service restarts with the new script, and older AetherFrame images are removed.
+          # Start the new version: the worker service restarts with the new script first, so every run
+          # that connects to the new server comes from the restarted service, which the worker check
+          # below relies on; then Caddy is pulled and recreated so its image and Caddyfile are current,
+          # and older AetherFrame images are removed.
           ssh "${ssh_opts[@]}" "$target" "set -e; cd /opt/aetherframe && chmod 755 aetherframe-worker.sh \
             && printf 'AETHERFRAME_VERSION=%s\nAETHERFRAME_DOMAIN=%s\n' '$COMMIT' '$DEPLOY_DOMAIN' > .env \
-            && docker compose pull caddy && docker compose up -d --remove-orphans && docker compose up -d --force-recreate caddy \
             && sudo /usr/bin/systemctl restart aetherframe-worker.service \
+            && docker compose pull caddy && docker compose up -d --remove-orphans && docker compose up -d --force-recreate caddy \
             && (docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^aetherframe-(server|worker):' | grep -v ':$COMMIT\$' | xargs -r docker rmi >/dev/null 2>&1 || true)"
 
       - name: Check it answers
@@ -90,6 +92,37 @@ jobs:
             sleep 5
           done
           echo "The server didn't answer /v1/status."
+          exit 1
+
+      # An image worker run must connect after the deploy (decision "Watching the server"). The
+      # server reads worker true only when a run connected within the last 2 minutes, with no grace
+      # after its start, so true from the new server shows a run connected to it, and the Deploy step
+      # restarts the worker service before the new server starts, so that run is the new service's. A healthy host
+      # connects one within seconds, and true is waited for up to 150 seconds. A server without
+      # /v1/health (a rollback to an older commit) answers 404, which only warns.
+      - name: Check the image worker connects
+        env:
+          DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+        run: |
+          health="$RUNNER_TEMP/health.json"
+          start=$(date +%s)
+          while true; do
+            elapsed=$(($(date +%s) - start))
+            code="$(curl --proto =https --max-time 20 --max-filesize 4096 --silent --output "$health" --write-out '%{http_code}' "https://$DEPLOY_DOMAIN/v1/health")" || code=000
+            if [ "$code" = 404 ]; then
+              echo "::warning::This server has no /v1/health (a commit from before it), so the image worker wasn't checked."
+              exit 0
+            fi
+            if [ "$code" = 200 ] && jq -e '.worker == true' "$health" > /dev/null 2>&1; then
+              echo "An image worker run connected."
+              exit 0
+            fi
+            if [ "$elapsed" -ge 150 ]; then
+              break
+            fi
+            sleep 5
+          done
+          echo "::error::No image worker run connected after the deploy: /v1/health doesn't say worker true. See the worker rows in docs/networking/Runbook.md, section 3, and its Health alerts."
           exit 1
 
       - name: Forget the key

@@ -104,7 +104,8 @@ public class SharingClientTests
     public void APublishsTimeout_CoversTheServersWorstCase_ForTheImagesItCarries()
     {
         using var client = new SharingClient(Example, new Silent(), disposeHandler: true, PluginVersion);
-        using var worker = new ImageWorkerClient(Options.Create(new ServerOptions()), NullLogger<ImageWorkerClient>.Instance);
+        var options = Options.Create(new ServerOptions());
+        using var worker = new ImageWorkerClient(options, new AetherFrame.Server.Hosting.ServerHealth(options, TimeProvider.System), NullLogger<ImageWorkerClient>.Instance);
 
         // The server reads the whole body before it looks at an image, then passes the images
         // through its worker one at a time, each within its patience and its job's deadline.

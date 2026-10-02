@@ -767,6 +767,7 @@ public class PluginAssemblyBoundaryTests
         { "TryOpenActiveSigner", "", "L10: every signer the plugin opens is bound to the persona an operation showed, through TryOpenSigner" },
         { "RunWithDpapiClaim", "PersonaCapabilityProbe.cs", "K3: the plugin calls only the probe's public entry point, which binds the protection claim" },
         { "new PersonaManager(", "", "P3: the plugin makes its manager with PersonaManager.Load, never without its registry" },
+        { "v1/health", "", "R2: no polling and no background traffic; the server's health check is for the operator's monitor alone" },
     };
 
     [Theory]

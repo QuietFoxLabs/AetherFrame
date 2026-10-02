@@ -31,7 +31,7 @@ public class OperationsTests
         try
         {
             var options = Options.Create(new ServerOptions { BackupFolder = folder, DatabasePath = server.DatabasePath });
-            var backups = new Backups(options, server.Services.GetRequiredService<ServerDatabase>(), server.Time, NullLogger<Backups>.Instance);
+            var backups = new Backups(options, server.Services.GetRequiredService<ServerDatabase>(), new ServerHealth(options, server.Time), server.Time, NullLogger<Backups>.Instance);
 
             await backups.RunOnceAsync(default);
             var first = Assert.Single(Directory.GetFiles(folder));
