@@ -7,7 +7,7 @@
     A tester kit is how a preview build reaches a second player (docs/networking/NETWORK2.md,
     section 3; "N2-11's tester kit" in docs/networking/DecisionRegister.md). It is never a release
     or a test build, and never goes into the folder the owner's game loads. Since October 1, 2026
-    ("Testing channel gets sharing" in the decision register) the testing channel serves the
+    ("Releases carry sharing" in the decision register) the testing channel serves the
     sharing build, so a kit is only made when the owner asks for one. This script:
     1. reads the three plugin files from -Package, checks them against the SHA256SUMS.txt staged
        with them, and checks the DLL is the preview flavour, stamped with -BuildId's commit, and
