@@ -6,6 +6,8 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ### Added
 
+- **The tutorial covers sharing**, at the owner's request: two new chapters in Help's tour, **Sharing online** and **Other players' Plates**. They show turning sharing on for a character, the Lodestone check, how its Active Plate is shared, pausing and turning sharing off, checking what a Plate would share, and viewing, hiding and reporting other players' Plates. The tour only points and explains: it never turns sharing on or off, shares, looks anyone up, hides or reports. Where a control isn't on screen (sharing not on yet, or already on), the step says so and moves on. Help marks the tour as updated for anyone who finished it.
+
 - **20 more Art Styles**, at the owner's request, for 40 in all: Alchemist's Workshop, Corsair's Fortune, Dark Academia, Desert Oasis, Embroidered Tapestry, Enchanted Toybox, Frontier Silver, Industrial Salvage, Liquid Chrome, Memphis Playground, Mosaic Courtyard, Paper Theater, Porcelain Garden, Prehistoric Amber, Psychedelic Bloom, Racing Carbon, Retro Space Age, Sugarcraft Patisserie, Velvet Masquerade and Volcanic Forge. Each is a complete look of seven pieces, like the first twenty, with text colors that read on them, and downloads (2.7 to 5.5 MB) the first time you use it.
 
 ### Changed
