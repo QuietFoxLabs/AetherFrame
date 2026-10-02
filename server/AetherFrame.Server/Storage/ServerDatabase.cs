@@ -79,14 +79,21 @@ internal sealed class ServerDatabase
 
     public ServerDatabase(IOptions<ServerOptions> options, ILogger<ServerDatabase> logger)
     {
-        connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = options.Value.DatabasePath,
-            Mode = SqliteOpenMode.ReadWriteCreate,
-            Pooling = true,
-        }.ToString();
+        connectionString = ConnectionStringFor(options.Value.DatabasePath);
         this.logger = logger;
     }
+
+    /// <summary>
+    /// The connection string of the database at <paramref name="path"/>. Microsoft.Data.Sqlite keeps one
+    /// pool per connection string, so this text names the server's pool: the tests clear that pool, and
+    /// only that one, before they delete the file.
+    /// </summary>
+    internal static string ConnectionStringFor(string path) => new SqliteConnectionStringBuilder
+    {
+        DataSource = path,
+        Mode = SqliteOpenMode.ReadWriteCreate,
+        Pooling = true,
+    }.ToString();
 
     /// <summary>How long a checkpoint is retried while readers block it, before it is left to <see cref="CheckpointRetries"/>.</summary>
     internal TimeSpan CheckpointPatience { get; set; } = TimeSpan.FromSeconds(30);
