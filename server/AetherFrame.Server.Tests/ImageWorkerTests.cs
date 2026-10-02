@@ -361,9 +361,9 @@ public class ImageWorkerTests
         using var folder = new TempFolder();
         using var client = NewClient(folder.Path);
 
-        // The product's order: the server stops giving a connection jobs before its run's own idle
+        // The product's order: the server stops giving a connection a job before its run's own idle
         // timeout ends the run, so the run it gives a job to has time left to take it.
-        Assert.True(client.MaxConnectionAge < WorkerRun.IdleTimeout);
+        Assert.True(client.MaxConnectionAge < WorkerRun.IdleTimeout, $"connections are used up to {client.MaxConnectionAge} old, but a run waits {WorkerRun.IdleTimeout}");
         client.MaxConnectionAge = TimeSpan.FromSeconds(1);
         using var stop = new CancellationTokenSource();
         await client.StartAsync(stop.Token);
@@ -373,8 +373,9 @@ public class ImageWorkerTests
         {
             // An idle spell: runs that end themselves after a moment without a job, as the real ones
             // do after 15 seconds, one after another. Each has ended and closed its connection before
-            // the next starts and before the job comes, so the job can't meet one that is ending; each
-            // connection left behind is skipped, as too old or as closed.
+            // the next starts and before the job comes, so the job can't meet one that is ending. The
+            // server drops the oldest connections left behind once four wait, and the job skips the
+            // rest, as too old or as closed.
             for (var run = 0; run < 8; run++)
             {
                 Assert.Equal(1, await WorkerRun.RunOnceAsync(folder.Socket, stop.Token, idleTimeout: TimeSpan.FromMilliseconds(400)).WaitAsync(TimeSpan.FromSeconds(10)));
