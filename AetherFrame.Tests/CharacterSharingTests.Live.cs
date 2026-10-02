@@ -23,7 +23,7 @@ public partial class CharacterSharingTests
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
     [Fact]
-    public async Task ArrivingPublishesNothing_ButASaveOfTheActivePlateDoes_AfterItsFirstShowing()
+    public async Task ArrivingPublishesNothing_ButASaveOfTheActivePlateDoes()
     {
         using var harness = new SharingHarness();
         harness.Bound();
@@ -32,21 +32,15 @@ public partial class CharacterSharingTests
         live.Active = plate.ProfileId;
 
         live.Frames(5);
-        Assert.Null(harness.Sharing.View.Consent);
         Assert.Empty(harness.Server.Publishes);
 
         live.Publisher.PlateSaved(plate.ProfileId);
-        await live.Until(() => harness.Sharing.View.Consent is not null);
-        var consent = harness.Sharing.View.Consent!;
-        Assert.Equal(plate.ProfileId, consent.Candidate.PlateId);
-        Assert.Empty(harness.Server.Publishes);
-
-        harness.Sharing.TryPublish(Aria, consent.Candidate, approved: true, live.Active);
-        Assert.Single(harness.Server.Publishes);
+        await live.Until(() => harness.Server.Publishes.Count == 1);
+        Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal(plate.ProfileId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
 
         live.Publisher.PlateSaved(plate.ProfileId);
         await live.Until(() => harness.Server.Publishes.Count == 2);
-        Assert.Null(harness.Sharing.View.Consent);
         Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
     }
 
@@ -63,7 +57,6 @@ public partial class CharacterSharingTests
         live.Publisher.PlateSaved(plate.ProfileId);
         await live.Until(() => live.Publisher.View.Problems.Count > 0);
         Assert.Equal(Aria, live.Publisher.View.ContentId);
-        Assert.Null(harness.Sharing.View.Consent);
         Assert.Empty(harness.Server.Publishes);
     }
 
@@ -77,36 +70,87 @@ public partial class CharacterSharingTests
         live.Active = plate.ProfileId;
         live.Frames(2);
         live.Publisher.PlateSaved(plate.ProfileId);
-        await live.Until(() => harness.Sharing.View.Consent is not null);
-        harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true, live.Active);
+        await live.Until(() => harness.Server.Publishes.Count == 1);
 
         harness.Sharing.TryPause(Aria);
         live.Publisher.PlateSaved(plate.ProfileId);
+        live.Publisher.Retry();
         live.Frames(20);
         Assert.Single(harness.Server.Publishes);
 
         harness.Sharing.TryResume(Aria);
         await live.Until(() => harness.Server.Publishes.Count == 2);
-        Assert.Null(harness.Sharing.View.Consent);
     }
 
     [Fact]
-    public async Task AnotherActivePlate_IsShownBeforeItIsShared()
+    public async Task MakingAnotherPlateActive_SharesItAtOnce()
     {
         using var harness = new SharingHarness();
-        harness.Bound();
+        var entry = harness.Bound();
         using var live = new LiveHarness(harness);
         var first = live.Save();
         live.Active = first.ProfileId;
         live.Frames(2);
         live.Publisher.PlateSaved(first.ProfileId);
-        await live.Until(() => harness.Sharing.View.Consent is not null);
-        harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true, live.Active);
+        await live.Until(() => harness.Server.Publishes.Count == 1);
+
+        // A Plate this character never shared, made Active: no save, no question.
+        var second = live.Save(text: "Another Plate");
+        live.Active = second.ProfileId;
+        await live.Until(() => harness.Server.Publishes.Count == 2);
+        Assert.Equal(second.ProfileId, Assert.Single(harness.Index(entry).Entries).PlateId);
+        Assert.Equal(second.ProfileId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+    }
+
+    [Fact]
+    public async Task MakingAPlateActive_ForACharacterThatDoesntShare_SendsNothing()
+    {
+        using var harness = new SharingHarness();
+        using var live = new LiveHarness(harness);
+        var first = live.Save();
+        live.Active = first.ProfileId;
+        live.Frames(2);
 
         var second = live.Save(text: "Another Plate");
         live.Active = second.ProfileId;
-        await live.Until(() => harness.Sharing.View.Consent is { } shown && shown.Candidate.PlateId == second.ProfileId);
-        Assert.Single(harness.Server.Publishes);
+        live.Publisher.PlateSaved(second.ProfileId);
+        live.Publisher.Retry();
+        live.Frames(10);
+        await Task.Delay(50);
+        live.Frames(10);
+
+        // Nothing at all reached the server: no publish, no action, no status, no challenge.
+        Assert.Empty(harness.Server.Publishes);
+        Assert.Empty(harness.Server.Actions);
+        Assert.Equal((0, 0), (harness.Server.StatusRequests, harness.Server.Challenges));
+        Assert.Null(harness.Sharing.View.Publish);
+        Assert.False(live.Publisher.View.Building);
+    }
+
+    [Fact]
+    public async Task TryingAgain_SharesTheActivePlateAgain()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        using var live = new LiveHarness(harness);
+        var plate = live.Save();
+        live.Active = plate.ProfileId;
+        live.Frames(2);
+
+        // The server can't be reached: the signed revision waits on this PC.
+        harness.Server.Unreachable = true;
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Ended });
+        Assert.Equal(SharingNoticeKind.PublishWaiting, harness.Sharing.View.Publish!.Outcome!.Kind);
+
+        // Trying again builds the Active Plate anew, as a save would, and its revision takes the
+        // waiting one's place.
+        harness.Server.Unreachable = false;
+        live.Publisher.Retry();
+        await live.Until(() => harness.Server.Publishes.Count == 1);
+        Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Publish!.Outcome!.Kind);
+        var entry = Assert.Single(harness.Index(harness.Sharing.View.Find(Aria)!).Entries);
+        Assert.Equal((PublicationState.Published, true), (entry.State, entry.PendingEntry.IsNone));
     }
 
     [Fact]

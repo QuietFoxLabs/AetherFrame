@@ -23,17 +23,19 @@ Tick each one for each pair of players. Each check names the step of NETWORK2's 
 | 1 | B | Before turning sharing on, right-click A's character | No **View AetherFrame Plate** item. My Plates' **Sharing** offers nothing to search | 1 |
 | 2 | B | Open **Sharing**, read the consent screen, agree, and turn sharing on | A one-time code. The screen said what others see, who can see it, what the server keeps, and how to stop | 2 |
 | 3 | B | Paste the code into the Lodestone Character Profile, then the page's address into AetherFrame, and press **Check** | The check passes. The code can then be deleted from the profile | 3 |
-| 4 | B | Look at the Plate AetherFrame shows before its first send, then press **Share this Plate** | It is your Active Plate, its texts in full, and its images as they'll be sent. My Plates then marks it **Shared** | 4 |
+| 4 | B | Wait a moment after the check passes | A small window says your Active Plate is shared, then closes by itself. My Plates marks it **Shared** | 4 |
 | 5 | A | Right-click B's character in the world or the party list, and choose **View AetherFrame Plate** | B's Active Plate, read-only, as it looks in B's own Profile View. Nothing new in A's Library | 5 |
 | 6 | A | **Find a player's Plate**: B's full name and World | The same Plate | 5 |
 | 7 | B | Edit the Active Plate and save it. Then A presses **Refresh** | A sees the new version | 6 |
-| 8 | B | Make another Plate Active, and share it when it's shown. Then A refreshes | A sees that Plate | 6 |
+| 8 | B | Make another Plate Active. Then A refreshes | The small window says it is shared, and A sees that Plate | 6 |
 | 9 | A | **Hide this player**, then reopen B's Plate from the menu | "You hid this player's Plate", with nothing looked up. **Show their Plate again** brings it back | C5 |
 | 10 | A | **Report...** with any reason | "Reported. Thank you." The owner sees it in `admin reports` | C5 |
 | 11 | B | Turn sharing off. Then A refreshes | "No AetherFrame Plate to show". `admin characters` no longer lists B | 7 |
 | 12 | Both | Use My Plates, both editors and Profile View, with the game's network or the server unreachable | Everything local works, and every Plate, Template and binding is as before | 8 |
 
 Swap A and B and repeat checks 5 to 11, so each player both shares and views.
+
+`[updated 2026-10-02: checks 4 and 8 follow the owner's direction ("Sharing a Plate as soon as it is Active" in DecisionRegister.md): nothing is shown before a Plate is shared any more. The results below were taken before it.]`
 
 ## Afterwards
 

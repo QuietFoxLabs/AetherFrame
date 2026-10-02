@@ -1,32 +1,35 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using AetherFrame.Domain.Profiles;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Services.Network.Publishing;
 using AetherFrame.Services.Plates;
 
 namespace AetherFrame.Services.Network.Sharing;
 
-/// <summary>What the Sharing window shows of the live publisher, for one character: whether its Active Plate is being prepared, or why it couldn't be shared as it is.</summary>
-internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<PlateSnapshotProblem> Problems, ShareCheckFailure Failure)
+/// <summary>
+/// What the sharing windows show of the live publisher, for one character: whether its Active Plate
+/// is being prepared (its images too, once that has begun), or why it couldn't be shared as it is.
+/// Replaced whole at each change, so a window that keeps one can tell it from the next.
+/// </summary>
+internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<PlateSnapshotProblem> Problems, ShareCheckFailure Failure, bool PreparingImages = false)
 {
     internal static readonly LiveView Idle = new(0, false, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None);
 }
 
 /// <summary>
-/// Publishes the logged-in character's Active Plate live (NETWORK2's N2-9c; decision C3): when the
-/// character shares, and its Active Plate is saved, becomes another Plate, or sharing starts,
-/// resumes or moves to a new key, the saved Plate is built into a candidate by a share check of its
-/// own (a private copy of the saved JSON, resolved as the renderer draws it, its images prepared),
-/// and handed to <see cref="CharacterSharing.TryPublish"/>, which shows a Plate never shared before
-/// first and sends the rest. Nothing is published on arriving at a character, only on a change
-/// after it, and only once the Library and the sharing file are both read, so a value becoming
-/// known is never taken for a change. A first showing whose candidate goes out of date (another
-/// build, another character, sharing stopping) is withdrawn. At login it asks for C1's re-read when
-/// the game shows another name or World than the binding's. It runs on the framework thread, a
-/// frame at a time; saves may be reported from any thread. Compiled only in the networking preview
-/// flavour.
+/// Publishes the logged-in character's Active Plate live (NETWORK2's N2-9c; decision C3, as the
+/// owner's direction of October 2, 2026 amends it): when the character shares, and its Active Plate
+/// is saved, becomes another Plate, or sharing starts, resumes or moves to a new key, the saved
+/// Plate is built into a candidate by a share check of its own (a private copy of the saved JSON,
+/// resolved as the renderer draws it, its images prepared), and handed to
+/// <see cref="CharacterSharing.TryPublish"/>, which signs and sends it with no screen before it.
+/// Nothing is published on arriving at a character, only on a change after it (or the player's
+/// <see cref="Retry"/>), and only once the Library and the sharing file are both read, so a value
+/// becoming known is never taken for a change. A candidate that goes out of date (another build,
+/// another character, sharing stopping) is never sent. At login it asks for C1's re-read when the
+/// game shows another name or World than the binding's. It runs on the framework thread, a frame at
+/// a time; saves may be reported from any thread. Compiled only in the networking preview flavour.
 /// </summary>
 internal sealed class LivePublisher : IDisposable
 {
@@ -43,8 +46,9 @@ internal sealed class LivePublisher : IDisposable
     private ProfileId? watchedBinding;
     private bool rereadDue;
     private (ulong ContentId, Guid PlateId, long Generation)? building;
-    private (SnapshotCandidate Candidate, ProfileDocument? Source)? ready;
+    private SnapshotCandidate? ready;
     private volatile LiveView view = LiveView.Idle;
+    private volatile bool retry;
 
     internal LivePublisher(CharacterSharing sharing, ShareCheck check, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf, Func<bool> libraryLoaded)
     {
@@ -60,6 +64,12 @@ internal sealed class LivePublisher : IDisposable
 
     /// <summary>A Plate was saved: any thread. It is published at the next frame when it is the sharing character's Active Plate.</summary>
     internal void PlateSaved(Guid plateId) => saved.Enqueue(plateId);
+
+    /// <summary>
+    /// The player asked to try again after a share that didn't go through: the sharing character's
+    /// Active Plate is built and shared again at the next frame, as a save would. Any thread.
+    /// </summary>
+    internal void Retry() => retry = true;
 
     /// <summary>One frame's work: the framework thread only.</summary>
     internal void OnFrame()
@@ -117,6 +127,12 @@ internal sealed class LivePublisher : IDisposable
             changed |= shared && plate == active;
         }
 
+        if (retry)
+        {
+            retry = false;
+            changed |= shared;
+        }
+
         if (!shared || active is null)
         {
             Drop(character.ContentId);
@@ -125,10 +141,9 @@ internal sealed class LivePublisher : IDisposable
 
         if (changed)
         {
-            // A first showing still on screen is of an older candidate: it goes, and the new
-            // candidate is shown instead when it needs to be.
-            sharing.ClearConsent(character.ContentId);
-            building = (character.ContentId, active.Value, sharing.ShowingGeneration(character.ContentId));
+            // A candidate built or handed over before this one is out of date, and never sent.
+            sharing.Supersede(character.ContentId);
+            building = (character.ContentId, active.Value, sharing.BuildGeneration(character.ContentId));
             ready = null;
             view = new LiveView(character.ContentId, true, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None);
             check.Begin(active.Value);
@@ -156,8 +171,11 @@ internal sealed class LivePublisher : IDisposable
             switch (built.Stage)
             {
                 case ShareCheckStage.Ready when built.Candidate is { } candidate:
-                    ready = (candidate, built.Source);
+                    ready = candidate;
                     break;
+                case ShareCheckStage.Preparing when !view.PreparingImages:
+                    view = view with { PreparingImages = true };
+                    return;
                 case ShareCheckStage.Refused:
                     view = new LiveView(target.ContentId, false, built.Problems, ShareCheckFailure.None);
                     Finish();
@@ -172,7 +190,7 @@ internal sealed class LivePublisher : IDisposable
         }
 
         // A busy service is asked again next frame; the candidate waits.
-        if (ready is { } waiting && sharing.TryPublish(target.ContentId, waiting.Candidate, approved: false, active, waiting.Source, target.Generation))
+        if (ready is { } waiting && sharing.TryPublish(target.ContentId, waiting, active, target.Generation))
         {
             view = LiveView.Idle;
             Finish();
@@ -181,7 +199,7 @@ internal sealed class LivePublisher : IDisposable
 
     public void Dispose() => check.Dispose();
 
-    /// <summary>No character is watched: what was being built for the last one, and its first showing, go.</summary>
+    /// <summary>No character is watched: what was being built for the last one goes, and so does a try again asked for it.</summary>
     private void Leave()
     {
         if (watchedCharacter != 0)
@@ -190,10 +208,11 @@ internal sealed class LivePublisher : IDisposable
         }
 
         watchedCharacter = 0;
+        retry = false;
         saved.Clear();
     }
 
-    /// <summary>Drops a candidate in the making, and a first showing waiting, for the character: sharing stopped, the Active Plate changed, or the character did.</summary>
+    /// <summary>Drops a candidate in the making for the character, and one handed over but not yet sent: sharing stopped, the Active Plate is gone, or the character changed.</summary>
     private void Drop(ulong contentId)
     {
         if (building is not null)
@@ -201,7 +220,7 @@ internal sealed class LivePublisher : IDisposable
             Finish();
         }
 
-        sharing.ClearConsent(contentId);
+        sharing.Supersede(contentId);
         view = LiveView.Idle;
     }
 

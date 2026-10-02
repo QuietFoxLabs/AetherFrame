@@ -70,15 +70,33 @@ internal sealed class SharingClient : IDisposable
     /// <summary>The deployment this client talks to.</summary>
     public DeploymentName Deployment => deployment;
 
-    /// <summary>How long one request may take, from sending it to reading the answer.</summary>
+    /// <summary>How long one request other than a publish may take, from sending it to reading the answer.</summary>
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// How long a publish may take. The server keeps a challenge for 300 seconds, so a publish must
-    /// arrive whole within that anyway: the largest one (about 43 MB) needs some 140 KiB/s upstream,
-    /// and a Plate with a few ordinary images a small part of that.
+    /// What a publish may take before its answer, besides its images' turns in the server's image
+    /// worker. The server reads the proof within 10 seconds and the rest within 300, its challenge's
+    /// life (the server's <c>PlateEndpoints.ProofDeadline</c> and <c>BodyDeadline</c>); the largest
+    /// publish (about 43 MB) needs some 140 KiB/s upstream for that. 30 seconds more cover the
+    /// server's own work after the body, storing the images included, and the network both ways.
     /// </summary>
-    public TimeSpan PublishTimeout { get; init; } = TimeSpan.FromMinutes(5);
+    public TimeSpan PublishBaseTimeout { get; init; } = TimeSpan.FromSeconds(10 + 300 + 30);
+
+    /// <summary>
+    /// What each image a publish carries adds. Once the body is read, the server passes the images
+    /// through its image worker one at a time, and gives each up to 30 seconds to get its turn and a
+    /// worker run, then 30 seconds for the run's answer (the server's
+    /// <c>ImageWorkerClient.WorkerPatience</c> and <c>JobDeadline</c>), before it answers.
+    /// </summary>
+    public TimeSpan PublishImageTimeout { get; init; } = TimeSpan.FromSeconds(30 + 30);
+
+    /// <summary>
+    /// How long a publish carrying <paramref name="images"/> images may take, from sending it to
+    /// reading the answer: the server's own worst case for it, so the plugin never stops waiting
+    /// while the server would still answer. Eight images, the most a publish carries, give 820
+    /// seconds; a stop by the player or by unloading ends it sooner.
+    /// </summary>
+    public TimeSpan PublishTimeout(int images) => PublishBaseTimeout + (PublishImageTimeout * Math.Max(0, images));
 
     /// <summary>The path of each action (ServerApi-v1.md, section 2.1), fixed by its kind.</summary>
     public static string PathOf(RequestProofKind kind) => kind switch
@@ -162,7 +180,7 @@ internal sealed class SharingClient : IDisposable
         for (var attempt = 0; ; attempt++)
         {
             var proof = RequestProofCodec.Sign(document, deployment, challenge, signer);
-            var response = await SendAsync(() => Post("v1/publish", PublishContent.Create(proof, document, images)), MaxJsonAnswerBytes, PublishTimeout, cancellation).ConfigureAwait(false);
+            var response = await SendAsync(() => Post("v1/publish", PublishContent.Create(proof, document, images)), MaxJsonAnswerBytes, PublishTimeout(images.Count), cancellation).ConfigureAwait(false);
             if (response.Status != HttpStatusCode.Conflict || attempt > 0 || ChallengeFrom(response, HttpStatusCode.Conflict) is not { } fresh)
             {
                 return response;

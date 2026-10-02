@@ -13,7 +13,11 @@ using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
 using AetherFrame.Protocol.Requests;
 using AetherFrame.Protocol.Signing;
+using AetherFrame.Server.Endpoints;
+using AetherFrame.Server.Images;
 using AetherFrame.Services.Network.Transport;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AetherFrame.Server.Tests;
@@ -94,6 +98,56 @@ public class SharingClientTests
 
         var failure = await Assert.ThrowsAsync<SharingException>(() => client.StatusAsync(default));
         Assert.Contains("in time", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APublishsTimeout_CoversTheServersWorstCase_ForTheImagesItCarries()
+    {
+        using var client = new SharingClient(Example, new Silent(), disposeHandler: true, PluginVersion);
+        using var worker = new ImageWorkerClient(Options.Create(new ServerOptions()), NullLogger<ImageWorkerClient>.Instance);
+
+        // The server reads the whole body before it looks at an image, then passes the images
+        // through its worker one at a time, each within its patience and its job's deadline.
+        var body = PlateEndpoints.ProofDeadline + PlateEndpoints.BodyDeadline;
+        var perImage = worker.WorkerPatience + worker.JobDeadline;
+        for (var images = 0; images <= ProtocolLimits.MaxImagesPerProfile; images++)
+        {
+            Assert.True(client.PublishTimeout(images) > body + (perImage * images), $"A publish with {images} image(s) gives up before the server answers.");
+        }
+
+        Assert.Equal(TimeSpan.FromSeconds(400), client.PublishTimeout(1));
+        Assert.Equal(TimeSpan.FromSeconds(820), client.PublishTimeout(ProtocolLimits.MaxImagesPerProfile));
+        Assert.Equal(TimeSpan.FromSeconds(30), client.RequestTimeout);
+    }
+
+    [Fact]
+    public async Task APublish_WaitsPastTheOtherRequestsTimeout_ForItsOwn()
+    {
+        using var key = EcdsaPersonaSigner.CreateEphemeral();
+        var png = Plates.Png(4, 3);
+        var document = SignedDocumentCodec.Sign(Plates.Snapshot(ProfileId.Parse("prf_fedcba9876543210fedcba9876543210"), "Aria's Plate", png), key);
+
+        // The publish is answered after 600 ms, three times the other requests' timeout.
+        using (var waiting = new SharingClient(Example, new SlowPublish(TimeSpan.FromMilliseconds(600)), disposeHandler: true, PluginVersion)
+        {
+            RequestTimeout = TimeSpan.FromMilliseconds(200),
+            PublishBaseTimeout = TimeSpan.FromMilliseconds(200),
+            PublishImageTimeout = TimeSpan.FromSeconds(2),
+        })
+        {
+            var published = await waiting.PublishAsync(document, [png], key, default);
+            Assert.Equal(HttpStatusCode.NoContent, published.Status);
+
+            // Without the image's allowance, the same answer comes too late.
+            var failure = await Assert.ThrowsAsync<SharingException>(() => waiting.PublishAsync(document, [], key, default));
+            Assert.Contains("in time", failure.Message, StringComparison.Ordinal);
+        }
+
+        // A stop still ends a publish at once, whatever its timeout.
+        using var stopped = new SharingClient(Example, new SlowPublish(Timeout.InfiniteTimeSpan), disposeHandler: true, PluginVersion);
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var cancelled = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stopped.PublishAsync(document, [png], key, cancel.Token));
+        Assert.Equal(cancel.Token, cancelled.CancellationToken);
     }
 
     [Fact]
@@ -393,6 +447,21 @@ public class SharingClientTests
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
             Task.FromException<int>(new System.IO.IOException("reset"));
+    }
+
+    /// <summary>Answers a challenge at once, and a publish with 204 after <c>delay</c>.</summary>
+    private sealed class SlowPublish(TimeSpan delay) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath == "/v1/challenge")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(RequestChallenge.NewRandom().ToArray()) };
+            }
+
+            await Task.Delay(delay, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.NoContent) { Content = new ByteArrayContent([]) };
+        }
     }
 
     private sealed class Silent : HttpMessageHandler

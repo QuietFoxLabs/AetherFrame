@@ -48,8 +48,10 @@ Active Plate. To share another one, open its menu in My Plates and choose Set Ac
 4. Paste your Lodestone page's address into AetherFrame and press Check. When it passes, you can
    delete the code from your profile. If it says to try again later, tell the person who invited
    you: during this test, the check needs their PC to be on.
-5. AetherFrame shows your Active Plate exactly as others will see it. Press Share this Plate.
-   From then on, saving your Active Plate updates what others see.
+5. Your Active Plate is shared as soon as the check passes, and a small window says so. From
+   then on, saving your Active Plate, or making another Plate Active, updates what others see.
+   To see what a Plate would share first, open its menu in My Plates and choose Check what
+   would be shared (preview).
 
 5. View other players' Plates
 -----------------------------

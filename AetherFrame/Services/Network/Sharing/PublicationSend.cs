@@ -41,8 +41,12 @@ internal enum SendResult
     NotSaved,
 }
 
-/// <summary>What sending came to: the server's reason code for a refusal, and, once sent, the Plate that is now public.</summary>
-internal sealed record SendOutcome(SendResult Result, string? Reason = null, Guid Plate = default);
+/// <summary>
+/// What sending came to: the server's reason code for a refusal, once sent the Plate that is now
+/// public, and for a revision that waits, the status the server answered with, if it answered at
+/// all (for the log: a busy server and no answer in time look alike to the player).
+/// </summary>
+internal sealed record SendOutcome(SendResult Result, string? Reason = null, Guid Plate = default, HttpStatusCode? Status = null);
 
 /// <summary>
 /// Sends a character's waiting revision (NETWORK2's N2-9c; decisions C3, C4 and N2): the one entry
@@ -110,9 +114,9 @@ internal static class PublicationSend
         {
             response = client.PublishAsync(entry.Document.ToArray(), entry.Images, new LeasedSigner(manager, slot, key), cancellation).GetAwaiter().GetResult();
         }
-        catch (SharingException)
+        catch (SharingException exception)
         {
-            return new SendOutcome(SendResult.TryLater);
+            return new SendOutcome(SendResult.TryLater, Status: exception.Status);
         }
         catch (OperationCanceledException)
         {
@@ -142,7 +146,7 @@ internal static class PublicationSend
             default:
                 // Busy, limited, restarting (a 5xx from the proxy while the server restarts), a
                 // request that timed out, or an answer this build doesn't know: it waits.
-                return new SendOutcome(SendResult.TryLater);
+                return new SendOutcome(SendResult.TryLater, Status: response.Status);
         }
     }
 
