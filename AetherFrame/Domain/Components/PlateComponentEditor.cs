@@ -96,6 +96,98 @@ public static class PlateComponentEditor
     public static bool HasCapacity(ProfileDocument profile) => Count(profile) < PlateComponentLimits.MaxComponentCount;
 
     /// <summary>
+    /// The Background artwork that hides the Plate's own background entirely, as it is drawn: visible,
+    /// at full opacity, over every point of the canvas (every Background artwork is opaque). Null when
+    /// any of the Plate's own background can show: no artwork, or artwork hidden, unresolvable,
+    /// see-through, moved, shrunk or turned off the canvas, or fitted inside a canvas of another
+    /// shape. The Basic editor shows the background's own settings (Pattern, Customize Background)
+    /// only when this is null, since they change nothing the artwork covers.
+    /// </summary>
+    public static ComponentDefinition? CoveringBackground(ProfileDocument profile, IComponentCatalog catalog)
+    {
+        if (!HasAnyBackground(profile))
+        {
+            return null;
+        }
+
+        var plan = new List<PaintStep>();
+        ComponentPaintPlan.Build(profile, Array.Empty<ProfileElement>(), catalog, plan);
+        var canvas = new Vector2(Math.Max(0f, profile.CanvasWidth), Math.Max(0f, profile.CanvasHeight));
+        var primitives = new List<ComponentPrimitive>();
+        foreach (var step in plan)
+        {
+            if (step.Component is not { Kind: PlateComponentKind.Background } component || step.Definition is not { } definition)
+            {
+                continue;
+            }
+
+            primitives.Clear();
+            ComponentGeometry.Build(profile, component, definition, step.Placement, primitives);
+            foreach (var primitive in primitives)
+            {
+                if (primitive.Kind == ComponentPrimitiveKind.Art && primitive.Color.W >= 1f
+                    && Contains(primitive, Vector2.Zero) && Contains(primitive, new Vector2(canvas.X, 0f))
+                    && Contains(primitive, canvas) && Contains(primitive, new Vector2(0f, canvas.Y)))
+                {
+                    return definition;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasAnyBackground(ProfileDocument profile)
+    {
+        foreach (var component in profile.Components ?? [])
+        {
+            if (component is { Kind: PlateComponentKind.Background })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True when <paramref name="point"/> is inside or on the convex quad A-B-C-D, either
+    /// winding (a mirrored quad winds the other way), within a hundredth of a pixel.</summary>
+    private static bool Contains(ComponentPrimitive quad, Vector2 point)
+    {
+        const float Slack = 0.01f;
+        var corners = new[] { quad.A, quad.B, quad.C, quad.D };
+        var sign = 0;
+        for (var i = 0; i < 4; i++)
+        {
+            var a = corners[i];
+            var b = corners[(i + 1) % 4];
+            var edge = b - a;
+            var length = edge.Length();
+            if (!(length > 0f))
+            {
+                return false;
+            }
+
+            // The point's signed distance from the edge's line.
+            var distance = ((edge.X * (point.Y - a.Y)) - (edge.Y * (point.X - a.X))) / length;
+            if (MathF.Abs(distance) <= Slack)
+            {
+                continue;
+            }
+
+            var side = distance > 0f ? 1 : -1;
+            if (sign != 0 && side != sign)
+            {
+                return false;
+            }
+
+            sign = side;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Basic: chooses a slot's style, or empties the slot (null). An existing slot Component keeps
     /// its instance and every Advanced refinement (offset, scale, color...) and only changes style;
     /// an empty slot gets a new Component with default placement. Only built-in, image-free
