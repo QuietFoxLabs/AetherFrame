@@ -150,6 +150,32 @@ internal static class PublicationSend
         }
     }
 
+    /// <summary>The local Plate whose revision waits to be sent under <paramref name="binding"/>, or null when none does or the index can't be read.</summary>
+    internal static Guid? WaitingPlate(PublicationFiles files, PersonaSlotId slot, ProfileId binding)
+    {
+        try
+        {
+            if (files.ReadIndex(slot) is not { } bytes)
+            {
+                return null;
+            }
+
+            foreach (var entry in PublicationIndexCodec.Decode(bytes, slot).Entries)
+            {
+                if (entry.ProfileId == binding && entry.IsLive && !entry.PendingEntry.IsNone)
+                {
+                    return entry.PlateId;
+                }
+            }
+        }
+        catch (Exception exception) when (exception is PublicationFileException or IOException or UnauthorizedAccessException)
+        {
+            // Sending reads the index again, and says so.
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Drops every revision waiting in the outbox of a character's key, and the index's record of
     /// anything not yet published, when sharing is paused or turned off (C4, D1): nothing it signed

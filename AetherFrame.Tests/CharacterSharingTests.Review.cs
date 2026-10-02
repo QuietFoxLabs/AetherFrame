@@ -160,6 +160,60 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
+    public void ASendWhosePlateIsNoLongerActive_Stops_AndSaysSo_ButOneOfTheActivePlateGoesOn()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        var first = PublicationCandidates.Simple();
+        harness.Publish(first);
+        Assert.Equal(first.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+
+        // The Active Plate is unset while another Plate is being sent: it stops, says so, and its
+        // revision is dropped rather than left to be sent later.
+        harness.Server.PublishHook = () => harness.Sharing.StopStaleSend(Aria, null);
+        harness.Publish(PublicationCandidates.Simple());
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Publish!.Outcome!.Kind);
+        Assert.Equal(first.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+        Assert.All(harness.Index(entry).Entries, recorded => Assert.True(recorded.PendingEntry.IsNone));
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+
+        // A send of the Active Plate itself goes on, and so does one while another character's
+        // Active Plate changes.
+        var active = PublicationCandidates.Simple();
+        harness.Server.PublishHook = () =>
+        {
+            harness.Sharing.StopStaleSend(Aria, active.PlateId);
+            harness.Sharing.StopStaleSend(Bram, null);
+        };
+        harness.Publish(active);
+        Assert.Equal(2, harness.Server.Publishes.Count);
+        Assert.Equal(active.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+    }
+
+    [Fact]
+    public void AWaitingRevisionSentAgain_StopsToo_WhenItsPlateIsNoLongerActive()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
+        var waiting = PublicationCandidates.Simple();
+        harness.Publish(waiting);
+        Assert.Equal(SharingNoticeKind.PublishWaiting, harness.Sharing.View.Notice!.Kind);
+
+        harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
+        harness.Server.PublishHook = () => harness.Sharing.StopStaleSend(Aria, Guid.NewGuid());
+        harness.Sharing.TrySendWaiting(Aria);
+
+        // Only the first try reached the server, which couldn't take it.
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+        Assert.Empty(harness.Index(entry).Entries);
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+    }
+
+    [Fact]
     public void NothingIsSigned_WhileANewKeyIsChecked_ThenTheNewKeySigns()
     {
         using var harness = new SharingHarness();

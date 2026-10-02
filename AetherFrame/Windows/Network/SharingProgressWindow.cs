@@ -158,7 +158,8 @@ internal sealed class SharingProgressWindow : Window
         switch (view.Action)
         {
             case SharingProgressAction.SendAgain:
-                using (ImRaii.Disabled(sharing.View.Busy))
+                // A newer build under way replaces the waiting revision: nothing to send again then.
+                using (ImRaii.Disabled(sharing.View.Busy || (live.View.ContentId == view.ContentId && live.View.Building)))
                 {
                     if (AetherControls.PrimaryButton("Try again"))
                     {

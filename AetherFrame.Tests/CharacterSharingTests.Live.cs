@@ -174,6 +174,10 @@ public partial class CharacterSharingTests
         // send stops, and the newer one is signed and sent in its place.
         live.Save(text: "Newer words", id: plate.ProfileId);
         live.Publisher.PlateSaved(plate.ProfileId);
+
+        // Ready while the older one is still being sent: the live publisher says it waits.
+        await live.Until(() => live.Publisher.View is { Building: true, Waiting: true });
+        Assert.Equal(Aria, live.Publisher.View.ContentId);
         await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Sending } newer && newer.Share != older);
         held.SetResult();
         await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Ended });
@@ -233,6 +237,71 @@ public partial class CharacterSharingTests
         Assert.False(LivePublisher.OffersShareNow(view.With(publish: new PublishStatus(Aria, 2, PublishStep.Sending)), LiveView.Idle, entry, plate));
         Assert.True(LivePublisher.OffersShareNow(view.With(publish: new PublishStatus(Bram, 2, PublishStep.Sending)), LiveView.Idle, entry, plate));
         Assert.True(LivePublisher.OffersShareNow(view.With(publish: new PublishStatus(Aria, 2, PublishStep.Ended)), LiveView.Idle, entry, plate));
+    }
+
+    [Fact]
+    public async Task ASendUnderWay_StopsWhenItsPlateIsNoLongerActive_ButNotOnALogout()
+    {
+        using var harness = new SharingHarness(background: true);
+        var entry = harness.Bound();
+        var held = new TaskCompletionSource();
+        harness.Server.PublishGate = held.Task;
+        using var live = new LiveHarness(harness);
+        var plate = live.Save();
+        live.Active = plate.ProfileId;
+        live.Frames(2);
+
+        // The Active Plate is unset while it is being sent.
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Sending });
+        live.Active = null;
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Ended });
+        harness.WaitIdle();
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+        Assert.Empty(harness.Server.Publishes);
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+
+        // Made Active again, then the character logs out while it is sent: the send goes on.
+        live.Active = plate.ProfileId;
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Sending });
+        live.LoggedIn = null;
+        live.Frames(5);
+        held.SetResult();
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Ended });
+        harness.WaitIdle();
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal(plate.ProfileId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+    }
+
+    [Fact]
+    public async Task ASendUnderWay_StopsWhenTheNewActivePlateCantBeShared()
+    {
+        using var harness = new SharingHarness(background: true);
+        harness.Bound();
+        var held = new TaskCompletionSource();
+        harness.Server.PublishGate = held.Task;
+        using var live = new LiveHarness(harness);
+        var plate = live.Save();
+        live.Active = plate.ProfileId;
+        live.Frames(2);
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Sending });
+
+        try
+        {
+            var bad = live.Save(text: "Bad" + (char)0 + "text");
+            live.Active = bad.ProfileId;
+            await live.Until(() => live.Publisher.View.Problems.Count > 0 && harness.Sharing.View.Publish is { Step: PublishStep.Ended });
+            harness.WaitIdle();
+            Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+            Assert.Empty(harness.Server.Publishes);
+            Assert.Null(harness.Sharing.View.Find(Aria)!.PublishedPlate);
+        }
+        finally
+        {
+            held.TrySetResult();
+        }
     }
 
     [Fact]

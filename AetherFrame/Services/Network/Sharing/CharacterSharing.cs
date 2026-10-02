@@ -43,6 +43,7 @@ internal enum SharingNoticeKind
     Resumed,
     PublishUnrecorded,
     PublishStopped,
+    PublishWithdrawn,
 }
 
 /// <summary>
@@ -66,13 +67,14 @@ internal enum PublishStep
 
 /// <summary>
 /// One publish of a character's Active Plate (a new build signed and sent, or a waiting revision
-/// sent again): where it stands and, once it ended, the notice it left. <see cref="Share"/> is the
-/// share it belongs to: the number of the build its candidate came from
-/// (<see cref="CharacterSharing.BuildGeneration"/>), or a number of its own for a waiting revision
-/// sent again. Builds and sends take their numbers from one count, so a higher number started
-/// later. Replaced whole at each step, so a window that keeps one can tell it from the next.
+/// sent again): where it stands and, once it ended, the notice it left. <see cref="Share"/> is its
+/// number, taken when it is handed over; builds (<see cref="CharacterSharing.BuildGeneration"/>)
+/// and publishes take their numbers from one count, so a higher number started later.
+/// <see cref="Build"/> is the number of the build its candidate came from, the same share carried
+/// on, or 0 for a waiting revision sent again. Replaced whole at each step, so a window that keeps
+/// one can tell it from the next.
 /// </summary>
-internal sealed record PublishStatus(ulong ContentId, long Share, PublishStep Step, SharingNotice? Outcome = null);
+internal sealed record PublishStatus(ulong ContentId, long Share, PublishStep Step, SharingNotice? Outcome = null, long Build = 0);
 
 /// <summary>A code the server issued for a character's Lodestone check, for the key in <see cref="Slot"/>, kept in memory only.</summary>
 internal sealed record IssuedCode(ulong ContentId, PersonaSlotId Slot, string Code, DateTimeOffset Expires);
@@ -475,8 +477,8 @@ internal sealed class CharacterSharing
                 return;
             }
 
-            SendWaiting(manager, entry, key, binding, generation);
-        }, publishing: contentId, share: generation);
+            SendWaiting(manager, entry, key, binding, generation, candidate.PlateId);
+        }, publishing: contentId, build: generation);
     }
 
     /// <summary>Sends the character's waiting revision again, after the server couldn't take it.</summary>
@@ -484,7 +486,7 @@ internal sealed class CharacterSharing
     {
         if (view.Find(contentId) is { Stage: SharingStage.Shared, ReplacingKey: false, ProfileId: { } binding } entry && SigningKey(manager, entry) is { } key && StatusAllows(contentId))
         {
-            SendWaiting(manager, entry, key, binding, generation: null);
+            SendWaiting(manager, entry, key, binding, generation: null, PublicationSend.WaitingPlate(publications, entry.Slot, binding));
         }
     }, publishing: contentId);
 
@@ -515,6 +517,27 @@ internal sealed class CharacterSharing
             {
                 older.GaveWay = true;
                 stop = older.Stop;
+            }
+        }
+
+        Cancel(stop);
+    }
+
+    /// <summary>
+    /// The character's Active Plate is no longer the Plate a send under way for it carries: there
+    /// is none any more, or another Plate that couldn't be shared took its place. The send stops,
+    /// its revision is dropped rather than left to be sent later, and the notice says so. A send of
+    /// <paramref name="activePlate"/> itself goes on, and so does another character's.
+    /// </summary>
+    internal void StopStaleSend(ulong contentId, Guid? activePlate)
+    {
+        CancellationTokenSource? stop = null;
+        lock (gate)
+        {
+            if (upload is { GaveWay: false, Withdrawn: false } stale && stale.ContentId == contentId && stale.Plate != activePlate)
+            {
+                stale.Withdrawn = true;
+                stop = stale.Stop;
             }
         }
 
@@ -707,14 +730,15 @@ internal sealed class CharacterSharing
     }
 
     /// <summary>Sends the waiting revision and says what came of it; a takeover is recorded as <see cref="Send"/> records one.</summary>
-    private void SendWaiting(PersonaManager manager, SharingCharacter entry, PersonaPublicKey key, ProfileId binding, long? generation)
+    private void SendWaiting(PersonaManager manager, SharingCharacter entry, PersonaPublicKey key, ProfileId binding, long? generation, Guid? plate)
     {
         SendOutcome sent;
         bool stopped;
         bool gaveWay;
+        bool withdrawn;
         using (var sending = CancellationTokenSource.CreateLinkedTokenSource(stopping))
         {
-            var mine = new Upload(sending, entry.ContentId);
+            var mine = new Upload(sending, entry.ContentId, plate);
             lock (gate)
             {
                 // Checked and recorded together, so a newer build either finds this send to stop
@@ -754,6 +778,7 @@ internal sealed class CharacterSharing
                     }
 
                     gaveWay = mine.GaveWay;
+                    withdrawn = mine.Withdrawn;
                 }
             }
 
@@ -766,6 +791,15 @@ internal sealed class CharacterSharing
         {
             // Stopped for a newer candidate, which replaces the revision left waiting: nothing to say.
             log("Sharing: the send gave way to a newer build of the Active Plate.");
+            return;
+        }
+
+        if (withdrawn && sent.Result == SendResult.TryLater)
+        {
+            // Stopped because its Plate is no longer the Active Plate: it is never sent later.
+            log("Sharing: the send stopped, since its Plate is no longer the Active Plate.");
+            PublicationSend.DropAll(publications, entry.Slot);
+            Notify(entry.ContentId, SharingNoticeKind.PublishWithdrawn);
             return;
         }
 
@@ -1027,11 +1061,12 @@ internal sealed class CharacterSharing
     /// the file was read (or this is the read). The persona selected before the work is selected
     /// again after it. An exception the work didn't expect becomes a notice, and the log gets its
     /// type only. With <paramref name="publishing"/>, the work is a publish of that character's
-    /// Active Plate: it is shown as signing from the moment it is handed over, as part of
-    /// <paramref name="share"/> (the build its candidate came from) or of a share of its own, and it
-    /// ends with the notice the work left for that character, or none.
+    /// Active Plate: it takes the next share number and is shown as signing from the moment it is
+    /// handed over, carrying on the share of <paramref name="build"/> (the build its candidate came
+    /// from) when there is one, and it ends with the notice the work left for that character, or
+    /// none.
     /// </summary>
-    private bool Run(string name, Action<PersonaManager> work, bool loading = false, bool keepNotice = false, ulong? publishing = null, long? share = null)
+    private bool Run(string name, Action<PersonaManager> work, bool loading = false, bool keepNotice = false, ulong? publishing = null, long? build = null)
     {
         lock (gate)
         {
@@ -1040,7 +1075,7 @@ internal sealed class CharacterSharing
                 return false;
             }
 
-            var publish = publishing is { } contentId ? new PublishStatus(contentId, share ?? ++shares, PublishStep.Signing) : null;
+            var publish = publishing is { } contentId ? new PublishStatus(contentId, ++shares, PublishStep.Signing, Build: build ?? 0) : null;
             view = keepNotice ? view.With(busy: true, publish: publish) : view.With(busy: true, clearNotice: true, publish: publish);
         }
 
@@ -1102,14 +1137,22 @@ internal sealed class CharacterSharing
         return view.With(busy: false, publish: publish with { Step = PublishStep.Ended, Outcome = outcome });
     }
 
-    /// <summary>A send under way: how to stop it, the character it is for, and whether a newer candidate stopped it (guarded by the service's lock).</summary>
-    private sealed class Upload(CancellationTokenSource stop, ulong contentId)
+    /// <summary>
+    /// A send under way: how to stop it, the character and the local Plate it is for (null when the
+    /// index couldn't say), and whether a newer candidate, or its Plate no longer being the Active
+    /// Plate, stopped it (both guarded by the service's lock).
+    /// </summary>
+    private sealed class Upload(CancellationTokenSource stop, ulong contentId, Guid? plate)
     {
         internal CancellationTokenSource Stop { get; } = stop;
 
         internal ulong ContentId { get; } = contentId;
 
+        internal Guid? Plate { get; } = plate;
+
         internal bool GaveWay { get; set; }
+
+        internal bool Withdrawn { get; set; }
     }
 
     /// <summary>Puts back the selection an operation found: the persona it named, or none.</summary>

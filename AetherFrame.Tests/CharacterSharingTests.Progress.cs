@@ -28,8 +28,9 @@ public partial class CharacterSharingTests
         Assert.Equal(SharingProgressStage.Preparing, progress.Update(Aria, shared, Build(1), At(1)).Stage);
         Assert.Equal((SharingProgressStage.PreparingImages, SharingText.PreparingImages), Stage(progress.Update(Aria, shared, Build(1) with { PreparingImages = true }, At(2))));
 
-        // Handed over: the live publisher is idle, and the service signs the build's candidate, then sends it.
-        var signing = shared.With(publish: new PublishStatus(Aria, 1, PublishStep.Signing));
+        // Handed over: the live publisher is idle, and the service signs the build's candidate, then
+        // sends it, under a number of its own that carries the build on.
+        var signing = shared.With(publish: new PublishStatus(Aria, 2, PublishStep.Signing, Build: 1));
         Assert.Equal((SharingProgressStage.Signing, SharingText.Signing), Stage(progress.Update(Aria, signing, LiveView.Idle, At(3))));
         var sending = signing.With(publish: signing.Publish! with { Step = PublishStep.Sending });
         var working = progress.Update(Aria, sending, LiveView.Idle, At(40));
@@ -223,6 +224,10 @@ public partial class CharacterSharingTests
         var other = harness.Sharing.View.With(publish: new PublishStatus(Bram, 1, PublishStep.Sending));
         Assert.Equal((SharingProgressStage.Waiting, SharingText.WaitingForOther), Stage(progress.Update(Aria, other, waiting, At(0))));
 
+        // Still signing, the other character's publish can't be stopped from the Sharing window.
+        var signing = harness.Sharing.View.With(publish: new PublishStatus(Bram, 1, PublishStep.Signing));
+        Assert.Equal((SharingProgressStage.Waiting, SharingText.WaitingTurn), Stage(progress.Update(Aria, signing, waiting, At(0))));
+
         // Waiting for anything else (a lookup, say) is waiting for its turn.
         var busy = harness.Sharing.View.With(busy: true);
         Assert.Equal((SharingProgressStage.Waiting, SharingText.WaitingTurn), Stage(progress.Update(Aria, busy, waiting, At(1))));
@@ -247,19 +252,74 @@ public partial class CharacterSharingTests
         var candidate = PublicationCandidates.Simple();
         harness.Sharing.TryPublish(Aria, candidate, candidate.PlateId, build);
         Assert.Equal(PublishStep.Sending, during);
-        Assert.Equal(new PublishStatus(Aria, build, PublishStep.Ended, new SharingNotice(Aria, SharingNoticeKind.PublishWaiting)), harness.Sharing.View.Publish);
+        var handed = harness.Sharing.View.Publish!;
+        Assert.True(handed.Share > build);
+        Assert.Equal(new PublishStatus(Aria, handed.Share, PublishStep.Ended, new SharingNotice(Aria, SharingNoticeKind.PublishWaiting), Build: build), handed);
         Assert.Contains("Sharing: sending the Active Plate came to TryLater (answer: 503).", harness.Log);
 
         // A waiting revision sent again is a later share of its own.
         harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
         harness.Sharing.TrySendWaiting(Aria);
         var again = harness.Sharing.View.Publish!;
-        Assert.True(again.Share > build);
-        Assert.Equal((PublishStep.Ended, SharingNoticeKind.Published), (again.Step, again.Outcome!.Kind));
+        Assert.True(again.Share > handed.Share);
+        Assert.Equal((PublishStep.Ended, SharingNoticeKind.Published, 0L), (again.Step, again.Outcome!.Kind, again.Build));
 
         // Other operations leave it as it is.
         harness.Sharing.TryPause(Aria);
         Assert.Same(again, harness.Sharing.View.Publish);
+    }
+
+    [Fact]
+    public void Progress_ABuildsPublish_IsTheNewestShare_EvenAfterAResendStartedDuringTheBuild()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        var shared = harness.Sharing.View;
+        foreach (var (kind, stage) in new[] { (SharingNoticeKind.Published, SharingProgressStage.Shared), (SharingNoticeKind.PublishWaiting, SharingProgressStage.Problem) })
+        {
+            var progress = new SharingProgress();
+            progress.Update(Aria, shared, LiveView.Idle, At(0));
+            Assert.Equal(SharingProgressStage.Preparing, progress.Update(Aria, shared, Build(1), At(1)).Stage);
+
+            // A waiting revision is sent again while the build runs, then gives way to it.
+            var resend = shared.With(publish: new PublishStatus(Aria, 2, PublishStep.Signing));
+            Assert.Equal(SharingProgressStage.Signing, progress.Update(Aria, resend, Build(1), At(2)).Stage);
+            var gaveWay = resend.With(publish: resend.Publish! with { Step = PublishStep.Ended });
+            Assert.Equal(SharingProgressStage.Waiting, progress.Update(Aria, gaveWay, Build(1) with { Waiting = true }, At(3)).Stage);
+
+            // The build's candidate is handed over: it is the newest share, and so is its result.
+            var handed = gaveWay.With(publish: new PublishStatus(Aria, 3, PublishStep.Signing, Build: 1));
+            Assert.Equal(SharingProgressStage.Signing, progress.Update(Aria, handed, LiveView.Idle, At(4)).Stage);
+            var ended = handed.With(publish: handed.Publish! with { Step = PublishStep.Ended, Outcome = new SharingNotice(Aria, kind) });
+            var done = progress.Update(Aria, ended, LiveView.Idle, At(5));
+            Assert.Equal((stage, SharingText.Notice(new SharingNotice(Aria, kind))), (done.Stage, done.Message));
+        }
+
+        // Hidden while it was built, the build's publish and its result stay hidden; time so far carries on.
+        var hidden = new SharingProgress();
+        hidden.Update(Aria, shared, Build(1), At(10));
+        var carried = new SharingProgress();
+        carried.Update(Aria, shared, Build(1), At(10));
+        var onward = shared.With(publish: new PublishStatus(Aria, 2, PublishStep.Sending, Build: 1));
+        Assert.Equal(TimeSpan.FromSeconds(30), carried.Update(Aria, onward, LiveView.Idle, At(40)).Elapsed);
+        hidden.Dismiss();
+        Assert.False(hidden.Update(Aria, onward, LiveView.Idle, At(11)).Visible);
+        var hiddenEnd = onward.With(publish: onward.Publish! with { Step = PublishStep.Ended, Outcome = new SharingNotice(Aria, SharingNoticeKind.Published) });
+        Assert.False(hidden.Update(Aria, hiddenEnd, LiveView.Idle, At(12)).Visible);
+    }
+
+    [Fact]
+    public void TrySendingAgain_IsNotOffered_WhileANewerBuildIsUnderWay()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        var waiting = harness.Sharing.View.With(notice: new SharingNotice(Aria, SharingNoticeKind.PublishWaiting));
+        Assert.True(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Aria));
+        Assert.False(LivePublisher.OffersSendAgain(waiting, Build(1), Aria));
+        Assert.False(LivePublisher.OffersSendAgain(waiting, Build(1) with { Waiting = true }, Aria));
+        Assert.True(LivePublisher.OffersSendAgain(waiting, Build(1) with { ContentId = Bram }, Aria));
+        Assert.False(LivePublisher.OffersSendAgain(harness.Sharing.View, LiveView.Idle, Aria));
+        Assert.False(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Bram));
     }
 
     [Fact]

@@ -179,6 +179,7 @@ internal static class SharingText
         SharingNoticeKind.Resumed => "Sharing is on again. Your Active Plate is being shared.",
         SharingNoticeKind.PublishUnrecorded => "Your Active Plate is shared, but this PC couldn't record it. It may be sent once more, which changes nothing.",
         SharingNoticeKind.PublishStopped => "Sending was stopped. If the server had already received your Plate it may be shared; otherwise it waits on this PC, and is sent when you try again or save it again.",
+        SharingNoticeKind.PublishWithdrawn => "Sending stopped, since that Plate is no longer your Active Plate. The version shared before stays up, unless the server had already received this one.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

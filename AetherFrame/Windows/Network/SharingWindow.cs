@@ -516,7 +516,7 @@ internal sealed class SharingWindow : Window
             }
         }
 
-        if (view.Notice is { Kind: SharingNoticeKind.PublishWaiting } waiting && waiting.ContentId == entry.ContentId)
+        if (LivePublisher.OffersSendAgain(view, liveView, entry.ContentId))
         {
             using (ImRaii.Disabled(view.Busy))
             {
