@@ -76,8 +76,12 @@ public sealed class ServerOptions
     /// <summary>The folder the daily backup is written to (N2-8), or empty for none.</summary>
     public string BackupFolder { get; set; } = "";
 
-    /// <summary>The oldest plugin version the server answers, told to plugins by <c>/v1/status</c>.</summary>
-    public string MinimumPlugin { get; set; } = "0.1.6";
+    /// <summary>
+    /// The oldest plugin version the server answers, told to plugins by <c>/v1/status</c>. It is 0.1.9
+    /// since that release: an earlier build draws its frames, cut to fit, as grey boxes (ROADMAP.md,
+    /// section 5, frames that fit), so it is asked to update before it shares.
+    /// </summary>
+    public string MinimumPlugin { get; set; } = "0.1.9";
 
     /// <summary>
     /// The Lodestone relay (docs/networking/Runbook.md), as <c>address:port</c>, or empty to reach

@@ -33,7 +33,7 @@ public class CharacterEndpointTests
         var status = await response.Content.ReadFromJsonElementAsync();
         Assert.Equal(ProtocolConstants.ProtocolVersion, status.GetProperty("protocolVersion").GetInt32());
         Assert.Equal(1, status.GetProperty("api").GetInt32());
-        Assert.Equal("0.1.6", status.GetProperty("minimumPlugin").GetString());
+        Assert.Equal("0.1.9", status.GetProperty("minimumPlugin").GetString());
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
         Assert.Contains("nosniff", response.Headers.GetValues("X-Content-Type-Options"));
     }
