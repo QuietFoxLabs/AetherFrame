@@ -13,7 +13,7 @@ where each runtime copy was made from.
 
 ## Hosted artwork (art on demand)
 
-Every runtime PNG under `Components/`, except Celestial Dream's, is hosted: players download it the first time they use it, from `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/<commit>/AetherFrame/Assets/<path>`, and the plugin uses it only when its length and SHA-256 are exactly those in `ArtFiles.txt` and the compiled `Domain/Components/ArtFiles.g.cs` ("Art on demand" in `docs/networking/DecisionRegister.md`).
+Every runtime PNG under `Components/`, except Celestial Dream's, is hosted. Once Art Styles leave the plugin (the change after the one that adds this table), players download each the first time they use it, from `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/<commit>/AetherFrame/Assets/<path>`, and the plugin uses it only when its length and SHA-256 are exactly those in `ArtFiles.txt` and the compiled `Domain/Components/ArtFiles.g.cs` ("Art on demand" in `docs/networking/DecisionRegister.md`).
 
 - **Hosted bytes never change.** A file in the table keeps its bytes and its commit forever; new art gets a new artwork id and a new file. `tools/art/write_art_files.py` refuses a recorded file whose bytes differ, or one that is gone.
 - **Adding hosted art** takes two commits on one branch: the first adds the PNGs (and whatever else the art pipeline writes); the second runs `python tools/art/write_art_files.py --write --commit <the first commit's full id>`. Merge the pull request with a merge commit, never a squash or rebase, so the first commit stays in master's history.

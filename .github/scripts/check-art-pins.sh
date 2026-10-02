@@ -49,6 +49,7 @@ if [ "$base" = "$(git rev-parse HEAD)" ]; then
   base=$(git rev-parse HEAD^1 2>/dev/null || true)
 fi
 
+base_failures=0
 if [ -n "$base" ] && git cat-file -e "$base:$table" 2>/dev/null; then
   while read -r commit sha length path; do
     path=${path%$'\r'}
@@ -58,13 +59,23 @@ if [ -n "$base" ] && git cat-file -e "$base:$table" 2>/dev/null; then
 
     if ! grep -qxF "$commit $sha $length $path" <(tr -d '\r' < "$table"); then
       echo "::error file=$table::$path was hosted at $commit as $length bytes, $sha, before this change; hosted files never change or go"
-      failures=$((failures + 1))
+      base_failures=$((base_failures + 1))
     fi
   done < <(git show "$base:$table")
+  echo "Checked against the table at $base: nothing hosted there changed or went, unless reported above."
+else
+  echo "No earlier table to check against (no base commit, or the base has no $table)."
+fi
+
+if [ "$base_failures" -ne 0 ]; then
+  echo "$base_failures files the base branch hosted changed or went."
 fi
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures of $checked hosted files failed their pin check."
+fi
+
+if [ "$failures" -ne 0 ] || [ "$base_failures" -ne 0 ]; then
   exit 1
 fi
 

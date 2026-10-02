@@ -19,10 +19,12 @@ namespace AetherFrame.Services.Art;
 ///
 /// <para><b>The cache.</b> One file per hosted file, named by its SHA-256
 /// (<c>&lt;config&gt;/artwork-cache/&lt;sha256&gt;.png</c>), so two game clients sharing the folder
-/// never disagree about a name. A download is written to a temporary file and moved into place, never
-/// over an existing copy. The folder is listed once, off the draw thread, when the store is made;
-/// until then hosted artwork is <see cref="ArtState.Checking"/>. A copy that fails its check when
-/// read is deleted, and the artwork is downloadable again.</para>
+/// never disagree about a name. A download is written to a temporary file and moved into place; a
+/// copy already there is kept when it checks out and replaced when it is damaged. The folder is
+/// listed once, off the draw thread, when the store is made; until then hosted artwork is
+/// <see cref="ArtState.Checking"/>. A copy that fails its check when read is deleted, and the
+/// artwork is downloadable again; one that can't be deleted, or can't be read, fails until the
+/// player tries again, which downloads it again.</para>
 ///
 /// <para><b>Downloads.</b> Only through <see cref="Downloader"/>, which only the networking flavour
 /// sets (decision R3): without one, hosted artwork that isn't on this PC is
@@ -192,7 +194,7 @@ internal sealed class ArtStore : IArtSource, IDisposable
                     {
                         // Downloading again would only meet the same copy: wait for the player instead.
                         Fail(file, "a damaged copy on this PC couldn't be removed");
-                        log($"AetherFrame found a damaged copy of the artwork {art.Id} that it couldn't remove ({path}).");
+                        log($"AetherFrame found a damaged copy of the artwork {art.Id} in its artwork cache that it couldn't remove.");
                     }
 
                     throw new InvalidDataException("The downloaded artwork was damaged.");
@@ -376,7 +378,7 @@ internal sealed class ArtStore : IArtSource, IDisposable
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            log("AetherFrame couldn't list its downloaded artwork (" + e.Message + "); it downloads again when used.");
+            log("AetherFrame couldn't list its downloaded artwork (" + e.GetType().Name + "); it downloads again when used.");
         }
         finally
         {
@@ -453,13 +455,13 @@ internal sealed class ArtStore : IArtSource, IDisposable
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             states[file.Sha256] = new ArtStatus(ArtState.Failed, Total: file.Length, Problem: "it couldn't be saved on this PC");
-            log($"AetherFrame couldn't save the artwork {file.Path}: {e.Message}.");
+            log($"AetherFrame couldn't save the artwork {file.Path} ({e.GetType().Name}).");
         }
         catch (Exception e)
         {
             // Never left Queued or Downloading for the session.
             states[file.Sha256] = new ArtStatus(ArtState.Failed, Total: file.Length, Problem: "something went wrong");
-            log($"AetherFrame couldn't download the artwork {file.Path}: {e}");
+            log($"AetherFrame couldn't download the artwork {file.Path} ({e.GetType().Name}).");
         }
         finally
         {

@@ -315,6 +315,62 @@ public class ArtOnDemandTests
     }
 
     [Fact]
+    public async Task ACopyAnotherProgramHolds_FailsAfterAFewTries_AndTryAgainDownloadsIt()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return; // Elsewhere a file held open can still be read.
+        }
+
+        using var folder = new TempDirectory();
+        var (art, file, bytes) = Hosted("Components/Set/Set_Locked.png", 200);
+        var cache = Path.Combine(folder.Path, ArtStore.CacheFolderName);
+        Directory.CreateDirectory(cache);
+        var copy = Path.Combine(cache, file.Sha256 + ".png");
+        File.WriteAllBytes(copy, bytes);
+        var calls = 0;
+        using var store = Store(folder, [], _ => null, path => path == file.Path ? file : null);
+        store.Downloader = (_, _, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(bytes.ToArray());
+        };
+        await store.Idle();
+
+        using (new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.ThrowsAny<IOException>(() => store.ReadVerified(art));
+            var held = store.Status(art);
+            Assert.Equal(ArtState.Failed, held.State);
+            Assert.Equal("the copy on this PC couldn't be read", held.Problem);
+            store.Request([art], retryFailed: false);
+            await store.Idle();
+            Assert.Equal(0, calls);
+        }
+
+        store.Request([art], retryFailed: true);
+        await store.Idle();
+        Assert.Equal(1, calls);
+        Assert.Equal(ArtState.Cached, store.Status(art).State);
+        Assert.Equal(bytes, store.ReadVerified(art));
+    }
+
+    [Fact]
+    public async Task AnUnexpectedFailure_EndsFailed_NeverStuckDownloading()
+    {
+        using var folder = new TempDirectory();
+        var (art, file, _) = Hosted("Components/Set/Set_Odd.png", 50);
+        using var store = Store(folder, [], _ => null, path => path == file.Path ? file : null);
+        store.Downloader = (_, _, _) => throw new InvalidOperationException("unexpected");
+        await store.Idle();
+
+        store.Request([art], retryFailed: false);
+        await store.Idle();
+
+        Assert.Equal(new ArtStatus(ArtState.Failed, Total: 50, Problem: "something went wrong"), store.Status(art));
+    }
+
+    [Fact]
     public async Task ADamagedCopyFoundOnSaving_IsReplaced_AndAGoodOneIsKept()
     {
         using var folder = new TempDirectory();

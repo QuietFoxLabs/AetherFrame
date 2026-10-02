@@ -58,7 +58,8 @@ public interface IArtSource
     /// <summary>
     /// Off the draw thread: the artwork's bytes, from the plugin assembly or from its downloaded
     /// copy, whose length and SHA-256 are checked first (a copy that fails is deleted, and the
-    /// artwork is downloadable again). Throws when they can't be read.
+    /// artwork is downloadable again; when it can't be deleted, or can't be read, the artwork fails
+    /// until the player tries again). Throws when they can't be read.
     /// </summary>
     byte[] ReadVerified(BuiltInArtAsset art);
 }
