@@ -569,6 +569,7 @@ public partial class CharacterSharingTests
         internal SharingHarness(bool load = true, bool background = false)
         {
             Background = background;
+            ActivePlateOf = ActiveIn;
             Log = new List<string>();
             Root = Path.Combine(Path.GetTempPath(), "aetherframe-sharing-" + Guid.NewGuid().ToString("N"));
             Blobs = new MemoryKeyBlobs();
@@ -581,7 +582,7 @@ public partial class CharacterSharingTests
             {
                 ClockHook?.Invoke();
                 return Now;
-            }, CancellationToken.None, Log.Add);
+            }, CancellationToken.None, Log.Add, contentId => ActivePlateOf(contentId));
             if (load)
             {
                 Assert.True(Sharing.TryLoad());
@@ -591,6 +592,9 @@ public partial class CharacterSharingTests
         }
 
         internal bool Background { get; }
+
+        /// <summary>The Active Plates <see cref="Actives"/> holds: the lookup until a test replaces it.</summary>
+        private Guid? ActiveIn(ulong contentId) => Actives.TryGetValue(contentId, out var plate) ? plate : null;
 
         internal string Root { get; }
 
@@ -615,7 +619,7 @@ public partial class CharacterSharingTests
             {
                 ClockHook?.Invoke();
                 return Now;
-            }, CancellationToken.None, Log.Add);
+            }, CancellationToken.None, Log.Add, contentId => ActivePlateOf(contentId));
             Assert.True(Sharing.TryLoad());
             WaitIdle();
         }
@@ -651,8 +655,17 @@ public partial class CharacterSharingTests
         }
 
         /// <summary>Hands a candidate for the Active Plate to the service, as the live publisher does.</summary>
-        internal bool Publish(SnapshotCandidate candidate, ulong contentId = Aria) =>
-            Sharing.TryPublish(contentId, candidate, candidate.PlateId);
+        internal bool Publish(SnapshotCandidate candidate, ulong contentId = Aria)
+        {
+            Actives[contentId] = candidate.PlateId;
+            return Sharing.TryPublish(contentId, candidate);
+        }
+
+        /// <summary>Each character's Active Plate, as the service reads it; a test may replace the lookup.</summary>
+        internal Dictionary<ulong, Guid?> Actives { get; } = new();
+
+        /// <summary>The service's lookup of a character's Active Plate.</summary>
+        internal Func<ulong, Guid?> ActivePlateOf { get; set; } = null!;
 
         /// <summary>The persona session's stand-in: the work runs here, or on another thread.</summary>
         private bool RunWork(string name, Action<PersonaManager> work)

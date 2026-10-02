@@ -335,6 +335,9 @@ public partial class CharacterSharingTests
                 Log = harness.Log.Add,
             });
             Publisher = new LivePublisher(harness.Sharing, check, () => LoggedIn is { } contentId ? new CharacterContext(contentId, Name, "Gilgamesh") : null, contentId => contentId == Aria ? Active : null, () => LibraryLoaded);
+
+            // The service reads the same Active Plate the live publisher does.
+            harness.ActivePlateOf = contentId => contentId == Aria ? Active : null;
         }
 
         internal LivePublisher Publisher { get; }

@@ -383,7 +383,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 AetherFrameBuildInfo.Current.ProductVersion,
                 () => DateTimeOffset.UtcNow,
                 ownedOperations.Stopping,
-                log.Information);
+                log.Information,
+                plateLibrary.GetActivePlateId);
             // Publishing the Active Plate live (N2-9c): a save, a new Active Plate, or sharing
             // starting or resuming builds a candidate with a share check of its own, a frame at a
             // time, and hands it to the sharing service.
@@ -397,7 +398,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // reads what the Sharing window reads, takes no focus, and stays out of the tutorial's
             // dimmed set, as the other sharing windows do: the dim covers the rectangle around the
             // windows in that set, and a corner window would stretch it over the game.
-            sharingProgressWindow = new SharingProgressWindow(characterSharing, livePublisher, () => characterIdentityService.CurrentCharacter)
+            sharingProgressWindow = new SharingProgressWindow(characterSharing, livePublisher, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId)
             {
                 OpenSharing = () =>
                 {

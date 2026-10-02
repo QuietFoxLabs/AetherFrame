@@ -97,13 +97,15 @@ internal sealed class SharingProgress
     private long workingShare;
     private TimeSpan workingSince;
     private long hiddenShare;
-    private (SharingProgressView View, long Share, TimeSpan At)? result;
+    private (SharingProgressView View, long Share, TimeSpan At, Guid Plate)? result;
 
     /// <summary>
     /// The window's view for this frame, given the character logged in (null for none), the sharing
-    /// service's view, the live publisher's view, and a monotonic <paramref name="now"/>.
+    /// service's view, the live publisher's view, a monotonic <paramref name="now"/>, and the
+    /// character's Active Plate: a waiting revision is offered to be sent again only while its Plate
+    /// is still that.
     /// </summary>
-    internal SharingProgressView Update(ulong? loggedIn, CharacterSharingView sharing, LiveView live, TimeSpan now)
+    internal SharingProgressView Update(ulong? loggedIn, CharacterSharingView sharing, LiveView live, TimeSpan now, Guid? activePlate = null)
     {
         ArgumentNullException.ThrowIfNull(sharing);
         ArgumentNullException.ThrowIfNull(live);
@@ -149,7 +151,7 @@ internal sealed class SharingProgress
 
                 if (publish is { Step: PublishStep.Ended, Outcome: { } outcome })
                 {
-                    Record(ResultOf(id, outcome), publish.Share, now);
+                    Record(ResultOf(id, outcome), publish.Share, now, outcome.Plate);
                 }
             }
         }
@@ -159,7 +161,7 @@ internal sealed class SharingProgress
             lastLive = live;
             if (live.ContentId == id && live.Share != 0 && !live.Building && ResultOf(id, live) is { } built)
             {
-                Record(built, live.Share, now);
+                Record(built, live.Share, now, default);
             }
         }
 
@@ -203,6 +205,13 @@ internal sealed class SharingProgress
             return SharingProgressView.Hidden;
         }
 
+        // A waiting revision of a Plate that isn't the Active Plate any more is never sent again:
+        // trying again then shares the Active Plate there is, if any.
+        if (shown.View.Action == SharingProgressAction.SendAgain && shown.Plate != activePlate)
+        {
+            return shown.View with { Action = activePlate is null ? SharingProgressAction.None : SharingProgressAction.ShareAgain };
+        }
+
         return shown.View;
     }
 
@@ -217,16 +226,22 @@ internal sealed class SharingProgress
     }
 
     /// <summary>
-    /// A share's result, kept unless it is older than the last result kept (a later build's
-    /// refusal outlasts an older send's outcome), or the player hid that share. It then sets how
-    /// old a share may be and still be shown.
+    /// A share's result, kept unless it is older than the last result (a later build's refusal
+    /// outlasts an older send's outcome), or the player hid that share. Either way a result no
+    /// older than the last sets how old a share may be and still be shown, so hiding a newer share
+    /// never lets an older one show again.
     /// </summary>
-    private void Record(SharingProgressView view, long share, TimeSpan now)
+    private void Record(SharingProgressView view, long share, TimeSpan now, Guid plate)
     {
-        if (share >= floor && share != hiddenShare)
+        if (share < floor)
         {
-            result = (view, share, now);
-            floor = share;
+            return;
+        }
+
+        floor = share;
+        if (share != hiddenShare)
+        {
+            result = (view, share, now, plate);
         }
     }
 

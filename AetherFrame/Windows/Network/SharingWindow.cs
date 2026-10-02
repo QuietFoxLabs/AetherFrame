@@ -516,7 +516,7 @@ internal sealed class SharingWindow : Window
             }
         }
 
-        if (LivePublisher.OffersSendAgain(view, liveView, entry.ContentId))
+        if (LivePublisher.OffersSendAgain(view, liveView, entry.ContentId, activePlateOf(entry.ContentId)))
         {
             using (ImRaii.Disabled(view.Busy))
             {

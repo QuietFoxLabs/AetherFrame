@@ -36,17 +36,19 @@ internal sealed class SharingProgressWindow : Window
     private readonly CharacterSharing sharing;
     private readonly LivePublisher live;
     private readonly Func<CharacterContext?> currentCharacter;
+    private readonly Func<ulong, Guid?> activePlateOf;
     private readonly SharingProgress progress = new();
     private readonly AetherWindowChrome chrome = new();
     private SharingProgressView view = SharingProgressView.Hidden;
     private bool shown;
 
-    internal SharingProgressWindow(CharacterSharing sharing, LivePublisher live, Func<CharacterContext?> currentCharacter)
+    internal SharingProgressWindow(CharacterSharing sharing, LivePublisher live, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf)
         : base("Sharing progress##AetherFrameSharingProgress", ToastFlags)
     {
         this.sharing = sharing ?? throw new ArgumentNullException(nameof(sharing));
         this.live = live ?? throw new ArgumentNullException(nameof(live));
         this.currentCharacter = currentCharacter ?? throw new ArgumentNullException(nameof(currentCharacter));
+        this.activePlateOf = activePlateOf ?? throw new ArgumentNullException(nameof(activePlateOf));
         RespectCloseHotkey = true;
         DisableWindowSounds = true;
         ShowCloseButton = false;
@@ -70,7 +72,8 @@ internal sealed class SharingProgressWindow : Window
             progress.Dismiss();
         }
 
-        view = progress.Update(currentCharacter()?.ContentId, sharing.View, live.View, TimeSpan.FromMilliseconds(Environment.TickCount64));
+        var character = currentCharacter()?.ContentId;
+        view = progress.Update(character, sharing.View, live.View, TimeSpan.FromMilliseconds(Environment.TickCount64), character is { } id ? activePlateOf(id) : null);
         shown = view.Visible;
         IsOpen = shown;
     }

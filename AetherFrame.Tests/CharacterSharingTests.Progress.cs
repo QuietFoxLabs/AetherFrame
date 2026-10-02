@@ -67,20 +67,30 @@ public partial class CharacterSharingTests
         };
 
         var share = 0;
+        var plate = Guid.NewGuid();
         foreach (var (kind, action) in cases)
         {
             var progress = new SharingProgress();
-            progress.Update(Aria, shared, LiveView.Idle, At(0));
-            var notice = new SharingNotice(Aria, kind);
+            progress.Update(Aria, shared, LiveView.Idle, At(0), plate);
+            var notice = new SharingNotice(Aria, kind, Plate: plate);
             var ended = shared.With(publish: new PublishStatus(Aria, ++share, PublishStep.Ended, notice));
-            var shown = progress.Update(Aria, ended, LiveView.Idle, At(1));
+            var shown = progress.Update(Aria, ended, LiveView.Idle, At(1), plate);
             Assert.Equal((SharingProgressStage.Problem, SharingText.Notice(notice), action), (shown.Stage, shown.Message, shown.Action));
 
             // It stays until the player closes it.
-            Assert.Equal(shown, progress.Update(Aria, ended, LiveView.Idle, At(600)));
+            Assert.Equal(shown, progress.Update(Aria, ended, LiveView.Idle, At(600), plate));
             progress.Dismiss();
-            Assert.False(progress.Update(Aria, ended, LiveView.Idle, At(601)).Visible);
+            Assert.False(progress.Update(Aria, ended, LiveView.Idle, At(601), plate).Visible);
         }
+
+        // A waiting revision of a Plate that isn't the Active Plate any more is never offered to
+        // be sent again: trying again shares the Active Plate there is, if any.
+        var waitingOne = shared.With(publish: new PublishStatus(Aria, ++share, PublishStep.Ended, new SharingNotice(Aria, SharingNoticeKind.PublishWaiting, Plate: plate)));
+        var other = new SharingProgress();
+        other.Update(Aria, shared, LiveView.Idle, At(0), plate);
+        Assert.Equal(SharingProgressAction.SendAgain, other.Update(Aria, waitingOne, LiveView.Idle, At(1), plate).Action);
+        Assert.Equal(SharingProgressAction.ShareAgain, other.Update(Aria, waitingOne, LiveView.Idle, At(2), Guid.NewGuid()).Action);
+        Assert.Equal(SharingProgressAction.None, other.Update(Aria, waitingOne, LiveView.Idle, At(3), null).Action);
     }
 
     [Fact]
@@ -176,6 +186,13 @@ public partial class CharacterSharingTests
         var olderShared = sendingOlder.With(publish: sendingOlder.Publish! with { Step = PublishStep.Ended, Outcome = new SharingNotice(Aria, SharingNoticeKind.Published) });
         Assert.Equal((SharingProgressStage.Problem, SharingText.CantShare), Stage(progress.Update(Aria, olderShared, refused, At(3))));
 
+        // Hiding the newer build's progress never lets the older send show again either.
+        var progress3 = new SharingProgress();
+        progress3.Update(Aria, sendingOlder, Build(2), At(0));
+        progress3.Dismiss();
+        Assert.False(progress3.Update(Aria, sendingOlder, refused, At(1)).Visible);
+        Assert.False(progress3.Update(Aria, olderShared, refused, At(2)).Visible);
+
         // Closed: the older share's progress and result stay out of sight too.
         progress.Dismiss();
         Assert.False(progress.Update(Aria, olderShared, refused, At(4)).Visible);
@@ -250,11 +267,12 @@ public partial class CharacterSharingTests
         harness.Sharing.Supersede(Aria);
         var build = harness.Sharing.BuildGeneration(Aria);
         var candidate = PublicationCandidates.Simple();
-        harness.Sharing.TryPublish(Aria, candidate, candidate.PlateId, build);
+        harness.Actives[Aria] = candidate.PlateId;
+        harness.Sharing.TryPublish(Aria, candidate, build);
         Assert.Equal(PublishStep.Sending, during);
         var handed = harness.Sharing.View.Publish!;
         Assert.True(handed.Share > build);
-        Assert.Equal(new PublishStatus(Aria, handed.Share, PublishStep.Ended, new SharingNotice(Aria, SharingNoticeKind.PublishWaiting), Build: build), handed);
+        Assert.Equal(new PublishStatus(Aria, handed.Share, PublishStep.Ended, new SharingNotice(Aria, SharingNoticeKind.PublishWaiting, Plate: candidate.PlateId), Build: build), handed);
         Assert.Contains("Sharing: sending the Active Plate came to TryLater (answer: 503).", harness.Log);
 
         // A waiting revision sent again is a later share of its own.
@@ -313,13 +331,18 @@ public partial class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         harness.Bound();
-        var waiting = harness.Sharing.View.With(notice: new SharingNotice(Aria, SharingNoticeKind.PublishWaiting));
-        Assert.True(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Aria));
-        Assert.False(LivePublisher.OffersSendAgain(waiting, Build(1), Aria));
-        Assert.False(LivePublisher.OffersSendAgain(waiting, Build(1) with { Waiting = true }, Aria));
-        Assert.True(LivePublisher.OffersSendAgain(waiting, Build(1) with { ContentId = Bram }, Aria));
-        Assert.False(LivePublisher.OffersSendAgain(harness.Sharing.View, LiveView.Idle, Aria));
-        Assert.False(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Bram));
+        var plate = Guid.NewGuid();
+        var waiting = harness.Sharing.View.With(notice: new SharingNotice(Aria, SharingNoticeKind.PublishWaiting, Plate: plate));
+        Assert.True(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Aria, plate));
+        Assert.False(LivePublisher.OffersSendAgain(waiting, Build(1), Aria, plate));
+        Assert.False(LivePublisher.OffersSendAgain(waiting, Build(1) with { Waiting = true }, Aria, plate));
+        Assert.True(LivePublisher.OffersSendAgain(waiting, Build(1) with { ContentId = Bram }, Aria, plate));
+        Assert.False(LivePublisher.OffersSendAgain(harness.Sharing.View, LiveView.Idle, Aria, plate));
+        Assert.False(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Bram, plate));
+
+        // Only while the waiting revision's Plate is the Active Plate.
+        Assert.False(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Aria, Guid.NewGuid()));
+        Assert.False(LivePublisher.OffersSendAgain(waiting, LiveView.Idle, Aria, null));
     }
 
     [Fact]

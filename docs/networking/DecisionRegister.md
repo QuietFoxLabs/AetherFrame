@@ -1498,7 +1498,7 @@ P2 leaves open how a preview build reaches a second player, and NETWORK2's secti
 - A small progress window follows each share: the step it is at, then that the Plate is shared (closing by itself after five seconds), or why it isn't, in the Sharing window's words, with Try again and Close. It appears only for the logged-in character, while it shares, takes no keyboard focus when it appears, and the player can hide it. It shows the newest share under way, and never an older share's progress or result in place of a newer one's result.
 - The Sharing window offers **Share it now** when the character's Active Plate isn't the one the server shows and nothing is being built or sent for it: after arriving with such a Plate (nothing is published for arriving), or after a share that didn't go through. It shares the Active Plate as a save would.
 - A send for another of the player's characters, still under way after a switch of characters or a logout, keeps the sharing service busy; the Sharing window then names that character and offers **Stop sending** for it, whichever character is logged in.
-- A send under way whose Plate is no longer the character's Active Plate (there is none any more, or another Plate that can't be shared took its place) stops by itself, its revision is dropped rather than left to be sent later, and the Sharing window and the progress window say so ("Sending stopped, since that Plate is no longer your Active Plate."). A logout or a switch of characters never stops a send.
+- **A revision is sent only while its Plate is the character's Active Plate.** The sharing service reads the Active Plate itself, as the live publisher and the Sharing window do, and checks it where every revision is sent: when a send is handed over, and again under its lock just before the upload. A waiting revision of a Plate that is no longer the Active Plate (there is none any more, or another Plate took its place) is dropped there, unsent and never sent later; a send already uploading stops when the Active Plate goes, or is replaced by a Plate that can't be shared, and its revision is dropped too. **Try sending again**, in the Sharing window and the progress window, is offered only while the waiting revision's Plate is the Active Plate; otherwise the progress window's **Try again** shares the Active Plate there is. The Sharing window then says "Sending stopped, since that Plate is no longer your Active Plate."; the progress window shows the new Active Plate's refusal when it couldn't be shared, and the withdrawal when there is no Active Plate. A logout or a switch of characters never stops a send.
 
 **What stays as it was:**
 - only a character that turned sharing on and passed the check shares anything (C4's "Off by default"); nothing is sent for any other, and nothing on arriving at a character;
@@ -1524,7 +1524,11 @@ Its recheck, of `2563b60` (two lenses, each finding challenged), confirmed those
 - the progress window pointed to the Sharing window's Stop sending while another character's publish was still signing, when there is nothing to stop: it does so only while that publish sends;
 - ROADMAP.md's marker on the share check's signings said the owner's direction retired a rule C3 still holds: reworded.
 
-A final recheck is due before the change merges.
+A final recheck, of `1d47ead`, confirmed one major point and three minor ones, all applied in the next commit:
+- a waiting revision of a Plate that was no longer the Active Plate could still be sent by Try sending again, which was still offered, and a resend handed over just before the Active Plate changed had no upload for the one-shot stop to find: the rule is now one invariant at the send itself (above), with tests that drive the real path (a busy server, then another Plate that can't be shared, then Try sending again; Try sending again with no Active Plate; the Active Plate's own revision still sent; and the Active Plate changing during a resend's status check);
+- hiding a newer build's progress let an older send show again with its result: a newer result now raises the bar even when its share is hidden;
+- Try sending again's offer, covered by the invariant;
+- this entry and the CHANGELOG said the progress window reports a withdrawn send even when it shows the new Plate's refusal: reworded to what the code does.
 
 ## Gates
 

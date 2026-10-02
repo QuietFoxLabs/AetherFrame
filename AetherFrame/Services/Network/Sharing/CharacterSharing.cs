@@ -48,9 +48,11 @@ internal enum SharingNoticeKind
 
 /// <summary>
 /// A notice for one character, or for every character when <see cref="ContentId"/> is 0, with the
-/// server's reason code for a refused publish, or the commit's result for one not stored.
+/// server's reason code for a refused publish, or the commit's result for one not stored. For a
+/// revision left waiting, <see cref="Plate"/> is the local Plate it is of, so it is offered to be
+/// sent again only while that is still the Active Plate.
 /// </summary>
-internal sealed record SharingNotice(ulong ContentId, SharingNoticeKind Kind, string? Detail = null);
+internal sealed record SharingNotice(ulong ContentId, SharingNoticeKind Kind, string? Detail = null, Guid Plate = default);
 
 /// <summary>Where a publish of a character's Active Plate stands.</summary>
 internal enum PublishStep
@@ -163,6 +165,7 @@ internal sealed class CharacterSharing
     private readonly SharingClient client;
     private readonly Version pluginVersion;
     private readonly Func<DateTimeOffset> utcNow;
+    private readonly Func<ulong, Guid?> activePlateOf;
     private readonly CancellationToken stopping;
     private readonly Action<string> log;
     private readonly object gate = new();
@@ -187,7 +190,8 @@ internal sealed class CharacterSharing
         Version pluginVersion,
         Func<DateTimeOffset> utcNow,
         CancellationToken stopping,
-        Action<string> log)
+        Action<string> log,
+        Func<ulong, Guid?> activePlateOf)
     {
         this.tryRun = tryRun ?? throw new ArgumentNullException(nameof(tryRun));
         this.file = file ?? throw new ArgumentNullException(nameof(file));
@@ -197,6 +201,7 @@ internal sealed class CharacterSharing
         this.utcNow = utcNow ?? throw new ArgumentNullException(nameof(utcNow));
         this.stopping = stopping;
         this.log = log ?? throw new ArgumentNullException(nameof(log));
+        this.activePlateOf = activePlateOf ?? throw new ArgumentNullException(nameof(activePlateOf));
     }
 
     internal CharacterSharingView View => view;
@@ -433,25 +438,26 @@ internal sealed class CharacterSharing
     /// Publishes <paramref name="candidate"/>, built from the character's Active Plate as it was
     /// saved (C3, as the owner's direction of October 2, 2026 amends it): signed under the
     /// character's key with its binding's profile id (C4) into the outbox, then sent, with no
-    /// screen before it. Only a candidate for <paramref name="activePlate"/>, the character's Active
-    /// Plate now, is signed, and only while the character shares. A candidate built under
-    /// <paramref name="generation"/> (<see cref="BuildGeneration"/>) that a newer build has made out
-    /// of date is never signed when that happened before its signing, and never sent when it
-    /// happened before its send began: its revision then waits on this PC, and the newer build's
-    /// replaces it. A send that has begun is stopped only by <see cref="StopOlderSend"/>, once a
-    /// newer candidate is ready to take its place.
+    /// screen before it. Only a candidate for the character's Active Plate (the service's own
+    /// lookup) is signed, and only while the character shares; and like every revision, it is sent
+    /// only while its Plate is still the Active Plate (<see cref="SendWaiting"/>). A candidate built
+    /// under <paramref name="generation"/> (<see cref="BuildGeneration"/>) that a newer build has
+    /// made out of date is never signed when that happened before its signing, and never sent when
+    /// it happened before its send began: its revision then waits on this PC, and the newer build's
+    /// replaces it. A send that has begun is stopped by <see cref="StopOlderSend"/>, once a newer
+    /// candidate is ready to take its place, or by <see cref="StopStaleSend"/>.
     /// </summary>
-    internal bool TryPublish(ulong contentId, SnapshotCandidate candidate, Guid? activePlate, long? generation = null)
+    internal bool TryPublish(ulong contentId, SnapshotCandidate candidate, long? generation = null)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         return Run("sharing publish", manager =>
         {
-            if (!IsCurrent(contentId, generation))
+            if (!IsCurrent(contentId, generation) || activePlateOf(contentId) != candidate.PlateId)
             {
                 return;
             }
 
-            if (view.Find(contentId) is not { Stage: SharingStage.Shared, ReplacingKey: false, ProfileId: { } binding } entry || candidate.PlateId != activePlate)
+            if (view.Find(contentId) is not { Stage: SharingStage.Shared, ReplacingKey: false, ProfileId: { } binding } entry)
             {
                 return;
             }
@@ -462,10 +468,11 @@ internal sealed class CharacterSharing
             }
 
             // The checks above may have asked the server: a newer build that started meanwhile
-            // takes this candidate's place, and this one is never signed.
-            if (!IsCurrent(contentId, generation))
+            // takes this candidate's place, and one whose Plate isn't Active any more is never
+            // signed.
+            if (!IsCurrent(contentId, generation) || activePlateOf(contentId) != candidate.PlateId)
             {
-                log("Sharing: a newer build of the Active Plate started, so the older one wasn't signed.");
+                log("Sharing: the Active Plate changed, so the candidate built before wasn't signed.");
                 return;
             }
 
@@ -477,18 +484,41 @@ internal sealed class CharacterSharing
                 return;
             }
 
-            SendWaiting(manager, entry, key, binding, generation, candidate.PlateId);
+            SendWaiting(manager, entry, key, binding, generation);
         }, publishing: contentId, build: generation);
     }
 
-    /// <summary>Sends the character's waiting revision again, after the server couldn't take it.</summary>
+    /// <summary>
+    /// Sends the character's waiting revision again, after the server couldn't take it: only while
+    /// its Plate is the character's Active Plate, checked at once and again just before the upload.
+    /// One of a Plate that isn't Active any more is dropped, never sent.
+    /// </summary>
     internal bool TrySendWaiting(ulong contentId) => Run("sharing send", manager =>
     {
-        if (view.Find(contentId) is { Stage: SharingStage.Shared, ReplacingKey: false, ProfileId: { } binding } entry && SigningKey(manager, entry) is { } key && StatusAllows(contentId))
+        if (view.Find(contentId) is not { Stage: SharingStage.Shared, ReplacingKey: false, ProfileId: { } binding } entry)
         {
-            SendWaiting(manager, entry, key, binding, generation: null, PublicationSend.WaitingPlate(publications, entry.Slot, binding));
+            return;
+        }
+
+        if (PublicationSend.WaitingPlate(publications, entry.Slot, binding) is { } waiting && waiting != activePlateOf(contentId))
+        {
+            Withdraw(entry);
+            return;
+        }
+
+        if (SigningKey(manager, entry) is { } key && StatusAllows(contentId))
+        {
+            SendWaiting(manager, entry, key, binding, generation: null);
         }
     }, publishing: contentId);
+
+    /// <summary>The character's waiting revision is of a Plate that isn't the Active Plate any more: it is dropped, and the notice says so.</summary>
+    private void Withdraw(SharingCharacter entry)
+    {
+        log("Sharing: a waiting revision was dropped, since its Plate is no longer the Active Plate.");
+        PublicationSend.DropAll(publications, entry.Slot);
+        Notify(entry.ContentId, SharingNoticeKind.PublishWithdrawn);
+    }
 
     /// <summary>Stops a send under way, whichever character it is for: the revision waits on this PC, and the next save or a try again sends it.</summary>
     internal void StopSending()
@@ -730,63 +760,85 @@ internal sealed class CharacterSharing
     }
 
     /// <summary>Sends the waiting revision and says what came of it; a takeover is recorded as <see cref="Send"/> records one.</summary>
-    private void SendWaiting(PersonaManager manager, SharingCharacter entry, PersonaPublicKey key, ProfileId binding, long? generation, Guid? plate)
+    private void SendWaiting(PersonaManager manager, SharingCharacter entry, PersonaPublicKey key, ProfileId binding, long? generation)
     {
         SendOutcome sent;
         bool stopped;
-        bool gaveWay;
-        bool withdrawn;
+        Upload? mine = null;
         using (var sending = CancellationTokenSource.CreateLinkedTokenSource(stopping))
         {
-            var mine = new Upload(sending, entry.ContentId, plate);
-            lock (gate)
+            // Asked just before the upload, with the Plate the waiting revision is of. Checked and
+            // recorded together, under the lock: a revision is sent only while its Plate is the
+            // character's Active Plate (otherwise it is dropped), and only while no newer build has
+            // started (otherwise it waits, and the newer build's replaces it). Once recorded, a
+            // newer candidate finds the send to stop (StopOlderSend), and so does the Active Plate
+            // going (StopStaleSend).
+            SendAdmission Admit(Guid plate)
             {
-                // Checked and recorded together, so a newer build either finds this send to stop
-                // (StopOlderSend), or has made it out of date here, before anything is sent: then
-                // the revision waits, and the newer build's replaces it.
-                if (generation is { } built && builds.GetValueOrDefault(entry.ContentId) != built)
+                lock (gate)
                 {
-                    mine = null;
-                }
-                else
-                {
+                    if (activePlateOf(entry.ContentId) != plate)
+                    {
+                        return SendAdmission.NotActive;
+                    }
+
+                    if (generation is { } built && builds.GetValueOrDefault(entry.ContentId) != built)
+                    {
+                        return SendAdmission.Superseded;
+                    }
+
+                    mine = new Upload(sending, entry.ContentId, plate);
                     upload = mine;
                     if (view.Publish is { Step: PublishStep.Signing } publish && publish.ContentId == entry.ContentId)
                     {
                         view = view.With(publish: publish with { Step = PublishStep.Sending });
                     }
-                }
-            }
 
-            if (mine is null)
-            {
-                log("Sharing: a newer build of the Active Plate started, so the one just signed waits for it.");
-                return;
+                    return SendAdmission.Send;
+                }
             }
 
             try
             {
-                sent = PublicationSend.SendWaiting(manager, publications, client, entry.Slot, key, binding, utcNow, sending.Token);
+                sent = PublicationSend.SendWaiting(manager, publications, client, entry.Slot, key, binding, utcNow, Admit, sending.Token);
             }
             finally
             {
                 lock (gate)
                 {
-                    if (ReferenceEquals(upload, mine))
+                    if (mine is not null && ReferenceEquals(upload, mine))
                     {
                         upload = null;
                     }
-
-                    gaveWay = mine.GaveWay;
-                    withdrawn = mine.Withdrawn;
                 }
             }
 
             stopped = sending.IsCancellationRequested && !stopping.IsCancellationRequested;
         }
 
+        bool gaveWay;
+        bool withdrawn;
+        lock (gate)
+        {
+            gaveWay = mine?.GaveWay == true;
+            withdrawn = mine?.Withdrawn == true;
+        }
+
         // The server's answer, or none: a busy server and no answer in time look alike to the player.
         log($"Sharing: sending the Active Plate came to {sent.Result} (answer: {(sent.Status is { } status ? ((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture) : "none")}).");
+        if (sent.Result == SendResult.Superseded)
+        {
+            log("Sharing: a newer build of the Active Plate started, so the one just signed waits for it.");
+            return;
+        }
+
+        if (sent.Result == SendResult.Withdrawn)
+        {
+            // Dropped unsent: its Plate isn't the Active Plate any more.
+            Notify(entry.ContentId, SharingNoticeKind.PublishWithdrawn, plate: sent.Plate);
+            return;
+        }
+
         if (gaveWay && sent.Result == SendResult.TryLater)
         {
             // Stopped for a newer candidate, which replaces the revision left waiting: nothing to say.
@@ -799,7 +851,7 @@ internal sealed class CharacterSharing
             // Stopped because its Plate is no longer the Active Plate: it is never sent later.
             log("Sharing: the send stopped, since its Plate is no longer the Active Plate.");
             PublicationSend.DropAll(publications, entry.Slot);
-            Notify(entry.ContentId, SharingNoticeKind.PublishWithdrawn);
+            Notify(entry.ContentId, SharingNoticeKind.PublishWithdrawn, plate: sent.Plate);
             return;
         }
 
@@ -828,7 +880,7 @@ internal sealed class CharacterSharing
                 TakenOver(entry);
                 break;
             case SendResult.TryLater:
-                Notify(entry.ContentId, stopped ? SharingNoticeKind.PublishStopped : SharingNoticeKind.PublishWaiting);
+                Notify(entry.ContentId, stopped ? SharingNoticeKind.PublishStopped : SharingNoticeKind.PublishWaiting, plate: sent.Plate);
                 break;
             case SendResult.KeyUnavailable:
                 Notify(entry.ContentId, SharingNoticeKind.KeyUnavailable);
@@ -1045,7 +1097,7 @@ internal sealed class CharacterSharing
         return true;
     }
 
-    private void Notify(ulong contentId, SharingNoticeKind kind, string? detail = null) => Update(v => v.With(notice: new SharingNotice(contentId, kind, detail)));
+    private void Notify(ulong contentId, SharingNoticeKind kind, string? detail = null, Guid plate = default) => Update(v => v.With(notice: new SharingNotice(contentId, kind, detail, plate)));
 
     /// <summary>Changes the view, inside the lock, from the view as it is then: a change made on another thread is never lost.</summary>
     private void Update(Func<CharacterSharingView, CharacterSharingView> change)

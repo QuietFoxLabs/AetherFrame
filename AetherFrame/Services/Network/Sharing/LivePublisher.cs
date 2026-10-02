@@ -91,10 +91,12 @@ internal sealed class LivePublisher : IDisposable
 
     /// <summary>
     /// Whether the Sharing window offers to send the character's waiting revision again: the server
-    /// couldn't take it, and no newer build of the Active Plate is under way, which would replace it.
+    /// couldn't take it, its Plate is still the Active Plate, and no newer build of the Active Plate
+    /// is under way, which would replace it.
     /// </summary>
-    internal static bool OffersSendAgain(CharacterSharingView sharing, LiveView live, ulong contentId) =>
+    internal static bool OffersSendAgain(CharacterSharingView sharing, LiveView live, ulong contentId, Guid? activePlate) =>
         sharing.Notice is { Kind: SharingNoticeKind.PublishWaiting } waiting && waiting.ContentId == contentId
+        && activePlate is { } plate && waiting.Plate == plate
         && !(live.ContentId == contentId && live.Building);
 
     /// <summary>One frame's work: the framework thread only.</summary>
@@ -233,7 +235,7 @@ internal sealed class LivePublisher : IDisposable
             return;
         }
 
-        if (sharing.TryPublish(target.ContentId, waiting, active, target.Generation))
+        if (sharing.TryPublish(target.ContentId, waiting, target.Generation))
         {
             view = LiveView.Idle;
             Finish();
