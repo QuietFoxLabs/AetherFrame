@@ -45,6 +45,14 @@ internal static class ProfileRenderer
     private static readonly Func<TextProfileElement, float?> MeasureText = static element =>
         measureFonts is { } fonts && ProfileTextRenderer.TryMeasureNaturalWidth(element, fonts, out var width) ? width : null;
 
+    // The pictures' sizes, for the portrait's frame in Fit mode: the loaded texture's, else the file
+    // header's (what the snapshot measures too), cached by the image cache.
+    private static Services.ImageTextureCache? measureImages;
+    private static readonly Func<ImageProfileElement, Vector2?> MeasureImage = static image =>
+        measureImages is { } images && image.AssetId != Guid.Empty && images.GetNativeSize(image.AssetId) is { } size
+            ? new Vector2(size.Width, size.Height)
+            : null;
+
     /// <summary>
     /// Draws the full logical canvas starting at <paramref name="canvasOrigin"/> in screen space,
     /// uniformly scaled by <paramref name="scale"/> from the profile's own logical canvas size.
@@ -80,8 +88,10 @@ internal static class ProfileRenderer
         // layers around them (see ComponentPaintPlan). Without Components it is just the elements.
         // The Name Backing tracks the name's measured text (render thread only, like the buffers).
         measureFonts = resources.Fonts;
-        ComponentPaintPlan.Build(profile, DrawnBuffer, BuiltInComponentCatalog.Instance, PaintPlanBuffer, MeasureText);
+        measureImages = resources.Images;
+        ComponentPaintPlan.Build(profile, DrawnBuffer, BuiltInComponentCatalog.Instance, PaintPlanBuffer, MeasureText, MeasureImage);
         measureFonts = null;
+        measureImages = null;
         foreach (var step in PaintPlanBuffer)
         {
             if (step.Element is { } element)

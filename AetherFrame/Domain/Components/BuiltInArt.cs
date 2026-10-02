@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace AetherFrame.Domain.Components;
 
@@ -17,8 +18,10 @@ namespace AetherFrame.Domain.Components;
 /// it when it carries the artwork (not a filesystem path; see <see cref="AssetPath"/> for where a
 /// downloaded copy comes from). Always an 8-bit RGBA (or, for opaque art, RGB) PNG (see <c>BundledArtImage</c>).</param>
 /// <param name="PixelWidth">The runtime PNG's width, in pixels.</param>
-/// <param name="PixelHeight">The runtime PNG's height, in pixels. The artwork is always drawn at this
-/// aspect ratio (fitted inside its placement box, never visibly stretched: see <c>ComponentPaintPlan</c>).</param>
+/// <param name="PixelHeight">The runtime PNG's height, in pixels. The artwork is drawn at this aspect
+/// ratio (fitted inside its placement box, never visibly stretched: see <c>ComponentPaintPlan</c>),
+/// except where it is cut to fit: <see cref="Slices"/> and <see cref="Frame"/>, whose caps and
+/// ornaments still keep it.</param>
 /// <param name="Tintable">True when the artwork is white/greyscale and takes the Component's color;
 /// false draws its own colors, with only the color's alpha applied.</param>
 /// <param name="DefaultOpacity">Alpha of the definition's default color.</param>
@@ -57,6 +60,11 @@ public sealed record BuiltInArtAsset(
     /// viewer, so they are frozen with the artwork's id: different cuts need a new id.</summary>
     public ArtSlices? Slices { get; init; }
 
+    /// <summary>How a frame (a Plate Frame or a Portrait Frame) is cut so its drawing meets the edges
+    /// of any box, or null when it is drawn whole at its own aspect ratio. Frozen with the artwork's
+    /// id like <see cref="Slices"/>, for the same reason.</summary>
+    public ArtFrameSlices? Frame { get; init; }
+
     private static string AssetPathOf(string resourceName)
     {
         var name = resourceName.StartsWith(BuiltInArtCatalog.ResourcePrefix, StringComparison.Ordinal)
@@ -85,6 +93,60 @@ public sealed record BuiltInArtAsset(
         };
 
         return ((float)x0 / PixelWidth, (float)x1 / PixelWidth);
+    }
+
+    /// <summary>The part of the texture <paramref name="piece"/> draws, in texture coordinates (0 to 1):
+    /// a cell of the grid for a piece of a frame (<see cref="Frame"/>), else <see cref="Window"/>'s
+    /// span over the whole height.</summary>
+    public (float U0, float V0, float U1, float V1) Window2D(ArtPiece piece)
+    {
+        if (ArtPieces.IsFrame(piece))
+        {
+            if (Frame is not { } frame || PixelWidth <= 0 || PixelHeight <= 0)
+            {
+                return (0f, 0f, 1f, 1f);
+            }
+
+            var (row, column) = ArtPieces.FrameCell(piece);
+            var (x0, x1) = frame.Band(rows: false, column);
+            var (y0, y1) = frame.Band(rows: true, row);
+            return ((float)x0 / PixelWidth, (float)y0 / PixelHeight, (float)x1 / PixelWidth, (float)y1 / PixelHeight);
+        }
+
+        var (u0, u1) = Window(piece);
+        return (u0, 0f, u1, 1f);
+    }
+
+    /// <summary>
+    /// The on-screen size, in pixels, of the whole artwork a quad A-B-C-D (D below A) draws
+    /// <paramref name="piece"/> of: what picks the level it draws from. A whole artwork's longer side;
+    /// a piece of sliced artwork scales its full-height strip by the artwork's long side over its
+    /// height; a cell of a frame scales by a side that keeps the artwork's proportions (a cap or the
+    /// center piece). So every piece of one placement draws from the same level, and a stretched
+    /// fill never needs a larger one.
+    /// </summary>
+    public float ScreenPixels(ArtPiece piece, Vector2 a, Vector2 b, Vector2 d)
+    {
+        var longSide = Math.Max(PixelWidth, PixelHeight);
+        if (ArtPieces.IsFrame(piece) && Frame is { } frame && PixelWidth > 0 && PixelHeight > 0)
+        {
+            var (row, column) = ArtPieces.FrameCell(piece);
+            var (y0, y1) = frame.Band(rows: true, row);
+            var (x0, x1) = frame.Band(rows: false, column);
+            if (ArtFrameSlices.IsFixed(row) && y1 > y0)
+            {
+                return Vector2.Distance(a, d) * longSide / (y1 - y0);
+            }
+
+            if (ArtFrameSlices.IsFixed(column) && x1 > x0)
+            {
+                return Vector2.Distance(a, b) * longSide / (x1 - x0);
+            }
+        }
+
+        return piece == ArtPiece.Whole || ArtPieces.IsFrame(piece) || PixelHeight <= 0
+            ? MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d))
+            : Vector2.Distance(a, d) * longSide / PixelHeight;
     }
 
     /// <summary>The ident a shared Plate names <paramref name="piece"/> by: <see cref="Id"/> for the whole
@@ -161,6 +223,88 @@ public sealed record ArtSlices(int ContentLeft, int CapLeft, int CenterLeft, int
     public int OutsideContent(int pixelWidth) => ContentLeft + (pixelWidth - ContentRight);
 }
 
+/// <summary>The bounds of an artwork's drawing, in its pixels: left and top inclusive, right and bottom exclusive.</summary>
+public readonly record struct ArtBounds(int Left, int Top, int Right, int Bottom);
+
+/// <summary>
+/// Where a frame (a Plate Frame or a Portrait Frame) is cut so it fits any box: an
+/// <see cref="ArtSlices"/> for its columns (x positions), one for its rows (y positions), so a grid
+/// of five bands each way, and the bounds of its <paramref name="Drawing"/>. On each axis
+/// <c>ContentLeft</c> to <c>ContentRight</c> is the outer edge of its rails, laid on the edges of the
+/// box it frames, so the frame runs along them; what reaches past its rails (corner ornaments, a
+/// crest) reaches past the box, out to the drawing's bounds. The caps and the center piece (a
+/// mid-edge ornament, when the frame has one) keep the artwork's proportions, and only the two fills
+/// stretch, so corners and ornaments are never distorted. Only the cells on the border are drawn:
+/// every frame is clear between its caps on both axes (tools/art/measure_frames.py checks it).
+/// </summary>
+public sealed record ArtFrameSlices(ArtSlices Columns, ArtSlices Rows, ArtBounds Drawing)
+{
+    /// <summary>The bands on each axis: a cap, a fill, the center piece, a fill and a cap.</summary>
+    public const int Bands = 5;
+
+    /// <summary>True when both axes are in order inside an artwork of this size, each with fills that
+    /// stretch, and the drawing reaches at least to the rails.</summary>
+    public bool IsValidFor(int pixelWidth, int pixelHeight) =>
+        Columns.IsValidFor(pixelWidth) && Rows.IsValidFor(pixelHeight)
+        && Drawing.Left >= 0 && Drawing.Left <= Columns.ContentLeft && Columns.ContentRight <= Drawing.Right && Drawing.Right <= pixelWidth
+        && Drawing.Top >= 0 && Drawing.Top <= Rows.ContentLeft && Rows.ContentRight <= Drawing.Bottom && Drawing.Bottom <= pixelHeight;
+
+    /// <summary>True for a band that keeps the artwork's proportions: a cap or the center piece.</summary>
+    public static bool IsFixed(int band) => band is 0 or 2 or 4;
+
+    /// <summary>True for a cell on the frame's border (a cap row or a cap column): the cells drawn.</summary>
+    public static bool IsBorder(int row, int column) => row is 0 or Bands - 1 || column is 0 or Bands - 1;
+
+    /// <summary>The pixel span of <paramref name="band"/> (0 to 4) across the columns, or down the rows:
+    /// the outer bands reach out to the drawing's bounds.</summary>
+    public (int Start, int End) Band(bool rows, int band)
+    {
+        var axis = rows ? Rows : Columns;
+        var (start, end) = rows ? (Drawing.Top, Drawing.Bottom) : (Drawing.Left, Drawing.Right);
+        return band switch
+        {
+            0 => (start, axis.CapLeft),
+            1 => (axis.CapLeft, axis.CenterLeft),
+            2 => (axis.CenterLeft, axis.CenterRight),
+            3 => (axis.CenterRight, axis.CapRight),
+            _ => (axis.CapRight, end),
+        };
+    }
+
+    /// <summary>The scale the caps keep in a box <paramref name="size"/> (logical units per pixel): the
+    /// largest at which the rails fit inside it on both axes.</summary>
+    public float ScaleFor(Vector2 size) =>
+        Math.Min(size.X / (Columns.ContentRight - Columns.ContentLeft), size.Y / (Rows.ContentRight - Rows.ContentLeft));
+
+    /// <summary>
+    /// Where each band starts and ends across a box <paramref name="length"/> long (the columns, or
+    /// the rows): six positions, from the drawing's start (at or before 0, by what reaches past the
+    /// rail) through the four cuts to the drawing's end (at or after <paramref name="length"/>). The
+    /// rails' outer edges lie exactly at 0 and <paramref name="length"/>. The fixed bands are at
+    /// <paramref name="scale"/> per pixel (squeezed to fit when they are longer than the box, with no
+    /// fill), and the fills share the rest in proportion to their own lengths, so at the shape the
+    /// frame was drawn for every band keeps its place.
+    /// </summary>
+    public void Edges(bool rows, float length, float scale, Span<float> edges)
+    {
+        var axis = rows ? Rows : Columns;
+        var (start, end) = rows ? (Drawing.Top, Drawing.Bottom) : (Drawing.Left, Drawing.Right);
+        var fixedPixels = (axis.CapLeft - axis.ContentLeft) + (axis.CenterRight - axis.CenterLeft) + (axis.ContentRight - axis.CapRight);
+        var fillPixels = (axis.CenterLeft - axis.CapLeft) + (axis.CapRight - axis.CenterRight);
+        var fixedLength = fixedPixels * scale;
+        var squeeze = fixedLength > length && fixedLength > 0f ? length / fixedLength : 1f;
+        var perFixed = scale * squeeze;
+        var perFill = fillPixels > 0 ? Math.Max(0f, length - (fixedLength * squeeze)) / fillPixels : 0f;
+
+        edges[0] = -(axis.ContentLeft - start) * perFixed;
+        edges[1] = (axis.CapLeft - axis.ContentLeft) * perFixed;
+        edges[2] = edges[1] + ((axis.CenterLeft - axis.CapLeft) * perFill);
+        edges[3] = edges[2] + ((axis.CenterRight - axis.CenterLeft) * perFixed);
+        edges[4] = length - ((axis.ContentRight - axis.CapRight) * perFixed);
+        edges[5] = length + ((end - axis.ContentRight) * perFixed);
+    }
+}
+
 /// <summary>A part of an artwork, as a primitive draws it. Not persisted.</summary>
 public enum ArtPiece
 {
@@ -179,17 +323,83 @@ public static class ArtPieces
     /// <summary>The pieces of sliced artwork, left to right.</summary>
     public static readonly IReadOnlyList<ArtPiece> Sliced = [ArtPiece.LeftCap, ArtPiece.LeftFill, ArtPiece.Center, ArtPiece.RightFill, ArtPiece.RightCap];
 
-    /// <summary>The ident suffix of <paramref name="piece"/>: lower case letters and '-' only. Frozen once
-    /// shipped, like the art ids themselves (a viewer looks pieces up by them).</summary>
-    public static string Suffix(ArtPiece piece) => piece switch
+    /// <summary>The ident suffix of <paramref name="piece"/>: lower case letters, digits and '-' only.
+    /// Frozen once shipped, like the art ids themselves (a viewer looks pieces up by them).</summary>
+    public static string Suffix(ArtPiece piece)
     {
-        ArtPiece.LeftCap => "left-cap",
-        ArtPiece.LeftFill => "left-fill",
-        ArtPiece.Center => "center",
-        ArtPiece.RightFill => "right-fill",
-        ArtPiece.RightCap => "right-cap",
-        _ => string.Empty,
-    };
+        if (IsFrame(piece))
+        {
+            var (row, column) = FrameCell(piece);
+            return FrameSuffixes[row][column];
+        }
+
+        return piece switch
+        {
+            ArtPiece.LeftCap => "left-cap",
+            ArtPiece.LeftFill => "left-fill",
+            ArtPiece.Center => "center",
+            ArtPiece.RightFill => "right-fill",
+            ArtPiece.RightCap => "right-cap",
+            _ => string.Empty,
+        };
+    }
+
+    // A frame's cells are pieces too, numbered from FrameBase, row by row ("frame-r0c4": the top
+    // right corner). Computed rather than named: nothing persists an ArtPiece.
+    private const int FrameBase = 100;
+    private const int FrameCells = ArtFrameSlices.Bands * ArtFrameSlices.Bands;
+
+    private static readonly string[][] FrameSuffixes = BuildFrameSuffixes();
+
+    /// <summary>The cells a frame draws, row by row: those on its border (see <see cref="ArtFrameSlices.IsBorder"/>).</summary>
+    public static readonly IReadOnlyList<ArtPiece> FrameBorder = BuildFrameBorder();
+
+    /// <summary>The piece for the cell at <paramref name="row"/> and <paramref name="column"/> (each 0 to 4) of a frame.</summary>
+    public static ArtPiece Frame(int row, int column) =>
+        row is >= 0 and < ArtFrameSlices.Bands && column is >= 0 and < ArtFrameSlices.Bands
+            ? (ArtPiece)(FrameBase + (row * ArtFrameSlices.Bands) + column)
+            : throw new ArgumentOutOfRangeException(row is >= 0 and < ArtFrameSlices.Bands ? nameof(column) : nameof(row));
+
+    /// <summary>True for a cell of a frame (<see cref="Frame"/>).</summary>
+    public static bool IsFrame(ArtPiece piece) => (int)piece is >= FrameBase and < FrameBase + FrameCells;
+
+    /// <summary>The row and column of a frame's cell.</summary>
+    public static (int Row, int Column) FrameCell(ArtPiece piece) =>
+        IsFrame(piece)
+            ? Math.DivRem((int)piece - FrameBase, ArtFrameSlices.Bands)
+            : throw new ArgumentOutOfRangeException(nameof(piece));
+
+    private static string[][] BuildFrameSuffixes()
+    {
+        var suffixes = new string[ArtFrameSlices.Bands][];
+        for (var row = 0; row < ArtFrameSlices.Bands; row++)
+        {
+            suffixes[row] = new string[ArtFrameSlices.Bands];
+            for (var column = 0; column < ArtFrameSlices.Bands; column++)
+            {
+                suffixes[row][column] = $"frame-r{row}c{column}";
+            }
+        }
+
+        return suffixes;
+    }
+
+    private static ArtPiece[] BuildFrameBorder()
+    {
+        var border = new List<ArtPiece>();
+        for (var row = 0; row < ArtFrameSlices.Bands; row++)
+        {
+            for (var column = 0; column < ArtFrameSlices.Bands; column++)
+            {
+                if (ArtFrameSlices.IsBorder(row, column))
+                {
+                    border.Add(Frame(row, column));
+                }
+            }
+        }
+
+        return [.. border];
+    }
 }
 
 /// <summary>How a corner drawing, designed for the top-left corner, is placed in the other corners.</summary>
@@ -251,16 +461,24 @@ public static class BuiltInArtCatalog
         CelestialSakuraBackground, "Celestial Sakura", PlateComponentKind.Background, "CelestialSakura_Background.png", 1672, 941, 1f,
         "background", "sky", "twilight", "landscape");
 
-    /// <summary>A gold filigree border with blossom corners and a crescent crest, drawn edge to edge
-    /// (the drawing keeps its own few-pixel margin).</summary>
+    /// <summary>A gold filigree border with blossom corners and a crescent crest, its rails laid on the
+    /// Plate's edges and its ornaments reaching past (cut where it is least busy: it is ornamented all
+    /// along; see ArtFrameData).</summary>
     public static readonly BuiltInArtAsset CelestialSakuraPlateFrameArt = CelestialSakura(
         CelestialSakuraPlateFrame, "Celestial Sakura", PlateComponentKind.PlateFrame, "CelestialSakura_PlateFrame.png", 1672, 941, 1f,
-        "frame", "plate frame", "border");
+        "frame", "plate frame", "border") with
+    {
+        Frame = ArtFrameData.ByFolder["CelestialSakura"].PlateFrame,
+    };
 
-    /// <summary>A slim gold portrait border with blossoms at opposing corners, fitted to the portrait.</summary>
+    /// <summary>A slim gold portrait border with blossoms at opposing corners, its rails laid on the
+    /// picture's edges and its ornaments reaching past.</summary>
     public static readonly BuiltInArtAsset CelestialSakuraPortraitFrameArt = CelestialSakura(
         CelestialSakuraPortraitFrame, "Celestial Sakura", PlateComponentKind.PortraitFrame, "CelestialSakura_PortraitFrame.png", 992, 1586, 1f,
-        "frame", "portrait", "portrait frame", "border");
+        "frame", "portrait", "portrait frame", "border") with
+    {
+        Frame = ArtFrameData.ByFolder["CelestialSakura"].PortraitFrame,
+    };
 
     /// <summary>An ivory enamel plaque with blossom ends, behind the name. 1.5x the name backing's height
     /// (the plaque's rails and ornaments surround a text area about a third of its height), and as
@@ -313,8 +531,8 @@ public static class BuiltInArtCatalog
     /// <summary>
     /// The artwork and piece a shared Plate's art ident names (<see cref="BuiltInArtAsset.PieceIdent"/>):
     /// an exact id is the whole artwork; an id followed by a piece's suffix is that piece of a sliced
-    /// artwork. Null for anything else, a piece of unsliced artwork included. Exact matches only,
-    /// like <see cref="Find"/>.
+    /// artwork, or that cell of a frame's border. Null for anything else, a piece of unsliced
+    /// artwork included. Exact matches only, like <see cref="Find"/>.
     /// </summary>
     public static (BuiltInArtAsset Art, ArtPiece Piece)? FindPiece(string? ident)
     {
@@ -332,6 +550,15 @@ public static class BuiltInArtCatalog
         {
             var suffix = "." + ArtPieces.Suffix(piece);
             if (ident.EndsWith(suffix, StringComparison.Ordinal) && Find(ident[..^suffix.Length]) is { Slices: { } slices } art && slices.IsValidFor(art.PixelWidth))
+            {
+                return (art, piece);
+            }
+        }
+
+        foreach (var piece in ArtPieces.FrameBorder)
+        {
+            var suffix = "." + ArtPieces.Suffix(piece);
+            if (ident.EndsWith(suffix, StringComparison.Ordinal) && Find(ident[..^suffix.Length]) is { Frame: { } frame } art && frame.IsValidFor(art.PixelWidth, art.PixelHeight))
             {
                 return (art, piece);
             }

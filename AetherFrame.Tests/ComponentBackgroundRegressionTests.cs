@@ -181,8 +181,10 @@ public class ComponentBackgroundRegressionTests
         stream!.CopyTo(buffer);
         var image = Domain.Rendering.BundledArtImage.DecodePng(buffer.ToArray());
 
-        var u = (point.X - quad.A.X) / (quad.B.X - quad.A.X);
-        var v = (point.Y - quad.A.Y) / (quad.D.Y - quad.A.Y);
+        // Where the point falls in the quad, then in the part of the artwork the quad draws.
+        var (u0, v0, u1, v1) = art.Window2D(quad.Piece);
+        var u = u0 + ((u1 - u0) * (point.X - quad.A.X) / (quad.B.X - quad.A.X));
+        var v = v0 + ((v1 - v0) * (point.Y - quad.A.Y) / (quad.D.Y - quad.A.Y));
         var cx = (int)(u * image.Width);
         var cy = (int)(v * image.Height);
         var max = 0;
