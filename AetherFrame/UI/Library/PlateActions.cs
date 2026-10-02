@@ -16,7 +16,9 @@ namespace AetherFrame.UI.Library;
 /// The actions on one Plate as a whole, shared by My Plates' card menu and the editors' Plate
 /// menu, so both do exactly the same thing with the same words: Set Active, Rename, Duplicate or
 /// Save as New Plate, Save as Template, Export and Delete. Each runs through its window's
-/// <see cref="PlateOperationRunner"/>, which shows the result or the error in that window.
+/// <see cref="PlateOperationRunner"/>, which shows the result or the error in that window. The
+/// Create Plate chooser, which both draw too (interface task 2), acts through here as well: Use
+/// Template, and a saved Template's Rename, Duplicate and Delete.
 ///
 /// <para>Every action but Save as New Plate works on the saved Plate, as it always has from My
 /// Plates: an editor's unsaved changes are not part of it, and the editors' Plate menu says so
@@ -145,6 +147,63 @@ internal sealed class PlateActions
                 ? $"Deleted \"{plateName}\". No Plate is Active for {(result.ClearedActiveForContentIds.Count == 1 ? "that character" : "those characters")} now."
                 : $"Deleted \"{plateName}\".";
         });
+
+    // ---------------------------------------------------------------- Create Plate's chooser
+
+    /// <summary>
+    /// Use Template: makes a new, independent Plate from the Template (see
+    /// <see cref="TemplateLibraryService.InstantiateAsync"/>), first in My Plates and named after the
+    /// Template; <paramref name="onCreated"/> then opens it. A character's first Plate becomes its
+    /// Active Plate, and the result says so. Nothing asks about the open Plate's unsaved changes
+    /// here: the window that uses the Template does, before (the editors, see
+    /// <see cref="PlateSwitcher"/>) or after (My Plates, until interface task 10).
+    /// </summary>
+    /// <param name="templateId">The Template.</param>
+    /// <param name="character">The logged-in character, if any: the new Plate belongs to it.</param>
+    /// <param name="starter">What a built-in Template fills in from the character.</param>
+    /// <param name="onCreated">Gets the new Plate, on the render thread.</param>
+    internal void UseTemplate(Guid templateId, CharacterContext? character, PlateStarterContent starter, Action<PlateCreationResult> onCreated) =>
+        Runner.Run<PlateCreationResult>("use the Template", () => templates.InstantiateAsync(templateId, character, starter), result =>
+        {
+            if (result.BecameActive && character is not null)
+            {
+                Runner.Status = MyPlatesCharacterText.FirstPlateCreated;
+            }
+
+            onCreated(result);
+        });
+
+    /// <summary>A Template's name as the chooser lists it, or null when there is no such Template.</summary>
+    internal string? TemplateName(Guid templateId) => templates.FindTemplate(templateId)?.DisplayName;
+
+    /// <summary>
+    /// Renames a saved Template, or returns why <paramref name="requestedName"/> can't be its name
+    /// (for the prompt to show, with nothing started).
+    /// </summary>
+    internal string? RenameTemplate(Guid templateId, string requestedName)
+    {
+        if (!TemplateNaming.TryNormalizeName(requestedName, out var name, out var error))
+        {
+            return error;
+        }
+
+        Runner.Run("rename the Template", () => templates.RenameTemplateAsync(templateId, name));
+        return null;
+    }
+
+    /// <summary>Copies a saved Template; <paramref name="onCopied"/> gets the copy's id.</summary>
+    internal void DuplicateTemplate(Guid templateId, Action<Guid> onCopied) =>
+        Runner.Run("duplicate the Template", () => templates.DuplicateTemplateAsync(templateId), onCopied);
+
+    /// <summary>Deletes a saved Template (to the trash); <paramref name="onDeleted"/> runs first, once it's gone.</summary>
+    internal void DeleteTemplate(Guid templateId, string templateName, Action onDeleted) =>
+        Runner.Run("delete the Template", () => templates.DeleteTemplateAsync(templateId), () =>
+        {
+            onDeleted();
+            Runner.Status = $"Deleted \"{templateName}\".";
+        });
+
+    // ---------------------------------------------------------------- Save as New Plate
 
     /// <summary>
     /// Save as New Plate: the open Plate as it is now, unsaved changes included, saved as a new

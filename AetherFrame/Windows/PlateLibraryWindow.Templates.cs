@@ -4,32 +4,29 @@ using System.Linq;
 using System.Numerics;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
-using AetherFrame.Domain.Templates;
 using AetherFrame.Services;
-using AetherFrame.Services.Plates;
 using AetherFrame.Services.Templates;
 using AetherFrame.Services.Thumbnails;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Library;
-using AetherFrame.UI.Rendering;
-using AetherFrame.UI.Tutorial;
-using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
-using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
 namespace AetherFrame.Windows;
 
 /// <summary>
-/// Templates: the Create Plate chooser (the primary Template entry point — Start with a built-in,
-/// or from My Templates), the quieter Manage Templates mode it opens into (the Templates card grid
-/// and its action bar: Preview / Rename / Duplicate / Delete / Use Template), and Save as Template
-/// for a Plate. Templates is deliberately not a permanent top-level tab beside My Plates — Manage
-/// Templates is entered only from the chooser and returns to My Plates explicitly. Follows the
-/// exact visual and interaction patterns <c>PlateLibraryWindow.cs</c>/<c>.Actions.cs</c> already
-/// established for My Plates — same card grid math, same async-operation and popup-deferral
-/// plumbing, same disabled-with-tooltip convention for actions a built-in Template can't do.
+/// Templates in My Plates: Use Template as My Plates does it, and the quieter Manage Templates
+/// mode the Create Plate chooser opens into (the Templates card grid and its action bar: View /
+/// Use Template / Rename / Duplicate / Delete). The chooser itself, the primary Template entry point
+/// (Start with a built-in, or from My Templates), and its Rename and Delete Template prompts belong
+/// to the shared <see cref="PlateMenu"/> (<see cref="TemplateChooser"/>), which the editors' New
+/// Plate... draws too (interface task 2); Save as Template is a Plate menu action. Templates is
+/// deliberately not a permanent top-level tab beside My Plates: Manage Templates is entered only
+/// from the chooser and returns to My Plates explicitly. Follows the exact visual and interaction
+/// patterns <c>PlateLibraryWindow.cs</c>/<c>.Actions.cs</c> already established for My Plates: the
+/// same card grid math, the same async-operation and popup-deferral plumbing, the same
+/// disabled-with-tooltip convention for actions a built-in Template can't do.
 /// </summary>
 internal sealed partial class PlateLibraryWindow
 {
@@ -40,16 +37,6 @@ internal sealed partial class PlateLibraryWindow
         MyPlates,
         Templates,
     }
-
-    private const string TemplateChooserPopupId = "Create Plate##AetherFrameTemplateChooser";
-    private const string TemplateRenamePopupId = "Rename Template##AetherFrameTemplateRename";
-    private const string TemplateDeletePopupId = "Delete Template##AetherFrameTemplateDelete";
-
-    private const float ChooserWidth = 720f;
-    private const float ChooserHeight = 450f;
-    private const float ChooserMinWidth = 620f;
-    private const float ChooserMinHeight = 380f;
-    private const float ChooserLeftPaneWidth = 260f;
 
     private static readonly Vector4 BuiltInBadgeColor = new(0.55f, 0.62f, 0.95f, 1f);
     private static readonly Vector4 UserTemplateBadgeColor = new(0.55f, 0.85f, 0.65f, 1f);
@@ -64,28 +51,51 @@ internal sealed partial class PlateLibraryWindow
     private Guid? selectedTemplateId;
     private string templateSearchText = string.Empty;
 
-    private bool pendingTemplateChooserPopup;
-    private Guid chosenTemplateId = BuiltInTemplateCatalog.AdventurePlateClassicId;
+    // The editors' chooser asked for Manage Templates: OnOpen opens the window on it, once.
+    private bool openOnManageTemplates;
 
-    // Use Template chosen in a row's right-click menu. That menu is a popup inside the chooser, so
-    // closing from it would close only the menu: the chooser takes the request in its own scope
-    // instead, and closes as it does for its Use Template button.
-    private Guid? chooserUseRequestedId;
+    /// <summary>Whether the Create Plate chooser was on screen this frame or the one before (the tutorial waits on it).</summary>
+    internal bool TemplateChooserShowing => plateMenu.Chooser.Showing;
 
-    // The right pane's preview document is regenerated only when the selection actually changes
-    // (never every frame): a built-in's document is freshly generated each time it's resolved,
-    // and re-running that — plus the renderer's per-instance font prewarming — every single frame
-    // the popup is open would be wasteful and would leak a prewarm cache entry per frame.
-    private Guid? chooserPreviewedTemplateId;
-    private ProfileDocument? chooserPreviewDocument;
+    /// <summary>Whether Manage Templates is the view showing (the tutorial reads it, never sets it).</summary>
+    internal bool TemplatesViewShowing => activeView == LibraryView.Templates;
 
-    private bool pendingTemplateRenamePopup;
-    private Guid templateRenameTargetId;
-    private string templateRenameBuffer = string.Empty;
-    private string? templateRenameError;
+    /// <summary>
+    /// The editors' Create Plate chooser's Manage Templates...: this window, open on Manage
+    /// Templates and in front, as the chooser's link opens it here.
+    /// </summary>
+    internal void ShowManageTemplates()
+    {
+        activeView = LibraryView.Templates;
+        selectedTemplateId = null;
+        openOnManageTemplates = true;
+        IsOpen = true;
+        BringToFront();
+    }
 
-    private bool pendingTemplateDeletePopup;
-    private Guid templateDeleteTargetId;
+    /// <summary>
+    /// The shared Create Plate chooser, as My Plates uses it: Use Template makes the Plate, then
+    /// opens it (<see cref="UseTemplate"/>); Manage Templates... switches this window to its
+    /// Templates view; and Manage Templates' selection follows a row menu's Duplicate and Delete.
+    /// </summary>
+    private void AttachTemplateChooser()
+    {
+        var chooser = plateMenu.Chooser;
+        chooser.Use = UseTemplate;
+        chooser.ManageTemplates = () =>
+        {
+            activeView = LibraryView.Templates;
+            selectedTemplateId = null;
+        };
+        chooser.TemplateDuplicated = templateId => selectedTemplateId = templateId;
+        chooser.TemplateDeleted = templateId =>
+        {
+            if (selectedTemplateId == templateId)
+            {
+                selectedTemplateId = null;
+            }
+        };
+    }
 
     // ---------------------------------------------------------------- Manage Templates (a mode, not a tab)
 
@@ -100,7 +110,7 @@ internal sealed partial class PlateLibraryWindow
         DrawTemplateHeader(allTemplates.Count);
         if (templates.LoadFailed)
         {
-            ImGui.TextColored(EditorWidgets.WarningColor, UserTemplatesUnavailableText);
+            ImGui.TextColored(EditorWidgets.WarningColor, TemplateChooser.UserTemplatesUnavailableText);
         }
 
         ImGui.Separator();
@@ -361,26 +371,22 @@ internal sealed partial class PlateLibraryWindow
         ImGui.SameLine();
         using (ImRaii.Disabled(selected is null || selected.IsBuiltIn || IsBusy))
         {
+            // The same prompts and actions as the chooser's row menus: the shared PlateMenu's.
             if (ImGui.Button("Rename"))
             {
-                templateRenameTargetId = selected!.TemplateId;
-                templateRenameBuffer = selected.DisplayName;
-                templateRenameError = null;
-                pendingTemplateRenamePopup = true;
+                plateMenu.Chooser.RequestRename(selected!.TemplateId, selected.DisplayName);
             }
 
             ImGui.SameLine();
             if (ImGui.Button("Duplicate"))
             {
-                var sourceId = selected!.TemplateId;
-                runner.Run<Guid>("duplicate the Template", () => templates.DuplicateTemplateAsync(sourceId), newId => selectedTemplateId = newId);
+                plateMenu.Actions.DuplicateTemplate(selected!.TemplateId, newId => selectedTemplateId = newId);
             }
 
             ImGui.SameLine();
             if (ImGui.Button("Delete"))
             {
-                templateDeleteTargetId = selected!.TemplateId;
-                pendingTemplateDeletePopup = true;
+                plateMenu.Chooser.RequestDelete(selected!.TemplateId);
             }
         }
 
@@ -414,531 +420,25 @@ internal sealed partial class PlateLibraryWindow
         }
     }
 
-    /// <summary>Use Template: creates the new Plate, then opens it in Basic or Advanced depending
-    /// on whether its content actually has Basic structure (see <see cref="EditorSurfaceChooser"/>,
-    /// the same rule as Edit) — never a fixed choice per Template kind, so an arbitrary user
-    /// Template opens sensibly.</summary>
+    /// <summary>
+    /// Use Template, as My Plates does it: makes the new Plate first (see
+    /// <see cref="PlateActions.UseTemplate"/>), selects its card, then opens it in Basic or Advanced
+    /// depending on whether its content actually has Basic structure (see
+    /// <see cref="EditorSurfaceChooser"/>, the same rule as Edit), never a fixed choice per Template
+    /// kind, so an arbitrary user Template opens sensibly. Opening it asks about the open Plate's
+    /// unsaved changes, after the Plate is made; interface task 10 moves the question before it, as
+    /// the editors' New Plate already asks (<see cref="PlateSwitcher"/>).
+    /// </summary>
     private void UseTemplate(Guid templateId)
     {
-        var character = characterIdentity.CurrentCharacter;
         var starter = new PlateStarterContent(characterIdentity.CurrentInfo);
-        runner.Run<PlateCreationResult>("use the Template", () => templates.InstantiateAsync(templateId, character, starter), result =>
+        plateMenu.Actions.UseTemplate(templateId, characterIdentity.CurrentCharacter, starter, result =>
         {
             activeView = LibraryView.MyPlates;
             selectedPlateId = result.PlateId;
             searchText = string.Empty;
-            if (result.BecameActive && character is not null)
-            {
-                runner.Status = MyPlatesCharacterText.FirstPlateCreated;
-            }
-
             var basic = EditorSurfaceChooser.ForDocument(library.GetSavedDocument(result.PlateId)) == EditorSurfaceKind.Basic;
             RequestOpen(result.PlateId, basic);
         });
-    }
-
-    // ---------------------------------------------------------------- Template chooser (Create Plate)
-
-    /// <summary>Whether the Create Plate chooser was on screen this frame (the tutorial waits on it).</summary>
-    internal bool TemplateChooserShowing { get; private set; }
-
-    /// <summary>Whether Manage Templates is the view showing (the tutorial reads it, never sets it).</summary>
-    internal bool TemplatesViewShowing => activeView == LibraryView.Templates;
-
-    /// <summary>
-    /// A two-pane dialog: a full-width, scrollable Template browser on the left (Start: the two
-    /// built-ins; My Templates: everything saved), and the selected Template's own details —
-    /// including a live preview through the exact same <see cref="ProfileRenderer"/> every other
-    /// preview surface in AetherFrame uses — on the right. Nothing is created until "Use Template"
-    /// (or a double-click on a row) is confirmed.
-    /// </summary>
-    private void DrawTemplateChooserPopup()
-    {
-        TemplateChooserShowing = false;
-        if (pendingTemplateChooserPopup)
-        {
-            ImGui.OpenPopup(TemplateChooserPopupId);
-            pendingTemplateChooserPopup = false;
-            chosenTemplateId = BuiltInTemplateCatalog.AdventurePlateClassicId;
-            chooserPreviewedTemplateId = null;
-            chooserUseRequestedId = null;
-        }
-
-        ImGui.SetNextWindowSize(new Vector2(ChooserWidth, ChooserHeight) * ImGuiHelpers.GlobalScale, ImGuiCond.Appearing);
-        ImGui.SetNextWindowSizeConstraints(new Vector2(ChooserMinWidth, ChooserMinHeight) * ImGuiHelpers.GlobalScale, new Vector2(float.MaxValue, float.MaxValue));
-
-        if (!ImGui.BeginPopupModal(TemplateChooserPopupId, ImGuiWindowFlags.NoSavedSettings))
-        {
-            return;
-        }
-
-        TemplateChooserShowing = true;
-        TutorialAnchorMarks.MarkWindow(TutorialTarget.LibraryTemplateChooser);
-
-        // The selection can go stale without the chooser closing — e.g. Delete Template from a
-        // row's own context menu. Fall back to the default rather than showing an empty selection.
-        if (BuiltInTemplateCatalog.Find(chosenTemplateId) is null && templates.FindTemplate(chosenTemplateId) is null)
-        {
-            chosenTemplateId = BuiltInTemplateCatalog.AdventurePlateClassicId;
-            chooserPreviewedTemplateId = null;
-        }
-
-        var footerHeight = (ImGui.GetFrameHeightWithSpacing() * 2f) + ImGui.GetStyle().ItemSpacing.Y + (4f * ImGuiHelpers.GlobalScale);
-        var bodyHeight = -footerHeight;
-        var leftWidth = ChooserLeftPaneWidth * ImGuiHelpers.GlobalScale;
-
-        using (var left = ImRaii.Child("##TemplateChooserLeft", new Vector2(leftWidth, bodyHeight), true))
-        {
-            if (left.Success)
-            {
-                DrawTemplateChooserLeftPane();
-            }
-        }
-
-        ImGui.SameLine();
-
-        using (var right = ImRaii.Child("##TemplateChooserRight", new Vector2(-1f, bodyHeight), false))
-        {
-            if (right.Success)
-            {
-                DrawTemplateChooserRightPane();
-            }
-        }
-
-        ImGui.Separator();
-        DrawTemplateChooserFooter();
-
-        // A row menu's Use Template, taken here in the chooser's own scope, where closing closes
-        // the chooser, exactly as its Use Template button does.
-        if (chooserUseRequestedId is { } requestedId)
-        {
-            chooserUseRequestedId = null;
-            UseTemplate(requestedId);
-            ImGui.CloseCurrentPopup();
-        }
-
-        // Drawn here (nested inside the chooser's own popup scope), not from the top-level Draw(),
-        // whenever a row's context menu requested one — see the call site in PlateLibraryWindow.cs
-        // for the full explanation. This is what makes ImGui.OpenPopup() register Rename/Delete one
-        // level above the chooser instead of at the same level, so opening either one stacks on top
-        // of the chooser instead of silently closing it.
-        DrawTemplateRenamePopup();
-        DrawTemplateDeletePopup();
-
-        ImGui.EndPopup();
-    }
-
-    private const string UserTemplatesUnavailableText = "Your saved Templates couldn't be loaded. Built-in Templates still work. See the Dalamud log for details.";
-
-    private void DrawTemplateChooserLeftPane()
-    {
-        ImGui.TextDisabled("START");
-        ImGui.Spacing();
-
-        DrawTemplateChooserRow(BuiltInTemplateCatalog.AdventurePlateClassicId, "Adventure Plate Classic", "Basic Editor", isBuiltIn: true);
-        DrawTemplateChooserRow(BuiltInTemplateCatalog.BlankCanvasId, "Blank Canvas", "Advanced Editor", isBuiltIn: true);
-
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Spacing();
-        ImGui.TextDisabled("MY TEMPLATES");
-        ImGui.Spacing();
-
-        var userTemplates = templates.GetOrderedTemplates().Where(t => t.Kind == TemplateKind.UserSaved).ToList();
-        if (userTemplates.Count == 0)
-        {
-            using (ImRaii.TextWrapPos(0f))
-            {
-                ImGui.TextDisabled(templates.LoadFailed ? UserTemplatesUnavailableText
-                    : !templates.IsLoaded ? "Loading your Templates..."
-                    : "You haven't saved any Templates yet.");
-            }
-        }
-        else
-        {
-            foreach (var template in userTemplates)
-            {
-                DrawTemplateChooserRow(template.TemplateId, template.DisplayName, null, isBuiltIn: false);
-            }
-        }
-    }
-
-    /// <summary>
-    /// One full-width, fully-clickable row. Uses <see cref="ImGui.Selectable"/> (not a radio
-    /// button) purely for its built-in, AetherFrame-accent-tinted highlight — the label itself is
-    /// drawn over it, the same "invisible interactive widget plus manual text" technique the
-    /// Template/Plate card grids already use. Double-clicking a row uses that Template immediately,
-    /// mirroring the same established convention the My Plates and Manage Templates card grids
-    /// already use for their own primary action. Right-clicking opens a context menu (see
-    /// <see cref="DrawUserTemplateContextMenuItems"/>/<see cref="DrawBuiltInTemplateContextMenuItems"/>).
-    /// </summary>
-    private void DrawTemplateChooserRow(Guid templateId, string label, string? secondaryText, bool isBuiltIn)
-    {
-        var selected = chosenTemplateId == templateId;
-        var lineHeight = ImGui.GetTextLineHeightWithSpacing();
-        var rowHeight = (secondaryText is null ? lineHeight : lineHeight * 2f) + (4f * ImGuiHelpers.GlobalScale);
-        var rowId = $"##ChooserRow{templateId:N}";
-
-        using (ImRaii.PushColor(ImGuiCol.Header, EditorWidgets.AccentColor with { W = 0.35f }))
-        using (ImRaii.PushColor(ImGuiCol.HeaderHovered, EditorWidgets.AccentColor with { W = 0.18f }))
-        using (ImRaii.PushColor(ImGuiCol.HeaderActive, EditorWidgets.AccentColor with { W = 0.45f }))
-        {
-            if (ImGui.Selectable(rowId, selected, ImGuiSelectableFlags.None, new Vector2(0f, rowHeight)))
-            {
-                chosenTemplateId = templateId;
-            }
-        }
-
-        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
-        {
-            chosenTemplateId = templateId;
-            UseTemplate(templateId);
-            ImGui.CloseCurrentPopup();
-        }
-
-        var contextMenuId = $"##ChooserRowMenu{templateId:N}";
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
-        {
-            chosenTemplateId = templateId;
-            ImGui.OpenPopup(contextMenuId);
-        }
-
-        if (ImGui.BeginPopup(contextMenuId))
-        {
-            if (isBuiltIn)
-            {
-                DrawBuiltInTemplateContextMenuItems(templateId);
-            }
-            else
-            {
-                DrawUserTemplateContextMenuItems(templateId, label);
-            }
-
-            ImGui.EndPopup();
-        }
-
-        var min = ImGui.GetItemRectMin();
-        var padding = new Vector2(6f, 3f) * ImGuiHelpers.GlobalScale;
-        var drawList = ImGui.GetWindowDrawList();
-        drawList.AddText(min + padding, ImGui.GetColorU32(ImGuiCol.Text), label);
-        if (secondaryText is not null)
-        {
-            drawList.AddText(min + padding + new Vector2(0f, lineHeight), ImGui.GetColorU32(EditorWidgets.DimTextColor), secondaryText);
-        }
-    }
-
-    /// <summary>
-    /// The user Template context menu: Use Template, Rename, Duplicate, then Delete Template — the
-    /// one reusable set of actions any surface listing user Templates can share (currently the
-    /// Create Plate chooser's rows; Manage Templates' action bar already exposes the same actions
-    /// as buttons). No Preview entry: selecting the row already shows its preview in the chooser's
-    /// right pane. Rename/Delete defer to the existing popups (same pending-flag pattern Manage
-    /// Templates' own buttons use) so confirmation, name validation, and duplicate-name policy are
-    /// never reimplemented, and Use Template defers to the chooser, which closes as for its own
-    /// button. Must be called between a matching BeginPopup/EndPopup.
-    /// </summary>
-    private void DrawUserTemplateContextMenuItems(Guid templateId, string displayName)
-    {
-        DrawUseTemplateMenuItem(templateId);
-
-        if (ImGui.MenuItem("Rename"))
-        {
-            templateRenameTargetId = templateId;
-            templateRenameBuffer = displayName;
-            templateRenameError = null;
-            pendingTemplateRenamePopup = true;
-        }
-
-        if (ImGui.MenuItem("Duplicate"))
-        {
-            runner.Run<Guid>("duplicate the Template", () => templates.DuplicateTemplateAsync(templateId), newId =>
-            {
-                chosenTemplateId = newId;
-                selectedTemplateId = newId;
-            });
-        }
-
-        ImGui.Separator();
-
-        if (ImGui.MenuItem("Delete Template"))
-        {
-            templateDeleteTargetId = templateId;
-            pendingTemplateDeletePopup = true;
-        }
-    }
-
-    /// <summary>Built-ins are immutable: their context menu (right-click is optional for them —
-    /// left-click plus Use Template already covers the common case) offers only Use Template,
-    /// never Rename/Duplicate/Delete.</summary>
-    private void DrawBuiltInTemplateContextMenuItems(Guid templateId) => DrawUseTemplateMenuItem(templateId);
-
-    /// <summary>
-    /// A row menu's Use Template: available when the chooser's button is, and asking the chooser to
-    /// use the Template, so the chooser closes with the menu (the menu item closes only the menu).
-    /// </summary>
-    private void DrawUseTemplateMenuItem(Guid templateId)
-    {
-        using (ImRaii.Disabled(IsBusy))
-        {
-            if (ImGui.MenuItem("Use Template"))
-            {
-                chosenTemplateId = templateId;
-                chooserUseRequestedId = templateId;
-            }
-        }
-    }
-
-    private void DrawTemplateChooserRightPane()
-    {
-        var selection = ResolveChooserSelection();
-        if (selection is null)
-        {
-            ImGui.TextDisabled("Select a Template.");
-            return;
-        }
-
-        EnsureChooserPreviewFresh(selection.Value);
-
-        ImGui.TextUnformatted(selection.Value.Name);
-        ImGui.TextColored(EditorWidgets.DimTextColor, selection.Value.Destination);
-        ImGui.Spacing();
-        ImGui.TextWrapped(selection.Value.Description);
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Spacing();
-
-        if (!selection.Value.SupportsPreview)
-        {
-            // Deliberately no rendered preview here — Blank Canvas has nothing to show; a fake
-            // stand-in would just be noise. Its destination and description above are enough.
-            ImGui.TextDisabled("No preview — Blank Canvas starts empty.");
-            return;
-        }
-
-        if (chooserPreviewDocument is not { } document)
-        {
-            ImGui.TextDisabled("Preview unavailable.");
-            return;
-        }
-
-        var available = ImGui.GetContentRegionAvail();
-        if (available.X < 1f || available.Y < 1f || document.CanvasWidth <= 0f || document.CanvasHeight <= 0f)
-        {
-            return;
-        }
-
-        // Fits the Plate's visual bounds: its canvas plus any intentional Component overflow.
-        var fit = PlateViewFit.Fit(available, ProfileVisualBounds.Compute(document));
-        if (fit.Scale <= 0f)
-        {
-            return;
-        }
-
-        var canvasOrigin = ImGui.GetCursorScreenPos() + fit.CanvasOffset;
-        ImGui.Dummy(available);
-
-        var drawList = ImGui.GetWindowDrawList();
-        ProfileRenderer.Draw(drawList, document, canvasOrigin, fit.Scale, renderResources, ProfileRenderOptions.Finished);
-    }
-
-    private void DrawTemplateChooserFooter()
-    {
-        var character = characterIdentity.CurrentCharacter;
-        ImGui.TextColored(EditorWidgets.DimTextColor, character is not null
-            ? MyPlatesCharacterText.NewPlateBelongsToCurrent
-            : "No character is logged in, so the new Plate won't belong to a character yet.");
-
-        ImGui.Spacing();
-
-        // Left side: the quiet door into Manage Templates — not the common path through this
-        // popup (see DrawTemplatesView, a mode entered from here, never a permanent tab).
-        using (ImRaii.PushColor(ImGuiCol.Text, EditorWidgets.DimTextColor))
-        {
-            if (ImGui.Selectable("Manage Templates...", false, ImGuiSelectableFlags.None, new Vector2(ImGui.CalcTextSize("Manage Templates...").X, 0f)))
-            {
-                activeView = LibraryView.Templates;
-                selectedTemplateId = null;
-                ImGui.CloseCurrentPopup();
-            }
-        }
-
-        EditorWidgets.Tooltip("Preview, rename, duplicate, or delete your saved Templates.");
-
-        // Right side: Cancel, then Use Template as the primary (accent-colored) action.
-        var buttonSize = new Vector2(130f, 0f) * ImGuiHelpers.GlobalScale;
-        var rightWidth = (buttonSize.X * 2f) + ImGui.GetStyle().ItemSpacing.X;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - rightWidth));
-
-        if (ImGui.Button("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
-        {
-            ImGui.CloseCurrentPopup();
-        }
-
-        ImGui.SameLine();
-        using (ImRaii.PushColor(ImGuiCol.Button, EditorWidgets.AccentColor))
-        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, EditorWidgets.AccentColor with { W = 0.85f }))
-        using (ImRaii.PushColor(ImGuiCol.ButtonActive, EditorWidgets.AccentColor with { W = 0.7f }))
-        using (ImRaii.Disabled(IsBusy))
-        {
-            if (ImGui.Button("Use Template", buttonSize))
-            {
-                UseTemplate(chosenTemplateId);
-                ImGui.CloseCurrentPopup();
-            }
-        }
-    }
-
-    private readonly record struct ChooserSelection(string Name, string Description, string Destination, bool SupportsPreview);
-
-    private ChooserSelection? ResolveChooserSelection()
-    {
-        if (BuiltInTemplateCatalog.Find(chosenTemplateId) is { } builtIn)
-        {
-            var destination = builtIn.TemplateId == BuiltInTemplateCatalog.AdventurePlateClassicId ? "Basic Editor" : "Advanced Editor";
-            return new ChooserSelection(builtIn.Name, builtIn.Description, destination, builtIn.SupportsPreview);
-        }
-
-        var summary = templates.FindTemplate(chosenTemplateId);
-        if (summary is null)
-        {
-            return null;
-        }
-
-        if (!summary.IsReady)
-        {
-            return new ChooserSelection(summary.DisplayName, summary.Problem ?? "This Template can't be opened.", string.Empty, false);
-        }
-
-        var document = templates.GetSavedDocument(chosenTemplateId);
-        var destinationText = EditorSurfaceChooser.ForDocument(document) == EditorSurfaceKind.Basic ? "Basic Editor" : "Advanced Editor";
-        return new ChooserSelection(summary.DisplayName, $"Saved {summary.ModifiedUtc.ToLocalTime():g}.", destinationText, summary.SupportsPreview);
-    }
-
-    /// <summary>Regenerates the right pane's cached preview document only when the selected
-    /// Template id actually changed since the last draw — see the field doc comment.</summary>
-    private void EnsureChooserPreviewFresh(ChooserSelection selection)
-    {
-        if (chooserPreviewedTemplateId == chosenTemplateId)
-        {
-            return;
-        }
-
-        chooserPreviewedTemplateId = chosenTemplateId;
-        chooserPreviewDocument = selection.SupportsPreview
-            ? templates.GetSavedDocument(chosenTemplateId, new PlateStarterContent(characterIdentity.CurrentInfo))
-            : null;
-    }
-
-    // ---------------------------------------------------------------- Template rename
-
-    private void DrawTemplateRenamePopup()
-    {
-        if (pendingTemplateRenamePopup)
-        {
-            ImGui.OpenPopup(TemplateRenamePopupId);
-            pendingTemplateRenamePopup = false;
-        }
-
-        if (!ImGui.BeginPopupModal(TemplateRenamePopupId, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
-        {
-            return;
-        }
-
-        if (ImGui.IsWindowAppearing())
-        {
-            ImGui.SetKeyboardFocusHere();
-        }
-
-        ImGui.SetNextItemWidth(EditorWidgets.Scaled(300f));
-        var submitted = ImGui.InputText("##RenameTemplateName", ref templateRenameBuffer, TemplateNaming.MaxNameLength, ImGuiInputTextFlags.EnterReturnsTrue);
-
-        if (templateRenameError is { } error)
-        {
-            ImGui.TextColored(EditorWidgets.ErrorColor, error);
-        }
-
-        ImGui.Spacing();
-        using (ImRaii.Disabled(IsBusy))
-        {
-            if (ImGui.Button("Rename", EditorWidgets.Scaled(new Vector2(110f, 0f))) || submitted)
-            {
-                if (!TemplateNaming.TryNormalizeName(templateRenameBuffer, out var name, out var validationError))
-                {
-                    templateRenameError = validationError;
-                }
-                else
-                {
-                    var templateId = templateRenameTargetId;
-                    runner.Run("rename the Template", () => templates.RenameTemplateAsync(templateId, name));
-                    ImGui.CloseCurrentPopup();
-                }
-            }
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
-        {
-            ImGui.CloseCurrentPopup();
-        }
-
-        ImGui.EndPopup();
-    }
-
-    // ---------------------------------------------------------------- Template delete
-
-    private void DrawTemplateDeletePopup()
-    {
-        if (pendingTemplateDeletePopup)
-        {
-            ImGui.OpenPopup(TemplateDeletePopupId);
-            pendingTemplateDeletePopup = false;
-        }
-
-        if (!ImGui.BeginPopupModal(TemplateDeletePopupId, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
-        {
-            return;
-        }
-
-        var template = templates.FindTemplate(templateDeleteTargetId);
-        if (template is null || template.IsBuiltIn)
-        {
-            ImGui.CloseCurrentPopup();
-            ImGui.EndPopup();
-            return;
-        }
-
-        ImGui.TextUnformatted($"Delete \"{template.DisplayName}\"?");
-        EditorWidgets.Hint("It's moved to AetherFrame's Template trash folder, not destroyed. Its images are kept.");
-        ImGui.Spacing();
-
-        using (ImRaii.Disabled(IsBusy))
-        {
-            using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.6f, 0.18f, 0.18f, 1f)))
-            {
-                if (ImGui.Button("Delete", EditorWidgets.Scaled(new Vector2(110f, 0f))))
-                {
-                    var templateId = template.TemplateId;
-                    var name = template.DisplayName;
-                    runner.Run("delete the Template", () => templates.DeleteTemplateAsync(templateId), () =>
-                    {
-                        if (selectedTemplateId == templateId)
-                        {
-                            selectedTemplateId = null;
-                        }
-
-                        runner.Status = $"Deleted \"{name}\".";
-                    });
-                    ImGui.CloseCurrentPopup();
-                }
-            }
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Cancel", EditorWidgets.Scaled(new Vector2(110f, 0f))) || PopupEscapeGuard.CancelsPrompt())
-        {
-            ImGui.CloseCurrentPopup();
-        }
-
-        ImGui.EndPopup();
     }
 }

@@ -213,8 +213,14 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         fileDialogManager.Draw();
 
         // Before the open Plate is read: a Plate action that opens another Plate (Save as New
-        // Plate) takes effect before anything is drawn.
+        // Plate, Open another Plate, New Plate) takes effect before anything is drawn.
         actionBar.PlateMenu.DrawFrame();
+
+        // It opened in the Basic Editor, which draws it from now on.
+        if (!IsOpen)
+        {
+            return;
+        }
 
         editorSession.SyncWithCurrentProfile();
 

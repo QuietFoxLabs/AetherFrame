@@ -15,6 +15,7 @@ using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
 using AetherFrame.Services.Templates;
 using AetherFrame.Services.Thumbnails;
+using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Library;
@@ -264,12 +265,18 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
             // The Plate menu both editors' action bar shares (interface task 1): My Plates' card menu's
             // actions, run and reported where the Plate is being edited, with its own Export dialog.
+            // Its Open another Plate and New Plate... (interface task 2) switch the editor to another
+            // Plate, or a new one from the Create Plate chooser, asking first about unsaved changes.
             var editorPlateFileDialogs = new FileDialogManager();
+            var editorPlateActions = new PlateActions(plateLibrary, templateLibrary, packageService, profileService, editorSession, new PlateOperationRunner(log), log);
+            var editorPlates = new PlateMenu(
+                editorPlateActions, plateLibrary, templateLibrary, profileService, editorSession, characterIdentityService, thumbnailService, renderResources, editorPlateFileDialogs);
+            editorPlates.AttachSwitcher(new PlateSwitcher(
+                plateLibrary, profileService, editorSession, editorPlateActions,
+                () => characterIdentityService.CurrentCharacter, () => new PlateStarterContent(characterIdentityService.CurrentInfo),
+                ShowEditor, editorPlates.AskBeforeOpening, log));
             editorPlateMenu = new EditorPlateMenu(
-                new PlateMenu(
-                    new PlateActions(plateLibrary, templateLibrary, packageService, profileService, editorSession, new PlateOperationRunner(log), log),
-                    plateLibrary, profileService, editorSession, thumbnailService, editorPlateFileDialogs),
-                plateLibrary, characterIdentityService, documentCommands, editorPlateFileDialogs, plateId => profileViewWindow!.ShowPlate(plateId));
+                editorPlates, plateLibrary, characterIdentityService, documentCommands, editorPlateFileDialogs, plateId => profileViewWindow!.ShowPlate(plateId));
 
             basicProfileEditorWindow = new BasicProfileEditorWindow(
                 profileService, editorSession, basicEditorSession, imageTextureCache, renderResources, basicFileDialogManager, gameTitleCatalog, jobCatalog,
@@ -288,11 +295,14 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 basicGuidance, profileViewWindow.ShowPlate, profileViewWindow.ShowDocument,
                 packageService, new FileDialogManager(), packageImportWindow.Begin, log);
 
+            // The editors' Create Plate chooser is the same chooser: its Manage Templates... opens My Plates there.
+            editorPlates.Chooser.ManageTemplates = plateLibraryWindow.ShowManageTemplates;
+
             // The unsaved changes kept when AetherFrame last unloaded: read and claimed through the
             // Libraries' own store, offered once both Libraries have loaded and a character is logged
             // in (see LoadAsync), and restored into the editor that had them.
             keptChangesFiles = new DraftStore(paths, fileStore, log);
-            keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowRestoredPlate, log);
+            keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowEditor, log);
             keptChangesWindow = new KeptChangesWindow(keptChanges);
             plateLibraryWindow.KeptChanges = keptChanges;
 
@@ -796,8 +806,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
     private void OpenAdvancedEditor() => editorSurfaces.Show(EditorSurfaceKind.Advanced);
 
-    /// <summary>Shows a Plate the kept changes were restored into, in the editor they were made in.</summary>
-    private void ShowRestoredPlate(EditorSurfaceKind kind)
+    /// <summary>
+    /// Shows the open Plate in the editor of <paramref name="kind"/>: a Plate the kept changes were
+    /// restored into, in the editor they were made in, and the Plate the editors' Open another Plate
+    /// or New Plate opened, in the editor its content suits.
+    /// </summary>
+    private void ShowEditor(EditorSurfaceKind kind)
     {
         if (kind == EditorSurfaceKind.Basic)
         {
@@ -832,11 +846,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 }
             }
 
+            // Create Plate's chooser shows from My Plates, or over an editor from its New Plate...
+            // (interface task 2); either counts.
             var library = plugin.plateLibraryWindow;
             var snapshot = new TutorialContextSnapshot(
                 MyPlatesOpen: library.IsOpen,
                 TemplatesViewOpen: library.IsOpen && library.TemplatesViewShowing,
-                TemplateChooserOpen: library.IsOpen && library.TemplateChooserShowing,
+                TemplateChooserOpen: (library.IsOpen && library.TemplateChooserShowing) || plugin.editorPlateMenu.TemplateChooserShowing,
                 ActiveEditor: plugin.editorSurfaces.ActiveSurface,
                 PlateOpen: profile is not null,
                 PlateCount: plugin.plateLibrary.IsLoaded ? plugin.plateLibrary.GetOrderedPlates().Count : 0,

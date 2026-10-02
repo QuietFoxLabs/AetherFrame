@@ -25,7 +25,9 @@ namespace AetherFrame.Windows;
 /// <para>One instance serves both editors, like <see cref="EditorDocumentCommands"/>, so an action
 /// started in one finishes wherever the Plate is being edited. Its Export file dialog is its own,
 /// drawn once a frame by whichever editor is open (<see cref="DrawFrame"/>); when no editor draws
-/// one frame, <see cref="EndFrame"/> closes a dialog left open, and still applies finished actions.</para>
+/// one frame, <see cref="EndFrame"/> closes a dialog left open, and still applies finished actions.
+/// So are its Open another Plate and New Plate... (interface task 2): the menu's switcher, and its
+/// Create Plate chooser, which the open editor draws over itself.</para>
 /// </summary>
 internal sealed class EditorPlateMenu
 {
@@ -37,7 +39,7 @@ internal sealed class EditorPlateMenu
     // How long a result stays under the bar; an error stays until the next action.
     private const double ResultSeconds = 10.0;
 
-    private const string ControlTooltip = "Plate menu: View, Set Active, Save as New Plate, Save as Template, Export, Rename";
+    private const string ControlTooltip = "Plate menu: View, Set Active, Save as New Plate, Save as Template, Export, Rename,\nOpen another Plate, New Plate";
 
     private readonly PlateMenu menu;
     private readonly PlateLibraryService library;
@@ -71,13 +73,18 @@ internal sealed class EditorPlateMenu
 
     internal PlateMenu Menu => menu;
 
+    /// <summary>Whether the Create Plate chooser, opened by New Plate..., was on screen this frame or the one before (the tutorial reads it).</summary>
+    internal bool TemplateChooserShowing => menu.Chooser.Showing;
+
     /// <summary>Shows the Plate with <paramref name="plateId"/> in the Plate Viewer: the open one shows its live document.</summary>
     internal void View(Guid plateId) => view(plateId);
 
     /// <summary>
-    /// Applies a finished action and draws the Export file dialog, once a frame whichever editor
-    /// calls it. Call at the start of an editor's Draw, before it reads the open Plate, so an
-    /// action that opens another Plate (Save as New Plate) takes effect before anything is drawn.
+    /// Applies a finished action, opens a Plate waiting to open (Open another Plate, New Plate,
+    /// or either once the unsaved-changes question is answered), and draws the Export file dialog,
+    /// once a frame whichever editor calls it. Call at the start of an editor's Draw, before it
+    /// reads the open Plate, so an action that opens another Plate takes effect before anything is
+    /// drawn.
     /// </summary>
     internal void DrawFrame()
     {
@@ -89,12 +96,14 @@ internal sealed class EditorPlateMenu
 
         lastDrawnFrame = frame;
         menu.Runner.Advance();
+        menu.AdvanceOpenGuard();
         fileDialogs.Draw();
     }
 
     /// <summary>
     /// After every window has drawn: when no editor drew this frame, applies a finished action
-    /// anyway, and closes an Export dialog its editor left open. Call once a frame.
+    /// anyway, opens a Plate waiting to open, and closes an Export dialog its editor left open.
+    /// Call once a frame.
     /// </summary>
     internal void EndFrame()
     {
@@ -105,6 +114,7 @@ internal sealed class EditorPlateMenu
         }
 
         menu.Runner.Advance();
+        menu.AdvanceOpenGuard();
         if (lastDrawnFrame == frame - 1)
         {
             fileDialogs.Reset();
