@@ -72,7 +72,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 
 | Request | Answer |
 |---|---|
-| `GET /v1/status` | `200` `{"protocolVersion": 32769, "api": 1, "minimumPlugin": "0.1.6"}` |
+| `GET /v1/status` | `200` `{"protocolVersion": 32769, "api": 1, "minimumPlugin": "0.1.9"}` |
 | `POST /v1/challenge`, empty body | `200` the 32 challenge bytes |
 | `GET /v1/health`, no body | `200` `{"worker": true, "images": true, "backup": true}`, with each `true` or `false`; `413` for a body |
 
