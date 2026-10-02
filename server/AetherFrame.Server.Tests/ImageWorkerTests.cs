@@ -360,17 +360,31 @@ public class ImageWorkerTests
     {
         using var folder = new TempFolder();
         using var client = NewClient(folder.Path);
+
+        // The product's order: the server stops giving a connection a job before its run's own idle
+        // timeout ends the run, so the run it gives a job to has time left to take it.
+        Assert.True(client.MaxConnectionAge < WorkerRun.IdleTimeout, $"connections are used up to {client.MaxConnectionAge} old, but a run waits {WorkerRun.IdleTimeout}");
         client.MaxConnectionAge = TimeSpan.FromSeconds(1);
         using var stop = new CancellationTokenSource();
         await client.StartAsync(stop.Token);
-
-        // Runs that end themselves after half a second idle, as the real ones do after 15: several
-        // come and go, each leaving a connection behind that is closed or stale.
-        var workers = RunWorkersAsync(folder.Socket, stop.Token, idleTimeout: TimeSpan.FromMilliseconds(500));
+        var png = Images.Png(40, 30);
+        var workers = Task.CompletedTask;
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(4));
-            var png = Images.Png(40, 30);
+            // An idle spell: runs that end themselves after a moment without a job, as the real ones
+            // do after 15 seconds, one after another. Each has ended and closed its connection before
+            // the next starts and before the job comes, so the job can't meet one that is ending. The
+            // server drops the oldest connections left behind once four wait, and the job skips the
+            // rest, as too old or as closed.
+            for (var run = 0; run < 8; run++)
+            {
+                Assert.Equal(1, await WorkerRun.RunOnceAsync(folder.Socket, stop.Token, idleTimeout: TimeSpan.FromMilliseconds(400)).WaitAsync(TimeSpan.FromSeconds(10)));
+            }
+
+            // Then runs that wait as long as the real ones do. In the product's order again, a
+            // connection young enough for the job (1 second here) is a run with most of its 15
+            // seconds ahead of it.
+            workers = RunWorkersAsync(folder.Socket, stop.Token);
             var started = System.Diagnostics.Stopwatch.StartNew();
             var processed = await client.ProcessAsync(Images.Declared(ImageFormat.Png, 40, 30, png), png, default);
             Assert.NotNull(processed.Bytes);
@@ -569,13 +583,13 @@ public class ImageWorkerTests
     }
 
     /// <summary>Worker runs, one after another, as the container's restart policy would start them.</summary>
-    internal static Task RunWorkersAsync(string socket, CancellationToken stop, TimeSpan? idleTimeout = null) => Task.Run(async () =>
+    internal static Task RunWorkersAsync(string socket, CancellationToken stop) => Task.Run(async () =>
     {
         while (!stop.IsCancellationRequested)
         {
             try
             {
-                await WorkerRun.RunOnceAsync(socket, stop, idleTimeout: idleTimeout);
+                await WorkerRun.RunOnceAsync(socket, stop);
             }
             catch (OperationCanceledException)
             {
