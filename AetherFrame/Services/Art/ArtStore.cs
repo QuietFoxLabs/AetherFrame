@@ -44,6 +44,9 @@ internal sealed class ArtStore : IArtSource, IDisposable
     /// <summary>How old a temporary file left by an interrupted download must be before it is deleted.</summary>
     internal static readonly TimeSpan StaleTemporaryAge = TimeSpan.FromHours(1);
 
+    /// <summary>How many times a downloaded copy another program holds (an antivirus scan, say) is read before giving up.</summary>
+    private const int ReadAttempts = 3;
+
     private readonly HashSet<string> embedded;
     private readonly Func<string, byte[]?> readEmbedded;
     private readonly Func<string, ArtFile?> findFile;
@@ -177,23 +180,22 @@ internal sealed class ArtStore : IArtSource, IDisposable
             case Where.Hosted:
                 var file = findFile(art.AssetPath)!;
                 var path = CachePath(file);
-                byte[] bytes;
-                try
-                {
-                    bytes = File.ReadAllBytes(path);
-                }
-                catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
-                {
-                    Forget(file);
-                    throw new FileNotFoundException("The downloaded artwork is no longer on this PC; it downloads again.", path, e);
-                }
-
+                var bytes = ReadCopy(file, path);
                 if (!Matches(bytes, file))
                 {
-                    TryDelete(path);
-                    Forget(file);
-                    log($"AetherFrame removed a damaged copy of the artwork {art.Id}; it downloads again.");
-                    throw new InvalidDataException("The downloaded artwork was damaged; it downloads again.");
+                    if (TryDelete(path))
+                    {
+                        Forget(file);
+                        log($"AetherFrame removed a damaged copy of the artwork {art.Id}; it downloads again.");
+                    }
+                    else
+                    {
+                        // Downloading again would only meet the same copy: wait for the player instead.
+                        Fail(file, "a damaged copy on this PC couldn't be removed");
+                        log($"AetherFrame found a damaged copy of the artwork {art.Id} that it couldn't remove ({path}).");
+                    }
+
+                    throw new InvalidDataException("The downloaded artwork was damaged.");
                 }
 
                 return bytes;
@@ -223,6 +225,12 @@ internal sealed class ArtStore : IArtSource, IDisposable
                 if (!waitingForList.Contains(file))
                 {
                     waitingForList.Enqueue(file);
+                }
+
+                // The listing may have ended in between: then it won't drain this one.
+                if (listed)
+                {
+                    StartWaiting();
                 }
 
                 continue;
@@ -255,15 +263,16 @@ internal sealed class ArtStore : IArtSource, IDisposable
     private static bool Matches(byte[] bytes, ArtFile file) =>
         bytes.LongLength == file.Length && Convert.ToHexStringLower(SHA256.HashData(bytes)) == file.Sha256;
 
-    private static void TryDelete(string path)
+    private static bool TryDelete(string path)
     {
         try
         {
             File.Delete(path);
+            return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            // Left for the next read to find damaged again.
+            return false;
         }
     }
 
@@ -276,6 +285,51 @@ internal sealed class ArtStore : IArtSource, IDisposable
 
     private void Bump() => Interlocked.Increment(ref generation);
 
+    private void Fail(ArtFile file, string problem)
+    {
+        states[file.Sha256] = new ArtStatus(ArtState.Failed, Total: file.Length, Problem: problem);
+        Bump();
+    }
+
+    /// <summary>
+    /// A downloaded copy's bytes. One that is gone makes the artwork downloadable again; one that
+    /// another program holds is read again a few times, then the artwork fails until the player tries
+    /// again (so a held copy is never mistaken for a missing one, and never read every frame).
+    /// </summary>
+    private byte[] ReadCopy(ArtFile file, string path)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return File.ReadAllBytes(path);
+            }
+            catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+            {
+                Forget(file);
+                throw new FileNotFoundException("The downloaded artwork is no longer on this PC; it downloads again.", path, e);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                if (attempt < ReadAttempts)
+                {
+                    Thread.Sleep(100 * attempt);
+                    continue;
+                }
+
+                Fail(file, "the copy on this PC couldn't be read");
+                throw;
+            }
+        }
+    }
+
+    private void StartWaiting()
+    {
+        while (waitingForList.TryDequeue(out var file))
+        {
+            Start(file, retryFailed: false);
+        }
+    }
     private void Forget(ArtFile file)
     {
         if (states.TryRemove(file.Sha256, out _))
@@ -328,10 +382,7 @@ internal sealed class ArtStore : IArtSource, IDisposable
         {
             listed = true;
             Bump();
-            while (waitingForList.TryDequeue(out var file))
-            {
-                Start(file, retryFailed: false);
-            }
+            StartWaiting();
         }
     }
 
@@ -404,6 +455,12 @@ internal sealed class ArtStore : IArtSource, IDisposable
             states[file.Sha256] = new ArtStatus(ArtState.Failed, Total: file.Length, Problem: "it couldn't be saved on this PC");
             log($"AetherFrame couldn't save the artwork {file.Path}: {e.Message}.");
         }
+        catch (Exception e)
+        {
+            // Never left Queued or Downloading for the session.
+            states[file.Sha256] = new ArtStatus(ArtState.Failed, Total: file.Length, Problem: "something went wrong");
+            log($"AetherFrame couldn't download the artwork {file.Path}: {e}");
+        }
         finally
         {
             Bump();
@@ -416,15 +473,41 @@ internal sealed class ArtStore : IArtSource, IDisposable
         Directory.CreateDirectory(cacheDirectory);
         var target = CachePath(file);
         var temporary = Path.Combine(cacheDirectory, file.Sha256 + "." + Guid.NewGuid().ToString("N") + ".tmp");
-        File.WriteAllBytes(temporary, bytes);
         try
         {
-            File.Move(temporary, target, overwrite: false);
+            File.WriteAllBytes(temporary, bytes);
+            try
+            {
+                File.Move(temporary, target, overwrite: false);
+            }
+            catch (IOException) when (File.Exists(target))
+            {
+                // Another game client saved the same file first, or a damaged copy is still there:
+                // keep a good copy, and replace a damaged one (a failure here fails the download).
+                if (!CopyIsGood(file, target))
+                {
+                    File.Move(temporary, target, overwrite: true);
+                }
+            }
         }
-        catch (IOException) when (File.Exists(target))
+        finally
         {
-            // Another game client saved the same file first: its copy is checked when read.
-            TryDelete(temporary);
+            if (File.Exists(temporary))
+            {
+                TryDelete(temporary);
+            }
+        }
+    }
+
+    private static bool CopyIsGood(ArtFile file, string path)
+    {
+        try
+        {
+            return Matches(File.ReadAllBytes(path), file);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 

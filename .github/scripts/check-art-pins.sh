@@ -13,6 +13,7 @@ failures=0
 checked=0
 
 while read -r commit sha length path; do
+  path=${path%$'\r'}
   case "$commit" in
     '' | '#'*) continue ;;
   esac
@@ -39,6 +40,28 @@ while read -r commit sha length path; do
 done < "$table"
 
 python3 tools/art/write_art_files.py
+
+# What players already download never changes: every file the base branch's table names is still
+# named, at the same commit, with the same bytes. The base is the merge base with master (on a
+# push to master, the commit before the merge).
+base=$(git merge-base origin/master HEAD 2>/dev/null || true)
+if [ "$base" = "$(git rev-parse HEAD)" ]; then
+  base=$(git rev-parse HEAD^1 2>/dev/null || true)
+fi
+
+if [ -n "$base" ] && git cat-file -e "$base:$table" 2>/dev/null; then
+  while read -r commit sha length path; do
+    path=${path%$'\r'}
+    case "$commit" in
+      '' | '#'*) continue ;;
+    esac
+
+    if ! grep -qxF "$commit $sha $length $path" <(tr -d '\r' < "$table"); then
+      echo "::error file=$table::$path was hosted at $commit as $length bytes, $sha, before this change; hosted files never change or go"
+      failures=$((failures + 1))
+    fi
+  done < <(git show "$base:$table")
+fi
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures of $checked hosted files failed their pin check."

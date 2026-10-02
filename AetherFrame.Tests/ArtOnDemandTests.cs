@@ -84,6 +84,7 @@ public class ArtOnDemandTests
     [InlineData("Components/A/B/C.png", false)]
     [InlineData("StylePreviews/A.png", false)]
     [InlineData("Components/A/B.png?x=1", false)]
+    [InlineData("Components/A/B.png\n", false)]
     public void OnlyAPlainPath_IsWellFormed(string path, bool wellFormed)
     {
         Assert.Equal(wellFormed, ArtFiles.IsWellFormed(new ArtFile(path, 10, new string('a', 64), new string('b', 40))));
@@ -267,6 +268,80 @@ public class ArtOnDemandTests
         Assert.False(File.Exists(copy));
         Assert.Equal(ArtState.NotDownloaded, store.Status(art).State);
         Assert.True(store.Generation > before);
+    }
+
+    [Fact]
+    public async Task ADamagedCopyThatCantBeRemoved_FailsUntilTryAgain_InsteadOfDownloadingEveryFrame()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return; // Elsewhere a file held open can still be deleted.
+        }
+
+        using var folder = new TempDirectory();
+        var (art, file, bytes) = Hosted("Components/Set/Set_Held.png", 300);
+        var cache = Path.Combine(folder.Path, ArtStore.CacheFolderName);
+        Directory.CreateDirectory(cache);
+        var copy = Path.Combine(cache, file.Sha256 + ".png");
+        File.WriteAllBytes(copy, new byte[300]);
+        var calls = 0;
+        using var store = Store(folder, [], _ => null, path => path == file.Path ? file : null);
+        store.Downloader = (_, _, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(bytes.ToArray());
+        };
+        await store.Idle();
+
+        using (new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.Throws<InvalidDataException>(() => store.ReadVerified(art));
+            var held = store.Status(art);
+            Assert.Equal(ArtState.Failed, held.State);
+            Assert.Equal("a damaged copy on this PC couldn't be removed", held.Problem);
+
+            // A window asking every frame downloads nothing.
+            store.Request([art], retryFailed: false);
+            await store.Idle();
+            Assert.Equal(0, calls);
+        }
+
+        // Once it is free, the player's Try again replaces it with a good copy.
+        store.Request([art], retryFailed: true);
+        await store.Idle();
+        Assert.Equal(1, calls);
+        Assert.Equal(ArtState.Cached, store.Status(art).State);
+        Assert.Equal(bytes, store.ReadVerified(art));
+    }
+
+    [Fact]
+    public async Task ADamagedCopyFoundOnSaving_IsReplaced_AndAGoodOneIsKept()
+    {
+        using var folder = new TempDirectory();
+        var (art, file, bytes) = Hosted("Components/Set/Set_Raced.png", 400);
+        var cache = Path.Combine(folder.Path, ArtStore.CacheFolderName);
+        var copy = Path.Combine(cache, file.Sha256 + ".png");
+        var release = new TaskCompletionSource();
+        using var store = Store(folder, [], _ => null, path => path == file.Path ? file : null);
+        store.Downloader = async (_, _, _) =>
+        {
+            await release.Task;
+            return bytes.ToArray();
+        };
+        await store.Idle();
+
+        store.Request([art], retryFailed: false);
+        Assert.True(SpinWait.SpinUntil(() => store.Status(art).State == ArtState.Downloading, TimeSpan.FromSeconds(10)));
+
+        // Something else wrote a damaged copy meanwhile.
+        Directory.CreateDirectory(cache);
+        File.WriteAllBytes(copy, new byte[400]);
+        release.SetResult();
+        await store.Idle();
+
+        Assert.Equal(ArtState.Cached, store.Status(art).State);
+        Assert.Equal(bytes, File.ReadAllBytes(copy));
+        Assert.Empty(Directory.EnumerateFiles(cache, "*.tmp"));
     }
 
     [Fact]

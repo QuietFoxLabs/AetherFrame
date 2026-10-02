@@ -9,7 +9,8 @@ The plugin downloads a file only from the commit the table names for it, and use
 length and SHA-256 are exactly the table's. So hosted bytes never change: a path already in the
 table keeps its pin, and a file whose bytes differ from its recorded ones is refused (new bytes
 need a new artwork id and a new path). New files are pinned to the commit given with --commit,
-which must be the commit that adds them, on master (see AetherFrame/Assets/README.md).
+which must be the commit that adds them, merged into master with a merge commit (see "Hosted
+artwork" in AetherFrame/Assets/README.md).
 
 It writes:
 
@@ -60,7 +61,7 @@ def hosted_files():
             if not name.endswith(".png"):
                 continue
             path = f"Components/{folder}/{name}"
-            if not PATH.match(path):
+            if not PATH.fullmatch(path):
                 raise SystemExit(f"{path}: hosted paths are Components/<Folder>/<File>.png in letters, digits, '_' and '-'")
             found.append((path, full))
     return sorted(found)
@@ -82,7 +83,7 @@ def read_table():
             if not line or line.startswith("#"):
                 continue
             commit, sha, length, path = line.split(" ")
-            if not (COMMIT.match(commit) and SHA.match(sha) and length.isdigit() and PATH.match(path)):
+            if not (COMMIT.fullmatch(commit) and SHA.fullmatch(sha) and length.isdigit() and PATH.fullmatch(path)):
                 raise SystemExit(f"ArtFiles.txt line {number} is malformed")
             if path in rows:
                 raise SystemExit(f"ArtFiles.txt names {path} twice")
@@ -137,8 +138,8 @@ def csharp_text(rows):
         "public static partial class ArtFiles",
         "{",
     ]
-    for index, commit in enumerate(pins, 1):
-        lines.append(f'    private const string Pin{index} = "{commit}";')
+    for commit in pins:
+        lines.append(f'    private const string Commit{commit[:12]} = "{commit}";')
     lines += [
         "",
         "    /// <summary>Every hosted file, by path.</summary>",
@@ -146,7 +147,7 @@ def csharp_text(rows):
         "    [",
     ]
     for path, (commit, sha, length) in sorted(rows.items()):
-        lines.append(f'        new("{path}", {length}, "{sha}", Pin{pins.index(commit) + 1}),')
+        lines.append(f'        new("{path}", {length}, "{sha}", Commit{commit[:12]}),')
     lines += ["    ];", "}", ""]
     return "\n".join(lines)
 
@@ -156,7 +157,7 @@ def main():
     parser.add_argument("--write", action="store_true", help="write the table and the C# file")
     parser.add_argument("--commit", help="the 40-hex commit new files are pinned to")
     options = parser.parse_args()
-    if options.commit is not None and not COMMIT.match(options.commit):
+    if options.commit is not None and not COMMIT.fullmatch(options.commit):
         raise SystemExit("--commit takes a full 40-character lowercase commit id")
 
     rows, problems = build(options.commit if options.write else None)

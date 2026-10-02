@@ -28,9 +28,9 @@ public static partial class ArtFiles
     /// <summary>The longest file the table may name, in bytes: the largest piece is about 2.6 MB.</summary>
     public const long MaxLength = 8L * 1024 * 1024;
 
-    private static readonly Regex CommitPattern = new("^[0-9a-f]{40}$", RegexOptions.CultureInvariant);
-    private static readonly Regex Sha256Pattern = new("^[0-9a-f]{64}$", RegexOptions.CultureInvariant);
-    private static readonly Regex PathPattern = new("^Components/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+\\.png$", RegexOptions.CultureInvariant);
+    private static readonly Regex CommitPattern = new("^[0-9a-f]{40}\\z", RegexOptions.CultureInvariant);
+    private static readonly Regex Sha256Pattern = new("^[0-9a-f]{64}\\z", RegexOptions.CultureInvariant);
+    private static readonly Regex PathPattern = new("^Components/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+\\.png\\z", RegexOptions.CultureInvariant);
 
     /// <summary>Every hosted file, in path order.</summary>
     public static IReadOnlyList<ArtFile> All => Table;

@@ -409,7 +409,7 @@ Any other kind is `InvalidValue`. Each field is checked as soon as it is read, i
 - **A quad or triangle** is filled with its colour.
 - **An image quad or art quad** maps the image's corners onto the four points and multiplies it by `tint`.
 
-A font or art ident is looked up by exact match in a table the viewer bundles. An art ident may name one piece of a bundled artwork that stretches to fit (for example a name backing's left end); the image an art quad maps is then that piece, so the quad's fields are the same either way. It is never used to build a file path, a URL or anything else. An ident the viewer does not bundle is drawn as a placeholder and named in a note, never fetched.
+A font or art ident is looked up by exact match in a table the viewer bundles. `[note 2026-10-01: a viewer may download a known artwork's image from an address its own table gives, never one built from the ident ("Art on demand" in the decision register); an ident not in its table is still never fetched]` An art ident may name one piece of a bundled artwork that stretches to fit (for example a name backing's left end); the image an art quad maps is then that piece, so the quad's fields are the same either way. It is never used to build a file path, a URL or anything else. An ident the viewer does not bundle is drawn as a placeholder and named in a note, never fetched.
 
 **Consumers treat every text as plain text** (decision N7): never markup, a format string, a game text payload, a path, a URL or a command.
 

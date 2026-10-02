@@ -33,7 +33,7 @@ The owner will buy and set up a domain and a server when needed. Putting network
 
 Two players on native Windows, each running a **networking preview build**, and one server the owner hosts. How a preview build reaches the second player is a decision of its own (the tester kit, N2-11), because P2 keeps preview builds out of releases and test builds.
 
-1. **Nothing until you opt in.** A preview build that hasn't opted in adds no menu item and no search box, sends nothing, and looks nothing up.
+1. **Nothing until you opt in.** A preview build that hasn't opted in adds no menu item and no search box, sends nothing, and looks nothing up. `[updated 2026-10-01, "Art on demand": for sharing: an Art Style's artwork downloads from GitHub when used, whether or not the player shares]`
 2. **Opt in (V1).** Player A turns on sharing, which is off by default. A consent screen says:
    - what others will see: A's Active Plate for each character A opts in, as a finished picture, updated whenever A saves it (V2);
    - who can see it: other players who have opted in, from the game's right-click menu on A's character or by searching A's name and World (V5);
@@ -79,7 +79,7 @@ Player A's plugin (preview)                          Owner's server             
   Network code lives only inside `Services/Network`, and only in the preview flavour, as R3's exact allowlist says; the player flavour stays free of it.
 - **The viewer.**
   - It turns a schema 2 snapshot into an in-memory Plate that is never saved, and draws it with the shared renderer. It touches no Library, Template or binding.
-  - Components and fonts resolve only against the viewer's own bundled set. An identifier it doesn't know is drawn as a placeholder and named in a note, never fetched.
+  - Components and fonts resolve only against the viewer's own bundled set. An identifier it doesn't know is drawn as a placeholder and named in a note, never fetched. `[updated 2026-10-01, "Art on demand": an artwork the viewer's build knows but hasn't downloaded yet downloads from its compiled address]`
   - It accepts only the images I1 allows: it sniffs the bytes before decoding and refuses anything but a non-animated 8-bit PNG or an 8-bit JPEG with 1 or 3 components, within the limits imports use (ROADMAP.md, section 4, rule 5).
   - Whether the viewer checks the signature itself or receives server-checked content is D6. `[updated 2026-09-30: server-checked content (D6): the viewer receives a served profile and images by index, and verifies no signature.]`
 - **Server.** `server/AetherFrame.Server`, a small ASP.NET Core service in this repository, built and tested by CI like the rest:
