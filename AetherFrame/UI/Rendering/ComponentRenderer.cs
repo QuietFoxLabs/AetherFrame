@@ -61,8 +61,8 @@ internal static class ComponentRenderer
                     // tints the white/greyscale artwork and carries the opacity.
                     if (definition.Art is { } art && resources.Art.GetWrapOrNull(art, ArtScreenPixels(art, primitive.Piece, a, b, d)) is { } artWrap)
                     {
-                        var (u0, u1) = art.Window(primitive.Piece);
-                        drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, 0f), new Vector2(u1, 0f), new Vector2(u1, 1f), new Vector2(u0, 1f), color);
+                        var (u0, v0, u1, v1) = art.Window2D(primitive.Piece);
+                        drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), color);
                     }
 
                     break;
@@ -72,14 +72,7 @@ internal static class ComponentRenderer
         PrimitiveBuffer.Clear();
     }
 
-    /// <summary>
-    /// The on-screen size, in pixels, of the whole artwork a quad A-B-C-D (D below A) draws
-    /// <paramref name="piece"/> of: what picks its level. A whole artwork's longer side; a piece of
-    /// sliced artwork scales its full-height strip by the artwork's long side over its height, so
-    /// every piece of one placement draws from the same level (a stretched fill never needs a larger one).
-    /// </summary>
-    internal static float ArtScreenPixels(BuiltInArtAsset art, ArtPiece piece, Vector2 a, Vector2 b, Vector2 d) =>
-        piece == ArtPiece.Whole || art.PixelHeight <= 0
-            ? MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d))
-            : Vector2.Distance(a, d) * Math.Max(art.PixelWidth, art.PixelHeight) / art.PixelHeight;
+    /// <summary>The on-screen size of the whole artwork a quad draws a piece of: what picks its level
+    /// (see <see cref="BuiltInArtAsset.ScreenPixels"/>).</summary>
+    internal static float ArtScreenPixels(BuiltInArtAsset art, ArtPiece piece, Vector2 a, Vector2 b, Vector2 d) => art.ScreenPixels(piece, a, b, d);
 }

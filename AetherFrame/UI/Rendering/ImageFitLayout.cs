@@ -45,9 +45,8 @@ internal static class ImageFitLayout
             if (fit == ProfileImageFit.Fit)
             {
                 // Letterbox: shrink the drawn rect to the image's aspect, centered; full source UV.
-                var drawSize = imageAspect > boxAspect
-                    ? new Vector2(boxSize.X, boxSize.X / imageAspect)
-                    : new Vector2(boxSize.Y * imageAspect, boxSize.Y);
+                // The paint plan lays the portrait's frame on this same rect (PictureFit).
+                var drawSize = PictureFit.Size(boxSize, sourcePixels);
                 drawMin = (boxSize - drawSize) / 2f;
                 drawMax = drawMin + drawSize;
             }

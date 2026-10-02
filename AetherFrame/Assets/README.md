@@ -37,8 +37,9 @@ Every runtime PNG under `Components/`, except Celestial Dream's, is hosted: play
 - Corner Ornaments are drawn for the top-left corner. The catalog says whether the other corners
   rotate or mirror it.
 - Name Backings and Dividers may be **sliced** (`ArtSlices` in `BuiltInArtCatalog`), below.
+- Plate Frames and Portrait Frames are **cut to fit** (`ArtFrameSlices`), below.
 
-`BuiltInArtTests`, `CelestialSakuraTests`, `SlicedArtTests` and `ArtSetsTests` check all of this against the files (which the tests embed in their own assembly) and the hosted table's SHA-256s.
+`BuiltInArtTests`, `CelestialSakuraTests`, `SlicedArtTests`, `FrameFittingTests` and `ArtSetsTests` check all of this against the files (which the tests embed in their own assembly) and the hosted table's SHA-256s.
 
 ## Sliced artwork (Name Backings, Dividers and Section Headers)
 
@@ -66,6 +67,35 @@ a fill, a center piece, a fill and a right cap:
   (`BuiltInArtCatalog.FindPiece`), so the art quad's format is unchanged.
 - To measure a new piece: the fills are where every column has the same silhouette and nearly the
   same colors. Measure them on the runtime PNG, never by eye on a scaled preview.
+
+## Frames cut to fit (Plate Frames and Portrait Frames)
+
+A frame's corners and crests reach past its rails, and most frames' drawings stop a little short of
+their image's edges (up to about 5%; a few touch them). So a frame laid on its box by its image sat
+well inside the box. And the Plate or the picture it frames is not always the shape it was drawn
+for. So every frame is cut into a grid (`ArtFrameSlices`: an `ArtSlices` for its columns, one for its
+rows, and its drawing's bounds), October 2, 2026, at the owner's request:
+
+- On each axis, `ContentLeft` to `ContentRight` is the outer edge of the frame's rails, laid on the
+  box's edges: the canvas for a Plate Frame, the drawn picture for a Portrait Frame. What reaches
+  past the rails (corner ornaments, a crest) reaches past the box, out to the drawing's bounds
+  (alpha over 16); the faint halo beyond them is left out.
+- The caps and the center piece keep the artwork's proportions, at the scale at which the rails fit
+  inside the box; the two fills share the rest of each axis in proportion to their own lengths. A
+  center piece is a mid-edge ornament: on six measured Plate Frames' top edges, and in both of
+  Celestial Sakura's hand-set frames. Every other axis has one plain run across its middle, so no
+  center piece.
+- Only the border cells are drawn (`ArtPieces.FrameBorder`): every frame is clear between its caps.
+  A shared Plate names each cell by its own ident, the artwork's id plus `.frame-r0c0` to
+  `.frame-r4c4` (row, then column), so the art quad's format is unchanged.
+- `tools/art/measure_frames.py` measures the cuts from the runtime PNGs (which it never changes)
+  and writes `ArtFrameData.g.cs`. On each axis it takes one plain run of rail across the middle,
+  or else the longest plain run on each side of it, cut 16 px inside, so even a small preview's
+  smaller copy of the artwork samples only plain rail at the cuts. A rail's outer edge is where the
+  drawing starts and ends across those fills (their median). Embroidered Tapestry's woven Plate
+  Frame passes only its texture test; Celestial Sakura's frames are ornamented all along, so
+  theirs are set by hand where least busy, and their few hand-cut pixels stretch visibly further
+  than plain rail, more so on a canvas of another shape.
 
 ## Celestial Dream / Corner Ornaments / AstrolabePivot.png — 512 x 512
 
