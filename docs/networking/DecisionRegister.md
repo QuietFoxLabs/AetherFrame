@@ -1,6 +1,6 @@
 # Networking decision register
 
-**Status (2026-10-02): seven decisions are the owner's approvals (D3, amended by V4; D2 in principle; V1 to V5), and fifty-one more are approved under the owner's delegation (the details of "Sharing a Plate as soon as it is Active" the latest), two of them (R1 and R4) since retired by a third (R5), and S2 retired for stage 1 by C4.**
+**Status (2026-10-02): seven decisions are the owner's approvals (D3, amended by V4; D2 in principle; V1 to V5), and fifty-two more are approved under the owner's delegation (the details of "Watching the server" the latest), two of them (R1 and R4) since retired by a third (R5), and S2 retired for stage 1 by C4.**
 - **D3** is **APPROVED** by the owner, and amended by the owner's V4 (September 30, 2026).
 - **D2** is **APPROVED IN PRINCIPLE** by the owner. Its technical details remain unresolved, pending later security approval.
 - **V1** to **V5** are **APPROVED** by the owner (September 30, 2026): viewing Plates by character, opt-in and both ways. See "V1 to V5".
@@ -13,6 +13,7 @@
 - **D1**, **D6**, **N2**, **N6**, **S2**, **S3**, **S4**, **I2**, and the new **R4**, **S5** and **P4**, are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, and **K5** moves to the "D2 details" gate, where it stays UNRESOLVED. See "Decision batch B for the server (N2-7)".
 - **Art on demand** follows the owner's direction of October 1, 2026, with its details **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, October 1, 2026, with a security and privacy reviewer's concurrence. It amends R2, C4's "Off by default", N2-10's drawing of artwork and "Releases carry sharing". See "Art on demand".
 - **Sharing a Plate as soon as it is Active** follows the owner's direction of October 2, 2026, which overrules the first showing that C3, N2-9b's opt-in and N2-9c's live publishing had decided under the delegation, and what D5 and I1 relied on it for, with its details **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, October 2, 2026. See "Sharing a Plate as soon as it is Active".
+- **Watching the server** follows the owner's direction of October 2, 2026, with its details **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, October 2, 2026: a health answer, `GET /v1/health`, and a scheduled GitHub workflow that opens an issue for the owner when it fails. It amends N2-8's deployment (the deploy also waits for the worker) and ServerApi's only-GET rule. See "Watching the server".
 - **R5** is **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, September 30, 2026. It retires R1's share codes and R4's format, following the owner's V1 and V5. See "R5".
 - **C1** to **C9**, decision batch C (viewing by character), are **APPROVED (Claude, under the owner's delegation of September 29, 2026)**, September 30, 2026, with a security reviewer's concurrence. C3 amends D5's N2-6 note, point 6, for opted-in characters; C4 amends P1 and retires S2 for stage 1. The owner **approved in advance, with conditions,** the one signed-byte change it needs, a new request kind (C9). See "Decision batch C".
 - The owner also **approved in advance, with conditions,** NETWORK2's two signed-byte changes, N2-2 and N2-3 (September 29, 2026). This is not a decision of this register, only the owner's approval that NETWORK1.md's safeguard 3 requires. See "Approved decisions".
@@ -1531,6 +1532,73 @@ A final recheck, of `1d47ead`, confirmed one major point and three minor ones, a
 - this entry and the CHANGELOG said the progress window reports a withdrawn send even when it shows the new Plate's refusal: reworded to what the code does.
 
 A focused check of `eef8d6f` found no way around that rule through the buttons or retries, and two last minor points, both applied in the next commit: a send for a character the player had switched away from now also stops once its Plate is no longer that character's Active Plate (the check runs every frame for whichever character's send is under way), and an older send's result ending in the same frame as a hidden newer build's refusal no longer reopens the progress window.
+
+### Watching the server. The owner's direction, October 2, 2026; its details APPROVED (Claude, under the owner's delegation of September 29, 2026), October 2, 2026
+
+**The owner's direction.** The image worker's service refused every image for about eight hours from October 1 to 2, and nothing told anyone (ROADMAP.md, known bugs 13 and 14). Claude's next tasks in ROADMAP.md, section 8, began with "A health check for the server": decide what to watch (the worker taking jobs, the daily backup, the relay answering, new reports) and how the owner is told, then build it; anything that needs an account, a key or a login on the server stays the owner's. The owner answered in chat on October 2, 2026: "ill go with all of your recommendations".
+
+**What is watched.**
+- **`GET /v1/health`.** The server answers with exactly `{"worker": bool, "images": bool, "backup": bool}` and status 200, whatever the state. A 5xx, or no answer at all, means the server itself is down.
+  - It reads in-memory state only. A request does no database, worker, Lodestone or relay work, and nothing is kept.
+  - It has no rate limit, like `/v1/status`, and a request body is refused with 413.
+  - The plugin never calls it (R2).
+- **`worker`:** an image worker run connected within the last 2 minutes.
+  - A healthy host connects a fresh run every 15 to 60 seconds, whether or not anyone publishes.
+  - So it turns false within about 2 minutes of known bug 13, or of a stopped service, Docker or worker image.
+- **`images`:** a canary.
+  - A fixed, tiny PNG compiled into the server goes through the image worker on the server's own timer: about a minute after start, then hourly, and five minutes after a failure. Its output is checked as a publish's is, then discarded.
+  - It never touches the database, a character, a limit or a budget.
+  - It is true when the last canary succeeded within 3 hours. It turns false after two failures in a row, and a busy queue counts neither way.
+  - It catches a worker that connects but can't re-encode. Real jobs could show that only by revealing who shared.
+- **`backup`:** the backup, which now runs every hour, last finished both its copy and its clean-up within 3 hours.
+- **Defaults:** a value that isn't known, or isn't configured, is false. After a start, `worker` is false until a run connects, which takes seconds on a healthy host. Images and the backup read true for their first 15 minutes, while their first results come in.
+
+**Not watched, on purpose.**
+- **The Lodestone relay.** Its reachability would say when the owner's PC is on. That is a live "last seen" the privacy rules forbid (ROADMAP.md, section 4, rule 8), and the alerts below would keep it as a public log. A relay that is off is also normal ("Opening the alpha").
+- **Reports, even as one bit.** In a small alpha, that bit would say a dispute happened, when, and how long moderation waits. The runbook asks the operator to look once a week (`admin reports`); reports go after 30 days anyway (C5).
+- **Any count, rate, time, version or size.** These are activity levels, which S5 allows only as aggregates in the logs. A queue depth would also show an attacker the effect of the publish-slot risk that "Opening the alpha" accepted.
+
+**How the owner is told.**
+- **The monitor.** A scheduled workflow, `.github/workflows/server-health.yml`, asks `/v1/health` every 15 minutes. When a check fails twice, two minutes apart, it opens one issue labelled `server-health`, which mentions and assigns the owner.
+  - GitHub's notification is the alert, so no account, key, secret or server login is needed.
+  - While the outage lasts, it updates that issue, commenting only when the failing checks change. When the server is healthy again, it says so and closes the issue.
+  - It skips its check while a deploy runs.
+  - A `/v1/health` that answers 404 (a server not yet deployed with it) is judged by `/v1/status` alone.
+- **What the issue may say.** Only what `/v1/health` says, or that the server didn't answer, or answered with something else, plus fixed text. Never the answer's body, an address, or a timing beyond the check's UTC time.
+- **Its token** can write issues and read the repository's contents and Actions runs, nothing more. It has no secret and no environment.
+- **The deploy.** It now restarts the worker service before the new server starts, so every run that connects to the new server comes from the restarted service. It then waits up to 150 seconds for `worker` to be true. A deploy that breaks the worker then fails in front of the owner, who approves every deploy. A rollback to a commit without the route only warns.
+- **CI.** The deployment-kit job stages known bug 13: it runs the worker service's loop as a user that can't read the socket volume. `/v1/health` must then report `worker: false`, and the monitor's decision must be to alert. The loop then runs as root again, and the worker recovers.
+
+**The backup's 7 days, kept** (ROADMAP.md, known bug 15). D1 and the consent text promise that backups keep copies for up to 7 days, and two things broke it:
+- the clean-up ran only with the daily copy, so a deploy or a retry that moved the copy later in the day kept a copy up to about a day longer;
+- a failed copy skipped the clean-up altogether, so while copies failed (a full disk, say), older copies stayed.
+
+The backup now runs every hour. It writes one copy a day, as before, and deletes each copy once it is 6 days and 22 hours past the start of its day, even when the day's copy fails. A copy is written no earlier than the start of its day, so each is gone within 7 days of being written, through any restart shorter than an hour (the spare hour covers one). A failed copy is tried again at the next hourly run. While the server is stopped, nothing runs, as before (the runbook says so).
+
+**What stays as it was.** Nothing new is kept, so S5, C7 and the consent text are unchanged. The server API gains one unsigned GET (ServerApi-v1.md, section 3).
+
+**Residual risks, accepted.**
+- Closed alert issues are a public record of the server's outages, and the time each one closes hints at when the owner acted. The owner already works in public issues.
+- GitHub can delay a scheduled run, so an alert can take 5 to 30 minutes.
+- GitHub turns the schedule off in a public repository after 60 days without activity. The runbook says how to turn it back on.
+- A monitor that has stopped is silent.
+
+**Not settled:**
+- a private channel to the owner, for reports or the relay, which needs an account and is the owner's call;
+- read-only diagnostic access for Claude, also the owner's call;
+- a check that the configuration file loaded. A broken edit closes the alpha until it is fixed.
+
+**Independent review.** Three reviewers examined `142e36a` (October 2, 2026), for security and privacy, correctness and tests, and the workflows and CI.
+- **The security and privacy reviewer concurred** with what the answer and the issues reveal: the answer's bytes are the same whatever a request carries and whatever players do, and the issues carry only check names and times.
+- **One blocking point:** backup copies could outlive the 7 days by up to about a day, since the clean-up ran only with the daily copy. Fixed above: the backup now runs hourly.
+- **Five minor points, all applied:**
+  - the plugin boundary test now also scans the linked Protocol and Personas sources, and an IL check covers the plugin's strings;
+  - tests now cover the canary's and the watch's schedules;
+  - CI's Stop step stops the worker loop's subshells;
+  - the deploy job times out after 30 minutes, so the monitor's skip during a deploy is bounded;
+  - the alert issue says its text is rewritten when the failing checks change.
+
+A recheck of `d0b2fa9` confirmed every fix. It found one more minor point, also applied: a restart during a copy's last hour could keep that copy a few seconds past 7 days, so copies now go an hour earlier.
 
 ## Gates
 

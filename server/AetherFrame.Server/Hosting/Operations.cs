@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Server.Storage;
@@ -14,14 +15,24 @@ using Microsoft.Extensions.Options;
 namespace AetherFrame.Server.Hosting;
 
 /// <summary>
-/// The daily backup (decision D1; N2-8): a consistent copy of the database, written with
-/// <c>VACUUM INTO</c>, kept for <see cref="Retention"/> and then deleted, so a deletion has reached
-/// every copy once that time has passed. The consent text quotes the retention.
+/// The backup (decision D1; N2-8): a consistent copy of the database once a UTC day, written with
+/// <c>VACUUM INTO</c>, and deleted within <see cref="Retention"/> of its writing, so a deletion has
+/// reached every copy once that time has passed. The consent text quotes the retention. A run every
+/// <see cref="Interval"/> writes the day's copy if it isn't there yet and deletes the copies due, so
+/// neither a restart nor a failed run moves a deletion later. Each run's outcome is
+/// <c>/v1/health</c>'s <c>backup</c> (<see cref="ServerHealth"/>).
 /// </summary>
-internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase database, TimeProvider time, ILogger<Backups> logger) : BackgroundService
+internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase database, ServerHealth health, TimeProvider time, ILogger<Backups> logger) : BackgroundService
 {
-    /// <summary>How long a backup is kept.</summary>
+    /// <summary>How long a backup is kept, at most.</summary>
     public static readonly TimeSpan Retention = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// How long after one run the next starts, whether it succeeded or not. A run writes only the
+    /// copy its UTC day lacks, so there is still one copy a day, and a failed run is simply tried
+    /// again at the next.
+    /// </summary>
+    internal TimeSpan Interval { get; set; } = TimeSpan.FromHours(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -30,7 +41,10 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
             return;
         }
 
-        while (!stoppingToken.IsCancellationRequested)
+        // A timer, not a pause after each run, so the runs stay an interval apart however long a copy
+        // takes: the sweep's margin relies on it.
+        using var timer = new PeriodicTimer(Interval, time);
+        do
         {
             try
             {
@@ -40,42 +54,54 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
             {
                 logger.LogWarning("A backup failed with {ErrorKind}.", e.GetType().Name);
             }
-
-            await Task.Delay(TimeSpan.FromHours(24), time, stoppingToken);
         }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Writes today's backup if there is none, and deletes those past the retention.</summary>
+    /// <summary>
+    /// Writes today's backup if there is none, then deletes those due, whether or not the copy
+    /// succeeded, and records the outcome: a success only when both did. A copy of day D is due once
+    /// <see cref="Retention"/> less two <see cref="Interval"/>s has passed since D began, so a run in
+    /// the second-last interval before D plus the retention deletes it, or, after a restart shorter
+    /// than an interval, a run in the last. It was written on day D, so it is gone within the
+    /// retention of its writing, whatever the runs' phase, and whether or not a run failed.
+    /// </summary>
     internal async Task RunOnceAsync(CancellationToken cancellation)
+    {
+        try
+        {
+            await CopyAndSweepAsync(cancellation);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            health.BackupFinished(succeeded: false);
+            throw;
+        }
+
+        health.BackupFinished(succeeded: true);
+    }
+
+    private async Task CopyAndSweepAsync(CancellationToken cancellation)
     {
         var folder = options.Value.BackupFolder;
         var now = time.GetUtcNow();
+        var due = Retention - (2 * Interval);
         var today = Path.Combine(folder, "server-" + now.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".db");
+        ExceptionDispatchInfo? copyFailure = null;
         if (!File.Exists(today))
         {
-            var partial = today + ".partial";
-            File.Delete(partial);
             try
             {
-                await using (var connection = await database.OpenAsync(cancellation))
-                {
-                    await using var command = connection.CreateCommand();
-                    command.CommandText = "VACUUM INTO $path;";
-                    command.Parameters.AddWithValue("$path", partial);
-                    await command.ExecuteNonQueryAsync(cancellation);
-                }
-
-                SqliteConnection.ClearAllPools();
-                File.Move(partial, today);
+                await CopyAsync(today, cancellation);
             }
-            catch
+            catch (Exception e) when (e is not OperationCanceledException)
             {
-                // A failed copy (a full disk, say) is never left to outlive the retention.
-                File.Delete(partial);
-                throw;
+                copyFailure = ExceptionDispatchInfo.Capture(e);
             }
         }
 
+        // The sweep runs even when the copy failed, so that while copies fail (a full disk, say),
+        // none older than the retention survives either.
         foreach (var file in Directory.GetFiles(folder, "server-*"))
         {
             var name = Path.GetFileName(file);
@@ -87,10 +113,38 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
 
             if (name.Length >= "server-yyyyMMdd".Length
                 && DateTime.TryParseExact(name.Substring("server-".Length, 8), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day)
-                && now.UtcDateTime - day >= Retention)
+                && now.UtcDateTime - day >= due)
             {
                 File.Delete(file);
             }
+        }
+
+        copyFailure?.Throw();
+    }
+
+    /// <summary>Copies the database to <paramref name="today"/>, through a partial file that a failure never leaves behind.</summary>
+    private async Task CopyAsync(string today, CancellationToken cancellation)
+    {
+        var partial = today + ".partial";
+        File.Delete(partial);
+        try
+        {
+            await using (var connection = await database.OpenAsync(cancellation))
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "VACUUM INTO $path;";
+                command.Parameters.AddWithValue("$path", partial);
+                await command.ExecuteNonQueryAsync(cancellation);
+            }
+
+            SqliteConnection.ClearAllPools();
+            File.Move(partial, today);
+        }
+        catch
+        {
+            // A failed copy (a full disk, say) is never left to outlive the retention.
+            File.Delete(partial);
+            throw;
         }
     }
 }

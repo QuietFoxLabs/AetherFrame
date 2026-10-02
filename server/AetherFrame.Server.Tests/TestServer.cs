@@ -55,6 +55,16 @@ internal sealed class TestServer : WebApplicationFactory<Program>
     /// </summary>
     public string ImageWorkerSocket { get; } = Path.Combine(Path.GetTempPath(), "afw-" + Guid.NewGuid().ToString("N")[..12], "i.sock");
 
+    /// <summary>
+    /// Whether the server offers one socket per worker run in <see cref="ImageWorkerRuns"/>, as
+    /// deployed (I2's per-job isolation), and talks to the runs rather than to <see cref="Images"/>.
+    /// Set before the server starts.
+    /// </summary>
+    public bool UseImageWorkerRuns { get; set; }
+
+    /// <summary>The folder of the runs' sockets, beside <see cref="ImageWorkerSocket"/>.</summary>
+    public string ImageWorkerRuns => Path.Combine(Path.GetDirectoryName(ImageWorkerSocket)!, "runs");
+
     /// <summary>The image worker: by default, it returns what it's given.</summary>
     public FakeImages Images { get; } = new();
 
@@ -86,6 +96,12 @@ internal sealed class TestServer : WebApplicationFactory<Program>
             Directory.CreateDirectory(Path.GetDirectoryName(ImageWorkerSocket)!);
             builder.UseSetting("AetherFrame:ImageWorkerSocket", ImageWorkerSocket);
         }
+
+        if (UseImageWorkerRuns)
+        {
+            builder.UseSetting("AetherFrame:ImageWorkerRuns", ImageWorkerRuns);
+        }
+
         for (var index = 0; index < Allowed.Length; index++)
         {
             builder.UseSetting($"AetherFrame:AllowedLodestoneIds:{index}", Allowed[index].ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -100,7 +116,7 @@ internal sealed class TestServer : WebApplicationFactory<Program>
             // The real Lodestone client, logging and all, with only its connection replaced.
             services.AddHttpClient(LodestoneHttpPages.ClientName).ConfigurePrimaryHttpMessageHandler(() => new FakeLodestoneHandler(Lodestone));
             services.PostConfigure<ServerOptions>(options => options.CheckFailureFloor = CheckFailureFloor);
-            if (!UseImageWorker)
+            if (!UseImageWorker && !UseImageWorkerRuns)
             {
                 services.RemoveAll<AetherFrame.Server.Images.IImageProcessor>();
                 services.AddSingleton<AetherFrame.Server.Images.IImageProcessor>(Images);
@@ -226,12 +242,18 @@ internal static class HttpContentJson
 /// <summary>An image worker whose answer the test chooses: by default, the bytes it was given.</summary>
 internal sealed class FakeImages : AetherFrame.Server.Images.IImageProcessor
 {
+    private int jobs;
+
     public Func<byte[], byte[]?> Answer { get; set; } = bytes => bytes;
 
     public bool Busy { get; set; }
 
+    /// <summary>How many images it was given, busy or not.</summary>
+    public int Jobs => Volatile.Read(ref jobs);
+
     public Task<AetherFrame.Server.Images.ImageProcessing> ProcessAsync(AetherFrame.Protocol.Remote.ImageReference declared, ReadOnlyMemory<byte> bytes, CancellationToken cancellation)
     {
+        Interlocked.Increment(ref jobs);
         if (Busy)
         {
             return Task.FromResult(AetherFrame.Server.Images.ImageProcessing.Busy);

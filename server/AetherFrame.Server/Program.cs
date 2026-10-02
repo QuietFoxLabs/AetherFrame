@@ -105,6 +105,7 @@ builder.Services.AddSingleton<Rereads>();
 builder.Services.AddSingleton<ContentStore>();
 builder.Services.AddSingleton<PublishSlots>();
 builder.Services.AddSingleton<Viewing>();
+builder.Services.AddSingleton<ServerHealth>();
 builder.Services.AddSingleton<ImageWorkerClient>();
 builder.Services.AddHostedService(services => services.GetRequiredService<ImageWorkerClient>());
 builder.Services.AddSingleton<IImageProcessor>(services =>
@@ -116,6 +117,10 @@ builder.Services.AddHostedService<CheckpointRetries>();
 builder.Services.AddHostedService<Housekeeping>();
 builder.Services.AddHostedService<Backups>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Rereads>());
+builder.Services.AddSingleton<ImageCanary>();
+builder.Services.AddHostedService(services => services.GetRequiredService<ImageCanary>());
+builder.Services.AddSingleton<HealthWatch>();
+builder.Services.AddHostedService(services => services.GetRequiredService<HealthWatch>());
 builder.Services.AddHttpClient(LodestoneHttpPages.ClientName, (services, client) =>
     {
         var options = services.GetRequiredService<IOptions<ServerOptions>>().Value;
@@ -145,6 +150,7 @@ app.UseForwardedHeaders();
 app.UseMiddleware<RequestLog>();
 CharacterEndpoints.Map(app);
 PlateEndpoints.Map(app);
+HealthEndpoints.Map(app);
 await app.RunAsync();
 return 0;
 

@@ -13,6 +13,7 @@ using AetherFrame.Protocol.Documents;
 using AetherFrame.Protocol.Identity;
 using AetherFrame.Protocol.Remote;
 using AetherFrame.Protocol.Requests;
+using AetherFrame.Server.Hosting;
 using AetherFrame.Server.Images;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -554,14 +555,15 @@ public class ImageWorkerTests
         }
     }
 
-    private static ImageWorkerClient NewRunsClient(string runs)
+    /// <summary>A client offering one socket per run in <paramref name="runs"/>, recording its connections in <paramref name="health"/> when given.</summary>
+    internal static ImageWorkerClient NewRunsClient(string runs, ServerHealth? health = null)
     {
         var options = Options.Create(new ServerOptions { ImageWorkerRuns = runs });
-        return new ImageWorkerClient(options, NullLogger<ImageWorkerClient>.Instance) { WorkerPatience = TimeSpan.FromSeconds(10), JobDeadline = TimeSpan.FromSeconds(10) };
+        return new ImageWorkerClient(options, health ?? new ServerHealth(options, TimeProvider.System), NullLogger<ImageWorkerClient>.Instance) { WorkerPatience = TimeSpan.FromSeconds(10), JobDeadline = TimeSpan.FromSeconds(10) };
     }
 
     /// <summary>The socket the server offers now, once there is one (other than <paramref name="except"/>).</summary>
-    private static async Task<string> OfferedAsync(string runs, string? except = null)
+    internal static async Task<string> OfferedAsync(string runs, string? except = null)
     {
         for (var attempt = 0; attempt < 200; attempt++)
         {
@@ -576,10 +578,11 @@ public class ImageWorkerTests
         throw new TimeoutException("No run socket was offered.");
     }
 
-    private static ImageWorkerClient NewClient(string folder)
+    /// <summary>A client listening on one shared socket in <paramref name="folder"/>, recording its connections in <paramref name="health"/> when given.</summary>
+    internal static ImageWorkerClient NewClient(string folder, ServerHealth? health = null)
     {
         var options = Options.Create(new ServerOptions { ImageWorkerSocket = System.IO.Path.Combine(folder, "images.sock") });
-        return new ImageWorkerClient(options, NullLogger<ImageWorkerClient>.Instance) { WorkerPatience = TimeSpan.FromSeconds(10), JobDeadline = TimeSpan.FromSeconds(10) };
+        return new ImageWorkerClient(options, health ?? new ServerHealth(options, TimeProvider.System), NullLogger<ImageWorkerClient>.Instance) { WorkerPatience = TimeSpan.FromSeconds(10), JobDeadline = TimeSpan.FromSeconds(10) };
     }
 
     /// <summary>Worker runs, one after another, as the container's restart policy would start them.</summary>

@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using AetherFrame.ImageJobs;
 using AetherFrame.Protocol.Remote;
+using AetherFrame.Server.Hosting;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -26,8 +27,12 @@ namespace AetherFrame.Server.Images;
 /// job it was started for and nothing else: its socket answers no second connection, and it can't
 /// see any other.
 /// </para>
+/// <para>
+/// Each connection is recorded as it is accepted, in either mode: <c>/v1/health</c>'s <c>worker</c>
+/// (<see cref="ServerHealth"/>).
+/// </para>
 /// </summary>
-internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger<ImageWorkerClient> logger) : BackgroundService, IImageProcessor
+internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ServerHealth health, ILogger<ImageWorkerClient> logger) : BackgroundService, IImageProcessor
 {
     /// <summary>The most jobs waiting or running at once (decision I2).</summary>
     public const int MaxQueued = 16;
@@ -180,6 +185,7 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
         while (!stoppingToken.IsCancellationRequested)
         {
             var worker = await listener.AcceptAsync(stoppingToken);
+            health.WorkerConnected();
             if (!connected.Writer.TryWrite((worker, Stopwatch.GetTimestamp())))
             {
                 worker.Dispose();
@@ -214,6 +220,7 @@ internal sealed class ImageWorkerClient(IOptions<ServerOptions> options, ILogger
 
                     listener.Listen(1);
                     worker = await listener.AcceptAsync(stoppingToken);
+                    health.WorkerConnected();
                 }
                 finally
                 {

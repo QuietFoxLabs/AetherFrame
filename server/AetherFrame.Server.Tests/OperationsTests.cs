@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
@@ -31,7 +32,7 @@ public class OperationsTests
         try
         {
             var options = Options.Create(new ServerOptions { BackupFolder = folder, DatabasePath = server.DatabasePath });
-            var backups = new Backups(options, server.Services.GetRequiredService<ServerDatabase>(), server.Time, NullLogger<Backups>.Instance);
+            var backups = new Backups(options, server.Services.GetRequiredService<ServerDatabase>(), new ServerHealth(options, server.Time), server.Time, NullLogger<Backups>.Instance);
 
             await backups.RunOnceAsync(default);
             var first = Assert.Single(Directory.GetFiles(folder));
@@ -67,6 +68,64 @@ public class OperationsTests
             server.Time.Advance(TimeSpan.FromDays(1));
             await backups.RunOnceAsync(default);
             Assert.False(File.Exists(stray));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ACopy_IsGoneWithinSevenDaysOfItsWriting_WhenARestartMovesTheRuns()
+    {
+        // The review's case. One server writes October 1's copy at 01:00 and stops; the next starts
+        // at 22:00 on October 3 and runs every hour from then. A daily run at the restart's time of
+        // day kept that copy until 22:00 on October 8, past the 7 days the consent text promises.
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        await player.BindAsync(12345678);
+        var folder = Path.Combine(Path.GetTempPath(), "afb-" + Guid.NewGuid().ToString("N")[..12]);
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var options = Options.Create(new ServerOptions { BackupFolder = folder, DatabasePath = server.DatabasePath });
+            var database = server.Services.GetRequiredService<ServerDatabase>();
+            var written = new DateTimeOffset(2026, 10, 1, 1, 0, 0, TimeSpan.Zero);
+            var copy = Path.Combine(folder, "server-20261001.db");
+            server.Time.Now = written;
+            using (var first = new Backups(options, database, new ServerHealth(options, server.Time), server.Time, NullLogger<Backups>.Instance))
+            {
+                await first.RunOnceAsync(default);
+            }
+
+            Assert.True(File.Exists(copy));
+            using var second = new Backups(options, database, new ServerHealth(options, server.Time), server.Time, NullLogger<Backups>.Instance);
+            var dayEight = new DateTimeOffset(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
+            DateTimeOffset? lastKept = null;
+            server.Time.Now = new DateTimeOffset(2026, 10, 3, 22, 0, 0, TimeSpan.Zero);
+            while (server.Time.Now <= written + Backups.Retention)
+            {
+                await second.RunOnceAsync(default);
+                var when = server.Time.Now.ToString("u", CultureInfo.InvariantCulture);
+                if (server.Time.Now >= dayEight)
+                {
+                    Assert.False(File.Exists(copy), "October 1's copy is still there after the run at " + when);
+                }
+
+                if (File.Exists(copy))
+                {
+                    // It stays until the next run at most, an interval later: that must still be within its 7 days.
+                    Assert.True(server.Time.Now + second.Interval <= written + Backups.Retention, "October 1's copy is kept past its 7 days by the run at " + when);
+                    lastKept = server.Time.Now;
+                }
+
+                server.Time.Advance(second.Interval);
+            }
+
+            // It went at 22:00 on October 7, the first run 6 days and 22 hours after its day began.
+            Assert.Equal(new DateTimeOffset(2026, 10, 7, 21, 0, 0, TimeSpan.Zero), lastKept);
+            Assert.False(File.Exists(copy));
         }
         finally
         {

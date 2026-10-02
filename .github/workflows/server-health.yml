@@ -1,0 +1,53 @@
+name: Server health
+
+# Watches the deployed server (decision "Watching the server" in docs/networking/DecisionRegister.md;
+# docs/networking/Runbook.md, "Health alerts"). Every 15 minutes it asks GET /v1/health, and when a
+# check fails twice in a row it opens one issue labelled server-health that mentions and assigns the
+# owner. It updates that issue while the problem lasts and closes it when the server is healthy
+# again. .github/scripts/server-health.sh decides and acts (test-server-health.sh tests it, in
+# build.yml). It skips its check while a deploy runs, and fails only when it couldn't act, never
+# because the server is unhealthy.
+#
+# Its token can read the repository's contents and Actions runs and write issues, nothing more. It
+# has no secret, no environment and no variable: the server's name is a constant in the script.
+
+on:
+  schedule:
+    # Every 15 minutes, off the hour: GitHub delays scheduled runs most at the top of the hour.
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: check the server and show the decision, but change no issue.'
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+# One check at a time, never cancelled halfway, and apart from the deploy's own group.
+concurrency:
+  group: server-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.repository == 'QuietFoxLabs/AetherFrame'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check the server
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: bash .github/scripts/server-health.sh run

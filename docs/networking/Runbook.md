@@ -48,7 +48,7 @@ The kit is in [`deploy/`](../../deploy):
    - **Variables:** `DEPLOY_DOMAIN` is the hostname from step 1, for example `plates.yourdomain.net`.
 5. **Deploy.** In **Actions → Deploy the server → Run workflow**, give the full SHA of the commit on master to deploy. Claude names it in the Owner inbox. Approve the run when GitHub asks.
    - The workflow builds both images, copies them and the compose files to the server, and starts them.
-   - It then checks that `https://<hostname>/v1/status` answers.
+   - It then checks that `https://<hostname>/v1/status` answers, and waits up to 150 seconds for `https://<hostname>/v1/health` to say an image worker run has connected. If none does, the deploy fails: see [Health alerts](#health-alerts).
    - Caddy gets the certificate by itself on the first start.
 6. **Add the testers.** Each tester's Lodestone id is the number in their character's Lodestone address, `https://na.finalfantasyxiv.com/lodestone/character/<id>/`. Put both ids in `/opt/aetherframe/config/aetherframe.json` on the server:
    ```
@@ -116,7 +116,7 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
   - If the file can't be read (a missing comma, say), or an entry isn't a Lodestone id, the server allows **no one** until the file is fixed. The log says so, and `admin allowlist` points to the entry at fault.
   - At a restart, a file it can't read stops the server until it is fixed.
   - It never lets anyone in by mistake, but a broken edit locks both testers out, so check it each time.
-- **While the server is stopped**, its daily backup and its clean-up don't run, so older copies aren't deleted. Stop it only briefly, or delete old copies by hand (section 4).
+- **While the server is stopped**, its backup runs don't happen, neither the day's copy nor the hourly clean-up, so older copies aren't deleted. Stop it only briefly, or delete old copies by hand (section 4).
 
 - **Reports** are kept for 30 days, or until you close them (decision C5). To act on one, look at the reported character's Plate in game. If it has to go, remove the character, and take its id off the allowlist if needed.
 - **Removal on request** (decision S3). A tester who asks to be removed, and whom you've confirmed out of band (in person, or in game), is removed with `remove-character`. Removing deletes at once exactly what opting out deletes.
@@ -124,9 +124,22 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 - **The Lodestone changes its page layout.** Checks and re-reads fail closed: no binding is lost, because only the Lodestone's own "not found" page, seen twice a day apart, removes one. Tell Claude in the Owner inbox; the parser is updated and redeployed.
 - **The Lodestone check's ownership rule** rests on the character profile being editable only by its signed-in owner (decision C2). If Square Enix ever changes that, turn sharing off by emptying the allowlist, and tell Claude.
 
+### Health alerts
+
+- **See the server's health:** open `https://<hostname>/v1/health`. When all is well it answers `{"worker":true,"images":true,"backup":true}`. Each value is true or false, and nothing else is in the answer (decision "Watching the server").
+- **How you're told.** GitHub asks it every 15 minutes (the **Server health** workflow). When a check fails twice, two minutes apart, it opens one issue labelled `server-health`, mentions you and assigns it to you. While the problem lasts, it updates that issue, and when the server is healthy again it closes it. GitHub's notification is the alert, so turn on notifications for mentions and assignments (**Settings → Notifications**, by email or GitHub Mobile).
+- **What each one means, and what to do:**
+  - **`worker` is false:** no image worker run has connected for 2 minutes, so publishes with images get "try again later". See the worker rows in the table above: `systemctl status aetherframe-worker`, then the one-time fix if the service doesn't run as root.
+  - **`images` is false:** runs connect, but the server's own test image didn't come back right twice in a row. Read `docker compose logs --since 3h server`, then deploy the commit again, which rebuilds the worker image.
+  - **`backup` is false:** the last backup run failed, or none has finished for 3 hours. The server runs one every hour: it writes one copy a day, and checks for old copies to delete each time. Check `df -h` for a full disk, and `docker compose logs --since 3h server` for "A backup failed". A failed run is tried again at the next, an hour later.
+  - **The server didn't answer:** run `docker compose ps`, then read the logs. Caddy answers 502 while the server is down.
+- **During a deploy** the workflow skips its check, for 30 minutes at most: GitHub cancels a deploy that has run for 30 minutes, so it doesn't complete. The deploy itself waits for a worker run to connect, and fails if none does.
+- **To pause the alerts:** go to **Actions → Server health → Disable workflow**, and **Enable workflow** to resume. GitHub also turns the schedule off after 60 days without activity in the repository. Turn it on again the same way.
+- **Reports** raise no alert, on purpose: the alert would be public. Look once a week with `admin reports`.
+
 ## 4. Backups and what is kept
 
-- **Backups.** The server writes a copy of its database to the `backups` volume once a day and deletes each copy after **7 days**. A Plate a player deletes, by opting out or pausing, is therefore gone from every copy within 7 days (decision D1). The consent text says so.
+- **Backups.** The server writes a copy of its database to the `backups` volume once a day and deletes each copy within **7 days**. It checks every hour, writing the day's copy if it isn't there yet and deleting each copy late on its seventh day (UTC: a copy written on October 1 goes between 22:00 and 23:00 on October 7, or before midnight after a restart), so a failed run, or a restart shorter than an hour, never keeps one longer. A Plate a player deletes, by opting out or pausing, is therefore gone from every copy within 7 days (decision D1). The consent text says so.
   - To keep a copy off the server, list the copies and copy one out, in `/opt/aetherframe`:
     ```
     docker compose exec server ls /backups
@@ -152,4 +165,4 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
   - It has no network, a read-only file system, 512 MB of memory, and 64 processes at most.
   - It runs as its own user in the server's group, so it can reach the server's socket and nothing else.
   - It refuses to run if it finds a network.
-  - If it keeps failing, publishes with images get "try again later", and publishes without images still work.
+  - If it keeps failing, publishes with images get "try again later", and publishes without images still work. The health check reports it, and its alert opens an issue ([Health alerts](#health-alerts)).
