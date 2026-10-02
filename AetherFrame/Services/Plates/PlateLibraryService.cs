@@ -1377,7 +1377,9 @@ internal sealed class PlateLibraryService
             // or answered and in the trash: an image added while editing may be used by nothing else.
             // Every GUID string in one counts, as for a stray file in the Plates folder (a draft is
             // named for its Plate and holds its own id, which only ever protects more). One that
-            // can't be read, or that a newer version wrote, leaves the scan incomplete.
+            // can't be read, whose bytes aren't all valid text (the offer reads such a draft from its
+            // backup copy, so what it would restore may name images this text doesn't), or that a
+            // newer version wrote, leaves the scan incomplete.
             foreach (var path in store.ListFiles(paths.DraftsDirectory, "*.json").Concat(store.ListFiles(paths.DraftTrashDirectory, "*.json")))
             {
                 try
@@ -1389,6 +1391,11 @@ internal sealed class PlateLibraryService
                         if (++runs > 1)
                         {
                             throw new InvalidDataException("Only its backup copy could be read.");
+                        }
+
+                        if (text.HasInvalidBytes)
+                        {
+                            throw new InvalidDataException("Its bytes aren't all valid text.");
                         }
 
                         using (var json = JsonDocument.Parse(text.Text))

@@ -288,6 +288,29 @@ public class KeptChangesClaimTests
     }
 
     [Fact]
+    public async Task KeptChangesWithBytesThatAreNotValidText_MakeTheScanIncomplete()
+    {
+        // The offer reads such a draft from its backup copy, so the scan can't trust this text. The
+        // draft is kept by a real unload into a store that keeps backup rows as Dalamud's does, then
+        // one byte of it on disk goes bad: the text the scan is handed still parses.
+        using var fixture = new LibraryFixture(new BackupSimulatingStore());
+        await KeepAnEditAsync(fixture);
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var bytes = File.ReadAllBytes(draft);
+        var name = System.Text.Encoding.UTF8.GetBytes("Edited");
+        var at = bytes.AsSpan().IndexOf(name);
+        Assert.True(at >= 0);
+        bytes[at] = 0xFF;
+        File.WriteAllBytes(draft, bytes);
+
+        var game = await GameSession.StartAsync(fixture);
+        var scan = await game.Library.ScanAssetReferencesAsync();
+
+        Assert.False(scan.IsComplete);
+        Assert.Contains(scan.Problems, p => p.StartsWith("Kept changes", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ANewerVersionsKeptChanges_MakeTheScanIncomplete_ButTheirIdsStillCount()
     {
         using var fixture = new LibraryFixture();

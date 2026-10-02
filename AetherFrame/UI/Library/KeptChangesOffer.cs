@@ -49,7 +49,11 @@ internal enum KeptChangesVariant
 /// first, through the same Save, Discard or Cancel question My Plates asks (<see cref="PlateOpenGuard"/>).
 /// Unlike My Plates' prompt it isn't modal, so the editors and My Plates stay usable while it waits:
 /// it is about the one open document it asked about, and once that isn't open with unsaved changes
-/// any more (another Plate opened, or its changes saved or undone), it is dropped, never answered.</para>
+/// any more (another Plate opened, or its changes saved or undone), it is dropped, never answered.
+/// Its Discard throws those changes away only once the draft is checked again and claimed, so a
+/// draft that can't be acted on costs the open Plate nothing. Its Cancel while its Save is written
+/// lets the save finish and restores nothing. My Plates' Review meanwhile keeps the draft it waits
+/// on (or whose new Plate is being made) the one on offer.</para>
 ///
 /// <para>Used on the framework thread only: the load hands its drafts over there, and the window and
 /// <see cref="Advance"/> run while drawing.</para>
@@ -270,7 +274,10 @@ internal sealed class KeptChangesOffer
         return Current is not null || Error is not null || Notice is not null;
     }
 
-    /// <summary>My Plates' Review: offers every draft left for later again.</summary>
+    /// <summary>
+    /// My Plates' Review: offers every draft left for later again. A draft being acted on (its
+    /// question waiting, or its new Plate being made) stays the one on offer (see <see cref="RequestOpen"/>).
+    /// </summary>
     internal void Review()
     {
         foreach (var entry in entries.Where(e => e.State == EntryState.Deferred))
@@ -359,9 +366,12 @@ internal sealed class KeptChangesOffer
     }
 
     /// <summary>
-    /// The question's Discard: drops the open Plate's own unsaved changes, then the answer goes ahead.
-    /// Nothing is discarded when the question is about a document that isn't open with unsaved
-    /// changes any more: it is dropped instead.
+    /// The question's Discard: secures the draft, then drops the open Plate's own unsaved changes,
+    /// and the answer goes ahead. Dropping them is a revert with no undo, so the draft is checked
+    /// again and claimed first: when it can't be acted on (its Plate changed meanwhile, another game
+    /// window took it, or it can't be moved), the question goes, nothing is discarded, and the open
+    /// Plate keeps its changes, undoable as before. Nothing is discarded either when the question is
+    /// about a document that isn't open with unsaved changes any more: it is dropped instead.
     /// </summary>
     internal void AnswerDiscard()
     {
@@ -370,26 +380,64 @@ internal sealed class KeptChangesOffer
             return;
         }
 
-        if (guard.Discard() is null)
+        var entry = waiting.Entry;
+        if (!Recheck(entry))
         {
-            Error = session.ErrorMessage;
+            EndQuestion();
+            return;
+        }
+
+        // Discarding waits for any save, and claiming first would only put the draft back.
+        if (!guard.CanAnswer)
+        {
+            Error = BusyMessage;
             Changed();
             return;
         }
 
+        if (!TryClaim(entry))
+        {
+            EndQuestion();
+            return;
+        }
+
+        if (guard.Discard() is null)
+        {
+            EndQuestion();
+            PutBack(entry, session.ErrorMessage ?? EditorSession.EditFailedMessage);
+            return;
+        }
+
+        // Claimed already: claiming again would find it gone, and read as another game window's.
         asking = null;
-        Proceed(waiting.Entry, waiting.RestoreHere);
+        if (waiting.RestoreHere)
+        {
+            RestoreClaimed(entry);
+        }
+        else
+        {
+            RestoreAsNewClaimed(entry);
+        }
     }
 
-    /// <summary>The question's Cancel: nothing happens, and the draft is still on offer.</summary>
+    /// <summary>
+    /// The question's Cancel: nothing is restored, and the draft is still on offer. While the
+    /// question's Save is being written, that save goes on, and the Plate ends saved; once it lands,
+    /// the question is only cleared (see <see cref="Advance"/>).
+    /// </summary>
     internal void AnswerCancel()
     {
-        guard.Cancel();
-        if (!guard.IsSaving)
+        if (guard.IsSaving)
         {
-            asking = null;
-            Changed();
+            if (asking is { } waiting)
+            {
+                waiting.Cancelled = true;
+            }
+
+            return;
         }
+
+        EndQuestion();
     }
 
     /// <summary>
@@ -420,9 +468,10 @@ internal sealed class KeptChangesOffer
 
     /// <summary>
     /// Applies what finished since the last frame: a new Plate made from kept changes, and the save
-    /// the question's Save started. Drops a question whose document isn't open with unsaved changes
-    /// any more (see <see cref="DropStaleQuestion"/>). Call once per frame, on the framework thread,
-    /// before the window draws.
+    /// the question's Save started (which restores nothing when the question was cancelled while it
+    /// was written). Drops a question whose document isn't open with unsaved changes any more (see
+    /// <see cref="DropStaleQuestion"/>). Call once per frame, on the framework thread, before the
+    /// window draws.
     /// </summary>
     internal void Advance()
     {
@@ -463,24 +512,29 @@ internal sealed class KeptChangesOffer
         }
 
         asking = null;
-        if (outcome.Open is not null)
-        {
-            // Saved: the document asked about is open and clean. Anything else since (another Plate
-            // opened, or edited again) is never replaced.
-            if (!ReferenceEquals(profiles.CurrentProfile, waiting.Document) || session.IsDirty)
-            {
-                Error = OpenPlateChangedMessage;
-                Changed();
-                return;
-            }
-
-            Proceed(waiting.Entry, waiting.RestoreHere);
-        }
-        else
+        if (outcome.Open is null)
         {
             Error = outcome.Error;
             Changed();
+            return;
         }
+
+        // Cancelled while its save was written: the Plate is saved, and nothing is restored.
+        if (waiting.Cancelled)
+        {
+            return;
+        }
+
+        // Saved: the document asked about is open and clean. Anything else since (another Plate
+        // opened, or edited again) is never replaced.
+        if (!ReferenceEquals(profiles.CurrentProfile, waiting.Document) || session.IsDirty)
+        {
+            Error = OpenPlateChangedMessage;
+            Changed();
+            return;
+        }
+
+        Proceed(waiting.Entry, waiting.RestoreHere);
     }
 
     /// <summary>The opening sentence: which Plate, which editor, when, and where the changes are.</summary>
@@ -529,12 +583,7 @@ internal sealed class KeptChangesOffer
         }
     }
 
-    /// <summary>
-    /// Restore over the Plate: claimed first, then the Plate opens (or stays open), its saved state
-    /// becomes the editor's baseline, and the kept changes go in as one undoable edit, so the editor
-    /// reads as unsaved and nothing is written. The Library's name and the saved file's unknown data
-    /// stay as they are. If it can't be done, the draft is put back and stays on offer.
-    /// </summary>
+    /// <summary>Restore over the Plate: checked again and claimed first, then <see cref="RestoreClaimed"/>.</summary>
     private void Restore(Entry entry)
     {
         // A save chosen at the question bumps the Plate's revision: restoring over it would undo that.
@@ -550,11 +599,20 @@ internal sealed class KeptChangesOffer
             return;
         }
 
-        if (!TryClaim(entry))
+        if (TryClaim(entry))
         {
-            return;
+            RestoreClaimed(entry);
         }
+    }
 
+    /// <summary>
+    /// Restore over the Plate, its draft claimed: the Plate opens (or stays open), its saved state
+    /// becomes the editor's baseline, and the kept changes go in as one undoable edit, so the editor
+    /// reads as unsaved and nothing is written. The Library's name and the saved file's unknown data
+    /// stay as they are. If it can't be done, the draft is put back and stays on offer.
+    /// </summary>
+    private void RestoreClaimed(Entry entry)
+    {
         try
         {
             profiles.OpenPlate(entry.PlateId);
@@ -579,14 +637,18 @@ internal sealed class KeptChangesOffer
         showEditor(EditorFor(entry.Kept));
     }
 
-    /// <summary>Restore as New Plate: claimed first, then made off this thread; <see cref="Advance"/> opens it.</summary>
+    /// <summary>Restore as New Plate: checked again and claimed first, then <see cref="RestoreAsNewClaimed"/>.</summary>
     private void RestoreAsNew(Entry entry)
     {
-        if (!Recheck(entry) || !TryClaim(entry))
+        if (Recheck(entry) && TryClaim(entry))
         {
-            return;
+            RestoreAsNewClaimed(entry);
         }
+    }
 
+    /// <summary>Restore as New Plate, its draft claimed: made off this thread; <see cref="Advance"/> opens it.</summary>
+    private void RestoreAsNewClaimed(Entry entry)
+    {
         entry.State = EntryState.Acting;
         creatingEntry = entry;
         creating = CreateAsync(entry.Kept);
@@ -711,19 +773,34 @@ internal sealed class KeptChangesOffer
             return false;
         }
 
-        guard.Cancel();
-        asking = null;
         Error = OpenPlateChangedMessage;
-        Changed();
+        EndQuestion();
         return true;
     }
 
+    /// <summary>The question goes unanswered: nothing is saved or discarded, and the open Plate keeps its changes.</summary>
+    private void EndQuestion()
+    {
+        guard.Cancel();
+        asking = null;
+        Changed();
+    }
+
+    /// <summary>
+    /// Opens the window on a new round: every draft on offer or being acted on, newest first, except
+    /// that one being acted on here (its question waiting, or its new Plate being made) comes first
+    /// and stays the one on offer, so the window shows the draft its answer acts on.
+    /// </summary>
     private void RequestOpen()
     {
         presented = true;
         openRequested = true;
         windowClosed = false;
-        round = entries.Where(e => e.State is EntryState.Pending or EntryState.Acting).ToList();
+        var held = asking?.Entry ?? creatingEntry;
+        round = entries
+            .Where(e => e.State is EntryState.Pending or EntryState.Acting)
+            .OrderBy(e => ReferenceEquals(e, held) ? 0 : 1)
+            .ToList();
         ClearMessages();
         Changed();
     }
@@ -836,6 +913,9 @@ internal sealed class KeptChangesOffer
         internal ProfileDocument Document { get; } = document;
 
         internal Guid PlateId { get; } = plateId;
+
+        /// <summary>Cancel was chosen while its Save was being written: once that lands, nothing is restored.</summary>
+        internal bool Cancelled { get; set; }
     }
 
     private sealed record ViewText(

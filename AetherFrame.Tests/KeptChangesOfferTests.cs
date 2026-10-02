@@ -629,6 +629,165 @@ public class KeptChangesOfferTests
         Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Renamed"), game.Offer.Question);
     }
 
+    // ---------------------------------------------------------------- the question's Discard secures the draft first
+
+    [Fact]
+    public async Task TheQuestionsDiscard_WhenTheDraftCantBeMoved_DiscardsNothing_AndTheDraftStaysKept()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new LibraryFixture(store);
+        var kept = (await KeepEditsAsync(fixture, "Kept"))[0];
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var game = await GameSession.StartAsync(fixture);
+        var otherId = await game.CreatePlateAsync(name: "Other");
+        game.Open(otherId);
+        game.Edit("Work on Other");
+        await game.LoadKeptChangesAsync();
+        game.Offer.Choose();
+        Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Other"), game.Offer.Question);
+
+        // The draft can't be moved (an antivirus scan holding it open, say).
+        store.FailMove = path => path == draft;
+        game.Offer.AnswerDiscard();
+
+        Assert.Equal(KeptChangesOffer.ClaimFailedMessage, game.Offer.Error);
+        Assert.Null(game.Offer.Question);
+        AssertTheOpenPlateKeepsItsEdit(game, otherId, "Work on Other");
+        Assert.True(game.Offer.HasCurrent);
+        Assert.Equal(new[] { draft }, KeptFiles.Drafts(fixture.Paths));
+        Assert.Empty(KeptFiles.Trashed(fixture.Paths));
+
+        // Once it can be moved, the same offer asks again, and its Discard restores.
+        store.FailMove = null;
+        game.Offer.Choose();
+        Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Other"), game.Offer.Question);
+        game.Offer.AnswerDiscard();
+
+        Assert.Null(game.Offer.Error);
+        Assert.Equal(kept, game.Profiles.OpenPlateId);
+        Assert.True(game.Session.IsDirty);
+        Assert.Contains(game.Document.Elements, e => e is TextProfileElement { Text: "Kept text" });
+        Assert.DoesNotContain("Work on Other", fixture.ReadPlateJson(otherId), StringComparison.Ordinal);
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+    }
+
+    [Fact]
+    public async Task TheQuestionsDiscard_AfterAnotherGameWindowTookTheDraft_DiscardsNothing()
+    {
+        using var fixture = new LibraryFixture();
+        await KeepEditsAsync(fixture, "Kept");
+        var first = await GameSession.StartAsync(fixture);
+        var second = await GameSession.StartAsync(fixture);
+        var otherId = await second.CreatePlateAsync(name: "Other");
+        second.Open(otherId);
+        second.Edit("Work on Other");
+        await first.LoadKeptChangesAsync();
+        await second.LoadKeptChangesAsync();
+        second.Offer.Choose();
+        Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Other"), second.Offer.Question);
+
+        // The other game window answers first, while this one's question waits.
+        first.Offer.Discard();
+        var trashed = Assert.Single(KeptFiles.Trashed(fixture.Paths));
+        second.Offer.AnswerDiscard();
+
+        Assert.Equal(KeptChangesOffer.AlreadyHandledMessage, second.Offer.Notice);
+        Assert.Null(second.Offer.Error);
+        Assert.Null(second.Offer.Question);
+        Assert.False(second.Offer.HasCurrent);
+        AssertTheOpenPlateKeepsItsEdit(second, otherId, "Work on Other");
+
+        // The draft is where the other window's claim put it, acted on once.
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+        Assert.Equal(new[] { trashed }, KeptFiles.Trashed(fixture.Paths));
+    }
+
+    [Fact]
+    public async Task TheQuestionsDiscard_AfterTheKeptPlateWasDeleted_DiscardsNothing_AndOffersItAsANewPlate()
+    {
+        using var fixture = new LibraryFixture();
+        var kept = (await KeepEditsAsync(fixture, "Kept"))[0];
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var game = await GameSession.StartAsync(fixture);
+        var otherId = await game.CreatePlateAsync(name: "Other");
+        game.Open(otherId);
+        game.Edit("Work on Other");
+        await game.LoadKeptChangesAsync();
+        game.Offer.Choose();
+        Assert.Equal(KeptChangesVariant.Restore, game.Offer.CurrentVariant);
+
+        // Deleted in My Plates while the question waits: Other is still open with its changes, so it still asks.
+        await game.Library.DeletePlateAsync(kept);
+        game.Offer.Advance();
+        Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Other"), game.Offer.Question);
+
+        game.Offer.AnswerDiscard();
+
+        Assert.Equal(KeptChangesOffer.ChangedMeanwhileMessage, game.Offer.Error);
+        Assert.Null(game.Offer.Question);
+        Assert.Equal(KeptChangesVariant.Deleted, game.Offer.CurrentVariant);
+        AssertTheOpenPlateKeepsItsEdit(game, otherId, "Work on Other");
+        Assert.Equal(new[] { draft }, KeptFiles.Drafts(fixture.Paths));
+        Assert.Empty(KeptFiles.Trashed(fixture.Paths));
+
+        // Chosen again, it asks again, and its Discard hands the draft it claimed to the new Plate.
+        game.Offer.Choose();
+        Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Other"), game.Offer.Question);
+        game.Offer.AnswerDiscard();
+        await game.SettleAsync();
+
+        Assert.Null(game.Offer.Error);
+        Assert.Null(game.Offer.Notice);
+        Assert.False(game.Offer.HasCurrent);
+        var copy = Assert.Single(game.Library.GetOrderedPlates(), p => p.PlateId != otherId);
+        Assert.Equal("Kept (kept changes)", copy.DisplayName);
+        Assert.Equal(copy.PlateId, game.Profiles.OpenPlateId);
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+        Assert.Single(KeptFiles.Trashed(fixture.Paths));
+    }
+
+    [Fact]
+    public async Task CancelWhileTheQuestionsSaveIsWritten_SavesThePlate_AndRestoresNothing()
+    {
+        var store = new HeldWriteStore();
+        using var fixture = new LibraryFixture(store);
+        var kept = (await KeepEditsAsync(fixture, "Kept"))[0];
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var game = await GameSession.StartAsync(fixture);
+        var otherId = await game.CreatePlateAsync(name: "Other");
+        game.Open(otherId);
+        game.Edit("Work on Other");
+        await game.LoadKeptChangesAsync();
+        game.Offer.Choose();
+
+        store.Hold();
+        game.Offer.AnswerSave();
+        await store.WriteStarted;
+        Assert.True(game.Offer.IsSavingForQuestion);
+
+        // The window's Cancel stays usable while its Save reads "Saving...".
+        game.Offer.AnswerCancel();
+        store.Release();
+        await game.SettleAsync();
+
+        // The save went on, so Other is saved and clean, and stays open; nothing is restored.
+        Assert.Null(game.Offer.Question);
+        Assert.Null(game.Offer.Error);
+        Assert.Equal(otherId, game.Profiles.OpenPlateId);
+        Assert.False(game.Session.IsDirty);
+        Assert.Contains("Work on Other", fixture.ReadPlateJson(otherId), StringComparison.Ordinal);
+        Assert.Empty(game.Shown);
+        Assert.True(game.Offer.HasCurrent);
+        Assert.Equal(new[] { draft }, KeptFiles.Drafts(fixture.Paths));
+        Assert.Empty(KeptFiles.Trashed(fixture.Paths));
+
+        // Chosen again, Other is clean: it restores without a question.
+        game.Offer.Choose();
+        Assert.Null(game.Offer.Question);
+        Assert.Equal(kept, game.Profiles.OpenPlateId);
+        Assert.True(game.Session.IsDirty);
+    }
+
     // ---------------------------------------------------------------- closing while a new Plate is made
 
     [Fact]
@@ -730,6 +889,109 @@ public class KeptChangesOfferTests
         Assert.Equal(openId, game.Profiles.OpenPlateId);
         Assert.True(game.Session.IsDirty);
         Assert.Contains(game.Library.GetOrderedPlates(), p => p.DisplayName == "Gone (kept changes)");
+    }
+
+    // ---------------------------------------------------------------- Review while a draft is acted on
+
+    [Fact]
+    public async Task ReviewWhileTheQuestionWaits_KeepsItsDraftOnOffer_AndTheAnswerRestoresIt()
+    {
+        using var fixture = new LibraryFixture();
+        var ids = await KeepEditsAsync(fixture, "Older", "Newer");
+        var olderId = ids[0];
+        var newerId = ids[1];
+        var game = await GameSession.StartAsync(fixture);
+        var otherId = await game.CreatePlateAsync(name: "Other");
+        game.Open(otherId);
+        game.Edit("Work on Other");
+        await game.LoadKeptChangesAsync();
+        Assert.True(game.Offer.ConsumeOpenRequest());
+        Assert.Equal(newerId, game.Offer.CurrentPlateId);
+        game.Offer.DecideLater();
+        Assert.Equal(olderId, game.Offer.CurrentPlateId);
+        game.Offer.Choose();
+        Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Other"), game.Offer.Question);
+
+        // My Plates' Review (its reminder counts Newer) while the question waits on Older.
+        Assert.Equal("Unsaved changes were kept for 1 Plate.", game.Offer.ReminderText);
+        game.Offer.Review();
+        game.Offer.Advance();
+
+        Assert.True(game.Offer.ConsumeOpenRequest());
+        Assert.Equal(olderId, game.Offer.CurrentPlateId);
+        Assert.Equal("1 of 2", game.Offer.PositionText);
+        Assert.Contains($"{Open}Older{Close}", game.Offer.Body, StringComparison.Ordinal);
+        Assert.Equal(KeptChangesOffer.OtherPlateQuestion("Other"), game.Offer.Question);
+
+        game.Offer.AnswerDiscard();
+
+        Assert.Null(game.Offer.Error);
+        Assert.Equal(olderId, game.Profiles.OpenPlateId);
+        Assert.True(game.Session.IsDirty);
+        Assert.Contains(game.Document.Elements, e => e is TextProfileElement { Text: "Kept text" });
+        Assert.Equal(newerId, game.Offer.CurrentPlateId);
+        Assert.Equal("2 of 2", game.Offer.PositionText);
+        Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        Assert.Single(KeptFiles.Trashed(fixture.Paths));
+    }
+
+    [Fact]
+    public async Task ReviewWhileAnOlderDraftsNewPlateIsMade_KeepsItOnOffer_AndItsFailureShowsWithIt()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new LibraryFixture(store);
+        var ids = await KeepEditsAsync(fixture, "Making", "Later");
+        var makingId = ids[0];
+        var laterId = ids[1];
+        var game = await GameSession.StartAsync(fixture);
+        await game.Library.DeletePlateAsync(makingId);
+        await game.LoadKeptChangesAsync();
+        Assert.True(game.Offer.ConsumeOpenRequest());
+        Assert.Equal(laterId, game.Offer.CurrentPlateId);
+        game.Offer.DecideLater();
+        Assert.Equal(makingId, game.Offer.CurrentPlateId);
+        store.FailWrite = path => path.StartsWith(fixture.Paths.PlatesDirectory, StringComparison.OrdinalIgnoreCase);
+        game.Offer.Choose();
+        Assert.True(game.Offer.IsBusy);
+
+        // My Plates' Review while Making's new Plate is being made.
+        game.Offer.Review();
+
+        Assert.True(game.Offer.ConsumeOpenRequest());
+        Assert.Equal(makingId, game.Offer.CurrentPlateId);
+        Assert.Equal("1 of 2", game.Offer.PositionText);
+        Assert.True(game.Offer.IsBusy);
+
+        await game.SettleAsync();
+
+        Assert.Equal(makingId, game.Offer.CurrentPlateId);
+        Assert.Equal(KeptChangesVariant.Deleted, game.Offer.CurrentVariant);
+        Assert.Contains($"{Open}Making{Close}", game.Offer.Body, StringComparison.Ordinal);
+        Assert.EndsWith("The changes are still kept.", game.Offer.Error, StringComparison.Ordinal);
+        Assert.Equal(2, KeptFiles.Drafts(fixture.Paths).Length);
+        Assert.Empty(KeptFiles.Trashed(fixture.Paths));
+    }
+
+    /// <summary>
+    /// The open Plate's own unsaved edit is untouched: the Plate still open and unsaved, the edit in
+    /// it and never written, no editor shown for anything else, and its history as before: one Undo
+    /// is the saved Plate, and Redo brings the edit back.
+    /// </summary>
+    private static void AssertTheOpenPlateKeepsItsEdit(GameSession game, Guid plateId, string text)
+    {
+        Assert.Equal(plateId, game.Profiles.OpenPlateId);
+        Assert.True(game.Session.IsDirty);
+        Assert.Contains(game.Document.Elements, e => e is TextProfileElement t && t.Text == text);
+        Assert.DoesNotContain(text, game.Fixture.ReadPlateJson(plateId), StringComparison.Ordinal);
+        Assert.Empty(game.Shown);
+
+        Assert.True(game.Session.CanUndo);
+        game.Session.Undo();
+        Assert.False(game.Session.IsDirty);
+        Assert.DoesNotContain(game.Document.Elements, e => e is TextProfileElement t && t.Text == text);
+        game.Session.Redo();
+        Assert.True(game.Session.IsDirty);
+        Assert.Contains(game.Document.Elements, e => e is TextProfileElement t && t.Text == text);
     }
 
     /// <summary>One unload per name: a Plate made, opened, given one unsaved edit, and kept as a draft.</summary>

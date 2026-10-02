@@ -211,6 +211,7 @@ internal sealed class KeptChangesWindow : Window
             }
         }
 
+        // Cancel stays usable while the question's Save is written: the save finishes, and nothing is restored.
         ImGui.SameLine();
         if (AetherControls.GhostButton("Cancel", size))
         {
