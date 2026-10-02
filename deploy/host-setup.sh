@@ -68,6 +68,10 @@ fi
 
 # The image worker's runs (I2): a service that starts one container per job, and ends each from
 # outside after at most 60 seconds. The deploy workflow copies aetherframe-worker.sh beside it.
+# It runs as root: it finds the socket the server offers each run in the socket volume's folder,
+# under /var/lib/docker, which only root can read. (Run as aetherframe-deploy, it never found one,
+# and no image could be shared.) That gives the deploy user, who writes the script, nothing it
+# hasn't already: it is in the docker group, which can do anything root can.
 cat > /etc/systemd/system/aetherframe-worker.service <<'UNIT'
 [Unit]
 Description=AetherFrame image worker runs, one container per job (decision I2)
@@ -76,7 +80,6 @@ Requires=docker.service
 StartLimitIntervalSec=0
 
 [Service]
-User=aetherframe-deploy
 ExecStart=/opt/aetherframe/aetherframe-worker.sh
 ExecStopPost=/bin/sh -c 'docker ps -aq --filter name=^aetherframe-worker- | xargs -r docker rm -f'
 Restart=always

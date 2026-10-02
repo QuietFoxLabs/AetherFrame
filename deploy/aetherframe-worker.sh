@@ -36,8 +36,9 @@ while true; do
   fi
 
   # The socket the server offers now: there is at most one, and it answers one connection. Only a
-  # socket counts, never a directory or a file of that name.
-  socket="$(find "$mount/runs" -maxdepth 1 -type s -name 'run-*.sock' -print -quit 2>/dev/null)"
+  # socket counts, never a directory or a file of that name, and only a name the server gives
+  # (run-, 32 hex digits, .sock), so nothing else in the folder can shape the mount below.
+  socket="$(find "$mount/runs" -maxdepth 1 -type s -regextype posix-extended -regex '.*/run-[0-9a-f]{32}\.sock' -print -quit 2>/dev/null)"
   if [[ -z "$mount" || -z "$socket" ]]; then
     mount="$(docker volume inspect -f '{{ .Mountpoint }}' "$volume" 2>/dev/null)"
     sleep 0.5
