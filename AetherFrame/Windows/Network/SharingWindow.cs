@@ -34,6 +34,7 @@ internal sealed class SharingWindow : Window
     private readonly LivePublisher live;
     private readonly PersonaSession session;
     private readonly Func<CharacterContext?> currentCharacter;
+    private readonly Func<ulong, Guid?> activePlateOf;
     private readonly string sharingFile;
     private readonly string applicationData;
     private readonly string userProfile;
@@ -47,13 +48,14 @@ internal sealed class SharingWindow : Window
     private ulong confirmingOff;
     private bool confirmingAll;
 
-    internal SharingWindow(CharacterSharing sharing, LivePublisher live, PersonaSession session, Func<CharacterContext?> currentCharacter, string sharingFile)
+    internal SharingWindow(CharacterSharing sharing, LivePublisher live, PersonaSession session, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf, string sharingFile)
         : base("Sharing##AetherFrameSharing", ImGuiWindowFlags.NoCollapse)
     {
         this.sharing = sharing;
         this.live = live;
         this.session = session;
         this.currentCharacter = currentCharacter;
+        this.activePlateOf = activePlateOf;
         this.sharingFile = sharingFile;
         applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -164,6 +166,8 @@ internal sealed class SharingWindow : Window
             AetherControls.StatusLine(AetherTone.Info, SharingText.Busy);
         }
 
+        DrawOtherSending(view, character);
+
         if (character is not { } current)
         {
             AetherControls.Muted(SharingText.NoCharacter);
@@ -196,6 +200,37 @@ internal sealed class SharingWindow : Window
 
         DrawViewing(view);
         DrawTurnOffAll(view);
+    }
+
+    /// <summary>
+    /// A send for another of the player's characters, still under way after a switch of
+    /// characters or a logout: it keeps the service busy, so it can always be stopped from here. The
+    /// character's name and World are the binding's, as the Sharing window already shows them, drawn
+    /// unformatted.
+    /// </summary>
+    private void DrawOtherSending(CharacterSharingView view, CharacterContext? character)
+    {
+        if (view.Publish is not { Step: PublishStep.Sending } sending || sending.ContentId == (character?.ContentId ?? 0))
+        {
+            return;
+        }
+
+        AetherControls.StatusLine(AetherTone.Info, SharingText.OtherSending);
+        if (view.Find(sending.ContentId) is { } other)
+        {
+            ImGui.Indent();
+            ImGui.TextUnformatted(other.Name ?? "");
+            ImGui.TextUnformatted(other.World ?? "");
+            ImGui.Unindent();
+        }
+
+        AetherControls.Muted(SharingText.OtherSendingWaits);
+        if (AetherControls.SecondaryButton("Stop sending##AetherFrameSharingOther"))
+        {
+            sharing.StopSending();
+        }
+
+        ImGui.Spacing();
     }
 
     /// <summary>Viewing other players' Plates: offered once a character shares, since viewing is part of sharing (V1).</summary>
@@ -451,7 +486,7 @@ internal sealed class SharingWindow : Window
         }
     }
 
-    /// <summary>The Active Plate's way out: being prepared, can't be shared as it is, being sent, or waiting to be sent again.</summary>
+    /// <summary>The Active Plate's way out: being prepared, can't be shared as it is, being sent, waiting to be sent again, or not shared yet.</summary>
     private void DrawPublishing(CharacterSharingView view, SharingCharacter entry)
     {
         var liveView = live.View;
@@ -488,6 +523,20 @@ internal sealed class SharingWindow : Window
                 if (AetherControls.SecondaryButton("Try sending again"))
                 {
                     sharing.TrySendWaiting(entry.ContentId);
+                }
+            }
+        }
+
+        // An Active Plate the server doesn't show, with nothing under way for it: after arriving with
+        // one (nothing is published for arriving), or after a share that didn't go through.
+        if (LivePublisher.OffersShareNow(view, liveView, entry, activePlateOf(entry.ContentId)))
+        {
+            AetherControls.Muted(SharingText.NotSharedYet);
+            using (ImRaii.Disabled(view.Busy))
+            {
+                if (AetherControls.PrimaryButton("Share it now"))
+                {
+                    live.Retry();
                 }
             }
         }

@@ -154,6 +154,88 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
+    public async Task ASendUnderWay_GivesWayToANewerSave_WhichIsSentInstead()
+    {
+        // The service runs on another thread, as in the game, and the server holds each publish.
+        using var harness = new SharingHarness(background: true);
+        var entry = harness.Bound();
+        var held = new TaskCompletionSource();
+        harness.Server.PublishGate = held.Task;
+        using var live = new LiveHarness(harness);
+        var plate = live.Save(text: "Older words");
+        live.Active = plate.ProfileId;
+        live.Frames(2);
+
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Sending });
+        var older = harness.Sharing.View.Publish!.Share;
+
+        // Saved again while the first is being sent: once the newer candidate is ready, the older
+        // send stops, and the newer one is signed and sent in its place.
+        live.Save(text: "Newer words", id: plate.ProfileId);
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Sending } newer && newer.Share != older);
+        held.SetResult();
+        await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Ended });
+        harness.WaitIdle();
+
+        var published = Assert.Single(harness.Server.Publishes);
+        Assert.Equal("Newer words", TextOf(published));
+        Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
+        var recorded = Assert.Single(harness.Index(entry).Entries);
+        Assert.Equal((PublicationState.Published, true, published.Snapshot.RevisionId), (recorded.State, recorded.PendingEntry.IsNone, recorded.LatestRevision));
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+        Assert.Contains("Sharing: the send gave way to a newer build of the Active Plate.", harness.Log);
+    }
+
+    [Fact]
+    public async Task AnActivePlateNotSharedYet_IsOfferedOnArriving_AndSharedOnlyWhenAsked()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        using var live = new LiveHarness(harness);
+        var plate = live.Save();
+        live.Active = plate.ProfileId;
+
+        // Arriving publishes nothing: the Sharing window offers Share it now instead.
+        live.Frames(5);
+        Assert.Empty(harness.Server.Publishes);
+        Assert.True(LivePublisher.OffersShareNow(harness.Sharing.View, live.Publisher.View, harness.Sharing.View.Find(Aria)!, live.Active));
+
+        live.Publisher.Retry();
+        live.Frames(1);
+        Assert.True(live.Publisher.View.Building);
+        Assert.False(LivePublisher.OffersShareNow(harness.Sharing.View, live.Publisher.View, entry, live.Active));
+        await live.Until(() => harness.Server.Publishes.Count == 1);
+        Assert.False(LivePublisher.OffersShareNow(harness.Sharing.View, live.Publisher.View, harness.Sharing.View.Find(Aria)!, live.Active));
+    }
+
+    [Fact]
+    public void ShareItNow_IsOfferedOnlyForASharingCharactersActivePlateNotSharedYet_WithNothingUnderWay()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        var plate = Guid.NewGuid();
+        var view = harness.Sharing.View;
+        Assert.True(LivePublisher.OffersShareNow(view, LiveView.Idle, entry, plate));
+
+        // No Active Plate, or the one the server shows.
+        Assert.False(LivePublisher.OffersShareNow(view, LiveView.Idle, entry, null));
+        Assert.False(LivePublisher.OffersShareNow(view, LiveView.Idle, entry with { PublishedPlate = plate }, plate));
+
+        // Paused, or another key being checked.
+        Assert.False(LivePublisher.OffersShareNow(view, LiveView.Idle, entry with { Stage = SharingStage.Paused }, plate));
+
+        // Something under way for it: a build, or a publish; another character's doesn't count.
+        var building = new LiveView(Aria, true, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None, Share: 1);
+        Assert.False(LivePublisher.OffersShareNow(view, building, entry, plate));
+        Assert.True(LivePublisher.OffersShareNow(view, building with { ContentId = Bram }, entry, plate));
+        Assert.False(LivePublisher.OffersShareNow(view.With(publish: new PublishStatus(Aria, 2, PublishStep.Sending)), LiveView.Idle, entry, plate));
+        Assert.True(LivePublisher.OffersShareNow(view.With(publish: new PublishStatus(Bram, 2, PublishStep.Sending)), LiveView.Idle, entry, plate));
+        Assert.True(LivePublisher.OffersShareNow(view.With(publish: new PublishStatus(Aria, 2, PublishStep.Ended)), LiveView.Idle, entry, plate));
+    }
+
+    [Fact]
     public void AtLogin_ARenamedCharacterAsksForARereadOnce()
     {
         using var harness = new SharingHarness();

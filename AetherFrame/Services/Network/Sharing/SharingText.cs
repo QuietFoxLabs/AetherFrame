@@ -82,6 +82,16 @@ internal static class SharingText
 
     internal const string SendingTakesTime = "This can take a few minutes when the sharing server is busy.";
 
+    internal const string WaitingTurn = "Ready, and waiting for its turn...";
+
+    internal const string WaitingForOther = "Ready, and waiting while another of your characters' Plates is sent. The Sharing window can stop that.";
+
+    internal const string OtherSending = "Another of your characters' Active Plate is being sent:";
+
+    internal const string OtherSendingWaits = "Until it is sent or stopped, the buttons below wait for it.";
+
+    internal const string NotSharedYet = "Your Active Plate isn't shared yet.";
+
     internal const string TurnOffConfirm =
         "Turn off sharing for this character? The server deletes its Plate, its images and its check at once. To share again, you'll need a new Lodestone check.";
 

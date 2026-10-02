@@ -9,10 +9,13 @@ namespace AetherFrame.Services.Network.Sharing;
 
 /// <summary>
 /// What the sharing windows show of the live publisher, for one character: whether its Active Plate
-/// is being prepared (its images too, once that has begun), or why it couldn't be shared as it is.
-/// Replaced whole at each change, so a window that keeps one can tell it from the next.
+/// is being prepared (its images too, once that has begun, and whether it is ready and waits for
+/// the sharing service to be free), or why it couldn't be shared as it is. <see cref="Share"/> is
+/// the build's number (<see cref="CharacterSharing.BuildGeneration"/>), which the publish of its
+/// candidate carries too. Replaced whole at each change, so a window that keeps one can tell it
+/// from the next.
 /// </summary>
-internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<PlateSnapshotProblem> Problems, ShareCheckFailure Failure, bool PreparingImages = false)
+internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<PlateSnapshotProblem> Problems, ShareCheckFailure Failure, bool PreparingImages = false, bool Waiting = false, long Share = 0)
 {
     internal static readonly LiveView Idle = new(0, false, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None);
 }
@@ -27,7 +30,10 @@ internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<Pl
 /// Nothing is published on arriving at a character, only on a change after it (or the player's
 /// <see cref="Retry"/>), and only once the Library and the sharing file are both read, so a value
 /// becoming known is never taken for a change. A candidate that goes out of date (another build,
-/// another character, sharing stopping) is never sent. At login it asks for C1's re-read when the
+/// another character, sharing stopping) before its send begins is never sent (see
+/// <see cref="CharacterSharing.TryPublish"/>), and a send of an older revision for the character
+/// gives way once a newer candidate is ready and waits for the service
+/// (<see cref="CharacterSharing.StopOlderSend"/>). At login it asks for C1's re-read when the
 /// game shows another name or World than the binding's. It runs on the framework thread, a frame at
 /// a time; saves may be reported from any thread. Compiled only in the networking preview flavour.
 /// </summary>
@@ -70,6 +76,18 @@ internal sealed class LivePublisher : IDisposable
     /// Active Plate is built and shared again at the next frame, as a save would. Any thread.
     /// </summary>
     internal void Retry() => retry = true;
+
+    /// <summary>
+    /// Whether the Sharing window offers to share the character's Active Plate now: the character
+    /// shares, it has an Active Plate the server doesn't show for it, and nothing is being built or
+    /// sent for it. That is the case after arriving with such a Plate, since nothing is published
+    /// for arriving, and after a share that didn't go through.
+    /// </summary>
+    internal static bool OffersShareNow(CharacterSharingView sharing, LiveView live, SharingCharacter entry, Guid? activePlate) =>
+        entry is { Stage: SharingStage.Shared, ReplacingKey: false }
+        && activePlate is { } plate && plate != entry.PublishedPlate
+        && !(live.ContentId == entry.ContentId && live.Building)
+        && !(sharing.Publish is { Step: not PublishStep.Ended } underWay && underWay.ContentId == entry.ContentId);
 
     /// <summary>One frame's work: the framework thread only.</summary>
     internal void OnFrame()
@@ -145,7 +163,7 @@ internal sealed class LivePublisher : IDisposable
             sharing.Supersede(character.ContentId);
             building = (character.ContentId, active.Value, sharing.BuildGeneration(character.ContentId));
             ready = null;
-            view = new LiveView(character.ContentId, true, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None);
+            view = new LiveView(character.ContentId, true, Array.Empty<PlateSnapshotProblem>(), ShareCheckFailure.None, Share: building.Value.Generation);
             check.Begin(active.Value);
         }
 
@@ -177,11 +195,11 @@ internal sealed class LivePublisher : IDisposable
                     view = view with { PreparingImages = true };
                     return;
                 case ShareCheckStage.Refused:
-                    view = new LiveView(target.ContentId, false, built.Problems, ShareCheckFailure.None);
+                    view = new LiveView(target.ContentId, false, built.Problems, ShareCheckFailure.None, Share: target.Generation);
                     Finish();
                     return;
                 case ShareCheckStage.Failed:
-                    view = new LiveView(target.ContentId, false, Array.Empty<PlateSnapshotProblem>(), built.Failure);
+                    view = new LiveView(target.ContentId, false, Array.Empty<PlateSnapshotProblem>(), built.Failure, Share: target.Generation);
                     Finish();
                     return;
                 default:
@@ -189,11 +207,24 @@ internal sealed class LivePublisher : IDisposable
             }
         }
 
-        // A busy service is asked again next frame; the candidate waits.
-        if (ready is { } waiting && sharing.TryPublish(target.ContentId, waiting, active, target.Generation))
+        // A busy service is asked again next frame; the candidate waits. A send of an older revision
+        // for the character gives way to it, so it goes next; another character's send goes on.
+        if (ready is not { } waiting)
+        {
+            return;
+        }
+
+        if (sharing.TryPublish(target.ContentId, waiting, active, target.Generation))
         {
             view = LiveView.Idle;
             Finish();
+            return;
+        }
+
+        sharing.StopOlderSend(target.ContentId);
+        if (!view.Waiting)
+        {
+            view = view with { Waiting = true };
         }
     }
 

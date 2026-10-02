@@ -107,9 +107,22 @@ internal sealed class SharingProgressWindow : Window
         }
     }
 
+    /// <summary>A working status: the info icon, then the step in the info tone, wrapped to the window.</summary>
+    private static void Status(string text)
+    {
+        var (color, _, icon) = AetherControls.Of(AetherTone.Info);
+        EditorWidgets.IconText(icon, color);
+        ImGui.SameLine(0f, AetherMetrics.ItemInnerSpacing * ImGuiHelpers.GlobalScale);
+        using (ImRaii.PushColor(ImGuiCol.Text, color))
+        using (ImRaii.TextWrapPos(0f))
+        {
+            ImGui.TextUnformatted(text);
+        }
+    }
+
     private void DrawWorking()
     {
-        AetherControls.StatusLine(AetherTone.Info, view.Message);
+        Status(view.Message);
         if (view.Elapsed >= ElapsedAfter)
         {
             AetherControls.Muted(SharingText.Elapsed(view.Elapsed));

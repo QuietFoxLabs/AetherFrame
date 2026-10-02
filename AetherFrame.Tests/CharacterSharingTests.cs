@@ -564,8 +564,11 @@ public partial class CharacterSharingTests
     /// <summary>A persona manager over memory, a scratch persona folder, and the service over a server answered in memory.</summary>
     private sealed class SharingHarness : IDisposable
     {
-        internal SharingHarness(bool load = true)
+        /// <param name="load">Whether to read the sharing file at once.</param>
+        /// <param name="background">Whether the service's operations run on another thread, as the persona session runs them, instead of to their end inside each call.</param>
+        internal SharingHarness(bool load = true, bool background = false)
         {
+            Background = background;
             Log = new List<string>();
             Root = Path.Combine(Path.GetTempPath(), "aetherframe-sharing-" + Guid.NewGuid().ToString("N"));
             Blobs = new MemoryKeyBlobs();
@@ -574,11 +577,7 @@ public partial class CharacterSharingTests
             Publications = new PublicationFiles(Root);
             Server = new FakeSharingServer();
             Client = new SharingClient(FakeSharingServer.Deployment, Server, disposeHandler: false, new Version(0, 1, 7));
-            Sharing = new CharacterSharing((_, work) =>
-            {
-                work(Personas);
-                return true;
-            }, File, Publications, Client, new Version(0, 1, 7), () =>
+            Sharing = new CharacterSharing(RunWork, File, Publications, Client, new Version(0, 1, 7), () =>
             {
                 ClockHook?.Invoke();
                 return Now;
@@ -586,9 +585,12 @@ public partial class CharacterSharingTests
             if (load)
             {
                 Assert.True(Sharing.TryLoad());
+                WaitIdle();
                 Assert.True(Sharing.View.Loaded);
             }
         }
+
+        internal bool Background { get; }
 
         internal string Root { get; }
 
@@ -609,16 +611,24 @@ public partial class CharacterSharingTests
         /// <summary>A new session over the same files, keys and server, as after a reload: nothing is remembered but what was saved.</summary>
         internal void Restart()
         {
-            Sharing = new CharacterSharing((_, work) =>
-            {
-                work(Personas);
-                return true;
-            }, File, Publications, Client, new Version(0, 1, 7), () =>
+            Sharing = new CharacterSharing(RunWork, File, Publications, Client, new Version(0, 1, 7), () =>
             {
                 ClockHook?.Invoke();
                 return Now;
             }, CancellationToken.None, Log.Add);
             Assert.True(Sharing.TryLoad());
+            WaitIdle();
+        }
+
+        /// <summary>Waits until no operation of the service runs: at once when operations run inside each call.</summary>
+        internal void WaitIdle()
+        {
+            var deadline = DateTime.UtcNow + Patience;
+            while (Sharing.View.Busy)
+            {
+                Assert.True(DateTime.UtcNow < deadline, "timed out");
+                Thread.Sleep(5);
+            }
         }
 
         internal List<string> Log { get; }
@@ -632,7 +642,9 @@ public partial class CharacterSharingTests
         internal SharingCharacter Bound(ulong contentId = Aria)
         {
             Sharing.TryStart(contentId, newKey: false);
+            WaitIdle();
             Sharing.TryCheck(contentId, "12345678", "Aria Starfall", "Gilgamesh");
+            WaitIdle();
             var entry = Sharing.View.Find(contentId)!;
             Assert.Equal(SharingStage.Shared, entry.Stage);
             return entry;
@@ -641,6 +653,21 @@ public partial class CharacterSharingTests
         /// <summary>Hands a candidate for the Active Plate to the service, as the live publisher does.</summary>
         internal bool Publish(SnapshotCandidate candidate, ulong contentId = Aria) =>
             Sharing.TryPublish(contentId, candidate, candidate.PlateId);
+
+        /// <summary>The persona session's stand-in: the work runs here, or on another thread.</summary>
+        private bool RunWork(string name, Action<PersonaManager> work)
+        {
+            if (Background)
+            {
+                _ = Task.Run(() => work(Personas));
+            }
+            else
+            {
+                work(Personas);
+            }
+
+            return true;
+        }
 
         /// <summary>The character's publication index, as saved.</summary>
         internal PublicationIndex Index(SharingCharacter entry) =>
@@ -707,6 +734,15 @@ public partial class CharacterSharingTests
 
         internal int StatusRequests { get; private set; }
 
+        /// <summary>Runs when the server is asked for its status, before it answers: a test's way to act during the check.</summary>
+        internal Action? StatusHook { get; set; }
+
+        /// <summary>Runs when a publish arrives, before it is taken: a test's way to act while it is sent.</summary>
+        internal Action? PublishHook { get; set; }
+
+        /// <summary>When set, a publish is taken only once it completes, or fails as cancelled when its request is.</summary>
+        internal Task? PublishGate { get; set; }
+
         internal int Challenges { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -721,6 +757,7 @@ public partial class CharacterSharingTests
             var path = request.RequestUri.AbsolutePath;
             if (path == "/v1/status")
             {
+                StatusHook?.Invoke();
                 StatusRequests++;
                 return Answer(HttpStatusCode.OK, $"{{\"protocolVersion\":{Protocol},\"api\":1,\"minimumPlugin\":\"{MinimumPlugin}\"}}");
             }
@@ -745,6 +782,15 @@ public partial class CharacterSharingTests
                 Assert.True(issued.Remove(Convert.ToHexString(submission.Challenge.ToArray())), "The publish names a challenge this server didn't issue.");
                 var snapshot = Assert.IsType<ProfileLayoutSnapshot>(submission.Document.Document);
                 Assert.Equal(snapshot.Images.Count, body[4 + documentLength]);
+
+                // A request stopped while it is sent never reaches the server.
+                PublishHook?.Invoke();
+                if (PublishGate is { } held)
+                {
+                    await held.WaitAsync(cancellationToken);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
                 Publishes.Add(new SeenPublish(submission.Document.Persona, snapshot, body[4 + documentLength]));
                 var (published, reason) = PublishAnswer();
                 return Answer(published, reason);

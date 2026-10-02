@@ -16,6 +16,9 @@ internal enum SharingProgressStage
     /// <summary>Its images are being prepared.</summary>
     PreparingImages,
 
+    /// <summary>It is ready, and waits for the sharing service, which is busy with something else.</summary>
+    Waiting,
+
     /// <summary>The key and the server are checked, and the Plate is signed on this PC.</summary>
     Signing,
 
@@ -60,7 +63,7 @@ internal sealed record SharingProgressView(
     internal bool Visible => Stage != SharingProgressStage.Hidden;
 
     /// <summary>Whether sharing is still under way.</summary>
-    internal bool Working => Stage is SharingProgressStage.Preparing or SharingProgressStage.PreparingImages or SharingProgressStage.Signing or SharingProgressStage.Sending;
+    internal bool Working => Stage is SharingProgressStage.Preparing or SharingProgressStage.PreparingImages or SharingProgressStage.Waiting or SharingProgressStage.Signing or SharingProgressStage.Sending;
 }
 
 /// <summary>
@@ -69,10 +72,16 @@ internal sealed record SharingProgressView(
 /// publisher's <see cref="LiveView"/> while the Plate is prepared, then the sharing service's
 /// <see cref="PublishStatus"/> while it is signed and sent, and the notice the publish ended with.
 /// Each of those is replaced whole at every change, so a new one is told from the last by reference.
+/// <para>
+/// Every share carries its number (<see cref="LiveView.Share"/>, <see cref="PublishStatus.Share"/>):
+/// a build and the publish of its candidate share one, and a waiting revision sent again has its
+/// own. A higher number started later, and the window only ever shows the newest share it has
+/// seen: an older share's progress or result never takes the place of a newer one's. A share the
+/// player hid stays hidden, its result included, and the next share shows again.
+/// </para>
 /// It shows only while the character shares, and only what happens after it began following that
-/// character: nothing from before a login or a switch of characters. One share at a time: a new one
-/// takes the place of the last one's result. A share the player hid stays hidden until it ends.
-/// Framework thread only; it sends nothing itself.
+/// character: nothing from before a login or a switch of characters. Framework thread only; it
+/// sends nothing itself.
 /// </summary>
 internal sealed class SharingProgress
 {
@@ -83,9 +92,11 @@ internal sealed class SharingProgress
     private ulong character;
     private LiveView? lastLive;
     private PublishStatus? lastPublish;
-    private TimeSpan? workingSince;
-    private bool hidden;
-    private (SharingProgressView View, TimeSpan At)? result;
+    private long newest;
+    private long workingShare;
+    private TimeSpan workingSince;
+    private long hiddenShare;
+    private (SharingProgressView View, long Share, TimeSpan At)? result;
 
     /// <summary>
     /// The window's view for this frame, given the character logged in (null for none), the sharing
@@ -98,13 +109,15 @@ internal sealed class SharingProgress
         var id = loggedIn ?? 0;
         if (!following || id != character)
         {
-            // Arriving at a character: what happened before is not this window's to show.
+            // Arriving at a character: what happened before is not this window's to show, though
+            // what is still under way for it is.
             following = true;
             character = id;
             lastLive = live;
             lastPublish = sharing.Publish;
-            workingSince = null;
-            hidden = false;
+            newest = Math.Max(live.ContentId == id ? live.Share : 0, sharing.Publish is { } arrived && arrived.ContentId == id ? arrived.Share : 0);
+            workingShare = 0;
+            hiddenShare = 0;
             result = null;
         }
 
@@ -113,43 +126,57 @@ internal sealed class SharingProgress
             return SharingProgressView.Hidden;
         }
 
-        // What ended since the last frame: a publish, with the notice it left, or a build that
-        // couldn't be shared. A publish that ended with no word had nothing to do (a newer build
-        // took its place, or sharing stopped).
+        // What changed since the last frame: a publish under way or ended, with the notice it
+        // left, or a build under way or one that couldn't be shared. A publish that ended with no
+        // word had nothing to do (a newer build took its place, or sharing stopped).
         if (!ReferenceEquals(sharing.Publish, lastPublish))
         {
             lastPublish = sharing.Publish;
-            if (lastPublish is { Step: PublishStep.Ended, Outcome: { } outcome } ended && ended.ContentId == id && !hidden)
+            if (lastPublish is { } publish && publish.ContentId == id)
             {
-                result = (ResultOf(id, outcome), now);
+                See(publish.Share);
+                if (publish is { Step: PublishStep.Ended, Outcome: { } outcome })
+                {
+                    Record(ResultOf(id, outcome), publish.Share, now);
+                }
             }
         }
 
         if (!ReferenceEquals(live, lastLive))
         {
             lastLive = live;
-            if (live.ContentId == id && !live.Building && !hidden && ResultOf(id, live) is { } built)
+            if (live.ContentId == id && live.Share != 0)
             {
-                result = (built, now);
+                See(live.Share);
+                if (!live.Building && ResultOf(id, live) is { } built)
+                {
+                    Record(built, live.Share, now);
+                }
             }
         }
 
-        var working = Working(id, sharing, live);
+        var (working, share) = Working(id, sharing, live);
         if (working != SharingProgressStage.Hidden)
         {
-            if (workingSince is null)
+            if (share != workingShare)
             {
-                // A new share: it takes the place of the last one's result.
+                // A share starts, or reaches this window for the first time.
+                workingShare = share;
                 workingSince = now;
-                hidden = false;
-                result = null;
             }
 
-            return hidden ? SharingProgressView.Hidden : new SharingProgressView(working, id, MessageOf(working), now - workingSince.Value, Array.Empty<PlateSnapshotProblem>(), SharingProgressAction.None);
+            if (share == hiddenShare)
+            {
+                return SharingProgressView.Hidden;
+            }
+
+            var message = working == SharingProgressStage.Waiting && sharing.Publish is { Step: not PublishStep.Ended } other && other.ContentId != id
+                ? SharingText.WaitingForOther
+                : MessageOf(working);
+            return new SharingProgressView(working, id, message, now - workingSince, Array.Empty<PlateSnapshotProblem>(), SharingProgressAction.None);
         }
 
-        workingSince = null;
-        hidden = false;
+        workingShare = 0;
         if (result is not { } shown)
         {
             return SharingProgressView.Hidden;
@@ -164,38 +191,76 @@ internal sealed class SharingProgress
         return shown.View;
     }
 
-    /// <summary>The player closed the window: a result goes, and a share still under way stays hidden until it ends, its result included.</summary>
+    /// <summary>The player closed the window: a result goes, and a share still under way stays out of sight until it ends, its result included.</summary>
     internal void Dismiss()
     {
         result = null;
-        hidden = workingSince is not null;
+        if (workingShare != 0)
+        {
+            hiddenShare = workingShare;
+        }
     }
 
-    /// <summary>What is under way for the character, while it shares: a publish signing or sending, or a build being prepared.</summary>
-    private static SharingProgressStage Working(ulong id, CharacterSharingView sharing, LiveView live)
+    /// <summary>A share with <paramref name="share"/> was seen: a newer one than any before makes an older result, and an older hidden share, go.</summary>
+    private void See(long share)
+    {
+        if (share <= newest)
+        {
+            return;
+        }
+
+        newest = share;
+        if (result is { } older && older.Share < share)
+        {
+            result = null;
+        }
+
+        if (hiddenShare < share)
+        {
+            hiddenShare = 0;
+        }
+    }
+
+    /// <summary>A share's result, kept unless a newer share was seen, or the player hid this one.</summary>
+    private void Record(SharingProgressView view, long share, TimeSpan now)
+    {
+        if (share >= newest && share != hiddenShare)
+        {
+            result = (view, share, now);
+        }
+    }
+
+    /// <summary>
+    /// What is under way for the character's newest share, while it shares: its publish signing or
+    /// sending, or its build being prepared or waiting for the service. An older share still under
+    /// way (an older revision being sent while a newer build couldn't be shared) isn't shown.
+    /// </summary>
+    private (SharingProgressStage Stage, long Share) Working(ulong id, CharacterSharingView sharing, LiveView live)
     {
         if (sharing.Find(id) is not { Stage: SharingStage.Shared })
         {
-            return SharingProgressStage.Hidden;
+            return (SharingProgressStage.Hidden, 0);
         }
 
-        if (sharing.Publish is { } publish && publish.ContentId == id && publish.Step != PublishStep.Ended)
+        if (sharing.Publish is { } publish && publish.ContentId == id && publish.Step != PublishStep.Ended && publish.Share >= newest)
         {
-            return publish.Step == PublishStep.Sending ? SharingProgressStage.Sending : SharingProgressStage.Signing;
+            return (publish.Step == PublishStep.Sending ? SharingProgressStage.Sending : SharingProgressStage.Signing, publish.Share);
         }
 
-        if (live.ContentId == id && live.Building)
+        if (live.ContentId == id && live.Building && live.Share >= newest)
         {
-            return live.PreparingImages ? SharingProgressStage.PreparingImages : SharingProgressStage.Preparing;
+            var stage = live.Waiting ? SharingProgressStage.Waiting : live.PreparingImages ? SharingProgressStage.PreparingImages : SharingProgressStage.Preparing;
+            return (stage, live.Share);
         }
 
-        return SharingProgressStage.Hidden;
+        return (SharingProgressStage.Hidden, 0);
     }
 
     private static string MessageOf(SharingProgressStage stage) => stage switch
     {
         SharingProgressStage.Preparing => SharingText.Building,
         SharingProgressStage.PreparingImages => SharingText.PreparingImages,
+        SharingProgressStage.Waiting => SharingText.WaitingTurn,
         SharingProgressStage.Signing => SharingText.Signing,
         _ => SharingText.Sending,
     };
