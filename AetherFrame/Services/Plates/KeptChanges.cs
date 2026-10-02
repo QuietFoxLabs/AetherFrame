@@ -19,10 +19,17 @@ internal enum KeptChangesChoice
 
     /// <summary>
     /// The Plate was saved again since (here, in another game window, or by a save that landed while
-    /// reporting failure), edited by hand, or is now a newer version's or damaged: restoring over it
-    /// would undo something, so only Restore as New Plate is offered, and the Plate is never written.
+    /// reporting failure), or edited by hand in a way that changed its revision or modified time:
+    /// restoring over it would undo something, so only Restore as New Plate is offered, and the
+    /// Plate is never written. A hand edit that changes neither isn't seen (see <see cref="KeptChangesReview.Classify"/>).
     /// </summary>
     SavedAgain,
+
+    /// <summary>
+    /// The Plate is a newer version's, or damaged: this version can't open it, so only Restore as
+    /// New Plate is offered, and the Plate is never written.
+    /// </summary>
+    CannotOpen,
 
     /// <summary>The Plate was deleted or is missing: only Restore as New Plate, never under its old id.</summary>
     Deleted,
@@ -100,7 +107,9 @@ internal static class KeptChangesReview
     /// What the Library allows for <paramref name="draft"/> now. Identical when its content is the
     /// Plate's saved content (compared structurally, as dirty state is); Restore when the Plate is
     /// Ready and its saved revision and modified time are the ones the changes started from;
-    /// otherwise only a new Plate (see <see cref="KeptChangesChoice"/>).
+    /// otherwise only a new Plate (see <see cref="KeptChangesChoice"/>). Only the revision and the
+    /// modified time are compared, so a hand edit to the Plate's file that changes neither still
+    /// offers Restore. Restoring never writes: the player's Save is what would replace that edit.
     /// </summary>
     internal static KeptChangesChoice Classify(PlateDraft draft, PlateLibraryService library)
     {
@@ -109,25 +118,20 @@ internal static class KeptChangesReview
             return KeptChangesChoice.Deleted;
         }
 
-        switch (plate.Status)
+        if (!plate.IsReady)
         {
-            case PlateStatus.Ready:
-                if (library.GetSavedDocument(draft.PlateId) is { } saved
-                    && ProfileService.DocumentState.Capture(saved).ContentEquals(ProfileService.DocumentState.Capture(draft.Document)))
-                {
-                    return KeptChangesChoice.Identical;
-                }
-
-                return plate.Revision == draft.BaseRevision && plate.ModifiedUtc == draft.BaseUpdatedAtUtc
-                    ? KeptChangesChoice.Restore
-                    : KeptChangesChoice.SavedAgain;
-
-            case PlateStatus.NewerVersion:
-                return KeptChangesChoice.SavedAgain;
-
-            default:
-                return plate.Problem == PlateLibraryService.UnavailablePlateProblem ? KeptChangesChoice.Unavailable : KeptChangesChoice.SavedAgain;
+            return NotReady(plate);
         }
+
+        if (library.GetSavedDocument(draft.PlateId) is { } saved
+            && ProfileService.DocumentState.Capture(saved).ContentEquals(ProfileService.DocumentState.Capture(draft.Document)))
+        {
+            return KeptChangesChoice.Identical;
+        }
+
+        return plate.Revision == draft.BaseRevision && plate.ModifiedUtc == draft.BaseUpdatedAtUtc
+            ? KeptChangesChoice.Restore
+            : KeptChangesChoice.SavedAgain;
     }
 
     /// <summary>
@@ -143,8 +147,22 @@ internal static class KeptChangesReview
             return KeptChangesChoice.Deleted;
         }
 
-        return offered == KeptChangesChoice.Restore && (!plate.IsReady || plate.Revision != draft.BaseRevision)
-            ? KeptChangesChoice.SavedAgain
-            : offered;
+        if (offered != KeptChangesChoice.Restore)
+        {
+            return offered;
+        }
+
+        if (!plate.IsReady)
+        {
+            return NotReady(plate);
+        }
+
+        return plate.Revision == draft.BaseRevision ? KeptChangesChoice.Restore : KeptChangesChoice.SavedAgain;
     }
+
+    /// <summary>A Plate in the Library that isn't Ready: locked this session, or one this version can't open (newer, or damaged).</summary>
+    private static KeptChangesChoice NotReady(PlateSummary plate) =>
+        plate.Status != PlateStatus.NewerVersion && plate.Problem == PlateLibraryService.UnavailablePlateProblem
+            ? KeptChangesChoice.Unavailable
+            : KeptChangesChoice.CannotOpen;
 }

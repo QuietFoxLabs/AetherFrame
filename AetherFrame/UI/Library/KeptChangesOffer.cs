@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
+using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Plates;
@@ -17,8 +18,11 @@ internal enum KeptChangesVariant
     /// <summary>The Plate is saved as the changes started from: Restore, Discard or Decide Later.</summary>
     Restore,
 
-    /// <summary>The Plate was saved again since, or can't be written by this build: Restore as New Plate instead.</summary>
+    /// <summary>The Plate was saved again since: Restore as New Plate instead.</summary>
     SavedAgain,
+
+    /// <summary>The Plate is a newer version's or damaged, so this version can't open it: Restore as New Plate instead.</summary>
+    CannotOpen,
 
     /// <summary>The Plate was deleted: Restore as New Plate instead.</summary>
     Deleted,
@@ -42,7 +46,10 @@ internal enum KeptChangesVariant
 /// another game window took is reported, never acted on twice. Restoring never saves: the editor
 /// holds the changes as unsaved, one Undo away from the saved Plate, and the Plate's file is
 /// untouched until the player chooses Save. Replacing an open Plate's own unsaved changes asks
-/// first, through the same Save, Discard or Cancel question My Plates asks (<see cref="PlateOpenGuard"/>).</para>
+/// first, through the same Save, Discard or Cancel question My Plates asks (<see cref="PlateOpenGuard"/>).
+/// Unlike My Plates' prompt it isn't modal, so the editors and My Plates stay usable while it waits:
+/// it is about the one open document it asked about, and once that isn't open with unsaved changes
+/// any more (another Plate opened, or its changes saved or undone), it is dropped, never answered.</para>
 ///
 /// <para>Used on the framework thread only: the load hands its drafts over there, and the window and
 /// <see cref="Advance"/> run while drawing.</para>
@@ -66,6 +73,7 @@ internal sealed class KeptChangesOffer
     internal const string AlreadyHandledMessage = "These changes were already handled in another game window.";
     internal const string ClaimFailedMessage = "These changes couldn't be moved to AetherFrame's Trash folder, so nothing was done. They're still kept.";
     internal const string ChangedMeanwhileMessage = "The Plate changed meanwhile, so check the choices again.";
+    internal const string OpenPlateChangedMessage = "The open Plate changed, so choose again.";
     internal const string BusyMessage = "The open Plate is being saved. Try again once it's saved.";
     internal const string ReviewLabel = "Review";
     internal const string ReviewTooltip = "Show the kept changes again.";
@@ -86,8 +94,11 @@ internal sealed class KeptChangesOffer
     private bool presented;
     private bool openRequested;
 
+    // The window was closed (and not opened again since): what a new Plate's making comes to is shown again.
+    private bool windowClosed;
+
     // The answer waiting on the unsaved-changes question, and a new Plate being made.
-    private (Entry Entry, bool RestoreHere)? asking;
+    private Asked? asking;
     private Task<PlateCreationResult>? creating;
     private Entry? creatingEntry;
 
@@ -97,6 +108,11 @@ internal sealed class KeptChangesOffer
     private ViewText? view;
     private int reminderVersion = -1;
     private string? reminder;
+
+    // The question, rebuilt only when it is asked again or the open Plate's name changes.
+    private Asked? questionAsked;
+    private string? questionName;
+    private string? questionText;
 
     /// <param name="files">Where the drafts are, for claiming them.</param>
     /// <param name="showEditor">Shows the open Plate in the Basic or Advanced editor.</param>
@@ -146,7 +162,7 @@ internal sealed class KeptChangesOffer
 
     internal string Body => View()?.Body ?? string.Empty;
 
-    /// <summary>What the variant adds (saved again, deleted, couldn't be opened), or null.</summary>
+    /// <summary>What the variant adds (saved again, this version can't open it, deleted, couldn't be opened just now), or null.</summary>
     internal string? VariantNote => View()?.Note;
 
     /// <summary>The muted consequence line, or null where there is no saved Plate to speak of.</summary>
@@ -159,10 +175,34 @@ internal sealed class KeptChangesOffer
     /// <summary>Discard is offered for every variant but a Plate that couldn't be opened.</summary>
     internal bool OffersDiscard => View()?.OffersDiscard ?? false;
 
-    internal string DiscardTooltipText => View()?.DiscardTooltip ?? DiscardTooltip;
+    /// <summary>Discard's tooltip, or null where Discard isn't offered.</summary>
+    internal string? DiscardTooltipText => View()?.DiscardTooltip;
 
-    /// <summary>The unsaved-changes question to answer before acting, or null when none is asked.</summary>
-    internal string? Question => asking is { } waiting && guard.Pending is not null ? View()?.Question(waiting.RestoreHere) : null;
+    /// <summary>
+    /// The unsaved-changes question to answer before acting, naming the open Plate as it is now, or
+    /// null when none is asked (or the document it asked about isn't open any more: <see cref="Advance"/>
+    /// then drops it).
+    /// </summary>
+    internal string? Question
+    {
+        get
+        {
+            if (asking is not { } waiting || guard.Pending is null || !ReferenceEquals(profiles.CurrentProfile, waiting.Document))
+            {
+                return null;
+            }
+
+            var name = waiting.Document.Name is { Length: > 0 } open ? open : PlateNaming.DefaultName;
+            if (!ReferenceEquals(waiting, questionAsked) || !ReferenceEquals(name, questionName))
+            {
+                questionAsked = waiting;
+                questionName = name;
+                questionText = waiting.RestoreHere && waiting.PlateId == waiting.Entry.PlateId ? SamePlateQuestion(name) : OtherPlateQuestion(name);
+            }
+
+            return questionText;
+        }
+    }
 
     /// <summary>Save and Discard are unavailable while a save is being written.</summary>
     internal bool CanAnswerQuestion => guard.CanAnswer;
@@ -171,8 +211,9 @@ internal sealed class KeptChangesOffer
     internal bool IsSavingForQuestion => guard.IsSaving;
 
     /// <summary>
-    /// My Plates' reminder while kept changes wait for a later answer and the offer isn't showing:
-    /// "Unsaved changes were kept for N Plates." Null otherwise.
+    /// My Plates' reminder while kept changes wait for a later answer: "Unsaved changes were kept for
+    /// N Plates." Null otherwise. It counts the drafts left for later (Decide Later, or the window
+    /// closed), whatever else is on offer or being acted on meanwhile.
     /// </summary>
     internal string? ReminderText
     {
@@ -181,7 +222,7 @@ internal sealed class KeptChangesOffer
             if (reminderVersion != version)
             {
                 reminderVersion = version;
-                var count = Current is null ? entries.Where(e => e.State == EntryState.Deferred).Select(e => e.PlateId).Distinct().Count() : 0;
+                var count = entries.Where(e => e.State == EntryState.Deferred).Select(e => e.PlateId).Distinct().Count();
                 reminder = count == 0 ? null : $"Unsaved changes were kept for {count} {(count == 1 ? "Plate" : "Plates")}.";
             }
 
@@ -217,7 +258,7 @@ internal sealed class KeptChangesOffer
         }
     }
 
-    /// <summary>For the window: true once each time the offer should open.</summary>
+    /// <summary>For the window: true once each time the offer should open, with a draft on offer or a message to read.</summary>
     internal bool ConsumeOpenRequest()
     {
         if (!openRequested)
@@ -226,7 +267,7 @@ internal sealed class KeptChangesOffer
         }
 
         openRequested = false;
-        return Current is not null;
+        return Current is not null || Error is not null || Notice is not null;
     }
 
     /// <summary>My Plates' Review: offers every draft left for later again.</summary>
@@ -261,7 +302,10 @@ internal sealed class KeptChangesOffer
         var basic = EditorFor(entry.Kept) == EditorSurfaceKind.Basic;
         if (guard.Request(entry.PlateId, basic, askEvenIfOpen: true) == PlateOpenDecision.Ask)
         {
-            asking = (entry, restoreHere);
+            // What the question is about: the document open now (it asks only when one is), with its
+            // unsaved changes. Once that isn't so, the question is dropped (see DropStaleQuestion).
+            var open = profiles.CurrentProfile!;
+            asking = new Asked(entry, restoreHere, open, open.ProfileId);
             Changed();
             return;
         }
@@ -299,13 +343,29 @@ internal sealed class KeptChangesOffer
         Changed();
     }
 
-    /// <summary>The question's Save: saves the open Plate; once that succeeds, the answer goes ahead (see <see cref="Advance"/>).</summary>
-    internal void AnswerSave() => guard.Save();
+    /// <summary>
+    /// The question's Save: saves the open Plate; once that succeeds, the answer goes ahead (see
+    /// <see cref="Advance"/>). Nothing is saved when the question is about a document that isn't open
+    /// with unsaved changes any more: it is dropped instead.
+    /// </summary>
+    internal void AnswerSave()
+    {
+        if (DropStaleQuestion())
+        {
+            return;
+        }
 
-    /// <summary>The question's Discard: drops the open Plate's own unsaved changes, then the answer goes ahead.</summary>
+        guard.Save();
+    }
+
+    /// <summary>
+    /// The question's Discard: drops the open Plate's own unsaved changes, then the answer goes ahead.
+    /// Nothing is discarded when the question is about a document that isn't open with unsaved
+    /// changes any more: it is dropped instead.
+    /// </summary>
     internal void AnswerDiscard()
     {
-        if (asking is not { } waiting)
+        if (asking is not { } waiting || DropStaleQuestion())
         {
             return;
         }
@@ -332,11 +392,16 @@ internal sealed class KeptChangesOffer
         }
     }
 
-    /// <summary>The window closed without an answer: every draft still on offer stays kept, for later.</summary>
+    /// <summary>
+    /// The window closed without an answer: every draft still on offer stays kept, for later. A new
+    /// Plate still being made carries on, and if it can't be made, or ends with something to say,
+    /// the window opens again to say so (see <see cref="Advance"/>).
+    /// </summary>
     internal void Closed()
     {
         asking = null;
         guard.Cancel();
+        windowClosed = true;
         foreach (var entry in round.Where(e => e.State == EntryState.Pending))
         {
             entry.State = EntryState.Deferred;
@@ -355,7 +420,9 @@ internal sealed class KeptChangesOffer
 
     /// <summary>
     /// Applies what finished since the last frame: a new Plate made from kept changes, and the save
-    /// the question's Save started. Call once per frame, on the framework thread.
+    /// the question's Save started. Drops a question whose document isn't open with unsaved changes
+    /// any more (see <see cref="DropStaleQuestion"/>). Call once per frame, on the framework thread,
+    /// before the window draws.
     /// </summary>
     internal void Advance()
     {
@@ -373,8 +440,16 @@ internal sealed class KeptChangesOffer
                     ? refused.Message
                     : "The new Plate couldn't be made. See the Dalamud log for details.");
             }
+
+            // The window was closed while it was made: what it came to is shown, never left unseen.
+            if (windowClosed && (Error is not null || Notice is not null))
+            {
+                windowClosed = false;
+                openRequested = true;
+            }
         }
 
+        DropStaleQuestion();
         if (guard.Advance() is not { } outcome)
         {
             return;
@@ -390,6 +465,15 @@ internal sealed class KeptChangesOffer
         asking = null;
         if (outcome.Open is not null)
         {
+            // Saved: the document asked about is open and clean. Anything else since (another Plate
+            // opened, or edited again) is never replaced.
+            if (!ReferenceEquals(profiles.CurrentProfile, waiting.Document) || session.IsDirty)
+            {
+                Error = OpenPlateChangedMessage;
+                Changed();
+                return;
+            }
+
             Proceed(waiting.Entry, waiting.RestoreHere);
         }
         else
@@ -415,6 +499,21 @@ internal sealed class KeptChangesOffer
     /// <summary>The saved-again variant's sentence.</summary>
     internal static string SavedAgainNote(string plateName) =>
         $"{Quoted(plateName)} was saved again after these changes were made, so restoring them over it would undo that save.";
+
+    /// <summary>The sentence for a Plate that is a newer version's, or damaged.</summary>
+    internal static string CannotOpenNote(string plateName) =>
+        $"{Quoted(plateName)} can't be opened by this version of AetherFrame, so these changes can only be restored as a new Plate.";
+
+    /// <summary>
+    /// The question when the Plate the changes belong to is open with unsaved changes of its own:
+    /// only Discard lets these be restored over it, since saving it makes it a later version.
+    /// </summary>
+    internal static string SamePlateQuestion(string plateName) =>
+        $"{Quoted(plateName)} is open with unsaved changes of its own. Discard them to restore these over it, or save them, and these can then be restored as a new Plate.";
+
+    /// <summary>The question when another Plate is open with unsaved changes.</summary>
+    internal static string OtherPlateQuestion(string plateName) =>
+        $"{Quoted(plateName)} has unsaved changes. Save them before opening these?";
 
     internal static string Quoted(string text) => OpenQuote + text + CloseQuote;
 
@@ -539,9 +638,10 @@ internal sealed class KeptChangesOffer
     /// <summary>Claims the draft (see <see cref="DraftStore.Claim"/>); says so when it can't.</summary>
     private bool TryClaim(Entry entry)
     {
-        switch (files.Claim(entry.Kept.Path))
+        switch (files.Claim(entry.Kept.Path, out var trashPath))
         {
             case DraftClaim.Claimed:
+                entry.TrashPath = trashPath;
                 return true;
 
             case DraftClaim.AlreadyHandled:
@@ -561,8 +661,9 @@ internal sealed class KeptChangesOffer
     /// <summary>A claimed draft whose restore failed before changing anything: back where it was, and on offer again.</summary>
     private void PutBack(Entry entry, string reason)
     {
-        if (files.Unclaim(entry.Kept.Path))
+        if (entry.TrashPath is { } trashPath && files.Unclaim(entry.Kept.Path, trashPath))
         {
+            entry.TrashPath = null;
             entry.State = EntryState.Pending;
             Error = reason + " The changes are still kept.";
         }
@@ -593,11 +694,36 @@ internal sealed class KeptChangesOffer
         return false;
     }
 
+    /// <summary>
+    /// The question waits on one document's unsaved changes (see <see cref="Choose"/>). The window
+    /// isn't modal, so meanwhile another Plate can be opened and edited, or those changes saved or
+    /// undone: its Save would then save, and its Discard throw away, what it never asked about. So
+    /// once the document isn't open, or has no unsaved changes, the question is dropped, nothing is
+    /// saved or discarded, and the draft is still on offer. True when it was dropped. A save the
+    /// question's own Save is writing is left to finish (see <see cref="Advance"/>).
+    /// </summary>
+    private bool DropStaleQuestion()
+    {
+        if (asking is not { } waiting
+            || guard.IsSaving
+            || (ReferenceEquals(profiles.CurrentProfile, waiting.Document) && profiles.OpenPlateId == waiting.PlateId && session.IsDirty))
+        {
+            return false;
+        }
+
+        guard.Cancel();
+        asking = null;
+        Error = OpenPlateChangedMessage;
+        Changed();
+        return true;
+    }
+
     private void RequestOpen()
     {
         presented = true;
         openRequested = true;
-        round = entries.Where(e => e.State == EntryState.Pending).ToList();
+        windowClosed = false;
+        round = entries.Where(e => e.State is EntryState.Pending or EntryState.Acting).ToList();
         ClearMessages();
         Changed();
     }
@@ -620,6 +746,7 @@ internal sealed class KeptChangesOffer
     private static KeptChangesVariant VariantOf(KeptChangesChoice choice) => choice switch
     {
         KeptChangesChoice.Restore => KeptChangesVariant.Restore,
+        KeptChangesChoice.CannotOpen => KeptChangesVariant.CannotOpen,
         KeptChangesChoice.Deleted => KeptChangesVariant.Deleted,
         KeptChangesChoice.Unavailable => KeptChangesVariant.Unavailable,
         _ => KeptChangesVariant.SavedAgain,
@@ -642,12 +769,12 @@ internal sealed class KeptChangesOffer
 
         var name = DisplayName(entry);
         var variant = VariantOf(entry.Choice);
-        var openName = profiles.CurrentProfile?.Name is { Length: > 0 } open ? open : PlateNaming.DefaultName;
         view = new ViewText(
             Body: BodyText(name, entry.Kept.Draft.Editor, entry.Kept.Draft.WrittenAtUtc),
             Note: variant switch
             {
                 KeptChangesVariant.SavedAgain => SavedAgainNote(name),
+                KeptChangesVariant.CannotOpen => CannotOpenNote(name),
                 KeptChangesVariant.Deleted => DeletedNote,
                 KeptChangesVariant.Unavailable => UnavailableNote,
                 _ => null,
@@ -661,12 +788,13 @@ internal sealed class KeptChangesOffer
                 _ => RestoreAsNewTooltip,
             },
             OffersDiscard: variant != KeptChangesVariant.Unavailable,
-            DiscardTooltip: variant == KeptChangesVariant.Deleted ? DiscardDeletedTooltip : DiscardTooltip,
-            Position: round.Count > 1 ? $"{round.IndexOf(entry) + 1} of {round.Count}" : null,
-            SamePlateQuestion: $"{Quoted(openName)} is open with other unsaved changes. Save or discard them first?",
-            OtherPlateQuestion: $"{Quoted(openName)} has unsaved changes. Save them before opening these?",
-            OpenPlateId: profiles.OpenPlateId,
-            PlateId: entry.PlateId);
+            DiscardTooltip: variant switch
+            {
+                KeptChangesVariant.Unavailable => null,
+                KeptChangesVariant.Deleted => DiscardDeletedTooltip,
+                _ => DiscardTooltip,
+            },
+            Position: round.Count > 1 ? $"{round.IndexOf(entry) + 1} of {round.Count}" : null);
         return view;
     }
 
@@ -689,7 +817,25 @@ internal sealed class KeptChangesOffer
 
         internal EntryState State { get; set; } = EntryState.Pending;
 
+        /// <summary>Where its claim moved the draft, while claimed (see <see cref="DraftStore.Claim(string, out string?)"/>).</summary>
+        internal string? TrashPath { get; set; }
+
         internal Guid PlateId => Kept.PlateId;
+    }
+
+    /// <summary>
+    /// The unsaved-changes question waiting for an answer: the draft and how it is to be restored,
+    /// and what it is about, the open document then (the instance itself) and its Plate.
+    /// </summary>
+    private sealed class Asked(Entry entry, bool restoreHere, ProfileDocument document, Guid plateId)
+    {
+        internal Entry Entry { get; } = entry;
+
+        internal bool RestoreHere { get; } = restoreHere;
+
+        internal ProfileDocument Document { get; } = document;
+
+        internal Guid PlateId { get; } = plateId;
     }
 
     private sealed record ViewText(
@@ -699,13 +845,6 @@ internal sealed class KeptChangesOffer
         string PrimaryLabel,
         string PrimaryTooltip,
         bool OffersDiscard,
-        string DiscardTooltip,
-        string? Position,
-        string SamePlateQuestion,
-        string OtherPlateQuestion,
-        Guid? OpenPlateId,
-        Guid PlateId)
-    {
-        internal string Question(bool restoreHere) => restoreHere && OpenPlateId == PlateId ? SamePlateQuestion : OtherPlateQuestion;
-    }
+        string? DiscardTooltip,
+        string? Position);
 }

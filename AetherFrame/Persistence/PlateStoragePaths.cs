@@ -141,8 +141,15 @@ internal sealed class PlateStoragePaths
     internal string GetDraftPath(Guid plateId, DateTime writtenUtc, Guid draftId) =>
         Path.Combine(DraftsDirectory, $"{plateId}.unsaved-{Stamp(writtenUtc)}-{draftId:N}.json");
 
-    /// <summary>Where a draft goes once answered or retired: the trash, under the same (unique) name.</summary>
-    internal string GetDraftTrashPath(string draftPath) => Path.Combine(DraftTrashDirectory, Path.GetFileName(draftPath));
+    /// <summary>
+    /// Where a draft goes once answered or retired: the trash, under the same (unique) name; or, for
+    /// a <paramref name="number"/> from 2, that name numbered ("{name}.2.json"), for a draft whose name
+    /// the trash has already (one the player copied back out of it).
+    /// </summary>
+    internal string GetDraftTrashPath(string draftPath, int number = 1) =>
+        Path.Combine(DraftTrashDirectory, number == 1
+            ? Path.GetFileName(draftPath)
+            : $"{Path.GetFileNameWithoutExtension(draftPath)}.{number.ToString(CultureInfo.InvariantCulture)}{Path.GetExtension(draftPath)}");
 
     /// <summary>
     /// The Plate, time and draft a file in the Drafts folder is named for, only when the name is the

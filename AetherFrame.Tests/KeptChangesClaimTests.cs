@@ -120,6 +120,81 @@ public class KeptChangesClaimTests
         Assert.Empty(KeptFiles.Drafts(fixture.Paths));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ADraftCopiedBackFromTheTrash_IsOfferedAgain_AndCanBeRestoredOrDiscarded(bool restore)
+    {
+        using var fixture = new LibraryFixture();
+        var plateId = await KeepAnEditAsync(fixture);
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var draftBytes = File.ReadAllBytes(draft);
+        var first = await GameSession.StartAsync(fixture);
+        await first.LoadKeptChangesAsync();
+        first.Offer.Discard();
+        var trashed = Assert.Single(KeptFiles.Trashed(fixture.Paths));
+
+        // The player copies it back out of the trash to have it offered again: its name is taken there.
+        File.Copy(trashed, draft);
+        var next = await GameSession.StartAsync(fixture);
+        Assert.Equal(KeptChangesChoice.Restore, Assert.Single(await next.LoadKeptChangesAsync()).Choice);
+
+        if (restore)
+        {
+            next.Offer.Choose();
+            Assert.Equal(plateId, next.Profiles.OpenPlateId);
+            Assert.True(next.Session.IsDirty);
+            Assert.Contains(next.Document.Elements, e => e is TextProfileElement { Text: "Kept text" });
+        }
+        else
+        {
+            next.Offer.Discard();
+            Assert.Null(next.Profiles.CurrentProfile);
+        }
+
+        Assert.Null(next.Offer.Error);
+        Assert.False(next.Offer.HasCurrent);
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+        var numbered = fixture.Paths.GetDraftTrashPath(draft, 2);
+        Assert.Equal(Path.GetFileNameWithoutExtension(draft) + ".2.json", Path.GetFileName(numbered));
+        Assert.Equal(new[] { trashed, numbered }.Order(StringComparer.Ordinal), KeptFiles.Trashed(fixture.Paths));
+        Assert.All(KeptFiles.Trashed(fixture.Paths), path => Assert.Equal(draftBytes, File.ReadAllBytes(path)));
+    }
+
+    [Fact]
+    public async Task ADraftCopiedBackFromTheTrash_WhoseNewPlateFails_IsPutBackFromWhereItsClaimMovedIt()
+    {
+        var store = new FaultInjectingStore();
+        using var fixture = new LibraryFixture(store);
+        var plateId = await KeepAnEditAsync(fixture);
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var first = await GameSession.StartAsync(fixture);
+        await first.LoadKeptChangesAsync();
+        first.Offer.Discard();
+        var trashed = Assert.Single(KeptFiles.Trashed(fixture.Paths));
+        File.Copy(trashed, draft);
+
+        var next = await GameSession.StartAsync(fixture);
+        await next.Library.DeletePlateAsync(plateId);
+        Assert.Equal(KeptChangesChoice.Deleted, Assert.Single(await next.LoadKeptChangesAsync()).Choice);
+        store.FailWrite = path => path.StartsWith(fixture.Paths.PlatesDirectory, StringComparison.OrdinalIgnoreCase);
+
+        next.Offer.Choose();
+        await next.SettleAsync();
+
+        Assert.EndsWith("The changes are still kept.", next.Offer.Error, StringComparison.Ordinal);
+        Assert.True(next.Offer.HasCurrent);
+        Assert.Equal(new[] { draft }, KeptFiles.Drafts(fixture.Paths));
+        Assert.Equal(new[] { trashed }, KeptFiles.Trashed(fixture.Paths));
+
+        store.FailWrite = null;
+        next.Offer.Choose();
+        await next.SettleAsync();
+        Assert.Single(next.Library.GetOrderedPlates());
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+        Assert.Equal(2, KeptFiles.Trashed(fixture.Paths).Length);
+    }
+
     [Fact]
     public async Task NothingEverDeletesADraft()
     {

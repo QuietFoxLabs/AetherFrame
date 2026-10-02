@@ -182,7 +182,11 @@ internal sealed class KeptChangesWindow : Window
         }
     }
 
-    /// <summary>The open Plate's own unsaved changes stand in the way: Save, Discard or Cancel, as My Plates asks.</summary>
+    /// <summary>
+    /// The open Plate's own unsaved changes stand in the way: Save, Discard or Cancel, as My Plates
+    /// asks. This window isn't modal, so the offer drops the question once that Plate isn't open with
+    /// those changes any more, and its buttons never act on another (see <see cref="KeptChangesOffer.Advance"/>).
+    /// </summary>
     private void DrawQuestion(string question, float width)
     {
         using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + width))

@@ -170,7 +170,9 @@ public class KeptChangesConflictTests
         var savedBytes = File.ReadAllBytes(platePath);
 
         var next = await GameSession.StartAsync(fixture);
-        Assert.Equal(KeptChangesChoice.SavedAgain, Assert.Single(await next.LoadKeptChangesAsync()).Choice);
+        Assert.Equal(KeptChangesChoice.CannotOpen, Assert.Single(await next.LoadKeptChangesAsync()).Choice);
+        Assert.Equal(KeptChangesOffer.CannotOpenNote("Edited"), next.Offer.VariantNote);
+        Assert.Equal(KeptChangesOffer.RestoreAsNewLabel, next.Offer.PrimaryLabel);
         next.Offer.Choose();
         await next.SettleAsync();
 
@@ -189,7 +191,9 @@ public class KeptChangesConflictTests
         var damagedBytes = File.ReadAllBytes(platePath);
 
         var next = await GameSession.StartAsync(fixture);
-        Assert.Equal(KeptChangesChoice.SavedAgain, Assert.Single(await next.LoadKeptChangesAsync()).Choice);
+        Assert.Equal(KeptChangesChoice.CannotOpen, Assert.Single(await next.LoadKeptChangesAsync()).Choice);
+        Assert.Equal(KeptChangesOffer.CannotOpenNote("Edited"), next.Offer.VariantNote);
+        Assert.Equal(KeptChangesOffer.RestoreAsNewLabel, next.Offer.PrimaryLabel);
         next.Offer.Choose();
         await next.SettleAsync();
 

@@ -54,8 +54,9 @@ internal sealed record DraftListing(IReadOnlyList<DraftRead> Drafts, int Unread)
 /// <para><b>Write-once.</b> Every draft gets a new file named for its Plate, the time and its own
 /// random id (see <see cref="PlateStoragePaths.GetDraftPath"/>), so nothing is ever written over:
 /// not an earlier draft, not one another game client wrote, and never a name whose backup copy in
-/// Dalamud's storage could hold anything but what was written under it. A draft answered or retired
-/// moves intact to <see cref="PlateStoragePaths.DraftTrashDirectory"/>; nothing here deletes one.</para>
+/// Dalamud's storage could hold anything but what was written under it (so a draft whose bytes aren't
+/// valid text is read from that copy). A draft answered or retired moves intact to
+/// <see cref="PlateStoragePaths.DraftTrashDirectory"/>, under a name no file there has; nothing here deletes one.</para>
 ///
 /// <para><b>Claiming.</b> No lock spans game clients (the reliability report's D8), so whatever
 /// acts on a draft moves it to the trash first (<see cref="Claim"/>): only one move can succeed,
@@ -67,6 +68,9 @@ internal sealed class DraftStore
 {
     /// <summary>The most drafts one load reads and offers; any others wait, untouched, for a later load.</summary>
     internal const int MaxDraftsRead = 20;
+
+    // The most numbered trash names a draft is given (see FreeTrashPath): each is a copy the player put back.
+    private const int MaxTrashNumber = 1000;
 
     private readonly PlateStoragePaths paths;
     private readonly IPlateFileStore store;
@@ -192,8 +196,20 @@ internal sealed class DraftStore
         var name = LogPrivacy.FileName(path);
         try
         {
+            // Bytes that aren't valid text are refused, unlike a Plate's (D18: a Plate's backup copy
+            // may be older than its file). A draft's name is written once, so the storage's backup
+            // copy under it can only be exactly what was written, and the store reads that instead;
+            // with no backup copy the draft is damaged, and left as it is.
             DraftText? text = null;
-            await store.ReadTextAsync(path, stored => text = DraftDocuments.Parse(stored.Text)).ConfigureAwait(false);
+            await store.ReadTextAsync(path, stored =>
+            {
+                if (stored.HasInvalidBytes)
+                {
+                    throw new InvalidDataException($"Unsaved changes hold bytes that aren't valid {stored.EncodingName}.");
+                }
+
+                text = DraftDocuments.Parse(stored.Text);
+            }).ConfigureAwait(false);
             if (text is null)
             {
                 throw new InvalidDataException("Unsaved changes could not be read.");
@@ -230,8 +246,16 @@ internal sealed class DraftStore
     /// another file, to the trash. Discarding it is exactly this. A draft no longer there was taken by
     /// another game window. A move that fails leaves it where it was, logged, and nothing may act on it.
     /// </summary>
-    internal DraftClaim Claim(string draftPath)
+    internal DraftClaim Claim(string draftPath) => Claim(draftPath, out _);
+
+    /// <summary>
+    /// <see cref="Claim(string)"/>, saying where in the trash a claimed draft went (<paramref name="trashPath"/>,
+    /// null unless claimed), for <see cref="Unclaim"/>: under its own name, or, when the trash holds a
+    /// file of that name already (a draft the player copied back out of it), that name numbered.
+    /// </summary>
+    internal DraftClaim Claim(string draftPath, out string? trashPath)
     {
+        trashPath = null;
         try
         {
             if (!store.FileExists(draftPath))
@@ -239,7 +263,9 @@ internal sealed class DraftStore
                 return DraftClaim.AlreadyHandled;
             }
 
-            store.MoveFile(draftPath, paths.GetDraftTrashPath(draftPath));
+            var destination = FreeTrashPath(draftPath);
+            store.MoveFile(draftPath, destination);
+            trashPath = destination;
             return DraftClaim.Claimed;
         }
         catch (Exception ex) when (!IsInterruption(ex))
@@ -255,14 +281,15 @@ internal sealed class DraftStore
     }
 
     /// <summary>
-    /// Puts a claimed draft back where it was, when what it was claimed for failed before it changed
-    /// anything, so it is offered again; never over a file. False, logged, when it stays in the trash.
+    /// Puts a claimed draft back where it was, from where its claim moved it (<paramref name="trashPath"/>),
+    /// when what it was claimed for failed before it changed anything, so it is offered again; never
+    /// over a file. False, logged, when it stays in the trash.
     /// </summary>
-    internal bool Unclaim(string draftPath)
+    internal bool Unclaim(string draftPath, string trashPath)
     {
         try
         {
-            store.MoveFile(paths.GetDraftTrashPath(draftPath), draftPath);
+            store.MoveFile(trashPath, draftPath);
             return true;
         }
         catch (Exception ex) when (!IsInterruption(ex))
@@ -270,6 +297,21 @@ internal sealed class DraftStore
             log.Error(ex, $"AetherFrame could not put kept changes {LogPrivacy.FileName(draftPath)} back; they stay in its Trash folder.");
             return false;
         }
+    }
+
+    /// <summary>The first of the draft's trash names (see <see cref="PlateStoragePaths.GetDraftTrashPath"/>) no file has.</summary>
+    private string FreeTrashPath(string draftPath)
+    {
+        for (var number = 1; number <= MaxTrashNumber; number++)
+        {
+            var path = paths.GetDraftTrashPath(draftPath, number);
+            if (!store.FileExists(path))
+            {
+                return path;
+            }
+        }
+
+        throw new IOException("AetherFrame found no free name for kept changes in its Trash folder.");
     }
 
     private static bool IsInterruption(Exception ex) => ex is OperationCanceledException or OperationAbandonedException;

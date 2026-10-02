@@ -218,6 +218,49 @@ public class KeptChangesReadTests
         Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("damaged and left as they are", StringComparison.Ordinal));
     }
 
+    // ---------------------------------------------------------------- bytes that aren't valid text
+
+    [Fact]
+    public async Task ADraftWithBytesThatAreNotValidText_IsReadFromItsBackupCopy_ExactlyAsWritten()
+    {
+        var store = new BackupSimulatingStore();
+        using var fixture = new LibraryFixture(store);
+        var (plateId, draft, damagedBytes) = await KeepAndDamageAsync(fixture);
+        Assert.Contains("Zebra saved text", store.Backups[draft], StringComparison.Ordinal);
+
+        var next = await GameSession.StartAsync(fixture);
+        var found = Assert.Single(await next.LoadKeptChangesAsync());
+
+        // Read as written, from the backup copy a write-once name can only hold; the file is left as it is.
+        Assert.Equal(KeptChangesChoice.Restore, found.Choice);
+        Assert.Contains(found.Draft.Document.Elements, e => e is TextProfileElement { Text: "Zebra saved text" });
+        Assert.DoesNotContain(found.Draft.Document.Elements, e => e is TextProfileElement text && text.Text.Contains((char)0xFFFD, StringComparison.Ordinal));
+        Assert.Equal(damagedBytes, File.ReadAllBytes(draft));
+
+        // Restored and saved, the Plate keeps the text it had intact.
+        next.Offer.Choose();
+        Assert.True(await next.Session.SaveProfileAsync());
+        var saved = fixture.ReadPlateJson(plateId);
+        Assert.Contains("Zebra saved text", saved, StringComparison.Ordinal);
+        Assert.Contains("Unsaved addition", saved, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ADraftWithBytesThatAreNotValidText_AndNoBackupCopy_IsDamaged_AndLeftAsItIs()
+    {
+        using var fixture = new LibraryFixture();
+        var (_, draft, damagedBytes) = await KeepAndDamageAsync(fixture);
+        var next = await GameSession.StartAsync(fixture);
+
+        Assert.Equal(DraftReadStatus.Damaged, Assert.Single((await next.Drafts.ReadNewestAsync()).Drafts).Status);
+        Assert.Empty(await next.LoadKeptChangesAsync());
+
+        Assert.False(next.Offer.HasCurrent);
+        Assert.Equal(damagedBytes, File.ReadAllBytes(draft));
+        Assert.Empty(KeptFiles.Trashed(fixture.Paths));
+        Assert.Contains(fixture.Log.Messages, m => m.StartsWith("E ", StringComparison.Ordinal) && m.Contains("damaged and left as they are", StringComparison.Ordinal));
+    }
+
     // ---------------------------------------------------------------- unknown data
 
     [Fact]
@@ -258,6 +301,31 @@ public class KeptChangesReadTests
         Assert.Contains("Kept in the draft", json, StringComparison.Ordinal);
         Assert.Equal(created.PlateId, game.Profiles.OpenPlateId);
         Assert.False(game.Session.IsDirty);
+    }
+
+    /// <summary>
+    /// A Plate saved with the text "Zebra saved text", then given an unsaved edit and unloaded, and
+    /// its draft's file damaged on disk: the 'Z' of that text turned into a byte that isn't valid
+    /// UTF-8. The Plate, the draft's path and the damaged bytes.
+    /// </summary>
+    private static async Task<(Guid PlateId, string Draft, byte[] DamagedBytes)> KeepAndDamageAsync(LibraryFixture fixture)
+    {
+        var game = await GameSession.StartAsync(fixture);
+        var plateId = await game.CreatePlateAsync(name: "Plate");
+        game.Open(plateId);
+        game.Edit("Zebra saved text");
+        Assert.True(await game.Session.SaveProfileAsync());
+        game.Session.SyncWithCurrentProfile();
+        game.Edit("Unsaved addition");
+        await game.UnloadAsync();
+
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var bytes = File.ReadAllBytes(draft);
+        var marker = Encoding.UTF8.GetBytes("Zebra saved text");
+        var at = Enumerable.Range(0, bytes.Length - marker.Length + 1).First(i => bytes.AsSpan(i, marker.Length).SequenceEqual(marker));
+        bytes[at] = 0xFF;
+        File.WriteAllBytes(draft, bytes);
+        return (plateId, draft, bytes);
     }
 
     /// <summary>
