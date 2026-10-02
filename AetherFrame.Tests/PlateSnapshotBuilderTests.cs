@@ -232,6 +232,25 @@ public sealed class PlateSnapshotBuilderTests
         }
     }
 
+    /// <summary>A Mirrored Plate's background artwork is shared mirrored, as its owner sees it: the
+    /// art quad's corners carry the flip, so the art's left edge is at the Plate's right.</summary>
+    [Theory]
+    [InlineData(AdventurePlateOrientation.Normal)]
+    [InlineData(AdventurePlateOrientation.Mirrored)]
+    public void AMirroredPlatesBackground_IsSharedMirrored(AdventurePlateOrientation orientation)
+    {
+        var plate = ClassicPlate();
+        plate.BasicPlate!.Orientation = orientation;
+        plate.Components = [ComponentDocuments.Of(BuiltInComponentCatalog.BackgroundCelestialSakura)];
+
+        var snapshot = Build(Resolve(plate));
+
+        var art = Assert.Single(snapshot.Items.OfType<LayoutArtQuad>());
+        var (left, right) = (Point(Vector2.Zero).X, Point(new Vector2(plate.CanvasWidth, 0f)).X);
+        Assert.Equal(orientation == AdventurePlateOrientation.Mirrored ? (right, left) : (left, right), (art.A.X, art.B.X));
+        Assert.Equal((art.A.X, art.B.X), (art.D.X, art.C.X));
+    }
+
     [Fact]
     public void AText_IsSharedWithItsDisplayText_AndEveryField_AsTheRendererResolvesIt()
     {
