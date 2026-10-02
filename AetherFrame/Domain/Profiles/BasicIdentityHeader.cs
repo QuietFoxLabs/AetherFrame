@@ -23,7 +23,6 @@ namespace AetherFrame.Domain.Profiles;
 public sealed class BasicIdentityHeader
 {
     public const int MaxCustomTitleLength = 64;
-    public const int MaxTaglineLength = 120;
 
     private string customTitle = string.Empty;
 

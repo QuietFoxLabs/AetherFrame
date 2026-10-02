@@ -334,15 +334,6 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     // ---------------------------------------------------------------- navigation
 
-    /// <summary>
-    /// The wide layout's navigation rail: its own subtle background, then one row per category from
-    /// the top (the action bar's Basic | Advanced switch already says which editor this is) —
-    /// Title Case, one height, evenly spaced, text inset. The selected
-    /// row has a soft accent tint, a narrow accent bar at its left edge and full-strength text;
-    /// the others muted text, with a faint background on hover. Rows are ordinary ImGui items, so
-    /// mouse, keyboard and gamepad navigation work as before; a status marker still sits at the
-    /// right of any row that needs one.
-    /// </summary>
     /// <summary>The tutorial target of a category's row in the navigator or the strip.</summary>
     private static TutorialTarget NavigatorTarget(BasicEditorCategory category) => category switch
     {
@@ -354,6 +345,15 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         _ => TutorialTarget.None,
     };
 
+    /// <summary>
+    /// The wide layout's navigation rail: its own subtle background, then one row per category from
+    /// the top (the action bar's Basic | Advanced switch already says which editor this is) —
+    /// Title Case, one height, evenly spaced, text inset. The selected
+    /// row has a soft accent tint, a narrow accent bar at its left edge and full-strength text;
+    /// the others muted text, with a faint background on hover. Rows are ordinary ImGui items, so
+    /// mouse, keyboard and gamepad navigation work as before; a status marker still sits at the
+    /// right of any row that needs one.
+    /// </summary>
     private void DrawNavigator(ProfileDocument profile, Vector2 size)
     {
         var scale = ImGuiHelpers.GlobalScale;
@@ -571,7 +571,6 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         ImGui.Spacing();
     }
 
-    /// <summary>A small heading inside a category (not collapsible).</summary>
     /// <summary>A group's label inside a category: the small label face in the accent, on one row so a Show toggle can follow it.</summary>
     private static void Subheading(string text)
     {
@@ -839,7 +838,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         ImGui.Spacing();
         ImGui.TextUnformatted("Resets:");
         BulletText("the orientation, back to Normal");
-        BulletText("the position and size of every Basic section: portrait, identity header,\nhome world, favorite job, level, free company, playstyle, active hours, message");
+        BulletText("the position and size of every Basic section: portrait, identity header,\nhome world, favorite jobs, free company, playstyle, active hours, message");
         BulletText("sections customized in the Advanced Editor, too");
         ImGui.Spacing();
         ImGui.TextUnformatted("Keeps:");

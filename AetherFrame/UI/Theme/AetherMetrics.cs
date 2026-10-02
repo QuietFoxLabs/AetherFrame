@@ -59,9 +59,6 @@ internal static class AetherMetrics
 
     // ---------------------------------------------------------------- controls
 
-    /// <summary>The property label column in an inspector (label at the left, value at the right).</summary>
-    internal const float LabelColumnWidth = 92f;
-
     /// <summary>A primary or secondary button's minimum width, so a row of them lines up.</summary>
     internal const float ButtonMinWidth = 96f;
 
@@ -70,10 +67,6 @@ internal static class AetherMetrics
 
     /// <summary>The mark (the AetherFrame corner-bracket sigil) beside a window title.</summary>
     internal const float BrandMarkSize = 18f;
-
-    /// <summary>A card in My Plates and Templates.</summary>
-    internal const float CardWidth = 196f;
-    internal const float CardPadding = 8f;
 
     /// <summary>A callout's icon column.</summary>
     internal const float CalloutIconWidth = 22f;

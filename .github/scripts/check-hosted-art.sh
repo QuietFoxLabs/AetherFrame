@@ -2,7 +2,7 @@
 # Art on demand ("Art on demand" in docs/networking/DecisionRegister.md): before a release, every
 # hosted artwork file in AetherFrame/Assets/ArtFiles.txt is downloaded from the address players'
 # plugins use, https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/<commit>/AetherFrame/Assets/<path>,
-# and must be exactly the table's bytes. Downloads about 80 MB; needs curl and sha256sum.
+# and must be exactly the table's bytes. Downloads about 160 MB; needs curl and sha256sum.
 set -euo pipefail
 
 table=AetherFrame/Assets/ArtFiles.txt

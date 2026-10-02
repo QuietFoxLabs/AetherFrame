@@ -27,10 +27,11 @@
     <ProjectReference Include="..\AetherFrame.Protocol\AetherFrame.Protocol.csproj" />
   </ItemGroup>
 
-  <!-- The plugin's Dalamud-free key custody code, which the plugin compiles only in its networking
-       preview flavour, is compiled into this test assembly from its source so it is tested on every
-       build: the key blob storage (a directory of files, System.IO only), the DPAPI protector
-       (crypt32 on Windows, refusing elsewhere) and the capability probe. -->
+  <!-- The plugin's Dalamud-free key custody code, part of the sharing build (the default since
+       October 1, 2026; the player flavour, -p:AetherFrameNetworkPreview=false, leaves it out), is
+       compiled into this test assembly from its source so it is tested on every build: the key blob
+       storage (a directory of files, System.IO only), the DPAPI protector (crypt32 on Windows,
+       refusing elsewhere) and the capability probe. -->
   <ItemGroup>
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaKeyFileStorage.cs" Link="Linked\PersonaKeyFileStorage.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\WrittenThroughMove.cs" Link="Linked\WrittenThroughMove.cs" />
@@ -38,7 +39,7 @@
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaInstanceLock.cs" Link="Linked\PersonaInstanceLock.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\NoBackupCodec.cs" Link="Linked\NoBackupCodec.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaSession.cs" Link="Linked\PersonaSession.cs" />
-    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaWindowModel.cs" Link="Linked\PersonaWindowModel.cs" />
+    <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaPaths.cs" Link="Linked\PersonaPaths.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\DpapiPersonaKeyProtector.cs" Link="Linked\DpapiPersonaKeyProtector.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Personas\PersonaCapabilityProbe.cs" Link="Linked\PersonaCapabilityProbe.cs" />
   </ItemGroup>

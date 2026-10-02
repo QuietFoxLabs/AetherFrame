@@ -133,7 +133,8 @@ internal static class TestPackages
         module.DefineType("Plugin", TypeAttributes.Public | TypeAttributes.Class).CreateType();
         if (typeNamespace is not null)
         {
-            // A type in a namespace the package check refuses (a networking preview build).
+            // A type in one of the networking namespaces: the sharing build's mark, which the package
+            // check requires from sharingSince on and refuses before it.
             module.DefineType(typeNamespace + ".Marker", TypeAttributes.Public | TypeAttributes.Class).CreateType();
         }
 

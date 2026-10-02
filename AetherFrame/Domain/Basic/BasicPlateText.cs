@@ -28,7 +28,6 @@ public sealed record BasicCharacterInfo(
 /// </summary>
 public static class BasicPlateText
 {
-    public const int MinLevel = 1;
     public const int MaxLevel = 100;
 
     /// <summary>Separator between playstyle entries and between parts of a line (U+00B7, in every curated font).</summary>

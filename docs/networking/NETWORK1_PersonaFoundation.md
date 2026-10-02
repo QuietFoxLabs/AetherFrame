@@ -1,6 +1,6 @@
 # NETWORK1: the persona management foundation
 
-**Status (2026-09-29):** implemented and tested as a standalone assembly the plugin does not reference, corrected after an independent security audit and an independent review of those corrections (section 8). It generates no persistent key, stores nothing, encrypts nothing, opens no connection and changes no plugin behaviour. It applies decision D3 and the principle of D2 as recorded in the networking decision register ([DecisionRegister.md](DecisionRegister.md), merged with the planned boundaries in [NETWORK1.md](NETWORK1.md) by the NETWORK1 increment 0 documentation change, pull request #22). Where it had to choose behaviour that an unresolved decision governs, it says so and names the decision (section 7); nothing here approves anything.
+**Status (2026-09-29):** implemented and tested as a standalone assembly the plugin does not reference, corrected after an independent security audit and an independent review of those corrections (section 8). It generates no persistent key, stores nothing, encrypts nothing, opens no connection and changes no plugin behaviour. It applies decision D3 and the principle of D2 as recorded in the networking decision register ([DecisionRegister.md](DecisionRegister.md), merged with the planned boundaries in [NETWORK1.md](NETWORK1.md) by the NETWORK1 increment 0 documentation change, pull request #22). Where it had to choose behaviour that an unresolved decision governs, it says so and names the decision (section 7); nothing here approves anything. `[updated 2026-10-02: the assembly's sources are compiled into AetherFrame.dll (D9b) in the sharing build, the default build every release since 0.1.8 carries; the release package is still three files.]`
 
 ## 1. What this increment is
 
@@ -151,7 +151,7 @@ dotnet build AetherFrame.slnx -c Release
 dotnet test AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj -c Release --no-build
 ```
 
-The Build workflow (`build.yml`) runs the suite on windows-2022 and ubuntu-24.04 after the protocol suite, on every push to master and every pull request. The plugin package check in that workflow (`validate-package`) confirms the release package still holds exactly the three plugin files, since the plugin does not reference the new assembly.
+The Build workflow (`build.yml`) runs the suite on windows-2022 and ubuntu-24.04 after the protocol suite, on every push to master and every pull request. The plugin package check in that workflow (`validate-package`) confirms the release package still holds exactly the three plugin files, since the plugin does not reference the new assembly. `[updated 2026-10-02: the sharing build compiles the persona sources into AetherFrame.dll (D9b), and since 0.1.8 the same check also holds the DLL to the sharing flavour ("Releases carry sharing" in DecisionRegister.md; sharingSince in distribution/repository.json).]`
 
 The Release workflow (`release.yml`) is **not** changed. Whether the persona suite should also block a plugin release is a new question of the same kind as L9, tracked in the register as L11 and unresolved (section 7).
 

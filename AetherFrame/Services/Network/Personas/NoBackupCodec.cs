@@ -7,8 +7,8 @@ namespace AetherFrame.Services.Network.Personas;
 /// The backup codec of a build with no backup format: the encrypted backup waits for the D2
 /// details and K5 (docs/networking/DecisionRegister.md; NETWORK1 increment 6, stage 2), so nothing
 /// here exports or restores a key. Every container reads as not one this build opens, and writing
-/// or opening one is refused before anything is used. The persona window offers neither. Compiled
-/// only in the networking preview flavour.
+/// or opening one is refused before anything is used. No window offers either. Compiled only in
+/// the networking preview flavour.
 /// </summary>
 public sealed class NoBackupCodec : IPersonaBackupCodec
 {

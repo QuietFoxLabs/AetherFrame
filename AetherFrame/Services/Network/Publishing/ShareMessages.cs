@@ -3,11 +3,10 @@ using AetherFrame.Domain.Profiles;
 namespace AetherFrame.Services.Network.Publishing;
 
 /// <summary>
-/// What the preview's share check says to the player: why a Plate can't be shared, what it leaves
-/// out, why a check couldn't finish, and what signing came to. Each message is plain text, drawn
-/// unformatted, and names no path, id or label; the window adds the Plate's or the persona's own
-/// words beside it where they belong. The consent screen (N2-9) builds on these. Compiled only in
-/// the networking preview flavour.
+/// What the share check, the Sharing window and the progress window say to the player: why a Plate
+/// can't be shared, what it leaves out, and why a check couldn't finish. Each message is plain text,
+/// drawn unformatted, and names no path, id or label; the window adds the Plate's own words beside
+/// it where they belong. Compiled only in the sharing build.
 /// </summary>
 internal static class ShareMessages
 {
@@ -54,44 +53,6 @@ internal static class ShareMessages
         ShareCheckFailure.ResolveFailed => "It couldn't be checked. Try again; if it happens again, AetherFrame's log says what failed.",
         ShareCheckFailure.Unloading => "AetherFrame is unloading.",
         _ => "The check couldn't finish.",
-    };
-
-    /// <summary>What signing came to. <see cref="PublishResult.Stored"/> is followed by the window's own note that nothing is sent yet.</summary>
-    internal static string For(PublishResult result) => result switch
-    {
-        PublishResult.Stored => "Signed and kept on this PC.",
-        PublishResult.IndexUnreadable => "This persona's list of what it shared can't be read, so sharing is off for it. The file is left exactly as it was.",
-        PublishResult.IndexNewerVersion => "This persona's list of what it shared was saved by a newer AetherFrame, so sharing is off for it. Update AetherFrame; the file is left exactly as it was.",
-        PublishResult.IndexFull => "This persona has shared as many Plates as it can from here (256).",
-        PublishResult.CandidateUsed => "This check was used for a signature already. Check again to sign.",
-        PublishResult.ActivePersonaChanged => "The persona in use isn't the one shown any more. Nothing was signed; check again.",
-        PublishResult.KeyUnavailable => "This persona's key can't be opened on this PC now. The Personas window says more.",
-        PublishResult.NotAcknowledged => "First acknowledge, in the Personas window, what losing this persona's key means.",
-        PublishResult.SigningFailed => "Signing failed, so nothing was kept. Check that your PC's clock is right, then try again.",
-        PublishResult.NotAsShown => "What would be kept isn't exactly what was checked, so nothing was kept. Check again.",
-        PublishResult.OutboxFull => "This persona has 128 MiB of signed Plates waiting to be sent, the most it keeps.",
-        PublishResult.NotSaved => "The signed Plate couldn't be saved. Nothing will be sent that wasn't; try again.",
-        _ => "Signing didn't finish.",
-    };
-
-    /// <summary>Why a persona's list of what it shared couldn't be used.</summary>
-    internal static string For(PublicationLoadResult result) => result switch
-    {
-        PublicationLoadResult.Loaded => string.Empty,
-        PublicationLoadResult.IndexUnreadable => "This persona's list of what it shared can't be read, so sharing and unsharing are off for it. The file is left exactly as it was.",
-        PublicationLoadResult.IndexNewerVersion => "This persona's list of what it shared was saved by a newer AetherFrame. Update AetherFrame; the file is left exactly as it was.",
-        _ => "This persona's list of what it shared couldn't be used.",
-    };
-
-    /// <summary>Where one of a persona's profiles stands, for its list.</summary>
-    internal static string For(PublicationState state, OutboxState outbox) => (state, outbox) switch
-    {
-        (_, OutboxState.NotStored) => "its latest signing wasn't stored: share it again",
-        (PublicationState.Pending, _) => "signed, waiting to be sent",
-        (PublicationState.Published, OutboxState.Waiting) => "shared; an update is waiting to be sent",
-        (PublicationState.Published, _) => "shared",
-        (PublicationState.Retracting, _) => "being unshared",
-        _ => "unknown",
     };
 
     /// <summary>Whether a text of this role holds what AetherFrame filled in from the character (the name, World and Data Center, job and Free Company tag), which a player may not think of as shared.</summary>

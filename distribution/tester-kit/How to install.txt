@@ -8,9 +8,8 @@ What you need
 -------------
 - FFXIV on Windows with Dalamud (XIVLauncher). Mac and Linux, including Wine and Proton, aren't
   supported yet: the key that proves your character is yours is protected by Windows.
-- Your character's Lodestone page. Send its address to the person who invited you before you
-  start. The test's server only accepts the characters on its list, and can add yours only once it
-  has the number at the end of that address.
+- Your character's Lodestone page: you paste its address into AetherFrame during the check below,
+  so have it to hand.
 
 1. Unpack
 ---------
@@ -31,7 +30,7 @@ Installed Plugins, and disable it. Two copies running at once would share the sa
    ticked.
 3. Press Save and Close.
 4. Type /xlplugins, open Dev Tools, then Installed Dev Plugins, and enable AetherFrame.
-5. Type /af version. It should say "network preview".
+5. Type /af version. It should end with "[sharing]".
 
 Your Plates, Templates and settings are the same ones any AetherFrame on this PC uses.
 

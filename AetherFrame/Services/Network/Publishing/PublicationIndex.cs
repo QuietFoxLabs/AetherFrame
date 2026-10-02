@@ -145,7 +145,7 @@ internal readonly struct OutboxEntryName : IEquatable<OutboxEntryName>
 /// the local Plate it was made from, its profile id, the latest revision signed for it, where it
 /// stands, when the server last acknowledged a revision of it (Unix seconds; 0 for never), and the
 /// outbox entry holding a signed revision not yet acknowledged (<see cref="OutboxEntryName.None"/>
-/// for none). The share code the server returns is added by N2-9.
+/// for none). The entry's trailing 16 bytes are reserved (share codes were retired, R5).
 /// </summary>
 internal sealed record PublicationEntry(
     Guid PlateId,

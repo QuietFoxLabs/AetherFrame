@@ -20,7 +20,7 @@ For the project owner. Everything below this section is the detail.
 
 **Undo.** If a release turns out bad, you run the same workflow with the previous good version and **rollback** ticked. Players who already updated keep the bad version until a fixed release with a higher number follows; Dalamud never downgrades. The source code, the tags and the old releases are never deleted or moved.
 
-**Testing builds.** Dalamud has a built-in idea of testing builds: players who tick **Get plugin testing builds** and opt into AetherFrame's testing see a newer *testing* version before everyone else. The repository can carry a stable version and a testing version at the same time. The first release through the repository, 0.1.6, is planned as testing-only: only players with testing builds on see AetherFrame at all, until you promote a release to stable.
+**Testing builds.** Dalamud has a built-in idea of testing builds: players who tick **Get plugin testing builds** and opt into AetherFrame's testing see a newer *testing* version before everyone else. The repository can carry a stable version and a testing version at the same time. The first release through the repository, 0.1.6, was published testing-only on 2026-09-28, and every release since has gone to the testing channel: only players with testing builds on see AetherFrame at all, until you promote a release to stable.
 
 ## How Dalamud custom repositories work
 
@@ -92,12 +92,12 @@ And the rules behind the table:
 | [`distribution/plugin-repository/README.md`](../distribution/plugin-repository/README.md) | The README the publication branch carries next to `pluginmaster.json`, copied byte for byte. |
 | [`tools/AetherFrame.ReleaseTools/`](../tools/AetherFrame.ReleaseTools/) | The tool: `validate-package`, `generate-repository`, `validate-repository`, `checksums`, `verify-checksums`, `plan-publication`, `prepare-publication`. Plain .NET, no packages, no Dalamud reference, no network, no AppData. |
 | [`tools/AetherFrame.ReleaseTools.Tests/`](../tools/AetherFrame.ReleaseTools.Tests/) | Its tests, on packages, assemblies and GitHub-shaped release descriptions they build themselves in temporary directories, plus checks of the committed publication workflow. |
-| [`.github/scripts/New-ReleasePackage.ps1`](../.github/scripts/New-ReleasePackage.ps1) | Stages `dist/` from DalamudPackager's `latest.zip`: the named ZIP, `SHA256SUMS.txt` and `release-notes.md`. Unchanged since 0.1.5; the tool re-checks its output with the full rule set. |
+| [`.github/scripts/New-ReleasePackage.ps1`](../.github/scripts/New-ReleasePackage.ps1) | Stages `dist/` from DalamudPackager's `latest.zip`: the named ZIP, `SHA256SUMS.txt` and `release-notes.md`. Changed since 0.1.5 only by the repository move (the tester-guide link in the release notes) and, on 2026-10-02, by the release notes' install line; the tool re-checks its output with the full rule set. |
 | [`.github/scripts/custom-repository.sh`](../.github/scripts/custom-repository.sh) | The git and GitHub side of a publication: reads the published file, fetches releases, writes the one commit. It decides nothing; the tool does. |
 | [`.github/workflows/build.yml`](../.github/workflows/build.yml) | Every push and pull request: build, tests, tooling tests, the package check on the build's own `latest.zip`, and ShellCheck on the publication script. |
 | [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Tags and manual dry runs: the above plus staging, the staged-package check, repository metadata generation and a draft release (tags only). |
 | [`.github/workflows/publish-custom-repository.yml`](../.github/workflows/publish-custom-repository.yml) | Publishing, by hand only: see [Publishing](#publishing). |
-| branch `plugin-repository` (not created yet) | The live `pluginmaster.json` and the README, and nothing else, written only by the publication workflow. |
+| branch `plugin-repository` (created by the first publication, 2026-09-28) | The live `pluginmaster.json` and the README, and nothing else, written only by the publication workflow. |
 
 The live `pluginmaster.json` never lives on `master`. It has its own branch, `plugin-repository`, served as `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/refs/heads/plugin-repository/pluginmaster.json`, the approved permanent address ([Permanent repository URL](#permanent-repository-url)). That keeps generated data out of the source history, gives it its own history for auditing, and lets the workflow write it with the built-in `GITHUB_TOKEN`. The first publication creates the branch.
 
@@ -195,7 +195,7 @@ Players verify a download with `Get-FileHash .\AetherFrame-0.1.6.zip` (PowerShel
 
 ## CI
 
-Nothing in CI publishes anything or needs a secret beyond the built-in token.
+None of the build, release or publication workflows publishes anything or needs a secret beyond the built-in token. The server's `deploy.yml` is separate: it uses secrets held only in its `production` environment (docs/networking/Runbook.md).
 
 **Build and test** (`build.yml`, every push and pull request to `master`, Windows and Linux, `contents: read`): locked restore is implied by the SDK, Release build of the whole solution, the plugin's tests against the built DLL, the tooling's tests (among them the publication rules, the checks on the committed publication workflow, and the check that the build's own `latest.zip` regenerates the committed fixture), `validate-package` on that `latest.zip` with `--version-props`, `--csproj`, `--changelog` and `--commit`, and on Linux, ShellCheck on the publication script. Pull requests from forks run with read-only permissions and no secrets, and the tool only ever reads the checkout. Pushes to `master` run it too: those runs belong to the merge commit, not to the pull request, so the pull request's checks list does not show them; they are under **Actions** and on the commit.
 
@@ -318,7 +318,7 @@ Never edit `pluginmaster.json` by hand and never force-push the branch: a hand-e
 
 ## What must never be committed
 
-- Tokens, personal access tokens, deploy keys, or any secret. The workflows need none beyond GitHub's built-in token, and the tool never reads one.
+- Tokens, personal access tokens, deploy keys, or any secret. The build, release and publication workflows need none beyond GitHub's built-in token (the server's deploy.yml keeps its own in the production environment), and the tool never reads one.
 - Local paths, user names, or anything from `%AppData%`. The tool fails a package whose manifest or `deps.json` contains a local path, and its summaries carry file names, releases and hashes only.
 - `dist/`, `bin/`, `obj/`, or any built ZIP. They are ignored by Git.
 - The live `pluginmaster.json` on `master`. It lives on `plugin-repository` only; `distribution/dry-run/pluginmaster.json` is a fixture with non-resolving links.
@@ -331,7 +331,7 @@ Never edit `pluginmaster.json` by hand and never force-push the branch: a hand-e
 
 The owner approved `https://raw.githubusercontent.com/richhiiee/AetherFrame/refs/heads/plugin-repository/pluginmaster.json` on 2026-09-27. On 2026-09-29 the owner moved the repository to the QuietFoxLabs organization and said to use it from then on, so the address above replaced it. Installations made from the `richhiiee` address keep working only through GitHub's redirect for transferred repositories (checked 2026-09-29: the old address answers 200 with the same file). That redirect ends if a repository named `AetherFrame` is ever created or forked under `richhiiee`.
 
-It is `pluginMasterUrl` in `distribution/repository.json`, and the publication writes the branch it names, `plugin-repository`. It is not active yet: the branch doesn't exist until the first publication, and until then the address answers 404. Once players use it, it never changes. Dalamud offers a plugin's updates only from the exact address it was installed from, so every installation made from this address depends on it for good. `DistributionTests` fails if the configured address changes, so a change can only ever be deliberate.
+It is `pluginMasterUrl` in `distribution/repository.json`, and the publication writes the branch it names, `plugin-repository`. It has been active since the first publication (0.1.6, 2026-09-28); the Status paragraph at the top says what it serves now. Once players use it, it never changes. Dalamud offers a plugin's updates only from the exact address it was installed from, so every installation made from this address depends on it for good. `DistributionTests` fails if the configured address changes, so a change can only ever be deliberate.
 
 **This is the GitHub compatibility endpoint.** A shorter, branded address, such as `https://repo.aetherframe.app/pluginmaster.json`, may be introduced later. If that happens:
 
@@ -373,7 +373,7 @@ Limits and follow-ups:
 
 ## Protecting the repository
 
-None of this is set up yet: the repository has no rulesets and no branch protection, and the `custom-repository` environment doesn't exist. These are owner actions in the GitHub settings. The repository is public, so all of them are available on GitHub Free.
+The `custom-repository` environment exists and has gated every publication since 2026-09-28: each run waits for the owner's approval (docs/process/AUTOPILOT.md, "Owner only"). The rulesets and immutable releases below are not set up yet (ROADMAP.md, "Official Dalamud repository and a stable channel"). These are owner actions in the GitHub settings. The repository is public, so all of them are available on GitHub Free.
 
 **1. The `custom-repository` environment. Required before the first publication.** Settings → Environments → **New environment**, name `custom-repository`:
 - **Required reviewers**: add `richhiiee`. Leave **Prevent self-review** unticked: you start the runs yourself, and with it ticked nobody could approve them.
@@ -427,7 +427,7 @@ The infrastructure was reviewed as though an attacker or an accidental bad relea
 - **Time-of-check to time-of-use.** The publish job derives everything again right before the push and requires the branch commit, the file and the whole publication record to match what was approved; the push only fast-forwards from that commit. What remains is the few seconds between the final verification and the push, during which a release asset could still be swapped; immutable releases close that too.
 - **Concurrency and partial writes.** One run at a time, never cancelled halfway. A publication is one commit and one ref update; the branch serves either the old or the new file, never a mixture.
 - **Accidental local path publication.** The manifest and `deps.json` may not contain local paths; summaries and publication records contain file names, releases and hashes only; `dist/` is ignored.
-- **Secrets.** No workflow uses a secret; the tool reads no environment variables and never reads `%AppData%`. The publication's token is never written to disk, and reaches git only for the push.
+- **Secrets.** None of the build, release or publication workflows uses a secret (the server's deploy.yml keeps its own in the production environment); the tool reads no environment variables and never reads `%AppData%`. The publication's token is never written to disk, and reaches git only for the push.
 - **GitHub Actions scope.** All workflows default to `contents: read`. Only the draft-release job (tags only, `release` environment) and the publication's publish job (by hand, `master` only, `custom-repository` environment) have `contents: write`. Pull requests run read-only with no secrets, and never start a release or a publication.
 - **Supply chain.** The tool has no NuGet dependencies; its test project uses the same test packages at the same versions as the plugin's tests. Both projects have lock files and are covered by `dotnet restore --locked-mode`. The publication workflow pins every action to a commit. CI runs ShellCheck on the publication script.
 - **Reproducibility.** The repository metadata is byte-identical across builds of one version (tested against differing commits and ZIP bytes), and a publication is byte-identical across runs with the same releases (tested). `LastUpdate` is never "now".
@@ -445,11 +445,10 @@ Not addressed, deliberately: signing the ZIP or the metadata. Dalamud has no sig
 
 The repository URL is decided ([Permanent repository URL](#permanent-repository-url)). Still open:
 
-1. **The `custom-repository` environment** with the owner as required reviewer and `master` as its only branch. Needed before the first publication.
+1. **The `custom-repository` environment** is in use and gates every publication; confirm it has the owner as required reviewer (it does, since runs wait) and `master` as its only deployment branch.
 2. **Rulesets** for `master`, `plugin-repository` and release tags ([Protecting the repository](#protecting-the-repository)).
 3. **Immutable releases** for the releases after 0.1.6, which was published without it.
 4. **When to promote to stable.** 0.1.6 starts testing-exclusive; stable stays empty until a release is deliberately promoted.
 5. **A branded short address**, later and optional. It must serve the same file, and the GitHub address stays the compatibility endpoint ([Permanent repository URL](#permanent-repository-url)).
 6. **A Dalamud API level change.** The configuration has one API level for both slots, so the first publication after an API change must replace both slots with releases built for the new level. Plan it when it comes.
 7. **Folding `New-ReleasePackage.ps1` into the tool.** Today the script stages `dist/` and the tool re-checks it; one implementation would be simpler once the tool has run in CI for a few releases.
-8. **Player-facing text.** `README.md` and `docs/Testing.md` describe the custom repository only in outline until the URL is live; the install steps and the address belong there then.

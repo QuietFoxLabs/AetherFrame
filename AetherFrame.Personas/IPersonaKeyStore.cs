@@ -10,7 +10,8 @@ namespace AetherFrame.Personas;
 /// for real keys is <see cref="Storage.ProtectedPersonaKeyStore"/> (the key store core, K1, K2, K6
 /// and K7 in docs/networking/DecisionRegister.md), which keeps protected envelopes in a storage and
 /// through a protector the plugin supplies: the Windows DPAPI protector (N2-4, NETWORK1 increment 7).
-/// Both are compiled only into the networking preview flavour, whose persona session (N2-5b) wires
+/// Both are compiled into AetherFrame.dll in the sharing build, the default since 0.1.8 (the player
+/// flavour, -p:AetherFrameNetworkPreview=false, holds neither), whose persona session (N2-5b) wires
 /// such a store over the plugin's key files. Nothing about this interface makes a key safe: that is
 /// a property of an implementation and its protector, and only a reviewed one may claim it.
 /// <para>

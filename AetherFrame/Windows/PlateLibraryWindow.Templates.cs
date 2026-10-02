@@ -439,6 +439,12 @@ internal sealed partial class PlateLibraryWindow
 
     // ---------------------------------------------------------------- Template chooser (Create Plate)
 
+    /// <summary>Whether the Create Plate chooser was on screen this frame (the tutorial waits on it).</summary>
+    internal bool TemplateChooserShowing { get; private set; }
+
+    /// <summary>Whether Manage Templates is the view showing (the tutorial reads it, never sets it).</summary>
+    internal bool TemplatesViewShowing => activeView == LibraryView.Templates;
+
     /// <summary>
     /// A two-pane dialog: a full-width, scrollable Template browser on the left (Start: the two
     /// built-ins; My Templates: everything saved), and the selected Template's own details —
@@ -446,12 +452,6 @@ internal sealed partial class PlateLibraryWindow
     /// preview surface in AetherFrame uses — on the right. Nothing is created until "Use Template"
     /// (or a double-click on a row) is confirmed.
     /// </summary>
-    /// <summary>Whether the Create Plate chooser was on screen this frame (the tutorial waits on it).</summary>
-    internal bool TemplateChooserShowing { get; private set; }
-
-    /// <summary>Whether Manage Templates is the view showing (the tutorial reads it, never sets it).</summary>
-    internal bool TemplatesViewShowing => activeView == LibraryView.Templates;
-
     private void DrawTemplateChooserPopup()
     {
         TemplateChooserShowing = false;

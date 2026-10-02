@@ -49,7 +49,7 @@ public enum PersonaUnavailableReason
     Failed,
 }
 
-/// <summary>What the persona window reads each frame: one immutable value, replaced whole after each change.</summary>
+/// <summary>What the Sharing window reads each frame: one immutable value, replaced whole after each change.</summary>
 public sealed class PersonaSessionView
 {
     internal PersonaSessionView(PersonaSessionState state, PersonaUnavailableReason reason, string? message, bool canRetry, bool busy, PersonaAudit? audit, PersonaOperationOutcome? lastOutcome)
@@ -75,7 +75,7 @@ public sealed class PersonaSessionView
     /// <summary>Whether the player may try again: never after the probe failed (K3).</summary>
     public bool CanRetry { get; }
 
-    /// <summary>Whether the start or an operation is running; the window starts nothing meanwhile.</summary>
+    /// <summary>Whether the start or an operation is running; the Sharing window starts nothing meanwhile.</summary>
     public bool Busy { get; }
 
     /// <summary>The latest audit of the key files (L12): at start, and after an operation that returned one.</summary>
@@ -88,7 +88,7 @@ public sealed class PersonaSessionView
         new(State, Reason, Message, CanRetry, busy, audit ?? Audit, lastOutcome ?? LastOutcome);
 }
 
-/// <summary>What one persona operation came to, for the window. It holds no path and no exception text.</summary>
+/// <summary>What one persona operation came to, for the Sharing window. It holds no path and no exception text.</summary>
 public sealed class PersonaOperationOutcome
 {
     private PersonaOperationOutcome(bool succeeded, PersonaError? error, PersonaAudit? audit, PersonaRecord? persona, PersonaPublicKey? opened)
@@ -168,9 +168,10 @@ public sealed class PersonaSessionSeams
 /// The plugin's persona session (docs/networking/DecisionRegister.md, K3, P3, L10 and L12):
 /// it starts once, off the framework thread, running the capability probe, then taking the persona
 /// files' lock, then loading the registry, then auditing the key files. Afterwards it runs the
-/// player's persona operations one at a time, off the framework thread too. The window reads
-/// <see cref="View"/>, <see cref="Personas"/> and <see cref="Active"/>, which never wait, and hands
-/// every change to <see cref="TryStart"/>. It never holds the manager out, so nothing can call it
+/// player's persona operations one at a time, off the framework thread too. The Sharing window
+/// reads <see cref="View"/>, and <see cref="Personas"/> and <see cref="Active"/> never wait either;
+/// the sharing services run their operations through <see cref="TryRun"/>, and <see cref="TryStart"/>
+/// runs one whose outcome the view keeps. It never holds the manager out, so nothing can call it
 /// on the framework thread. Compiled only in the networking preview flavour.
 /// <para>
 /// The lock is taken before the registry is read, and the manager is made only with it held. It
@@ -211,7 +212,7 @@ public sealed class PersonaSession
         this.seams = seams;
     }
 
-    /// <summary>Where the session stands, for the window.</summary>
+    /// <summary>Where the session stands, for the Sharing window.</summary>
     public PersonaSessionView View => view;
 
     /// <summary>The personas, from the manager's snapshot; empty until the session is ready.</summary>
@@ -253,8 +254,8 @@ public sealed class PersonaSession
     /// <summary>
     /// Runs <paramref name="work"/> on the manager as <see cref="TryStart"/> does (one operation at a
     /// time, off the framework thread, and waited for by unloading), for a caller that keeps its own
-    /// result, such as publishing (N2-6c). The view's last outcome is left as it was, so the persona
-    /// window never takes another window's operation for one of its own. When the work throws, the
+    /// result, such as publishing (N2-6c). The view's last outcome is left as it was, so the Sharing
+    /// window's view never shows a sharing operation as one of its own. When the work throws, the
     /// session logs its kind and leaves the view as it was.
     /// </summary>
     public bool TryRun(string name, Action<PersonaManager> work)

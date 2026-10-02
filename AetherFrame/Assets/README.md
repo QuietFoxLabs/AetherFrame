@@ -11,7 +11,10 @@ which the compile-time catalog maps to the logical asset id
 
 The full-size approved sources were kept in a separate AetherFrameAssets repository, which no
 longer exists; they are never needed at runtime or build time. The `Source:` lines below record
-where each runtime copy was made from.
+where each runtime copy was made from. Some sources survive on the branch `claude/celestial-art-wip`
+(never merged; kept as an archive, so never delete it): the Celestial Dream BlueGold sources, an
+unfinished AstralGold set, two more Celestial Sakura dividers and the Celestial Sakura generation
+prompts.
 
 ## Hosted artwork (art on demand)
 

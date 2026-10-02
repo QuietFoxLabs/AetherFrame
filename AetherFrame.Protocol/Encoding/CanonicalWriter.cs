@@ -20,9 +20,6 @@ internal sealed class CanonicalWriter
         buffer = new ArrayBufferWriter<byte>(initialCapacity);
     }
 
-    /// <summary>The bytes written so far.</summary>
-    public int Length => buffer.WrittenCount;
-
     public void WriteU8(byte value)
     {
         buffer.GetSpan(1)[0] = value;

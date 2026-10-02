@@ -9,7 +9,7 @@ namespace AetherFrame.UI.Tutorial;
 ///
 /// <para>Names say where the control lives and what it is, never what it looks like, so a
 /// redesign that moves a control keeps its target. Adding a target here is the first step of
-/// adding a tutorial step (see docs/DesignGuide.md, "Adding tutorial targets").</para>
+/// adding a tutorial step (see docs/DesignGuide.md, "Adding a tutorial target").</para>
 /// </summary>
 internal enum TutorialTarget
 {
@@ -23,10 +23,7 @@ internal enum TutorialTarget
     LibraryHelp,
     LibraryPlateGrid,
     LibraryFirstPlateCard,
-    LibraryFooter,
     LibraryTemplateChooser,
-    LibraryTemplatesGrid,
-    LibraryBackToMyPlates,
 
     // ---- the action bar both editors share
     EditorMyPlates,
@@ -48,10 +45,6 @@ internal enum TutorialTarget
     BasicInspector,
     BasicPreview,
     BasicPreviewZoom,
-    BasicStyleThemes,
-    BasicPortraitImport,
-    BasicIdentityName,
-    BasicMessageText,
 
     // ---- the Advanced editor
     AdvancedToolbar,

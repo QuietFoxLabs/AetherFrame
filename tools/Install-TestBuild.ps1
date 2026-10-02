@@ -13,7 +13,7 @@
        (player, or networking preview);
     2. stages them in -StagingRoot\<yyyy-MM-dd> <build id>[ preview]\ with SHA256SUMS.txt;
     3. reads (never writes) Dalamud's configuration, and when the game is running and will reload
-       AetherFrame, waits -GraceSeconds first;
+       AetherFrame, waits -GraceSeconds first, if one was given;
     4. backs up the plugin's data to -BackupRoot\AetherFrame-data-<yyyyMMdd-HHmmss>\, under a
        ".partial" name until the backup is complete;
     5. copies AetherFrame.json and AetherFrame.deps.json, then AetherFrame.dll last, each over the
@@ -32,8 +32,8 @@
 
 .PARAMETER GraceSeconds
     How long to wait before backing up and installing when the game is running and would reload
-    AetherFrame. The reload closes AetherFrame's windows and loses an editor's unsaved changes, so
-    AUTOPILOT.md warns the owner first and passes the time it promised.
+    AetherFrame. Off by default: since October 1, 2026 AUTOPILOT.md installs straight away ("No
+    warning wait"), so nothing passes it.
 
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/Install-TestBuild.ps1 -Package AetherFrame/bin/x64/Release/AetherFrame/latest.zip -BuildId 01a14a5 -Flavour Player
@@ -314,7 +314,7 @@ foreach ($name in $PluginFiles) {
 }
 
 # A reload closes AetherFrame's windows, and an editor's unsaved changes go with them. When one is
-# about to happen, give the owner the time AUTOPILOT.md's heads-up promised before touching anything.
+# about to happen and a wait was asked for (-GraceSeconds), wait that long before touching anything.
 # Settings that can't be read count as a reload, since the script can't rule one out.
 $reloads = (-not $alreadyInstalled) -and $gameRunning -and ((-not $dalamud.Readable) -or ($dalamud.ListsDll -and $dalamud.AutoReload))
 $waited = 0

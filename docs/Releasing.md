@@ -6,8 +6,8 @@ Nothing described here happens on its own. The release workflow only ever create
 
 ## Distribution plan
 
-1. **A public custom Dalamud repository, hosted from GitHub.** The intended route for players: one URL added in `/xlsettings`, then install and updates from `/xlplugins` like any other plugin. The releases stay GitHub Releases; the repository is one generated `pluginmaster.json` that points at them, published by a workflow you run by hand. How it works, how it is validated and how publishing runs: [CustomRepository](CustomRepository.md). Nothing is published there yet.
-2. **GitHub Release ZIPs**, loaded as dev plugins, for testers until the repository is live.
+1. **A public custom Dalamud repository, hosted from GitHub.** The intended route for players: one URL added in `/xlsettings`, then install and updates from `/xlplugins` like any other plugin. The releases stay GitHub Releases; the repository is one generated `pluginmaster.json` that points at them, published by a workflow you run by hand. How it works, how it is validated and how publishing runs: [CustomRepository](CustomRepository.md). The repository is live: the `plugin-repository` branch serves the testing channel, where 0.1.6 to 0.1.9 have been published; stable is still empty.
+2. **GitHub Release ZIPs**, loaded as dev plugins, for testers who want a build outside the repository ([Testing](Testing.md#from-a-github-release-zip-dev-plugin)).
 3. **Official Dalamud repository.** Welcome, and prepared for below, but not required for distribution. If AetherFrame is accepted there at a higher version, Dalamud moves players over from the custom repository automatically.
 
 Testers follow [Testing](Testing.md).

@@ -84,7 +84,7 @@ The owner asked on September 30, 2026: "please update the roadmap in the github 
 
 Merge only when all of these hold:
 - the PR is ready, not a draft;
-- both CI jobs passed on the exact head;
+- every job of the Build and test workflow (`build` on both legs, `art-pins` and `deployment-kit`) passed on the exact head;
 - the independent review is clean;
 - the description shows the acceptance criteria are met;
 - ROADMAP.md is updated;
@@ -153,6 +153,8 @@ A preview build is the networking preview flavour (`-p:AetherFrameNetworkPreview
    - how to go back: install the player build again. The persona files stay where they are, and a later preview build finds them; removing that folder loses those personas for good (K4), apart from the copies in the acceptance backups.
 
 ## Tester kits
+
+Since October 1, 2026 ("Releases carry sharing" in docs/networking/DecisionRegister.md) a tester installs the release from the custom repository's testing channel, which carries sharing from 0.1.8 on, so tester kits are no longer needed. `tools/New-TesterKit.ps1` still makes one, and the procedure below stays for a build no release carries yet.
 
 A tester kit is how a preview build reaches another player for the sharing test (NETWORK2's N2-11; "N2-11's tester kit" in docs/networking/DecisionRegister.md). It is never a release and never a test build, and it never goes into `E:\AetherFrame Test Build\`.
 
