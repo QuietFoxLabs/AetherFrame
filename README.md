@@ -80,7 +80,7 @@ A freeform canvas for when the Basic layout isn't enough.
 Reusable decorative pieces you add to a Plate and restyle without redrawing anything.
 
 - **Procedural Components**: Plate frames, portrait frames and overlays, name backings, dividers, section headers and corner ornaments, all drawn in code and tintable.
-- **Bundled graphical Components**: original artwork created with AI assistance, shipped inside the plugin. This currently means the Celestial Dream *Astrolabe Pivot* corner ornament and the full-color **Celestial Sakura** set: a background, Plate frame, portrait frame, name backing, two dividers and a corner ornament.
+- **Graphical Components and Art Styles**: original artwork created with AI assistance. The Celestial Dream *Astrolabe Pivot* corner ornament ships inside the plugin. The Art Styles' artwork, the full-color **Celestial Sakura** set included (a background, Plate frame, portrait frame, name backing, two dividers, a section header and a corner ornament), downloads from GitHub the first time you use it and is kept on your PC; only the styles' preview cards ship inside the plugin.
 - **Corner-specific placement**: choose which corners a corner ornament appears on.
 - **Overflow**: Components can deliberately extend past the Plate's edges, and previews account for it.
 
@@ -227,7 +227,7 @@ AetherFrame/            the plugin
   UI/Rendering/         Plate renderer, backgrounds, text, Components, previews
   Windows/              Dalamud/ImGui windows: My Plates, Basic Editor, Advanced Editor, Plate Viewer, import
   Hosting/              thin adapters over Dalamud services
-  Assets/               bundled Component artwork, embedded in the DLL
+  Assets/               Component artwork: previews and the Astrolabe embedded, the rest hosted (ArtFiles.txt)
   Fonts/                bundled fonts (SIL Open Font License), embedded in the DLL
 AetherFrame.Tests/      pure-logic tests that build without Dalamud
 ```
@@ -253,7 +253,7 @@ The plugin's bundled Component artwork is the optimized copies in `AetherFrame/A
 
 I use AI heavily while developing AetherFrame, mainly for implementation and code review. I decide what gets built, how the product works, and test the plugin in game myself. In the terms of the [Dalamud AI Usage Policy](https://dalamud.dev/plugin-publishing/ai-policy), that is the *Copilot* level.
 
-The plugin icon was generated with ChatGPT and then refined, and the bundled Celestial Dream and Celestial Sakura artwork was also created with AI assistance. The plugin's description in the Dalamud installer says so. The Celestial Sakura files are shipped unmodified, so they keep their embedded C2PA Content Credentials, which record how each image was made. I'd like to replace the icon with a hand-made one before AetherFrame goes into the official Dalamud repository.
+The plugin icon was generated with ChatGPT and then refined, and the Art Styles' artwork (their preview cards included) and the Celestial Dream and Celestial Sakura artwork were also created with AI assistance. The plugin's description in the Dalamud installer says so. The Celestial Sakura files are served unmodified, so they keep their embedded C2PA Content Credentials, which record how each image was made. I'd like to replace the icon with a hand-made one before AetherFrame goes into the official Dalamud repository.
 
 ## Support and feedback
 

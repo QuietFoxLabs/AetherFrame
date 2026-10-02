@@ -1,7 +1,9 @@
-# Bundled Component artwork
+# Built-in Component artwork
 
-Runtime copies of built-in graphical Components, embedded into `AetherFrame.dll` as manifest
-resources (`AetherFrame.Assets.<path with dots>`, see `AetherFrame.csproj`). Nothing here is
+Runtime copies of built-in graphical Components. The Art Styles' preview cards (`StylePreviews/`)
+and Celestial Dream's Astrolabe are embedded into `AetherFrame.dll` as manifest resources
+(`AetherFrame.Assets.<path with dots>`, see `AetherFrame.csproj`); every other runtime PNG here is
+hosted and downloaded the first time it is used (below). Nothing here is
 copied to the output folder, and nothing here is ever persisted: Plates, Templates and
 `.aetherframe` packages store only the stable definition id (`af.corner-ornament.astrolabe-pivot`),
 which the compile-time catalog maps to the logical asset id
@@ -13,7 +15,7 @@ where each runtime copy was made from.
 
 ## Hosted artwork (art on demand)
 
-Every runtime PNG under `Components/`, except Celestial Dream's, is hosted. Once Art Styles leave the plugin (the change after the one that adds this table), players download each the first time they use it, from `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/<commit>/AetherFrame/Assets/<path>`, and the plugin uses it only when its length and SHA-256 are exactly those in `ArtFiles.txt` and the compiled `Domain/Components/ArtFiles.g.cs` ("Art on demand" in `docs/networking/DecisionRegister.md`).
+Every runtime PNG under `Components/`, except Celestial Dream's, is hosted: players download each the first time they use it, from `https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/<commit>/AetherFrame/Assets/<path>`, and the plugin uses it only when its length and SHA-256 are exactly those in `ArtFiles.txt` and the compiled `Domain/Components/ArtFiles.g.cs` ("Art on demand" in `docs/networking/DecisionRegister.md`).
 
 - **Hosted bytes never change.** A file in the table keeps its bytes and its commit forever; new art gets a new artwork id and a new file. `tools/art/write_art_files.py` refuses a recorded file whose bytes differ, or one that is gone.
 - **Adding hosted art** takes two commits on one branch: the first adds the PNGs (and whatever else the art pipeline writes); the second runs `python tools/art/write_art_files.py --write --commit <the first commit's full id>`. Merge the pull request with a merge commit, never a squash or rebase, so the first commit stays in master's history.
@@ -36,7 +38,7 @@ Every runtime PNG under `Components/`, except Celestial Dream's, is hosted. Once
   rotate or mirror it.
 - Name Backings and Dividers may be **sliced** (`ArtSlices` in `BuiltInArtCatalog`), below.
 
-`BuiltInArtTests`, `CelestialSakuraTests`, `SlicedArtTests` and `ArtSetsTests` check all of this against the embedded bytes.
+`BuiltInArtTests`, `CelestialSakuraTests`, `SlicedArtTests` and `ArtSetsTests` check all of this against the files (which the tests embed in their own assembly) and the hosted table's SHA-256s.
 
 ## Sliced artwork (Name Backings, Dividers and Section Headers)
 

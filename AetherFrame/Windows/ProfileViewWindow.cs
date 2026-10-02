@@ -455,8 +455,8 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
     /// <summary>
     /// What the shown Plate's missing artwork is doing (art on demand): a pill at the composition's top
-    /// center, on the foreground layer like the hint, while it downloads or after it failed (Try again
-    /// is in the right-click menu). Nothing while nothing is missing.
+    /// center, in the viewer's own window (so other windows cover it), while it downloads or after it
+    /// failed (Try again is in the right-click menu). Nothing while nothing is missing.
     /// </summary>
     private void DrawArtStatus(Vector2 windowPos, PlateViewerLayout current)
     {
@@ -466,13 +466,13 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             return;
         }
 
-        var text = summary.Kind == ArtNeedKind.Failed ? summary.Label + " Right-click to try again." : summary.Label;
+        var text = summary.Kind == ArtNeedKind.Failed ? "Artwork didn't download. Right-click to try again." : summary.Label;
         var textSize = ImGui.CalcTextSize(text);
         var padding = new Vector2(10f, 5f) * ImGuiHelpers.GlobalScale;
         var size = textSize + (padding * 2f);
         var min = windowPos + new Vector2((current.WindowSize.X - size.X) / 2f, 12f * ImGuiHelpers.GlobalScale);
 
-        var drawList = ImGui.GetForegroundDrawList();
+        var drawList = ImGui.GetWindowDrawList();
         drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(PlateViewerPresentation.HintBacking), size.Y / 2f);
         drawList.AddText(min + padding, ImGui.GetColorU32(summary.Kind == ArtNeedKind.Failed ? AetherPalette.Warning : PlateViewerPresentation.HintText), text);
     }

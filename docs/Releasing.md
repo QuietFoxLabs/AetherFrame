@@ -41,6 +41,8 @@ Testers follow [Testing](Testing.md).
 | Build and test | the Release build or any test fails, including the checks on the built DLL and its manifest |
 | Package check ([`New-ReleasePackage.ps1`](../.github/scripts/New-ReleasePackage.ps1)) | `latest.zip` holds anything other than `AetherFrame.dll`, `AetherFrame.json` and `AetherFrame.deps.json`; the manifest isn't `AetherFrame` at `<version>.0` with its installer fields; the DLL isn't `<version>.0`; or the CHANGELOG has no section for the version |
 | Release tooling tests and staged package check (`AetherFrame.ReleaseTools validate-package`) | any rule in [CustomRepository](CustomRepository.md#release-validation-rules) fails: the DLL isn't x64 and built from the commit being released, a version or the Dalamud API level disagrees anywhere, the csproj no longer matches the packaged manifest, an entry name is unsafe, or `SHA256SUMS.txt` doesn't match |
+| Hosted artwork's pins (`check-art-pins.sh`) | a pinned commit isn't in the tag's history, doesn't hold the table's bytes, or something an earlier table hosted changed or went |
+| Hosted artwork downloads (`check-hosted-art.sh`) | a hosted file doesn't download from its address as exactly the table's length and SHA-256. The optional dry run (step 4) runs this before a tag does |
 | Repository metadata (`generate-repository`, `validate-repository`) | the custom repository entry can't be generated from the package, or doesn't validate. The result is kept in the artifact as `pluginmaster.json`; nothing is published |
 | Draft release | a release for the tag already exists, draft or published. Nothing is ever replaced |
 
@@ -91,15 +93,15 @@ Every new plugin is submitted to `testing/live`, so this is the list for the fir
 | Version not based on a timestamp or build counter | Done. `Version.props` only |
 | Dalamud Windowing API for windows | Done. Every window is a `Window` in one `WindowSystem` |
 | Clean install, working main and settings buttons | Done. The installer's main and settings buttons both open My Plates. Confirm on a clean install |
-| Follows the Plugin Restrictions | Done. No server communication, no combat, no automation, no other players' account IDs. The own character's Content ID is a local file key and is stripped from exports |
+| Follows the Plugin Restrictions | Done. No combat, no automation, no other players' account IDs. Server communication: sharing (opt-in, AetherFrame's server) and Art Styles' artwork (GET from commit-pinned GitHub addresses, checked against SHA-256s built into the plugin). The own character's Content ID is a local file key and is stripped from exports |
 | `icon.png` in the D17 `images/` folder, 1:1, 64–512 px | 512 × 512 file ready (`AetherFrame/images/icon.png`). It is AI-generated, so a hand-made replacement is recommended before submitting. See [Artwork](#artwork-and-ai-disclosure) |
-| AI-generated assets disclosed in the plugin description | Done. The description names the AI-generated icon and the AI-assisted Celestial Dream and Celestial Sakura artwork |
+| AI-generated assets disclosed in the plugin description | Done. The description names the AI-generated icon and the AI-assisted Art Styles and Celestial Dream and Celestial Sakura artwork |
 | AI use level disclosed in the PR description | **Copilot**. Draft below |
 | `manifest.toml` in `testing/live/AetherFrame/` with `repository`, `commit`, `owners`, `project_path` | Draft in [`dalamud-submission/manifest.toml`](dalamud-submission/manifest.toml). `commit` is filled in at submission |
 | One plugin per PR, from its own branch | At submission |
 | Acceptable Use Policy, Terms of Service, Code of Conduct | Read and accept at submission |
 
-The approval team also reviews the code informally and checks that the plugin works and doesn't upload personal data. Nothing leaves the player's machine.
+The approval team also reviews the code informally and checks that the plugin works and doesn't upload personal data. Nothing goes to AetherFrame's server unless a player turns sharing on for a character (and then what the installer's description lists); Art Styles' artwork downloads from GitHub, and no personal data is uploaded.
 
 ### Required for stable
 
@@ -133,7 +135,7 @@ A good preview set would be the four README screenshots in `docs/screenshots/`, 
 
 The AI Usage Policy asks for two separate disclosures:
 
-- **Assets, to players**, in the plugin description. `AetherFrame.csproj`'s `Description` says that the plugin icon is AI-generated and that the Celestial Dream and Celestial Sakura Components use AI-assisted artwork. The README says the same.
+- **Assets, to players**, in the plugin description. `AetherFrame.csproj`'s `Description` says that the plugin icon is AI-generated and that the Art Styles and the Celestial Dream and Celestial Sakura Components use AI-assisted artwork. The README says the same.
 - **Code, to reviewers**, as a level in the PR description. The intended level is **Copilot**: AI implements while I plan, decide, review and test. The README's development note says the same.
 
 | Asset | Origin | Disclosure |
@@ -165,9 +167,10 @@ Changelog: https://github.com/QuietFoxLabs/AetherFrame/blob/master/CHANGELOG.md
 Level: Copilot. AI writes most of the implementation and helps with code review. I decide what gets
 built and how it works, review the changes, and test every release in game myself.
 
-Assets: the plugin icon is AI-generated (ChatGPT, then refined), and the bundled Celestial Dream
-and Celestial Sakura Component artwork is AI-assisted. The plugin description says so. The
-Celestial Sakura files keep their C2PA Content Credentials.
+Assets: the plugin icon is AI-generated (ChatGPT, then refined), and the Art Styles' artwork (their
+preview cards included) and the Celestial Dream and Celestial Sakura Component artwork are
+AI-assisted. The plugin description says so. The Celestial Sakura files keep their C2PA Content
+Credentials.
 ```
 
 Copilot is the intended level. Change it only if it no longer describes how AetherFrame is made. If the icon has been replaced by then, update the Assets paragraph.

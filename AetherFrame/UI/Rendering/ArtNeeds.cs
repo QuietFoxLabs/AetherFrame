@@ -17,6 +17,10 @@ internal sealed class ArtNeeds
     private List<BuiltInArtAsset> missing = new();
     private readonly List<ArtStatus> statuses = new();
 
+    // Everything missing since the window last had nothing to say, so a download's progress counts
+    // the files already done and never goes backwards as each one finishes.
+    private readonly List<BuiltInArtAsset> tracked = new();
+
     /// <summary>What last frame's Plate couldn't draw.</summary>
     internal IReadOnlyList<BuiltInArtAsset> Missing => missing;
 
@@ -39,7 +43,10 @@ internal sealed class ArtNeeds
         }
     }
 
-    /// <summary>What to say about <see cref="Missing"/>.</summary>
+    /// <summary>
+    /// What to say about <see cref="Missing"/>. While it downloads, the bytes count everything missing
+    /// since the window last had nothing to say, the files already here included.
+    /// </summary>
     internal ArtNeedSummary Summary(ArtStore store)
     {
         statuses.Clear();
@@ -48,7 +55,37 @@ internal sealed class ArtNeeds
             statuses.Add(store.Status(art));
         }
 
-        return ArtNeedSummary.Of(statuses);
+        var now = ArtNeedSummary.Of(statuses);
+        if (now.Kind == ArtNeedKind.None)
+        {
+            tracked.Clear();
+            return now;
+        }
+
+        foreach (var art in missing)
+        {
+            if (!tracked.Contains(art))
+            {
+                tracked.Add(art);
+            }
+        }
+
+        if (now.Kind != ArtNeedKind.Downloading)
+        {
+            return now;
+        }
+
+        long received = 0;
+        long total = 0;
+        foreach (var art in tracked)
+        {
+            var status = store.Status(art);
+            var length = store.HostedFile(art)?.Length ?? status.Total;
+            received += status.Readable ? length : status.State == ArtState.Downloading ? status.Received : 0;
+            total += length;
+        }
+
+        return now with { Received = received, Total = total };
     }
 
     /// <summary>The player's Try again: downloads every missing artwork again, the failed ones too.</summary>

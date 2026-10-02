@@ -22,4 +22,6 @@ changelog = """
 AetherFrame 0.1.5, the first testing release: design character Plates in an Adventure Plate-style Basic Editor or a freeform Advanced Editor, keep them in a local My Plates library, and view the Active Plate with /af view.
 
 Everything is local. There is no networking, no account and no data collection.
+
+(This text describes 0.1.5 and is rewritten at submission: since 0.1.8 sharing is opt-in networking, and since 0.1.9 Art Styles' artwork downloads from GitHub.)
 """

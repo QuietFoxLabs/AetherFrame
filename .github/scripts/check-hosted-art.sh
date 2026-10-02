@@ -20,7 +20,8 @@ while read -r commit sha length path; do
   checked=$((checked + 1))
   url="https://raw.githubusercontent.com/QuietFoxLabs/AetherFrame/$commit/AetherFrame/Assets/$path"
   file="$scratch/file.png"
-  if ! status=$(curl --silent --show-error --max-time 120 --retry 3 --retry-delay 5 --output "$file" --write-out '%{http_code}' "$url"); then
+  rm -f "$file"
+  if ! status=$(curl --silent --show-error --max-time 120 --retry 3 --retry-delay 5 --retry-all-errors --output "$file" --write-out '%{http_code}' "$url"); then
     echo "::error::$path couldn't be downloaded from $url"
     failures=$((failures + 1))
     continue

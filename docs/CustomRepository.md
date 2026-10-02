@@ -4,7 +4,7 @@ How AetherFrame reaches players without the official Dalamud plugin repository: 
 
 **Status:** the repository is live. The `plugin-repository` branch serves 0.1.7 as a testing-exclusive release (published September 30, 2026), so players with **Get plugin testing builds** on can add the [permanent address](#permanent-repository-url) and install it. From 0.1.8, releases carry sharing (`sharingSince` in `distribution/repository.json`). The sections below on the first publication are kept as the record of how it was set up.
 
-Principles this is built on: everything is local first, nothing in the plugin phones home (sharing, since 0.1.8, talks to AetherFrame's server only for a character a player turns it on for), and the custom repository adds no networking to the plugin itself. Dalamud does the downloading, from GitHub Releases, exactly as it does for every plugin. GitHub stays the public source and release host. Approval into the official Dalamud repository is welcome but not required. No account or backend is involved in installing AetherFrame.
+Principles this is built on: everything is local first, nothing in the plugin phones home (sharing, since 0.1.8, talks to AetherFrame's server only for a character a player turns it on for, and since 0.1.9 an Art Style's artwork downloads by GET from commit-pinned GitHub addresses the first time it is used), and the custom repository adds no networking to the plugin itself. Dalamud does the downloading, from GitHub Releases, exactly as it does for every plugin. GitHub stays the public source and release host. Approval into the official Dalamud repository is welcome but not required. No account or backend is involved in installing AetherFrame.
 
 ## In plain language
 
@@ -142,7 +142,7 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 - At most 64 entries; every name is a plain, relative, flat file name: no `..`, no `.` segment, no leading `/`, no drive letter, no backslash, no folder, no directory entry, no control characters, at most 255 characters.
 - No two entries with the same name, and none that differ only by case.
 - Exactly `AetherFrame.dll`, `AetherFrame.json` and `AetherFrame.deps.json`. Anything else fails and is named by kind: debug symbols, source files, test assemblies, local configuration, user data paths, development-only files.
-- Size limits: 64 MiB for the DLL (it is about 38 MiB: the Art Styles' artwork is downloaded the first time it is used, not carried; see "Art on demand" in the decision register), 1 MiB for each JSON file, checked against the declared size and again while decompressing.
+- Size limits: 128 MiB for the DLL (since art on demand it is about 38 MiB, but releases before it carry the art sets, about 113 MiB, and must still verify for a rollback), 1 MiB for each JSON file, checked against the declared size and again while decompressing.
 
 **The DLL**
 - A .NET assembly named `AetherFrame`, x64 (PE32+, `AMD64`), IL only, not 32-bit.
@@ -412,7 +412,7 @@ The order for v0.1.6, whose in-game smoke test has passed. Nothing reaches the p
 The infrastructure was reviewed as though an attacker or an accidental bad release were trying to get through it. Findings and the resulting rules:
 
 - **Malicious ZIP paths.** Entry names are checked for traversal, absolute paths, drive letters, backslashes, folders, directory entries, control characters, duplicates and case collisions before any entry is read. Only the three expected names pass.
-- **Decompression size.** Entries are read with limits (64 MiB, 1 MiB) enforced during decompression, not from the declared size alone; at most 64 entries are considered.
+- **Decompression size.** Entries are read with limits (128 MiB, 1 MiB) enforced during decompression, not from the declared size alone; at most 64 entries are considered.
 - **Version confusion.** The version must agree between the DLL, the file version, the informational version, the manifest, `deps.json`, the ZIP file name, `Version.props`, the tag and the repository entry. Any disagreement fails.
 - **API level drift.** The configured API level must match the manifest, the DLL's Dalamud reference and the `Dalamud.NET.Sdk` major version.
 - **Stale or substituted artifacts.** The DLL's embedded commit must equal the commit being released, the project file must match the packaged manifest, and a publication validates the *published* asset, downloaded from the release, never a workflow artifact.
