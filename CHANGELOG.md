@@ -4,6 +4,10 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ## [Unreleased]
 
+### Added
+
+- **20 more Art Styles**, at the owner's request, for 40 in all: Alchemist's Workshop, Corsair's Fortune, Dark Academia, Desert Oasis, Embroidered Tapestry, Enchanted Toybox, Frontier Silver, Industrial Salvage, Liquid Chrome, Memphis Playground, Mosaic Courtyard, Paper Theater, Porcelain Garden, Prehistoric Amber, Psychedelic Bloom, Racing Carbon, Retro Space Age, Sugarcraft Patisserie, Velvet Masquerade and Volcanic Forge. Each is a complete look of seven pieces, like the first twenty, with text colors that read on them, and downloads (3 to 6 MB) the first time you use it.
+
 ### Changed
 
 - **Art Styles download their artwork the first time you use them**, at the owner's request ("Art on demand" in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md)). The plugin no longer carries it, so it is about 80 MB smaller, and every update with it. Choosing an Art Style, or opening a Plate that uses one in an editor or the Plate Viewer, or viewing another player's Plate, downloads what isn't on your PC yet from GitHub, checked against a checksum built into the plugin, and keeps it in `artwork-cache` in AetherFrame's configuration folder. Until it arrives, the Plate shows the style's colors, and the editor or the Plate Viewer says how far the download has got; if it fails, they say why, with **Try again**. Hovering an Art Style in the Theme browser says how much it downloads. The style previews are still in the plugin, so the Theme browser shows every style at once. Nothing goes to AetherFrame's server for this, and GitHub sees your address, the plugin's version and which files you fetch.
