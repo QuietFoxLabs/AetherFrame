@@ -3,9 +3,10 @@ using System;
 namespace AetherFrame.Services.Network.Sharing;
 
 /// <summary>
-/// The words of the sharing window (N2-9b): the consent a character's opting in asks for (decisions
-/// C3, C5, C7, K2 and K4 as C9 restates it), the Lodestone steps (C2), and what each outcome means.
-/// None of it holds a name, a World, a code or an id: the window draws those on their own,
+/// The words of the sharing windows (N2-9b, and the progress window of October 2, 2026): the
+/// consent a character's opting in asks for (decisions C3, C5, C7, K2 and K4 as C9 restates it),
+/// the Lodestone steps (C2), each step of sharing the Active Plate, and what each outcome means.
+/// None of it holds a name, a World, a code or an id: the windows draw those on their own,
 /// unformatted.
 /// </summary>
 internal static class SharingText
@@ -19,7 +20,7 @@ internal static class SharingText
     internal static readonly string[] Consent =
     [
         "Other players who have turned sharing on can view this character's Active Plate as a picture: by right-clicking the character in game, or by searching for its name and World. They never get the Plate itself, its Template or your original images.",
-        "Once sharing is on, saving this character's Active Plate shares the new version without asking again. Before a Plate is shared for the first time, you'll see exactly what will be sent, and nothing is shared unless you agree. My Plates marks the shared Plate, and you can pause or turn off sharing at any time.",
+        "Once sharing is on, this character's Active Plate is shared without asking: when the check passes, each time you save it, and each time you make another Plate Active. To see what a Plate would share before that, choose Check what would be shared (preview) in its menu in My Plates. My Plates marks the shared Plate, and you can pause or turn off sharing at any time.",
         "Turning sharing off deletes this character's Plate, its images and its check from the server at once. The server's backups keep copies for up to 7 days before they are deleted too.",
         "Other players can report a Plate. The server keeps a report (the character, the reason, and the reporting player's key) for up to 30 days, or until it is dealt with, even if sharing is turned off.",
         "Anyone who has turned sharing on can find out, from this character's name, that its player uses AetherFrame, and so Dalamud.",
@@ -63,7 +64,7 @@ internal static class SharingText
     internal const string SharedLine = "Sharing is on for this character, as it appears on the Lodestone:";
 
     internal const string SavingShares =
-        "Saving this character's Active Plate shares the new version. My Plates marks it Shared. A Plate you haven't shared before is shown to you first.";
+        "Saving this character's Active Plate shares the new version, and making another Plate Active shares that one. My Plates marks the shared Plate.";
 
     internal const string PausedLine = "Sharing is paused for this character: the server holds no Plate for it, and keeps its check.";
 
@@ -71,14 +72,25 @@ internal static class SharingText
 
     internal const string CantShare = "Your Active Plate can't be shared as it is. The version shared before stays up. Change what is listed here and save it again:";
 
-    internal const string FirstShowingTitle = "Share this Plate?";
-
-    internal const string FirstShowing =
-        "This is exactly what other players who share will see of this Plate: its name, every text in full, and each image as it will be sent. From now on, saving it shares the new version without asking again.";
-
-    internal const string FirstShowingImages = "Every image has to be shown here before the Plate can be shared.";
-
     internal const string Sending = "Sending your Active Plate...";
+
+    internal const string ProgressTitle = "Sharing your Active Plate";
+
+    internal const string PreparingImages = "Preparing its images...";
+
+    internal const string Signing = "Signing it on this PC...";
+
+    internal const string SendingTakesTime = "This can take a few minutes when the sharing server is busy.";
+
+    internal const string WaitingTurn = "Ready, and waiting for its turn...";
+
+    internal const string WaitingForOther = "Ready, and waiting while another of your characters' Plates is sent. The Sharing window can stop that.";
+
+    internal const string OtherSending = "Another of your characters' Active Plate is being sent:";
+
+    internal const string OtherSendingWaits = "Until it is sent or stopped, the buttons below wait for it.";
+
+    internal const string NotSharedYet = "Your Active Plate isn't shared yet.";
 
     internal const string TurnOffConfirm =
         "Turn off sharing for this character? The server deletes its Plate, its images and its check at once. To share again, you'll need a new Lodestone check.";
@@ -98,6 +110,13 @@ internal static class SharingText
     internal const string Starting = "Getting ready...";
 
     internal const string Busy = "Working...";
+
+    /// <summary>How long sharing has been working, in words: minutes and seconds.</summary>
+    internal static string Elapsed(TimeSpan elapsed)
+    {
+        var seconds = Math.Max(0, (long)elapsed.TotalSeconds);
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Still working, {seconds / 60}:{seconds % 60:00} so far.");
+    }
 
     /// <summary>How long a code has left, in words.</summary>
     internal static string CodeLeft(TimeSpan left) =>
@@ -158,15 +177,14 @@ internal static class SharingText
         SharingNoticeKind.PublishNotStored => "Your Plate couldn't be prepared for sharing on this PC, so nothing was sent. Please try again.",
         SharingNoticeKind.Paused => "Sharing is paused: the server deleted this character's Plate, and keeps its check. Resume to share again.",
         SharingNoticeKind.Resumed => "Sharing is on again. Your Active Plate is being shared.",
-        SharingNoticeKind.Declined => "Nothing was sent. The Plate you shared before, if any, stays up until you share another or pause sharing.",
         SharingNoticeKind.PublishUnrecorded => "Your Active Plate is shared, but this PC couldn't record it. It may be sent once more, which changes nothing.",
         SharingNoticeKind.PublishStopped => "Sending was stopped. If the server had already received your Plate it may be shared; otherwise it waits on this PC, and is sent when you try again or save it again.",
-        SharingNoticeKind.PublishChanged => "Your Active Plate changed before it was shared, so nothing was sent. It is shown to you again once it's ready.",
+        SharingNoticeKind.PublishWithdrawn => "Sending stopped, since that Plate is no longer your Active Plate. The version shared before stays up, unless the server had already received this one.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
     /// <summary>Whether a notice reports a problem, rather than progress.</summary>
     internal static bool IsProblem(SharingNoticeKind kind) =>
         kind is not (SharingNoticeKind.CodeReady or SharingNoticeKind.CheckPassed or SharingNoticeKind.TurnedOff or SharingNoticeKind.TurnedOffAll or SharingNoticeKind.NewKeyDropped or SharingNoticeKind.Renamed
-            or SharingNoticeKind.Published or SharingNoticeKind.Paused or SharingNoticeKind.Resumed or SharingNoticeKind.Declined);
+            or SharingNoticeKind.Published or SharingNoticeKind.Paused or SharingNoticeKind.Resumed);
 }

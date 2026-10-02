@@ -410,36 +410,18 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
-    public void APlateNeverSharedBefore_WaitsToBeShown_AndNothingIsSent()
+    public void APlateNeverSharedBefore_IsSignedUnderTheBindingsProfile_AndSent_WithNothingShownFirst()
     {
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         var candidate = PublicationCandidates.Simple();
 
         Assert.True(harness.Publish(candidate));
-        Assert.Equal(new PendingConsent(Aria, candidate, null, entry.Slot, entry.Key, Profile), harness.Sharing.View.Consent);
-        Assert.Empty(harness.Server.Publishes);
-
-        harness.Sharing.DeclineConsent(Aria);
-        Assert.Null(harness.Sharing.View.Consent);
-        Assert.Equal(SharingNoticeKind.Declined, harness.Sharing.View.Notice!.Kind);
-        Assert.Empty(harness.Server.Publishes);
-    }
-
-    [Fact]
-    public void AnApprovedPlate_IsSignedUnderTheBindingsProfile_AndSent()
-    {
-        using var harness = new SharingHarness();
-        var entry = harness.Bound();
-        var candidate = PublicationCandidates.Simple();
-
-        harness.Publish(candidate);
-        Assert.True(harness.Sharing.TryPublish(Aria, harness.Sharing.View.Consent!.Candidate, approved: true, candidate.PlateId));
 
         var published = Assert.Single(harness.Server.Publishes);
         Assert.Equal((entry.Key, Profile, 1), (published.Signer, published.Snapshot.ProfileId, published.Images));
         Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
-        Assert.Null(harness.Sharing.View.Consent);
+        Assert.Equal(candidate.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
         var recorded = Assert.Single(harness.Index(entry).Entries);
         Assert.Equal((candidate.PlateId, Profile, PublicationState.Published, published.Snapshot.RevisionId), (recorded.PlateId, recorded.ProfileId, recorded.State, recorded.LatestRevision));
         Assert.True(recorded.PendingEntry.IsNone);
@@ -447,26 +429,47 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
-    public void SavingTheSharedPlateAgain_SendsANewRevisionWithoutAsking_ButAnotherPlateIsShownFirst()
+    public void SavingTheSharedPlateAgain_OrMakingAnotherPlateActive_SendsANewRevisionWithoutAsking()
     {
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         var plate = Guid.NewGuid();
-        harness.Share(PublicationCandidates.Simple(plate));
+        harness.Publish(PublicationCandidates.Simple(plate));
 
         harness.Publish(PublicationCandidates.Simple(plate, "Edited"));
-        Assert.Null(harness.Sharing.View.Consent);
         Assert.Equal(2, harness.Server.Publishes.Count);
         Assert.NotEqual(harness.Server.Publishes[0].Snapshot.RevisionId, harness.Server.Publishes[1].Snapshot.RevisionId);
-        Assert.All(harness.Server.Publishes, publish => Assert.Equal(Profile, publish.Snapshot.ProfileId));
 
+        // Another Plate, made Active: shared at once, under the same profile, in the first one's place.
         var other = PublicationCandidates.Simple();
         harness.Publish(other);
-        Assert.Equal(other, harness.Sharing.View.Consent!.Candidate);
-        Assert.Equal(2, harness.Server.Publishes.Count);
-
-        harness.Share(other);
+        Assert.Equal(3, harness.Server.Publishes.Count);
+        Assert.All(harness.Server.Publishes, publish => Assert.Equal(Profile, publish.Snapshot.ProfileId));
         Assert.Equal(other.PlateId, Assert.Single(harness.Index(entry).Entries).PlateId);
+        Assert.Equal(other.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+    }
+
+    [Fact]
+    public void ACharacterThatDoesntShare_SignsAndSendsNothing()
+    {
+        using var harness = new SharingHarness();
+        var candidate = PublicationCandidates.Simple();
+
+        // Never turned on, then turned on but not checked yet, then turned off.
+        harness.Publish(candidate);
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Publish(candidate);
+        Assert.Equal(SharingStage.Checking, harness.Sharing.View.Find(Aria)!.Stage);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        harness.Sharing.TryTurnOff(Aria);
+        harness.Publish(candidate);
+        harness.Sharing.TrySendWaiting(Aria);
+
+        Assert.Empty(harness.Server.Publishes);
+        Assert.Empty(harness.Index(harness.Sharing.View.Find(Aria)!).Entries);
+
+        // Each of those ended with nothing to say, so the progress window has nothing to show.
+        Assert.Equal((PublishStep.Ended, null), (harness.Sharing.View.Publish!.Step, harness.Sharing.View.Publish.Outcome));
     }
 
     [Fact]
@@ -475,7 +478,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.UnprocessableEntity, "image-refused");
-        harness.Share(PublicationCandidates.Simple());
+        harness.Publish(PublicationCandidates.Simple());
 
         Assert.Equal(new SharingNotice(Aria, SharingNoticeKind.PublishRefused, "image-refused"), harness.Sharing.View.Notice);
         Assert.Empty(harness.Index(entry).Entries);
@@ -488,7 +491,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
-        harness.Share(PublicationCandidates.Simple());
+        harness.Publish(PublicationCandidates.Simple());
         Assert.Equal(SharingNoticeKind.PublishWaiting, harness.Sharing.View.Notice!.Kind);
         var waiting = Assert.Single(harness.Index(entry).Entries);
         Assert.Equal(PublicationState.Pending, waiting.State);
@@ -513,7 +516,7 @@ public partial class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         var entry = harness.Bound();
-        harness.Share(PublicationCandidates.Simple());
+        harness.Publish(PublicationCandidates.Simple());
         harness.Server.PublishAnswer = () => (HttpStatusCode.Gone, null);
         harness.Publish(PublicationCandidates.Simple(Assert.Single(harness.Index(entry).Entries).PlateId));
 
@@ -529,12 +532,12 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         var plate = Guid.NewGuid();
-        harness.Share(PublicationCandidates.Simple(plate));
+        harness.Publish(PublicationCandidates.Simple(plate));
 
         Assert.True(harness.Sharing.TryPause(Aria));
         Assert.Equal(("/v1/opt-out", "{\"mode\":\"pause\"}"), (harness.Server.Actions.Last().Path, harness.Server.Actions.Last().Body));
         Assert.Equal(SharingStage.Paused, harness.Sharing.View.Find(Aria)!.Stage);
-        harness.Share(PublicationCandidates.Simple(plate, "While paused"));
+        harness.Publish(PublicationCandidates.Simple(plate, "While paused"));
         Assert.Single(harness.Server.Publishes);
 
         Assert.True(harness.Sharing.TryResume(Aria));
@@ -550,7 +553,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
-        harness.Share(PublicationCandidates.Simple());
+        harness.Publish(PublicationCandidates.Simple());
         Assert.NotEmpty(harness.Publications.ListOutbox(entry.Slot).Entries);
 
         harness.Sharing.TryTurnOff(Aria);
@@ -561,8 +564,12 @@ public partial class CharacterSharingTests
     /// <summary>A persona manager over memory, a scratch persona folder, and the service over a server answered in memory.</summary>
     private sealed class SharingHarness : IDisposable
     {
-        internal SharingHarness(bool load = true)
+        /// <param name="load">Whether to read the sharing file at once.</param>
+        /// <param name="background">Whether the service's operations run on another thread, as the persona session runs them, instead of to their end inside each call.</param>
+        internal SharingHarness(bool load = true, bool background = false)
         {
+            Background = background;
+            ActivePlateOf = ActiveIn;
             Log = new List<string>();
             Root = Path.Combine(Path.GetTempPath(), "aetherframe-sharing-" + Guid.NewGuid().ToString("N"));
             Blobs = new MemoryKeyBlobs();
@@ -571,21 +578,23 @@ public partial class CharacterSharingTests
             Publications = new PublicationFiles(Root);
             Server = new FakeSharingServer();
             Client = new SharingClient(FakeSharingServer.Deployment, Server, disposeHandler: false, new Version(0, 1, 7));
-            Sharing = new CharacterSharing((_, work) =>
-            {
-                work(Personas);
-                return true;
-            }, File, Publications, Client, new Version(0, 1, 7), () =>
+            Sharing = new CharacterSharing(RunWork, File, Publications, Client, new Version(0, 1, 7), () =>
             {
                 ClockHook?.Invoke();
                 return Now;
-            }, CancellationToken.None, Log.Add);
+            }, CancellationToken.None, Log.Add, contentId => ActivePlateOf(contentId));
             if (load)
             {
                 Assert.True(Sharing.TryLoad());
+                WaitIdle();
                 Assert.True(Sharing.View.Loaded);
             }
         }
+
+        internal bool Background { get; }
+
+        /// <summary>The Active Plates <see cref="Actives"/> holds: the lookup until a test replaces it.</summary>
+        private Guid? ActiveIn(ulong contentId) => Actives.TryGetValue(contentId, out var plate) ? plate : null;
 
         internal string Root { get; }
 
@@ -606,16 +615,24 @@ public partial class CharacterSharingTests
         /// <summary>A new session over the same files, keys and server, as after a reload: nothing is remembered but what was saved.</summary>
         internal void Restart()
         {
-            Sharing = new CharacterSharing((_, work) =>
-            {
-                work(Personas);
-                return true;
-            }, File, Publications, Client, new Version(0, 1, 7), () =>
+            Sharing = new CharacterSharing(RunWork, File, Publications, Client, new Version(0, 1, 7), () =>
             {
                 ClockHook?.Invoke();
                 return Now;
-            }, CancellationToken.None, Log.Add);
+            }, CancellationToken.None, Log.Add, contentId => ActivePlateOf(contentId));
             Assert.True(Sharing.TryLoad());
+            WaitIdle();
+        }
+
+        /// <summary>Waits until no operation of the service runs: at once when operations run inside each call.</summary>
+        internal void WaitIdle()
+        {
+            var deadline = DateTime.UtcNow + Patience;
+            while (Sharing.View.Busy)
+            {
+                Assert.True(DateTime.UtcNow < deadline, "timed out");
+                Thread.Sleep(5);
+            }
         }
 
         internal List<string> Log { get; }
@@ -629,24 +646,40 @@ public partial class CharacterSharingTests
         internal SharingCharacter Bound(ulong contentId = Aria)
         {
             Sharing.TryStart(contentId, newKey: false);
+            WaitIdle();
             Sharing.TryCheck(contentId, "12345678", "Aria Starfall", "Gilgamesh");
+            WaitIdle();
             var entry = Sharing.View.Find(contentId)!;
             Assert.Equal(SharingStage.Shared, entry.Stage);
             return entry;
         }
 
         /// <summary>Hands a candidate for the Active Plate to the service, as the live publisher does.</summary>
-        internal bool Publish(SnapshotCandidate candidate, ulong contentId = Aria) =>
-            Sharing.TryPublish(contentId, candidate, approved: false, candidate.PlateId);
-
-        /// <summary>Shares a candidate as a player would: handed over, then approved where it is shown first.</summary>
-        internal void Share(SnapshotCandidate candidate, ulong contentId = Aria)
+        internal bool Publish(SnapshotCandidate candidate, ulong contentId = Aria)
         {
-            Publish(candidate, contentId);
-            if (Sharing.View.Consent is { } shown && ReferenceEquals(shown.Candidate, candidate))
+            Actives[contentId] = candidate.PlateId;
+            return Sharing.TryPublish(contentId, candidate);
+        }
+
+        /// <summary>Each character's Active Plate, as the service reads it; a test may replace the lookup.</summary>
+        internal Dictionary<ulong, Guid?> Actives { get; } = new();
+
+        /// <summary>The service's lookup of a character's Active Plate.</summary>
+        internal Func<ulong, Guid?> ActivePlateOf { get; set; } = null!;
+
+        /// <summary>The persona session's stand-in: the work runs here, or on another thread.</summary>
+        private bool RunWork(string name, Action<PersonaManager> work)
+        {
+            if (Background)
             {
-                Sharing.TryPublish(contentId, candidate, approved: true, candidate.PlateId);
+                _ = Task.Run(() => work(Personas));
             }
+            else
+            {
+                work(Personas);
+            }
+
+            return true;
         }
 
         /// <summary>The character's publication index, as saved.</summary>
@@ -714,6 +747,15 @@ public partial class CharacterSharingTests
 
         internal int StatusRequests { get; private set; }
 
+        /// <summary>Runs when the server is asked for its status, before it answers: a test's way to act during the check.</summary>
+        internal Action? StatusHook { get; set; }
+
+        /// <summary>Runs when a publish arrives, before it is taken: a test's way to act while it is sent.</summary>
+        internal Action? PublishHook { get; set; }
+
+        /// <summary>When set, a publish is taken only once it completes, or fails as cancelled when its request is.</summary>
+        internal Task? PublishGate { get; set; }
+
         internal int Challenges { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -728,6 +770,7 @@ public partial class CharacterSharingTests
             var path = request.RequestUri.AbsolutePath;
             if (path == "/v1/status")
             {
+                StatusHook?.Invoke();
                 StatusRequests++;
                 return Answer(HttpStatusCode.OK, $"{{\"protocolVersion\":{Protocol},\"api\":1,\"minimumPlugin\":\"{MinimumPlugin}\"}}");
             }
@@ -752,6 +795,15 @@ public partial class CharacterSharingTests
                 Assert.True(issued.Remove(Convert.ToHexString(submission.Challenge.ToArray())), "The publish names a challenge this server didn't issue.");
                 var snapshot = Assert.IsType<ProfileLayoutSnapshot>(submission.Document.Document);
                 Assert.Equal(snapshot.Images.Count, body[4 + documentLength]);
+
+                // A request stopped while it is sent never reaches the server.
+                PublishHook?.Invoke();
+                if (PublishGate is { } held)
+                {
+                    await held.WaitAsync(cancellationToken);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
                 Publishes.Add(new SeenPublish(submission.Document.Persona, snapshot, body[4 + documentLength]));
                 var (published, reason) = PublishAnswer();
                 return Answer(published, reason);

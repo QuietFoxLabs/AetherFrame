@@ -931,8 +931,7 @@ public class TutorialSessionTests
     [InlineData("online.check", "Check", "Windows/Network/SharingWindow.cs")]
     [InlineData("online.check", "Cancel", "Windows/Network/SharingWindow.cs")]
     [InlineData("online.shared", "Shared", "Windows/PlateLibraryWindow.cs")]
-    [InlineData("online.shared", "Share this Plate", "Windows/Network/SharingWindow.cs")]
-    [InlineData("online.shared", "Not now", "Windows/Network/SharingWindow.cs")]
+    [InlineData("online.shared", "Try again", "Windows/Network/SharingProgressWindow.cs")]
     [InlineData("online.stop", "Pause sharing", "Windows/Network/SharingWindow.cs")]
     [InlineData("online.stop", "Resume sharing", "Windows/Network/SharingWindow.cs")]
     [InlineData("online.stop", "Turn off sharing for this character", "Windows/Network/SharingWindow.cs")]
@@ -972,10 +971,11 @@ public class TutorialSessionTests
         Assert.Contains("delete the code", SharingText.Notice(SharingNoticeKind.CheckPassed), StringComparison.Ordinal);
         Assert.Contains("delete the code", Step("online.check").Body, StringComparison.Ordinal);
 
-        // Sharing the Active Plate, and the first showing.
-        Assert.Contains("shown to you first", SharingText.SavingShares, StringComparison.Ordinal);
-        Assert.Contains("shown to you first", Step("online.shared").Body, StringComparison.Ordinal);
-        Assert.Contains("Share this Plate", SharingText.FirstShowingTitle, StringComparison.Ordinal);
+        // Sharing the Active Plate: without asking, as the consent says, on a save and on another Active Plate.
+        Assert.Contains("without asking", string.Join(" ", SharingText.Consent), StringComparison.Ordinal);
+        Assert.Contains("without asking", Step("online.shared").Body, StringComparison.Ordinal);
+        Assert.Contains("making another Plate Active shares that one", SharingText.SavingShares, StringComparison.Ordinal);
+        Assert.Contains("making another Plate Active shares that one", Step("online.shared").Body, StringComparison.Ordinal);
 
         // Pausing keeps the check; turning off deletes the Plate, its images and its check, and needs a new check.
         Assert.Contains("keeps its check", SharingText.PausedLine, StringComparison.Ordinal);

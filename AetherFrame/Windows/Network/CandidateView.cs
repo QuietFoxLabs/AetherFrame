@@ -15,26 +15,13 @@ using Dalamud.Plugin.Services;
 
 namespace AetherFrame.Windows.Network;
 
-/// <summary>Whether every prepared copy of a candidate has been drawn.</summary>
-internal enum CandidateImages
-{
-    /// <summary>A copy is still being decoded for display.</summary>
-    Loading,
-
-    /// <summary>Every copy is drawn (or there is none).</summary>
-    Shown,
-
-    /// <summary>A copy couldn't be decoded for display.</summary>
-    Failed,
-}
-
 /// <summary>
-/// What a candidate would share, drawn for the player (N2-6's design, section 1; C3's showing): its
-/// name, every text in full with the ones filled in from the character marked, each prepared image
-/// as it would be sent, and what was left out and why; or why a Plate can't be shared. Every text
-/// from the Plate is drawn unformatted, never inside an ImGui label, a tooltip or a format string
-/// (N7). It owns the images' textures until it is released or disposed. Compiled only in the
-/// networking preview flavour.
+/// What a candidate would share, drawn for the player (N2-6's design, section 1; the share check's
+/// preview): its name, every text in full with the ones filled in from the character marked, each
+/// prepared image as it would be sent, and what was left out and why; or why a Plate can't be
+/// shared. Every text from the Plate is drawn unformatted, never inside an ImGui label, a tooltip or
+/// a format string (N7). It owns the images' textures until it is released or disposed. Compiled
+/// only in the networking preview flavour.
 /// </summary>
 internal sealed class CandidateView : IDisposable
 {
@@ -46,18 +33,14 @@ internal sealed class CandidateView : IDisposable
         this.textures = textures ?? throw new ArgumentNullException(nameof(textures));
     }
 
-    /// <summary>Draws <paramref name="candidate"/>; what it says of its images tells a caller whether a signing may follow.</summary>
-    internal CandidateImages Draw(SnapshotCandidate candidate)
+    /// <summary>Draws <paramref name="candidate"/>.</summary>
+    internal void Draw(SnapshotCandidate candidate)
     {
         if (!ReferenceEquals(thumbnails?.Candidate, candidate))
         {
             Release();
             thumbnails = new Thumbnails(textures, candidate);
         }
-
-        // Taken before anything is drawn: an image that finishes loading during this frame counts
-        // from the next one, once it is on screen.
-        var shown = thumbnails.Shown;
 
         AetherControls.SectionHeader("Its name, shared");
         Wrapped(candidate.Name);
@@ -122,12 +105,10 @@ internal sealed class CandidateView : IDisposable
             }
         }
 
-        if (shown == CandidateImages.Failed)
+        if (thumbnails?.Failed == true)
         {
-            AetherControls.StatusLine(AetherTone.Warning, "An image couldn't be shown here, so this can't be shared. Save the Plate again to try again.");
+            AetherControls.StatusLine(AetherTone.Warning, "An image couldn't be shown here. Check again to try again.");
         }
-
-        return shown;
     }
 
     /// <summary>Why a Plate can't be shared as it is: each problem once, naming what it is about.</summary>
@@ -199,7 +180,6 @@ internal sealed class CandidateView : IDisposable
     private sealed class Thumbnails : IDisposable
     {
         private readonly IDalamudTextureWrap?[] wraps;
-        private int loaded;
         private bool failed;
         private bool disposed;
 
@@ -215,14 +195,14 @@ internal sealed class CandidateView : IDisposable
 
         internal SnapshotCandidate Candidate { get; }
 
-        /// <summary>Whether every copy is drawn, one is still loading, or one failed.</summary>
-        internal CandidateImages Shown
+        /// <summary>Whether a copy couldn't be decoded for display.</summary>
+        internal bool Failed
         {
             get
             {
                 lock (wraps)
                 {
-                    return failed ? CandidateImages.Failed : loaded == wraps.Length ? CandidateImages.Shown : CandidateImages.Loading;
+                    return failed;
                 }
             }
         }
@@ -265,12 +245,11 @@ internal sealed class CandidateView : IDisposable
                     }
 
                     wraps[index] = wrap;
-                    loaded++;
                 }
             }
             catch (Exception)
             {
-                // The copy was checked when it was prepared; one that can't be shown here can't be shared.
+                // The copy was checked when it was prepared; the window says this one can't be shown.
                 lock (wraps)
                 {
                     failed = true;

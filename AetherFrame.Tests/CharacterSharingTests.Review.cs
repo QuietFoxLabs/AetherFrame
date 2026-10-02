@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using AetherFrame.Protocol.Identity;
+using AetherFrame.Protocol.Remote;
 using AetherFrame.Services.Network.Publishing;
 using AetherFrame.Services.Network.Sharing;
 using Xunit;
@@ -11,117 +12,305 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// N2-9c's security review: an approval counts only for what was shown, as it was shown; the Plate
-/// the server shows is recorded; transient failures wait; every way out forgets what was signed;
-/// loading tidies the outboxes; and the live publisher never takes a value becoming known for a
-/// change.
+/// N2-9c's security review, as the owner's direction of October 2, 2026 leaves it: only a candidate
+/// for the Active Plate, built from its latest build, is signed, under the key that binds the
+/// character now; the Plate the server shows is recorded; transient failures wait; every way out
+/// forgets what was signed; loading tidies the outboxes; and the live publisher never takes a value
+/// becoming known for a change.
 /// </summary>
 public partial class CharacterSharingTests
 {
     [Fact]
-    public void AnApproval_CountsOnlyForTheCandidateShown_AndOnlyForTheActivePlate()
+    public void OnlyACandidateForTheActivePlate_IsSigned()
     {
         using var harness = new SharingHarness();
-        harness.Bound();
-        var shown = PublicationCandidates.Simple();
-        harness.Publish(shown);
-        Assert.NotNull(harness.Sharing.View.Consent);
+        var entry = harness.Bound();
+        var candidate = PublicationCandidates.Simple();
 
-        // Another candidate for the same Plate was never shown.
-        var other = PublicationCandidates.Simple(shown.PlateId, "Not what was shown");
-        harness.Sharing.TryPublish(Aria, other, approved: true, other.PlateId);
-        Assert.Empty(harness.Server.Publishes);
-        Assert.Null(harness.Sharing.View.Consent);
+        // Another Plate is Active by the time the candidate reaches the service, or none is.
+        harness.Actives[Aria] = Guid.NewGuid();
+        Assert.True(harness.Sharing.TryPublish(Aria, candidate));
+        harness.Actives[Aria] = null;
+        Assert.True(harness.Sharing.TryPublish(Aria, candidate));
 
-        // The candidate shown, once the Plate is no longer Active.
-        harness.Publish(shown);
-        harness.Sharing.TryPublish(Aria, shown, approved: true, Guid.NewGuid());
         Assert.Empty(harness.Server.Publishes);
-        Assert.Null(harness.Sharing.View.Consent);
+        Assert.Empty(harness.Index(entry).Entries);
+        Assert.Null(harness.Sharing.View.Publish!.Outcome);
     }
 
     [Fact]
-    public void ACandidateBuiltBeforeAShowingWasWithdrawn_IsNeitherShownNorSent()
+    public void ACandidateBuiltBeforeANewerBuild_IsNeverSent()
     {
         using var harness = new SharingHarness();
         harness.Bound();
         var first = PublicationCandidates.Simple();
-        harness.Share(first);
+        harness.Publish(first);
 
-        // A build starts under the generation now; a re-save withdraws, and moves it on, before
-        // the candidate reaches the service.
-        var built = harness.Sharing.ShowingGeneration(Aria);
-        harness.Sharing.ClearConsent(Aria);
-        var stale = PublicationCandidates.Simple();
-        harness.Sharing.TryPublish(Aria, stale, approved: false, stale.PlateId, null, built);
-        Assert.Null(harness.Sharing.View.Consent);
-
-        var staleSave = PublicationCandidates.Simple(first.PlateId, "Older words");
-        harness.Sharing.TryPublish(Aria, staleSave, approved: false, first.PlateId, null, built);
+        // A build starts under the generation now; a re-save starts a newer one, and moves it on,
+        // before the candidate reaches the service.
+        var built = harness.Sharing.BuildGeneration(Aria);
+        harness.Sharing.Supersede(Aria);
+        var stale = PublicationCandidates.Simple(first.PlateId, "Older words");
+        harness.Sharing.TryPublish(Aria, stale, built);
         Assert.Single(harness.Server.Publishes);
 
-        // Under the generation now, it is shown as before.
-        harness.Sharing.TryPublish(Aria, stale, approved: false, stale.PlateId, null, harness.Sharing.ShowingGeneration(Aria));
-        Assert.Same(stale, harness.Sharing.View.Consent!.Candidate);
+        // Under the generation now, it is sent as before.
+        harness.Sharing.TryPublish(Aria, stale, harness.Sharing.BuildGeneration(Aria));
+        Assert.Equal(2, harness.Server.Publishes.Count);
     }
 
     [Fact]
-    public void ASaveThatLandsDuringAnotherSavesCommit_IsStillSent()
+    public void ANewerBuild_DuringTheStatusCheck_LeavesTheOlderCandidateUnsigned()
     {
         using var harness = new SharingHarness();
-        harness.Bound();
+        var entry = harness.Bound();
+
+        // The first publish of a session asks for the server's status; a newer build starts then.
+        harness.Restart();
+        harness.Server.StatusHook = () =>
+        {
+            harness.Server.StatusHook = null;
+            harness.Sharing.Supersede(Aria);
+        };
+        var candidate = PublicationCandidates.Simple();
+        harness.Actives[Aria] = candidate.PlateId;
+        Assert.True(harness.Sharing.TryPublish(Aria, candidate, harness.Sharing.BuildGeneration(Aria)));
+
+        Assert.Empty(harness.Server.Publishes);
+        Assert.Empty(harness.Index(entry).Entries);
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+        Assert.Null(harness.Sharing.View.Publish!.Outcome);
+    }
+
+    [Fact]
+    public void ANewerBuild_DuringTheCommit_KeepsTheRevisionWaiting_AndTheNewerOneReplacesIt()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
         var plate = Guid.NewGuid();
-        harness.Share(PublicationCandidates.Simple(plate));
+        harness.Publish(PublicationCandidates.Simple(plate));
 
         // The second save's commit is under way when the third save's build starts, as the live
-        // publisher starts it: a withdrawal, then the generation it will hand its candidate over with.
+        // publisher starts it: the second is signed, but never sent.
         long? third = null;
         harness.ClockHook = () =>
         {
             if (third is null)
             {
-                harness.Sharing.ClearConsent(Aria);
-                third = harness.Sharing.ShowingGeneration(Aria);
+                harness.Sharing.Supersede(Aria);
+                third = harness.Sharing.BuildGeneration(Aria);
             }
         };
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Second words"), approved: false, plate, null, harness.Sharing.ShowingGeneration(Aria));
+        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Second words"), harness.Sharing.BuildGeneration(Aria));
         harness.ClockHook = null;
+        Assert.Single(harness.Server.Publishes);
+        Assert.False(Assert.Single(harness.Index(entry).Entries).PendingEntry.IsNone);
+        Assert.Null(harness.Sharing.View.Publish!.Outcome);
+
+        // The third, under the generation now, replaces the waiting revision and is sent.
+        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Third words"), third);
         Assert.Equal(2, harness.Server.Publishes.Count);
-
-        harness.Sharing.TryPublish(Aria, PublicationCandidates.Simple(plate, "Third words"), approved: false, plate, null, third);
-        Assert.Equal(3, harness.Server.Publishes.Count);
+        Assert.Equal("Third words", TextOf(harness.Server.Publishes[1]));
+        var recorded = Assert.Single(harness.Index(entry).Entries);
+        Assert.Equal((PublicationState.Published, true, harness.Server.Publishes[1].Snapshot.RevisionId), (recorded.State, recorded.PendingEntry.IsNone, recorded.LatestRevision));
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
     }
 
     [Fact]
-    public void AnApprovalThatComesTooLate_SaysSo()
+    public void ANewerCandidate_StopsAnOlderSendUnderWay_WithNothingToSay_AndReplacesIt()
     {
         using var harness = new SharingHarness();
-        harness.Bound();
-        var candidate = PublicationCandidates.Simple();
-        harness.Publish(candidate);
-        harness.Sharing.TryPublish(Aria, candidate, approved: true, Guid.NewGuid());
-        Assert.Equal(SharingNoticeKind.PublishChanged, harness.Sharing.View.Notice!.Kind);
+        var entry = harness.Bound();
+        var plate = Guid.NewGuid();
+        harness.Server.PublishHook = () =>
+        {
+            harness.Server.PublishHook = null;
+            harness.Sharing.StopOlderSend(Aria);
+        };
+        harness.Publish(PublicationCandidates.Simple(plate, "Older words"));
+
         Assert.Empty(harness.Server.Publishes);
+        Assert.Null(harness.Sharing.View.Notice);
+        Assert.Null(harness.Sharing.View.Publish!.Outcome);
+        Assert.Contains("Sharing: the send gave way to a newer build of the Active Plate.", harness.Log);
+        Assert.Equal(PublicationState.Pending, Assert.Single(harness.Index(entry).Entries).State);
+
+        harness.Publish(PublicationCandidates.Simple(plate, "Newer words"));
+        Assert.Equal("Newer words", TextOf(Assert.Single(harness.Server.Publishes)));
+        var recorded = Assert.Single(harness.Index(entry).Entries);
+        Assert.Equal((PublicationState.Published, true), (recorded.State, recorded.PendingEntry.IsNone));
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
     }
 
     [Fact]
-    public void AnApproval_CountsOnlyUnderTheKeyItWasShownWith()
+    public void AnotherCharactersSend_DoesntGiveWay_ButThePlayersStopStopsAnySend()
     {
         using var harness = new SharingHarness();
         harness.Bound();
-        var candidate = PublicationCandidates.Simple();
-        harness.Publish(candidate);
 
-        // A new key replacing the old: nothing is signed while it is checked, and a passed check
-        // withdraws a first showing from before it.
+        // A newer candidate for another character leaves this one's send alone.
+        harness.Server.PublishHook = () => harness.Sharing.StopOlderSend(Bram);
+        harness.Publish(PublicationCandidates.Simple());
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
+
+        // The player's Stop sending stops it, and says so.
+        harness.Server.PublishHook = harness.Sharing.StopSending;
+        harness.Publish(PublicationCandidates.Simple());
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(SharingNoticeKind.PublishStopped, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal(SharingNoticeKind.PublishStopped, harness.Sharing.View.Publish!.Outcome!.Kind);
+    }
+
+    [Fact]
+    public void ASendWhosePlateIsNoLongerActive_Stops_AndSaysSo_ButOneOfTheActivePlateGoesOn()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        var first = PublicationCandidates.Simple();
+        harness.Publish(first);
+        Assert.Equal(first.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+
+        // The Active Plate is unset while another Plate is being sent: it stops, says so, and its
+        // revision is dropped rather than left to be sent later.
+        harness.Server.PublishHook = () =>
+        {
+            harness.Actives[Aria] = null;
+            harness.Sharing.StopStaleSends();
+        };
+        harness.Publish(PublicationCandidates.Simple());
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Publish!.Outcome!.Kind);
+        Assert.Equal(first.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+        Assert.All(harness.Index(entry).Entries, recorded => Assert.True(recorded.PendingEntry.IsNone));
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+
+        // A send of the Active Plate itself goes on, and so does one while another character's
+        // Active Plate changes.
+        var active = PublicationCandidates.Simple();
+        harness.Server.PublishHook = () =>
+        {
+            harness.Actives[Bram] = null;
+            harness.Sharing.StopStaleSends();
+        };
+        harness.Publish(active);
+        Assert.Equal(2, harness.Server.Publishes.Count);
+        Assert.Equal(active.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+    }
+
+    [Fact]
+    public async Task AWaitingRevision_OfAPlateNoLongerActive_IsNeverSent_WhenTriedAgain()
+    {
+        // The server can't take the Active Plate's revision; then another Plate, which can't be
+        // shared, is made Active; then the player tries sending again.
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        using var live = new LiveHarness(harness);
+        var first = live.Save();
+        live.Active = first.ProfileId;
+        live.Frames(2);
+        harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
+        live.Publisher.PlateSaved(first.ProfileId);
+        await live.Until(() => harness.Sharing.View.Notice is { Kind: SharingNoticeKind.PublishWaiting });
+        Assert.Equal(first.ProfileId, harness.Sharing.View.Notice!.Plate);
+        Assert.True(LivePublisher.OffersSendAgain(harness.Sharing.View, live.Publisher.View, Aria, live.Active));
+
+        harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
+        var bad = live.Save(text: "Bad" + (char)0 + "text");
+        live.Active = bad.ProfileId;
+        await live.Until(() => live.Publisher.View.Problems.Count > 0);
+        Assert.False(LivePublisher.OffersSendAgain(harness.Sharing.View, live.Publisher.View, Aria, live.Active));
+
+        // Even when asked, it isn't sent: it is dropped, and the notice says so.
+        Assert.True(harness.Sharing.TrySendWaiting(Aria));
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+        Assert.Null(harness.Sharing.View.Find(Aria)!.PublishedPlate);
+        Assert.Empty(harness.Index(entry).Entries);
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+    }
+
+    [Fact]
+    public void AWaitingRevision_IsNeverSent_WithNoActivePlate_ButItGoesWhileItsPlateIsActive()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
+        var waiting = PublicationCandidates.Simple();
+        harness.Publish(waiting);
+        harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
+
+        // While its Plate is the Active Plate, trying again sends it.
+        var again = PublicationCandidates.Simple();
+        harness.Publish(again);
+        Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
+        harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
+        harness.Publish(PublicationCandidates.Simple(again.PlateId, "Later words"));
+        harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
+        Assert.True(harness.Sharing.TrySendWaiting(Aria));
+        Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal("Later words", TextOf(harness.Server.Publishes.Last()));
+
+        // With no Active Plate, a waiting revision is dropped unsent.
+        harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
+        harness.Publish(PublicationCandidates.Simple(again.PlateId, "Waiting words"));
+        var sent = harness.Server.Publishes.Count;
+        harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
+        harness.Actives[Aria] = null;
+        Assert.True(harness.Sharing.TrySendWaiting(Aria));
+        Assert.Equal(sent, harness.Server.Publishes.Count);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+        Assert.Equal(again.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+        Assert.All(harness.Index(entry).Entries, recorded => Assert.True(recorded.PendingEntry.IsNone));
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+    }
+
+    [Fact]
+    public void AResendHandedOverJustBeforeTheActivePlateChanges_IsCaughtBeforeTheUpload()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
+        var waiting = PublicationCandidates.Simple();
+        harness.Publish(waiting);
+        harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
+        var tries = harness.Server.Publishes.Count;
+
+        // A new session asks the server's status first; the Active Plate changes meanwhile, after
+        // the resend was handed over and its Plate checked.
+        harness.Restart();
+        harness.Server.StatusHook = () =>
+        {
+            harness.Server.StatusHook = null;
+            harness.Actives[Aria] = Guid.NewGuid();
+        };
+        Assert.True(harness.Sharing.TrySendWaiting(Aria));
+
+        Assert.Equal(2, harness.Server.StatusRequests);
+        Assert.Equal(tries, harness.Server.Publishes.Count);
+        Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+        Assert.Empty(harness.Index(entry).Entries);
+        Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+    }
+
+    [Fact]
+    public void NothingIsSigned_WhileANewKeyIsChecked_ThenTheNewKeySigns()
+    {
+        using var harness = new SharingHarness();
+        var entry = harness.Bound();
+        var candidate = PublicationCandidates.Simple();
+
+        // A new key replacing the old: nothing is signed while it is checked.
         harness.Sharing.TryStart(Aria, newKey: true);
-        harness.Sharing.TryPublish(Aria, candidate, approved: true, candidate.PlateId);
-        Assert.Empty(harness.Server.Publishes);
-        Assert.Null(harness.Sharing.View.Consent);
-
         harness.Publish(candidate);
+        Assert.Empty(harness.Server.Publishes);
+
         harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
-        Assert.Null(harness.Sharing.View.Consent);
+        var moved = harness.Sharing.View.Find(Aria)!;
+        Assert.NotEqual(entry.Key, moved.Key);
+        harness.Publish(candidate);
+        Assert.Equal(moved.Key, Assert.Single(harness.Server.Publishes).Signer);
     }
 
     [Fact]
@@ -131,7 +320,7 @@ public partial class CharacterSharingTests
         harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
         var plate = Guid.NewGuid();
-        harness.Share(PublicationCandidates.Simple(plate));
+        harness.Publish(PublicationCandidates.Simple(plate));
         harness.Sharing.TryTurnOff(Aria);
 
         var fresh = ProfileId.Parse("prf_fedcba9876543210fedcba9876543210");
@@ -139,7 +328,7 @@ public partial class CharacterSharingTests
         harness.Server.PublishAnswer = () => (HttpStatusCode.NoContent, null);
         harness.Sharing.TryStart(Aria, newKey: false);
         harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
-        harness.Share(PublicationCandidates.Simple(plate, "Again"));
+        harness.Publish(PublicationCandidates.Simple(plate, "Again"));
         harness.Sharing.TrySendWaiting(Aria);
 
         var accepted = harness.Server.Publishes.Skip(1).ToList();
@@ -155,7 +344,7 @@ public partial class CharacterSharingTests
             using var harness = new SharingHarness();
             var entry = harness.Bound();
             harness.Server.PublishAnswer = () => (status, null);
-            harness.Share(PublicationCandidates.Simple());
+            harness.Publish(PublicationCandidates.Simple());
             Assert.Equal(SharingNoticeKind.PublishWaiting, harness.Sharing.View.Notice!.Kind);
             Assert.NotEmpty(harness.Publications.ListOutbox(entry.Slot).Entries);
 
@@ -171,12 +360,12 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         harness.Bound();
         var first = PublicationCandidates.Simple();
-        harness.Share(first);
+        harness.Publish(first);
         Assert.Equal(first.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
         Assert.Equal(first.PlateId, harness.File.Read().Single().PublishedPlate);
 
         harness.Server.PublishAnswer = () => (HttpStatusCode.UnprocessableEntity, "image-refused");
-        harness.Share(PublicationCandidates.Simple());
+        harness.Publish(PublicationCandidates.Simple());
         Assert.Equal(first.PlateId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
 
         harness.Sharing.TryPause(Aria);
@@ -189,7 +378,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         var entry = harness.Bound();
         harness.Server.PublishAnswer = () => (HttpStatusCode.ServiceUnavailable, null);
-        harness.Share(PublicationCandidates.Simple());
+        harness.Publish(PublicationCandidates.Simple());
         Assert.NotEmpty(harness.Publications.ListOutbox(entry.Slot).Entries);
 
         harness.Server.Answers["/v1/lodestone/reread"] = _ => (HttpStatusCode.NotFound, null);
@@ -204,7 +393,7 @@ public partial class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         var aria = harness.Bound();
-        harness.Share(PublicationCandidates.Simple());
+        harness.Publish(PublicationCandidates.Simple());
 
         // The share check's signing, under a persona that is no character's key.
         var old = harness.Personas.Create("Old persona");
@@ -247,34 +436,35 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
-    public async Task AFirstShowing_IsWithdrawn_WhenItsPlateIsSavedAgain_OrTheCharacterChanges()
+    public async Task ABuildThatGoesOutOfDate_IsNeverSent()
     {
         using var harness = new SharingHarness();
-        harness.Bound();
+        var entry = harness.Bound();
         using var live = new LiveHarness(harness);
-        var plate = live.Save();
-        live.Active = plate.ProfileId;
+        var first = live.Save();
+        live.Active = first.ProfileId;
         live.Frames(2);
-        live.Publisher.PlateSaved(plate.ProfileId);
-        await live.Until(() => harness.Sharing.View.Consent is not null);
 
-        // Saved again, now with something that can't be shared: the older showing goes with it.
-        live.Save(text: "Bad" + (char)0 + "text", id: plate.ProfileId);
-        live.Publisher.PlateSaved(plate.ProfileId);
-        await live.Until(() => live.Publisher.View.Problems.Count > 0);
-        Assert.Null(harness.Sharing.View.Consent);
-
-        // Saved again as it can be shared, then another character logs in, then this one again.
-        live.Save(id: plate.ProfileId);
-        live.Publisher.PlateSaved(plate.ProfileId);
-        await live.Until(() => harness.Sharing.View.Consent is not null);
+        // Another character logs in while the build is under way, then this one again.
+        live.Publisher.PlateSaved(first.ProfileId);
+        live.Frames(1);
         live.LoggedIn = Bram;
         live.Frames(2);
-        Assert.Null(harness.Sharing.View.Consent);
         live.LoggedIn = Aria;
         live.Frames(5);
-        Assert.Null(harness.Sharing.View.Consent);
+        await Task.Delay(50);
+        live.Frames(5);
         Assert.Empty(harness.Server.Publishes);
+
+        // Another Plate is made Active while the first one is built: only that one is sent.
+        live.Publisher.PlateSaved(first.ProfileId);
+        live.Frames(1);
+        var second = live.Save(text: "Another Plate");
+        live.Active = second.ProfileId;
+        await live.Until(() => harness.Server.Publishes.Count > 0);
+        live.Frames(20);
+        Assert.Single(harness.Server.Publishes);
+        Assert.Equal(second.ProfileId, Assert.Single(harness.Index(entry).Entries).PlateId);
     }
 
     [Fact]
@@ -283,7 +473,7 @@ public partial class CharacterSharingTests
         using var harness = new SharingHarness();
         harness.Bound();
         var candidate = PublicationCandidates.Simple();
-        harness.Share(candidate);
+        harness.Publish(candidate);
         using var live = new LiveHarness(harness) { LibraryLoaded = false };
 
         // The Library isn't loaded: no Active Plate is known yet.
@@ -292,6 +482,8 @@ public partial class CharacterSharingTests
         live.LibraryLoaded = true;
         live.Frames(20);
         Assert.Single(harness.Server.Publishes);
-        Assert.Null(harness.Sharing.View.Consent);
     }
+
+    /// <summary>The one text a test candidate's snapshot carries.</summary>
+    private static string TextOf(SeenPublish publish) => publish.Snapshot.Items.OfType<LayoutText>().Single().Text;
 }

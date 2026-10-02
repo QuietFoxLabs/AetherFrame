@@ -122,10 +122,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // for, so the connection is disposed only after every owned operation has ended.
     private readonly SharingConnection sharingConnection;
 
-    // Publishing the Active Plate when it is saved (N2-9c), driven once a frame while drawing,
-    // and the Sharing window that shows it.
+    // Publishing the Active Plate when it is saved or made Active (N2-9c), driven once a frame while
+    // drawing, the Sharing window that shows it, and the small window that follows each share.
     private readonly LivePublisher livePublisher;
     private readonly SharingWindow sharingWindow;
+    private readonly SharingProgressWindow sharingProgressWindow;
 
     // Viewing other players' Plates (N2-10): looked up only while one of the player's characters
     // shares, from the game's right-click menu or the viewer's search, a request a frame at most.
@@ -382,15 +383,30 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 AetherFrameBuildInfo.Current.ProductVersion,
                 () => DateTimeOffset.UtcNow,
                 ownedOperations.Stopping,
-                log.Information);
+                log.Information,
+                plateLibrary.GetActivePlateId);
             // Publishing the Active Plate live (N2-9c): a save, a new Active Plate, or sharing
             // starting or resuming builds a candidate with a share check of its own, a frame at a
             // time, and hands it to the sharing service.
             livePublisher = new LivePublisher(characterSharing, NewShareCheck(), () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, () => plateLibrary.IsLoaded);
             plateLibrary.PlateSaved += livePublisher.PlateSaved;
-            sharingWindow = new SharingWindow(characterSharing, livePublisher, TextureProvider, personaSession, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, profileViewWindow.ShowDocument, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
+            sharingWindow = new SharingWindow(characterSharing, livePublisher, personaSession, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
+
+            // The small window that follows each share of the Active Plate (October 2, 2026). It
+            // reads what the Sharing window reads, takes no focus, and stays out of the tutorial's
+            // dimmed set, as the other sharing windows do: the dim covers the rectangle around the
+            // windows in that set, and a corner window would stretch it over the game.
+            sharingProgressWindow = new SharingProgressWindow(characterSharing, livePublisher, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId)
+            {
+                OpenSharing = () =>
+                {
+                    sharingWindow.IsOpen = true;
+                    sharingWindow.BringToFront();
+                },
+            };
+            WindowSystem.AddWindow(sharingProgressWindow);
             // Shared: the Plate the server shows for the logged-in character (C3's marker). Not
             // shared yet: its Active Plate while the character shares, when that isn't it.
             plateLibraryWindow.IsShared = plateId => characterIdentityService.CurrentCharacter is { } shown
@@ -652,7 +668,6 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         shareCheckWindow.Dispose();
         plateLibrary.PlateSaved -= livePublisher.PlateSaved;
         livePublisher.Dispose();
-        sharingWindow.Dispose();
         servedPlate.Dispose();
 #endif
         imageTextureCache.Clear();

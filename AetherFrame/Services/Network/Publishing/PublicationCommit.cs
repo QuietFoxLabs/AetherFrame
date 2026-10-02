@@ -14,7 +14,9 @@ namespace AetherFrame.Services.Network.Publishing;
 /// What the consent screen showed, and the player approved: the candidate, and the persona it named
 /// (decision L10, and N2-6's design, section 1). The commit signs exactly this candidate, as exactly
 /// this persona, and reads nothing from the Plate again. The candidate's Plate id is the local
-/// Plate's, as the Library names its file.
+/// Plate's, as the Library names its file. Since the owner's direction of October 2, 2026, a
+/// sharing character's is the candidate the live publisher built from the saved Active Plate,
+/// under the character's key, with no screen before it; the commit's checks are the same.
 /// </summary>
 internal sealed class PublishConsent
 {

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using AetherFrame.Domain.Profiles;
 using AetherFrame.Services.Network.Personas;
 using AetherFrame.Services.Network.Sharing;
 using AetherFrame.Services.Plates;
@@ -12,32 +11,29 @@ using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
-using Dalamud.Plugin.Services;
 
 namespace AetherFrame.Windows.Network;
 
 /// <summary>
 /// The sharing window (NETWORK2's N2-9b and N2-9c; decision batch C, C1 to C4): for the logged-in
-/// character, the consent to turn sharing on, the Lodestone code and check, the first showing of a
-/// Plate before it is shared (C3), pausing, resuming and turning sharing off. It reads
-/// the service's view each frame, which never waits, and hands every change to the service, which
-/// runs it off the framework thread. A name, a World or a code is only ever drawn unformatted,
-/// never inside an ImGui label, a tooltip or a format string. The consent's tick is cleared
-/// whenever the consent isn't on screen, so it is always given afresh. Compiled only in the
-/// networking preview flavour. The tutorial's sharing chapters point at the window, the consent,
-/// the Lodestone check, the sharing status, its pause and turn-off buttons and the way to other
-/// players' Plates (each marked only while it is drawn); the tutorial never uses any of them.
+/// character, the consent to turn sharing on, the Lodestone code and check, how sharing the Active
+/// Plate stands, pausing, resuming and turning sharing off. It reads the service's view each frame,
+/// which never waits, and hands every change to the service, which runs it off the framework
+/// thread. A name, a World or a code is only ever drawn unformatted, never inside an ImGui label, a
+/// tooltip or a format string. The consent's tick is cleared whenever the consent isn't on screen,
+/// so it is always given afresh. Compiled only in the networking preview flavour. The tutorial's
+/// sharing chapters point at the window, the consent, the Lodestone check, the sharing status, its
+/// pause and turn-off buttons and the way to other players' Plates (each marked only while it is
+/// drawn); the tutorial never uses any of them.
 /// </summary>
-internal sealed class SharingWindow : Window, IDisposable
+internal sealed class SharingWindow : Window
 {
     private const int AddressBufferBytes = 256;
 
     private readonly CharacterSharing sharing;
     private readonly LivePublisher live;
-    private readonly CandidateView candidateView;
     private readonly PersonaSession session;
     private readonly Func<CharacterContext?> currentCharacter;
-    private readonly Action<ProfileDocument> viewDocument;
     private readonly Func<ulong, Guid?> activePlateOf;
     private readonly string sharingFile;
     private readonly string applicationData;
@@ -52,15 +48,13 @@ internal sealed class SharingWindow : Window, IDisposable
     private ulong confirmingOff;
     private bool confirmingAll;
 
-    internal SharingWindow(CharacterSharing sharing, LivePublisher live, ITextureProvider textures, PersonaSession session, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf, Action<ProfileDocument> viewDocument, string sharingFile)
+    internal SharingWindow(CharacterSharing sharing, LivePublisher live, PersonaSession session, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf, string sharingFile)
         : base("Sharing##AetherFrameSharing", ImGuiWindowFlags.NoCollapse)
     {
         this.sharing = sharing;
         this.live = live;
-        candidateView = new CandidateView(textures);
         this.session = session;
         this.currentCharacter = currentCharacter;
-        this.viewDocument = viewDocument;
         this.activePlateOf = activePlateOf;
         this.sharingFile = sharingFile;
         applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -89,10 +83,7 @@ internal sealed class SharingWindow : Window, IDisposable
         agreed = false;
         confirmingOff = 0;
         confirmingAll = false;
-        candidateView.Release();
     }
-
-    public void Dispose() => candidateView.Dispose();
 
     public override void Draw()
     {
@@ -175,6 +166,8 @@ internal sealed class SharingWindow : Window, IDisposable
             AetherControls.StatusLine(AetherTone.Info, SharingText.Busy);
         }
 
+        DrawOtherSending(view, character);
+
         if (character is not { } current)
         {
             AetherControls.Muted(SharingText.NoCharacter);
@@ -207,6 +200,37 @@ internal sealed class SharingWindow : Window, IDisposable
 
         DrawViewing(view);
         DrawTurnOffAll(view);
+    }
+
+    /// <summary>
+    /// A send for another of the player's characters, still under way after a switch of
+    /// characters or a logout: it keeps the service busy, so it can always be stopped from here. The
+    /// character's name and World are the binding's, as the Sharing window already shows them, drawn
+    /// unformatted.
+    /// </summary>
+    private void DrawOtherSending(CharacterSharingView view, CharacterContext? character)
+    {
+        if (view.Publish is not { Step: PublishStep.Sending } sending || sending.ContentId == (character?.ContentId ?? 0))
+        {
+            return;
+        }
+
+        AetherControls.StatusLine(AetherTone.Info, SharingText.OtherSending);
+        if (view.Find(sending.ContentId) is { } other)
+        {
+            ImGui.Indent();
+            ImGui.TextUnformatted(other.Name ?? "");
+            ImGui.TextUnformatted(other.World ?? "");
+            ImGui.Unindent();
+        }
+
+        AetherControls.Muted(SharingText.OtherSendingWaits);
+        if (AetherControls.SecondaryButton("Stop sending##AetherFrameSharingOther"))
+        {
+            sharing.StopSending();
+        }
+
+        ImGui.Spacing();
     }
 
     /// <summary>Viewing other players' Plates: offered once a character shares, since viewing is part of sharing (V1).</summary>
@@ -462,7 +486,7 @@ internal sealed class SharingWindow : Window, IDisposable
         }
     }
 
-    /// <summary>The Active Plate's way out: being prepared, can't be shared as it is, waiting to be sent, or shown before its first send (C3).</summary>
+    /// <summary>The Active Plate's way out: being prepared, can't be shared as it is, being sent, waiting to be sent again, or not shared yet.</summary>
     private void DrawPublishing(CharacterSharingView view, SharingCharacter entry)
     {
         var liveView = live.View;
@@ -483,7 +507,7 @@ internal sealed class SharingWindow : Window, IDisposable
             }
         }
 
-        if (view.Busy && sharing.Uploading)
+        if (view.Publish is { Step: PublishStep.Sending } sending && sending.ContentId == entry.ContentId)
         {
             AetherControls.StatusLine(AetherTone.Info, SharingText.Sending);
             if (AetherControls.SecondaryButton("Stop sending"))
@@ -492,7 +516,7 @@ internal sealed class SharingWindow : Window, IDisposable
             }
         }
 
-        if (view.Notice is { Kind: SharingNoticeKind.PublishWaiting } waiting && waiting.ContentId == entry.ContentId)
+        if (LivePublisher.OffersSendAgain(view, liveView, entry.ContentId, activePlateOf(entry.ContentId)))
         {
             using (ImRaii.Disabled(view.Busy))
             {
@@ -503,51 +527,19 @@ internal sealed class SharingWindow : Window, IDisposable
             }
         }
 
-        // Never beside a newer build of the Active Plate, whatever it came to: only its own showing.
-        var rebuilding = liveView.ContentId == entry.ContentId
-            && (liveView.Building || liveView.Problems.Count > 0 || liveView.Failure != Services.Network.Publishing.ShareCheckFailure.None);
-        if (view.Consent is not { } consent || consent.ContentId != entry.ContentId || rebuilding)
+        // An Active Plate the server doesn't show, with nothing under way for it: after arriving with
+        // one (nothing is published for arriving), or after a share that didn't go through.
+        if (LivePublisher.OffersShareNow(view, liveView, entry, activePlateOf(entry.ContentId)))
         {
-            candidateView.Release();
-            return;
-        }
-
-        // C3's first showing: exactly what will be signed and sent, and nothing until the player
-        // agrees. Only a candidate for the Active Plate now can be shared from here.
-        var active = activePlateOf(entry.ContentId);
-        AetherControls.Divider();
-        AetherControls.SectionHeader(SharingText.FirstShowingTitle);
-        Wrapped(SharingText.FirstShowing);
-        if (consent.Source is { } source && AetherControls.SecondaryButton("View it as drawn"))
-        {
-            viewDocument(source);
-        }
-
-        var images = candidateView.Draw(consent.Candidate);
-        if (images != CandidateImages.Shown)
-        {
-            AetherControls.Muted(SharingText.FirstShowingImages);
-        }
-
-        var current = consent.Candidate.PlateId == active;
-        using (ImRaii.Disabled(view.Busy || images != CandidateImages.Shown || !current))
-        {
-            if (AetherControls.PrimaryButton("Share this Plate") && images == CandidateImages.Shown && current)
+            AetherControls.Muted(SharingText.NotSharedYet);
+            using (ImRaii.Disabled(view.Busy))
             {
-                sharing.TryPublish(entry.ContentId, consent.Candidate, approved: true, active);
+                if (AetherControls.PrimaryButton("Share it now"))
+                {
+                    live.Retry();
+                }
             }
         }
-
-        ImGui.SameLine();
-        using (ImRaii.Disabled(view.Busy))
-        {
-            if (AetherControls.SecondaryButton("Not now"))
-            {
-                sharing.DeclineConsent(entry.ContentId);
-            }
-        }
-
-        AetherControls.Divider();
     }
 
     private void DrawTurnOffAll(CharacterSharingView view)

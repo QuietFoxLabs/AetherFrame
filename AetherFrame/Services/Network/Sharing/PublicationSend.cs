@@ -39,10 +39,34 @@ internal enum SendResult
 
     /// <summary>The server accepted it, but the index couldn't be saved: it is sent again next time, and the server answers that exact resubmission as accepted.</summary>
     NotSaved,
+
+    /// <summary>Its Plate isn't the character's Active Plate any more: it was dropped unsent, and is never sent later.</summary>
+    Withdrawn,
+
+    /// <summary>A newer build of the Active Plate started: it waits unsent, and the newer build's revision replaces it.</summary>
+    Superseded,
 }
 
-/// <summary>What sending came to: the server's reason code for a refusal, and, once sent, the Plate that is now public.</summary>
-internal sealed record SendOutcome(SendResult Result, string? Reason = null, Guid Plate = default);
+/// <summary>What the caller says, just before the upload, about sending the waiting revision of a local Plate.</summary>
+internal enum SendAdmission
+{
+    /// <summary>Send it.</summary>
+    Send,
+
+    /// <summary>A newer build started: leave it waiting.</summary>
+    Superseded,
+
+    /// <summary>Its Plate isn't the Active Plate: drop it.</summary>
+    NotActive,
+}
+
+/// <summary>
+/// What sending came to: the server's reason code for a refusal, the local Plate the revision is of
+/// (once sent, the Plate that is now public), and for a revision that waits, the status the server
+/// answered with, if it answered at all (for the log: a busy server and no answer in time look
+/// alike to the player).
+/// </summary>
+internal sealed record SendOutcome(SendResult Result, string? Reason = null, Guid Plate = default, HttpStatusCode? Status = null);
 
 /// <summary>
 /// Sends a character's waiting revision (NETWORK2's N2-9c; decisions C3, C4 and N2): the one entry
@@ -51,7 +75,9 @@ internal sealed record SendOutcome(SendResult Result, string? Reason = null, Gui
 /// under the persona files' lock, off the framework thread. The index is the record: a revision the
 /// server accepts is recorded as published before its outbox entry is deleted, and one it refuses,
 /// or one signed more than a day ago, is dropped the same way, so nothing the index doesn't name is
-/// ever sent. Compiled only in the networking preview flavour.
+/// ever sent. Just before the upload, the caller is asked about the revision's Plate
+/// (<see cref="SendAdmission"/>): a revision is sent only while its Plate is the character's Active
+/// Plate. Compiled only in the networking preview flavour.
 /// </summary>
 internal static class PublicationSend
 {
@@ -61,8 +87,9 @@ internal static class PublicationSend
     /// <summary>The server's reason codes for refusing a publish (ServerApi-v1.md, section 4); any other text is no reason.</summary>
     private static readonly string[] Reasons = ["not-bound", "wrong-profile", "not-a-layout", "clock-ahead", "revision-conflict", "image-refused", "document-refused"];
 
-    internal static SendOutcome SendWaiting(PersonaManager manager, PublicationFiles files, SharingClient client, PersonaSlotId slot, PersonaPublicKey key, ProfileId binding, Func<DateTimeOffset> utcNow, CancellationToken cancellation)
+    internal static SendOutcome SendWaiting(PersonaManager manager, PublicationFiles files, SharingClient client, PersonaSlotId slot, PersonaPublicKey key, ProfileId binding, Func<DateTimeOffset> utcNow, Func<Guid, SendAdmission> admit, CancellationToken cancellation)
     {
+        ArgumentNullException.ThrowIfNull(admit);
         PublicationIndex index;
         PublicationEntry? waiting = null;
         OutboxEntry entry;
@@ -105,19 +132,27 @@ internal static class PublicationSend
             return Drop(files, slot, index, waiting) ? new SendOutcome(SendResult.Stale) : new SendOutcome(SendResult.Unreadable);
         }
 
+        switch (admit(waiting.PlateId))
+        {
+            case SendAdmission.NotActive:
+                return Drop(files, slot, index, waiting) ? new SendOutcome(SendResult.Withdrawn, Plate: waiting.PlateId) : new SendOutcome(SendResult.Unreadable);
+            case SendAdmission.Superseded:
+                return new SendOutcome(SendResult.Superseded, Plate: waiting.PlateId);
+        }
+
         SharingResponse response;
         try
         {
             response = client.PublishAsync(entry.Document.ToArray(), entry.Images, new LeasedSigner(manager, slot, key), cancellation).GetAwaiter().GetResult();
         }
-        catch (SharingException)
+        catch (SharingException exception)
         {
-            return new SendOutcome(SendResult.TryLater);
+            return new SendOutcome(SendResult.TryLater, Plate: waiting.PlateId, Status: exception.Status);
         }
         catch (OperationCanceledException)
         {
             // The player stopped the send, or the plugin is unloading: the revision waits.
-            return new SendOutcome(SendResult.TryLater);
+            return new SendOutcome(SendResult.TryLater, Plate: waiting.PlateId);
         }
         catch (LeasedSignerException)
         {
@@ -142,8 +177,34 @@ internal static class PublicationSend
             default:
                 // Busy, limited, restarting (a 5xx from the proxy while the server restarts), a
                 // request that timed out, or an answer this build doesn't know: it waits.
-                return new SendOutcome(SendResult.TryLater);
+                return new SendOutcome(SendResult.TryLater, Plate: waiting.PlateId, Status: response.Status);
         }
+    }
+
+    /// <summary>The local Plate whose revision waits to be sent under <paramref name="binding"/>, or null when none does or the index can't be read.</summary>
+    internal static Guid? WaitingPlate(PublicationFiles files, PersonaSlotId slot, ProfileId binding)
+    {
+        try
+        {
+            if (files.ReadIndex(slot) is not { } bytes)
+            {
+                return null;
+            }
+
+            foreach (var entry in PublicationIndexCodec.Decode(bytes, slot).Entries)
+            {
+                if (entry.ProfileId == binding && entry.IsLive && !entry.PendingEntry.IsNone)
+                {
+                    return entry.PlateId;
+                }
+            }
+        }
+        catch (Exception exception) when (exception is PublicationFileException or IOException or UnauthorizedAccessException)
+        {
+            // Sending reads the index again, and says so.
+        }
+
+        return null;
     }
 
     /// <summary>
