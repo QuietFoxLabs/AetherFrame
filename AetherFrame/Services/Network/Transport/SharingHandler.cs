@@ -25,6 +25,9 @@ internal sealed class SharingHandler : IDisposable
             ConnectTimeout = TimeSpan.FromSeconds(10),
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             MaxResponseHeadersLength = 16,
+
+            // No trace header either: a request names the plugin's version and nothing else (R2).
+            ActivityHeadersPropagator = null,
         };
     }
 

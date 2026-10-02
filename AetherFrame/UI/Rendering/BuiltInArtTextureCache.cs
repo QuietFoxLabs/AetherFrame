@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Components;
@@ -12,19 +11,36 @@ using Dalamud.Interface.Textures.TextureWraps;
 namespace AetherFrame.UI.Rendering;
 
 /// <summary>
-/// Owns the GPU textures of the artwork bundled inside the plugin assembly
-/// (<see cref="BuiltInArtCatalog"/>). Each artwork is read from its manifest resource, decoded into
+/// Owns the GPU textures of the built-in artwork (<see cref="BuiltInArtCatalog"/>). Each artwork is
+/// read through its <see cref="IArtSource"/> (the plugin assembly, or since art on demand a
+/// downloaded copy checked against <see cref="ArtFiles"/>), decoded into
 /// a short chain of halved levels (see <see cref="BundledArtImage"/>) and uploaded once, the first
 /// time a Plate draws it — on the thread pool, never inside Draw (see <see cref="BuiltInArtLoader{TTexture}"/>):
 /// until it is ready the artwork simply isn't drawn, and drawing then only picks a level for the
 /// on-screen size — nothing is decoded, created or allocated per frame. Textures live until the
 /// plugin unloads (a level chain costs about 4/3 of its top level: ~1.4 MB for a 512 x 512
-/// artwork, ~8.4 MB for each full-resolution Celestial Sakura piece). A resource that is missing or
-/// fails to decode is logged once and simply not drawn, like a missing managed image.
+/// artwork, ~8.4 MB for each full-resolution Celestial Sakura piece). Art whose bytes can't be read
+/// yet isn't drawn, and the windows drawing it learn so through <see cref="BeginMisses"/>. Art that
+/// fails to read or decode is logged and not drawn until its source changes.
 /// </summary>
 internal sealed class BuiltInArtTextureCache : IDisposable
 {
-    private readonly BuiltInArtLoader<IDalamudTextureWrap> loader = new(LoadAsync);
+    private readonly BuiltInArtLoader<IDalamudTextureWrap> loader;
+
+    internal BuiltInArtTextureCache(IArtSource source)
+    {
+        Source = source;
+        loader = new BuiltInArtLoader<IDalamudTextureWrap>(source, (art, cancellationToken) => LoadAsync(source, art, cancellationToken));
+    }
+
+    /// <summary>Where the artwork's bytes come from, and where each stands.</summary>
+    internal IArtSource Source { get; }
+
+    /// <summary>Draw thread: collects the artwork drawn from now on whose bytes can't be read yet (see <see cref="BuiltInArtLoader{TTexture}.BeginMisses"/>).</summary>
+    internal void BeginMisses(System.Collections.Generic.List<BuiltInArtAsset> into) => loader.BeginMisses(into);
+
+    /// <summary>Draw thread: ends <see cref="BeginMisses"/>.</summary>
+    internal void EndMisses() => loader.EndMisses();
 
     /// <summary>The level of <paramref name="art"/> to draw <paramref name="screenPixels"/> across, or null
     /// while it is loading or when it can't be loaded.</summary>
@@ -33,19 +49,12 @@ internal sealed class BuiltInArtTextureCache : IDisposable
     public void Dispose() => loader.Dispose();
 
     /// <summary>Runs on the thread pool: decode and prepare (CPU), then upload through Dalamud's async API.</summary>
-    private static async Task<LoadedArt<IDalamudTextureWrap>> LoadAsync(BuiltInArtAsset art, CancellationToken cancellationToken)
+    private static async Task<LoadedArt<IDalamudTextureWrap>> LoadAsync(IArtSource source, BuiltInArtAsset art, CancellationToken cancellationToken)
     {
         var created = new List<IDalamudTextureWrap>();
         try
         {
-            byte[] bytes;
-            using (var stream = typeof(BuiltInArtTextureCache).Assembly.GetManifestResourceStream(art.ResourceName)
-                ?? throw new FileNotFoundException("bundled resource is missing"))
-            {
-                bytes = new byte[stream.Length];
-                stream.ReadExactly(bytes);
-            }
-
+            var bytes = source.ReadVerified(art);
             var levels = BundledArtImage.LoadLevels(bytes, art);
             var sizes = new int[levels.Count];
             for (var i = 0; i < levels.Count; i++)

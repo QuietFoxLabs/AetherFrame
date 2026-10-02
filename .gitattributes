@@ -1,0 +1,3 @@
+# Artwork is downloaded by players from pinned commits and checked against its SHA-256
+# (AetherFrame/Assets/ArtFiles.txt): never convert its bytes.
+*.png binary
