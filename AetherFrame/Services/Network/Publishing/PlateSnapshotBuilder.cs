@@ -74,7 +74,12 @@ internal static class PlateSnapshotBuilder
         var drawn = new List<ProfileElement>();
         var plan = new List<PaintStep>();
         ProfileVisualBounds.FillDrawnElements(plate, ProfileRenderOptions.Finished, paintOrder, drawn);
-        ComponentPaintPlan.Build(plate, drawn, BuiltInComponentCatalog.Instance, plan, Measure);
+        // A picture's size, as the renderer reads it, for the portrait's frame in Fit mode. A picture
+        // that can't be read is refused below (ImageMissing), so the box it falls back to is never shared.
+        Vector2? PictureSize(ImageProfileElement image) =>
+            image.AssetId != Guid.Empty && measurements.TryGetImageSize(image.AssetId, out var width, out var height) ? new Vector2(width, height) : null;
+
+        ComponentPaintPlan.Build(plate, drawn, BuiltInComponentCatalog.Instance, plan, Measure, PictureSize);
 
         // A theme or orientation a newer build made changes how components draw here: the colour
         // of one without its own, and where one without an anchor element sits.

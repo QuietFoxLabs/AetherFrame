@@ -61,8 +61,8 @@ internal static class ComponentRenderer
                     // tints the white/greyscale artwork and carries the opacity.
                     if (definition.Art is { } art && resources.Art.GetWrapOrNull(art, ArtScreenPixels(art, primitive.Piece, a, b, d)) is { } artWrap)
                     {
-                        var (u0, u1) = art.Window(primitive.Piece);
-                        drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, 0f), new Vector2(u1, 0f), new Vector2(u1, 1f), new Vector2(u0, 1f), color);
+                        var (u0, v0, u1, v1) = art.Window2D(primitive.Piece);
+                        drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), color);
                     }
 
                     break;
@@ -75,11 +75,32 @@ internal static class ComponentRenderer
     /// <summary>
     /// The on-screen size, in pixels, of the whole artwork a quad A-B-C-D (D below A) draws
     /// <paramref name="piece"/> of: what picks its level. A whole artwork's longer side; a piece of
-    /// sliced artwork scales its full-height strip by the artwork's long side over its height, so
-    /// every piece of one placement draws from the same level (a stretched fill never needs a larger one).
+    /// sliced artwork scales its full-height strip by the artwork's long side over its height, and a
+    /// cell of a frame scales by a side that keeps the artwork's proportions (a cap or the center
+    /// piece), so every piece of one placement draws from the same level (a stretched fill never
+    /// needs a larger one).
     /// </summary>
-    internal static float ArtScreenPixels(BuiltInArtAsset art, ArtPiece piece, Vector2 a, Vector2 b, Vector2 d) =>
-        piece == ArtPiece.Whole || art.PixelHeight <= 0
+    internal static float ArtScreenPixels(BuiltInArtAsset art, ArtPiece piece, Vector2 a, Vector2 b, Vector2 d)
+    {
+        var longSide = Math.Max(art.PixelWidth, art.PixelHeight);
+        if (ArtPieces.IsFrame(piece) && art.Frame is { } frame && art.PixelWidth > 0 && art.PixelHeight > 0)
+        {
+            var (row, column) = ArtPieces.FrameCell(piece);
+            var (y0, y1) = ArtFrameSlices.Band(frame.Rows, row);
+            var (x0, x1) = ArtFrameSlices.Band(frame.Columns, column);
+            if (ArtFrameSlices.IsFixed(row) && y1 > y0)
+            {
+                return Vector2.Distance(a, d) * longSide / (y1 - y0);
+            }
+
+            if (ArtFrameSlices.IsFixed(column) && x1 > x0)
+            {
+                return Vector2.Distance(a, b) * longSide / (x1 - x0);
+            }
+        }
+
+        return piece == ArtPiece.Whole || ArtPieces.IsFrame(piece) || art.PixelHeight <= 0
             ? MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d))
-            : Vector2.Distance(a, d) * Math.Max(art.PixelWidth, art.PixelHeight) / art.PixelHeight;
+            : Vector2.Distance(a, d) * longSide / art.PixelHeight;
+    }
 }

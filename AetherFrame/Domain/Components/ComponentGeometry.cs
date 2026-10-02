@@ -141,6 +141,10 @@ public static class ComponentGeometry
                 box.Image(ComponentPrimitiveKind.Image, color);
                 break;
 
+            case ComponentShape.Art when definition.Art is { Frame: { } frame } art && frame.IsValidFor(art.PixelWidth, art.PixelHeight):
+                Framed(box, frame, w, h, color);
+                break;
+
             case ComponentShape.Art when definition.Art is { Slices: { } slices } art && slices.IsValidFor(art.PixelWidth) && art.PixelHeight > 0:
                 Sliced(box, art, slices, w, h, color);
                 break;
@@ -248,6 +252,30 @@ public static class ComponentGeometry
         box.Slice(x4, w, ArtPiece.RightCap, color);
     }
 
+    /// <summary>
+    /// A frame over a w x h box: its drawing's edges on the box's edges, the caps and any mid-edge
+    /// ornament at the artwork's own proportions (the scale that fits the whole drawing inside the
+    /// box), and the fills sharing the rest of each axis (see <see cref="ArtFrameSlices.Edges"/>).
+    /// One primitive per border cell, row by row; the clear middle is never drawn.
+    /// </summary>
+    private static void Framed(Box box, ArtFrameSlices frame, float w, float h, Vector4 color)
+    {
+        var drawingWidth = frame.Columns.ContentRight - frame.Columns.ContentLeft;
+        var drawingHeight = frame.Rows.ContentRight - frame.Rows.ContentLeft;
+        var scale = Math.Min(w / drawingWidth, h / drawingHeight);
+
+        Span<float> xs = stackalloc float[ArtFrameSlices.Bands + 1];
+        Span<float> ys = stackalloc float[ArtFrameSlices.Bands + 1];
+        ArtFrameSlices.Edges(frame.Columns, w, scale, xs);
+        ArtFrameSlices.Edges(frame.Rows, h, scale, ys);
+
+        foreach (var piece in ArtPieces.FrameBorder)
+        {
+            var (row, column) = ArtPieces.FrameCell(piece);
+            box.Cell(xs[column], ys[row], xs[column + 1], ys[row + 1], piece, color);
+        }
+    }
+
     private static Vector4 WithAlpha(Vector4 color, float factor) => new(color.X, color.Y, color.Z, color.W * Math.Clamp(factor, 0f, 1f));
 
     /// <summary>A placement's local drawing space: local box coordinates to logical canvas coordinates.</summary>
@@ -350,6 +378,20 @@ public static class ComponentGeometry
             output.Add(new ComponentPrimitive(
                 ComponentPrimitiveKind.Art,
                 Map(new Vector2(x0, 0f)), Map(new Vector2(x1, 0f)), Map(new Vector2(x1, h)), Map(new Vector2(x0, h)), color, piece));
+        }
+
+        /// <summary>One cell of a frame over x0..x1 by y0..y1 (nothing when it is empty); its texture
+        /// window is fixed to A-B-C-D like <see cref="Image"/>'s.</summary>
+        internal void Cell(float x0, float y0, float x1, float y1, ArtPiece piece, Vector4 color)
+        {
+            if (!(x1 > x0) || !(y1 > y0))
+            {
+                return;
+            }
+
+            output.Add(new ComponentPrimitive(
+                ComponentPrimitiveKind.Art,
+                Map(new Vector2(x0, y0)), Map(new Vector2(x1, y0)), Map(new Vector2(x1, y1)), Map(new Vector2(x0, y1)), color, piece));
         }
 
         private Vector2 Map(Vector2 local)
