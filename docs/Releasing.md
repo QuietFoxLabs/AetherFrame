@@ -101,7 +101,7 @@ Every new plugin is submitted to `testing/live`, so this is the list for the fir
 | One plugin per PR, from its own branch | At submission |
 | Acceptable Use Policy, Terms of Service, Code of Conduct | Read and accept at submission |
 
-The approval team also reviews the code informally and checks that the plugin works and doesn't upload personal data. Nothing goes to AetherFrame's server unless a player turns sharing on for a character (and then what the installer's description lists); Art Styles' artwork downloads from GitHub, and no personal data is uploaded.
+The approval team also reviews the code informally and checks that the plugin works and doesn't upload personal data. Nothing goes to AetherFrame's server unless a player turns sharing on for a character (and then what the installer's description lists); an Art Style's artwork is a plain GET from GitHub that uploads nothing.
 
 ### Required for stable
 
@@ -140,7 +140,8 @@ The AI Usage Policy asks for two separate disclosures:
 
 | Asset | Origin | Disclosure |
 |---|---|---|
-| Celestial Sakura (7 pieces) | Created with AI assistance. Shipped byte for byte, each with embedded C2PA Content Credentials | Description and README. Credentials verified present in all seven files |
+| Art Styles (19 sets of seven pieces, and every style's preview card) | Created with AI assistance. The pieces are hosted on GitHub and downloaded on first use (`AetherFrame/Assets/ArtFiles.txt`); the preview cards are inside the plugin | Description and README |
+| Celestial Sakura (7 approved pieces and a Section Header) | Created with AI assistance. The 7 approved pieces are served byte for byte from GitHub, each with embedded C2PA Content Credentials; the Section Header is a half-size runtime copy | Description and README. Credentials verified present in the seven approved files |
 | Celestial Dream *Astrolabe Pivot* | Created with AI assistance. The runtime copy is resampled, so it carries no credentials | Description and README |
 | Plugin icon | Generated with ChatGPT, then refined. The file carries no provenance metadata | Description and README. **A hand-made replacement is recommended before the D17 submission.** When it lands, drop the icon from the description and from `ReleaseMetadataTests` |
 | Fonts | PT Sans, PT Serif, Cousine under the SIL OFL 1.1 | `Fonts/THIRD-PARTY-FONT-LICENSES.txt` |

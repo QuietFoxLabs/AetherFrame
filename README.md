@@ -240,12 +240,12 @@ AetherFrame.Tests/      pure-logic tests that build without Dalamud
 - **Basic Editor.** Structured input (identity, portrait, playstyle, message, theme) mapped onto an Adventure Plate-style layout.
 - **Advanced Editor.** Direct manipulation of every element on the canvas, with layers, snapping and undo.
 - **Templates.** Starting points for new Plates: built-in ones compiled into the plugin, plus user Templates saved locally.
-- **Components.** Decorations described by a stable definition id and per-instance settings. Procedural ones are drawn in code, graphical ones use embedded artwork. Plates store only ids, never the art itself.
+- **Components.** Decorations described by a stable definition id and per-instance settings. Procedural ones are drawn in code, graphical ones use artwork that is inside the plugin (the Astrolabe) or downloaded from GitHub the first time it is used (the Art Styles). Plates store only ids, never the art itself.
 - **Rendering.** One renderer draws a Plate for the editors, the Plate Viewer and My Plates previews, so all of them match.
 - **Assets.** User images are copied into a local asset store, checked on import and tracked by reference. Unused images are not cleaned up automatically in this version.
 - **Packages.** `.aetherframe` files are ZIP-based packages containing a manifest, the Plate document and its images. They are validated in a staging area before anything is imported.
 
-The plugin's bundled Component artwork is the optimized copies in `AetherFrame/Assets/`, and its icon is [`AetherFrame/images/icon.png`](AetherFrame/images/icon.png).
+The Component artwork is the optimized copies in `AetherFrame/Assets/` (`ArtFiles.txt` lists the hosted ones), and its icon is [`AetherFrame/images/icon.png`](AetherFrame/images/icon.png).
 
 ---
 

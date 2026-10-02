@@ -389,6 +389,9 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
         viewerArt.End(renderResources);
 
+        // Before Close, so Close always paints over it.
+        DrawArtStatus(windowPos, current);
+
         if (PresentationControls.Close("##ViewerClose", windowPos + current.CloseOffset, current.ControlSize, "Close (Esc)"))
         {
             placement.EndDrag();
@@ -397,7 +400,6 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
         DrawContextMenu(current);
         DrawHint(windowPos, current);
-        DrawArtStatus(windowPos, current);
     }
 
     private void DrawContextMenu(PlateViewerLayout current)
@@ -419,9 +421,16 @@ internal sealed class ProfileViewWindow : Window, IDisposable
                 ImGui.Separator();
             }
 
-            if (viewerArt.Summary(renderResources.ArtStore).Kind == ArtNeedKind.Failed && ImGui.MenuItem("Try Downloading the Artwork Again"))
+            var art = viewerArt.Summary(renderResources.ArtStore);
+            if (art.Kind == ArtNeedKind.Failed)
             {
-                viewerArt.TryAgain(renderResources.ArtStore);
+                ImGui.TextDisabled(art.Label);
+                if (ImGui.MenuItem("Try Downloading the Artwork Again"))
+                {
+                    viewerArt.TryAgain(renderResources.ArtStore);
+                }
+
+                ImGui.Separator();
             }
 
             ImGui.TextDisabled($"Size: {placement.Percent}%");
@@ -467,8 +476,17 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         }
 
         var text = summary.Kind == ArtNeedKind.Failed ? "Artwork didn't download. Right-click to try again." : summary.Label;
-        var textSize = ImGui.CalcTextSize(text);
         var padding = new Vector2(10f, 5f) * ImGuiHelpers.GlobalScale;
+        var room = current.WindowSize.X - (2f * (current.ControlSize + (16f * ImGuiHelpers.GlobalScale)));
+        if (ImGui.CalcTextSize(text).X + (padding.X * 2f) > room)
+        {
+            // A narrow viewer: the short form, clear of the Close control.
+            text = summary.Kind == ArtNeedKind.Failed ? "Artwork failed: right-click"
+                : summary.Total > 0 ? $"{ArtNeedSummary.Megabytes(summary.Received)} / {ArtNeedSummary.Megabytes(summary.Total)} MB"
+                : "Downloading artwork";
+        }
+
+        var textSize = ImGui.CalcTextSize(text);
         var size = textSize + (padding * 2f);
         var min = windowPos + new Vector2((current.WindowSize.X - size.X) / 2f, 12f * ImGuiHelpers.GlobalScale);
 

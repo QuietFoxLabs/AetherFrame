@@ -17,8 +17,9 @@ internal sealed class ArtNeeds
     private List<BuiltInArtAsset> missing = new();
     private readonly List<ArtStatus> statuses = new();
 
-    // Everything missing since the window last had nothing to say, so a download's progress counts
-    // the files already done and never goes backwards as each one finishes.
+    // Everything missing since this download run began (the window had nothing to say, or only a
+    // failure), so its progress counts the files already done and never goes backwards as each one
+    // finishes, and a failed run's files never count in the next.
     private readonly List<BuiltInArtAsset> tracked = new();
 
     /// <summary>What last frame's Plate couldn't draw.</summary>
@@ -45,7 +46,7 @@ internal sealed class ArtNeeds
 
     /// <summary>
     /// What to say about <see cref="Missing"/>. While it downloads, the bytes count everything missing
-    /// since the window last had nothing to say, the files already here included.
+    /// since this download run began, the files already here included.
     /// </summary>
     internal ArtNeedSummary Summary(ArtStore store)
     {
@@ -56,7 +57,7 @@ internal sealed class ArtNeeds
         }
 
         var now = ArtNeedSummary.Of(statuses);
-        if (now.Kind == ArtNeedKind.None)
+        if (now.Kind != ArtNeedKind.Downloading)
         {
             tracked.Clear();
             return now;
@@ -68,11 +69,6 @@ internal sealed class ArtNeeds
             {
                 tracked.Add(art);
             }
-        }
-
-        if (now.Kind != ArtNeedKind.Downloading)
-        {
-            return now;
         }
 
         long received = 0;
