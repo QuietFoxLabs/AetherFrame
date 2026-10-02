@@ -181,8 +181,10 @@ public class OperationsTests
             // Two players look Aria up, over and over, while the backup copies again and again: every
             // lookup and every copy succeeds.
             using var copied = new CancellationTokenSource();
-            var bramLooking = new TaskCompletionSource();
-            var caraLooking = new TaskCompletionSource();
+            // Asynchronous continuations, so the copies below don't run inline on whichever player
+            // signals last and stall that player's lookups for the whole loop.
+            var bramLooking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var caraLooking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var lookups = new[] { Task.Run(() => LookUpAsync(bram, bramLooking)), Task.Run(() => LookUpAsync(cara, caraLooking)) };
             try
             {
