@@ -6,7 +6,9 @@ using AetherFrame.Services.Network.Personas;
 using AetherFrame.Services.Network.Sharing;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Theme;
+using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Theme;
+using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -22,7 +24,9 @@ namespace AetherFrame.Windows.Network;
 /// runs it off the framework thread. A name, a World or a code is only ever drawn unformatted,
 /// never inside an ImGui label, a tooltip or a format string. The consent's tick is cleared
 /// whenever the consent isn't on screen, so it is always given afresh. Compiled only in the
-/// networking preview flavour.
+/// networking preview flavour. The tutorial's sharing chapters point at the window, the consent,
+/// the Lodestone check, the sharing status, its pause and turn-off buttons and the way to other
+/// players' Plates (each marked only while it is drawn); the tutorial never uses any of them.
 /// </summary>
 internal sealed class SharingWindow : Window, IDisposable
 {
@@ -92,6 +96,7 @@ internal sealed class SharingWindow : Window, IDisposable
 
     public override void Draw()
     {
+        TutorialAnchorMarks.MarkWindow(TutorialTarget.SharingWindow);
         consentShown = false;
         DrawContent();
 
@@ -181,7 +186,13 @@ internal sealed class SharingWindow : Window, IDisposable
             switch (keyLost ? null : entry)
             {
                 case { Checking: true } checking:
-                    DrawCheck(view, checking, current);
+                    using (ImRaii.Group())
+                    {
+                        DrawCheck(view, checking, current);
+                    }
+
+                    TutorialAnchorMarks.Mark(TutorialTarget.SharingLodestoneCheck);
+                    TutorialAnchorMarks.RevealIfWanted(TutorialTarget.SharingLodestoneCheck);
                     break;
                 case { IsBound: true } bound:
                     DrawShared(view, bound, current);
@@ -212,6 +223,9 @@ internal sealed class SharingWindow : Window, IDisposable
         {
             open();
         }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.SharingFindPlayer);
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.SharingFindPlayer);
     }
 
     private static bool HasBound(CharacterSharingView view)
@@ -240,6 +254,8 @@ internal sealed class SharingWindow : Window, IDisposable
 
         ImGui.Spacing();
         ImGui.Checkbox(SharingText.Agree, ref agreed);
+        var tickMin = ImGui.GetItemRectMin();
+        var tickMax = ImGui.GetItemRectMax();
         using (ImRaii.Disabled(!agreed || view.Busy))
         {
             if (AetherControls.PrimaryButton(newKey ? SharingText.NewKeyTitle : SharingText.TurnOn) && agreed)
@@ -250,6 +266,10 @@ internal sealed class SharingWindow : Window, IDisposable
                 sharing.TryStart(character.ContentId, newKey);
             }
         }
+
+        // The tick and the button it unlocks: what the tutorial points at (and never presses).
+        TutorialAnchorMarks.MarkRect(TutorialTarget.SharingConsent, tickMin, Vector2.Max(tickMax, ImGui.GetItemRectMax()));
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.SharingConsent);
     }
 
     private void DrawCheck(CharacterSharingView view, SharingCharacter entry, CharacterContext character)
@@ -362,14 +382,20 @@ internal sealed class SharingWindow : Window, IDisposable
         }
 
         var paused = entry.Stage == SharingStage.Paused;
-        AetherControls.SectionHeader(paused ? "Sharing is paused" : "Sharing is on");
-        Wrapped(SharingText.SharedLine);
-        ImGui.Indent();
-        ImGui.TextUnformatted(entry.Name ?? "");
-        ImGui.TextUnformatted(entry.World ?? "");
-        ImGui.Unindent();
-        ImGui.Spacing();
-        Wrapped(paused ? SharingText.PausedLine : SharingText.SavingShares, AetherPalette.TextMuted);
+        using (ImRaii.Group())
+        {
+            AetherControls.SectionHeader(paused ? "Sharing is paused" : "Sharing is on");
+            Wrapped(SharingText.SharedLine);
+            ImGui.Indent();
+            ImGui.TextUnformatted(entry.Name ?? "");
+            ImGui.TextUnformatted(entry.World ?? "");
+            ImGui.Unindent();
+            ImGui.Spacing();
+            Wrapped(paused ? SharingText.PausedLine : SharingText.SavingShares, AetherPalette.TextMuted);
+        }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.SharingStatus);
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.SharingStatus);
         ImGui.Spacing();
 
         if (!paused)
@@ -377,6 +403,18 @@ internal sealed class SharingWindow : Window, IDisposable
             DrawPublishing(view, entry);
         }
 
+        using (ImRaii.Group())
+        {
+            DrawPauseAndTurnOff(view, entry, paused);
+        }
+
+        TutorialAnchorMarks.Mark(TutorialTarget.SharingPauseAndTurnOff);
+        TutorialAnchorMarks.RevealIfWanted(TutorialTarget.SharingPauseAndTurnOff);
+    }
+
+    /// <summary>Pause or Resume, and turning sharing off for the character, which asks first.</summary>
+    private void DrawPauseAndTurnOff(CharacterSharingView view, SharingCharacter entry, bool paused)
+    {
         using (ImRaii.Disabled(view.Busy))
         {
             if (paused ? AetherControls.PrimaryButton("Resume sharing") : AetherControls.SecondaryButton("Pause sharing"))

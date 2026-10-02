@@ -338,6 +338,7 @@ internal sealed class TutorialSession
         TutorialCondition.ElementSelected => "Select an element to continue: click one on the canvas or in Layers.",
         TutorialCondition.TextElementSelected => "Select a text element to continue: click one on the canvas or in Layers, or add one with + Text.",
         TutorialCondition.CreatingOrEditingPlate => "Click Create Plate in My Plates to continue, or double-click a Plate you already have.",
+        TutorialCondition.SharingWindowOpen => "Open the Sharing window to continue: click Sharing at the top of My Plates.",
         _ => "This step isn't available right now. Use Next to continue.",
     };
 
