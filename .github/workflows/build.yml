@@ -122,6 +122,23 @@ jobs:
         $env:AETHERFRAME_PLUGIN_ASSEMBLY = Join-Path $out AetherFrame.dll
         dotnet test AetherFrame.Tests/AetherFrame.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PluginAssemblyBoundaryTests"
 
+  # Art on demand (docs/networking/DecisionRegister.md, "Art on demand"): players download each
+  # hosted artwork file from the commit AetherFrame/Assets/ArtFiles.txt pins it to, so every pin
+  # must stay in master's history and hold exactly the table's bytes. Needs the full history.
+  art-pins:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Check every pin
+      run: bash .github/scripts/check-art-pins.sh
+
+    - name: Check the script
+      run: shellcheck .github/scripts/check-art-pins.sh
+
   # The deployment kit (docs/networking/NETWORK2.md, N2-8): both images build, and the three
   # services start and answer on plain HTTP, with the worker as isolated as the compose file says.
   deployment-kit:

@@ -13,8 +13,9 @@ namespace AetherFrame.Domain.Components;
 /// independent of where or how the image is bundled. Never reused.</param>
 /// <param name="Name">Display label only.</param>
 /// <param name="Kind">The one Component kind this artwork is drawn for.</param>
-/// <param name="ResourceName">Manifest resource name of the runtime PNG inside the plugin assembly
-/// (not a filesystem path). Always an 8-bit RGBA (or, for opaque art, RGB) PNG (see <c>BundledArtImage</c>).</param>
+/// <param name="ResourceName">Manifest resource name of the runtime PNG, as the plugin assembly embeds
+/// it when it carries the artwork (not a filesystem path; see <see cref="AssetPath"/> for where a
+/// downloaded copy comes from). Always an 8-bit RGBA (or, for opaque art, RGB) PNG (see <c>BundledArtImage</c>).</param>
 /// <param name="PixelWidth">The runtime PNG's width, in pixels.</param>
 /// <param name="PixelHeight">The runtime PNG's height, in pixels. The artwork is always drawn at this
 /// aspect ratio (fitted inside its placement box, never visibly stretched: see <c>ComponentPaintPlan</c>).</param>
@@ -42,11 +43,27 @@ public sealed record BuiltInArtAsset(
     /// <summary>Width over height of the runtime artwork (1 for square art).</summary>
     public float AspectRatio => PixelHeight > 0 ? (float)PixelWidth / PixelHeight : 1f;
 
+    /// <summary>
+    /// The runtime PNG's path below the plugin project's Assets folder, with '/' separators
+    /// ("Components/AllaganTech/AllaganTech_Background.png"): <see cref="ResourceName"/> without its
+    /// prefix, since no folder or file name there holds a dot but the extension's. Where a hosted copy
+    /// lives (<see cref="ArtFiles"/>); never persisted.
+    /// </summary>
+    public string AssetPath { get; } = AssetPathOf(ResourceName);
+
     /// <summary>How the artwork stretches to any width, or null when it is always drawn whole at its
     /// own aspect ratio. Name Backings, Dividers and Section Headers can be sliced (see <c>ComponentPaintPlan</c>).
     /// The cuts are part of what a shared Plate's piece ident (<see cref="PieceIdent"/>) means to another
     /// viewer, so they are frozen with the artwork's id: different cuts need a new id.</summary>
     public ArtSlices? Slices { get; init; }
+
+    private static string AssetPathOf(string resourceName)
+    {
+        var name = resourceName.StartsWith(BuiltInArtCatalog.ResourcePrefix, StringComparison.Ordinal)
+            ? resourceName[BuiltInArtCatalog.ResourcePrefix.Length..]
+            : resourceName;
+        return name.EndsWith(".png", StringComparison.Ordinal) ? name[..^4].Replace('.', '/') + ".png" : name;
+    }
 
     /// <summary>The horizontal span of <paramref name="piece"/> in texture coordinates (0 to 1);
     /// the whole width for <see cref="ArtPiece.Whole"/> and for any piece of unsliced artwork.</summary>
@@ -185,8 +202,9 @@ public enum CornerArtPlacement
     Rotate,
 }
 
-/// <summary>The artwork AetherFrame bundles. Local and compile-time: no files outside the plugin
-/// assembly, no network, no user packs.</summary>
+/// <summary>The artwork AetherFrame knows. Compile-time: each artwork is inside the plugin assembly
+/// or, since art on demand, downloaded the first time a player uses it and checked against
+/// <see cref="ArtFiles"/>. No user packs.</summary>
 public static class BuiltInArtCatalog
 {
     public const string CelestialDreamAstrolabePivot = "af.asset.celestial-dream.corner-ornament.astrolabe-pivot";

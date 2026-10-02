@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using AetherFrame.Hosting;
 using AetherFrame.Persistence;
 using AetherFrame.Services;
+using AetherFrame.Services.Art;
 using AetherFrame.Services.Assets;
 using AetherFrame.Services.Commands;
 using AetherFrame.Services.Diagnostics;
@@ -72,6 +73,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly ProfileFontService fontService;
     private readonly ProceduralTextureCache proceduralTextureCache;
     private readonly BuiltInArtTextureCache builtInArtTextureCache;
+    private readonly ArtStore artStore;
     private readonly PlateThumbnailService thumbnailService;
     private readonly PlateThumbnailTextures thumbnailTextures;
     private readonly PlateThumbnailService templateThumbnailService;
@@ -198,7 +200,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             startup.OnFailure("fonts", fontService.Dispose);
             proceduralTextureCache = new ProceduralTextureCache();
             startup.OnFailure("pattern textures", proceduralTextureCache.Dispose);
-            builtInArtTextureCache = new BuiltInArtTextureCache();
+            // Built-in artwork: inside the plugin, or downloaded the first time a player uses it and
+            // kept in the configuration folder (art on demand). Downloads are owned operations, so
+            // unloading cancels them and waits for their file writes.
+            artStore = ArtStore.ForAssembly(
+                typeof(Plugin).Assembly, PluginInterface.ConfigDirectory.FullName, () => ownedOperations.TryBegin(out var lease) ? lease : null, ownedOperations.Stopping, log.Information);
+            startup.OnFailure("artwork store", artStore.Dispose);
+            builtInArtTextureCache = new BuiltInArtTextureCache(artStore);
             startup.OnFailure("artwork textures", builtInArtTextureCache.Dispose);
             var renderResources = new ProfileRenderResources(imageTextureCache, fontService, proceduralTextureCache, builtInArtTextureCache, jobCatalog);
             var fileDialogManager = new FileDialogManager();
@@ -360,6 +368,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // Sharing (N2-9b), reached from My Plates' header. Nothing is sent until the player
             // turns sharing on for a character, and then only on the player's action (R2).
             sharingConnection = new SharingConnection(AetherFrameBuildInfo.Current.ProductVersion);
+
+            // Hosted artwork downloads through the same connection, and only on a player's action
+            // ("Art on demand" in the decision register).
+            artStore.Downloader = sharingConnection.Art.DownloadAsync;
             var characterSharing = new CharacterSharing(
                 personaSession.TryRun,
                 new SharingStateFile(PersonaSessionHost.PersonasDirectory(configDirectory)),
@@ -644,6 +656,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private void DisposeUsedByOperations()
     {
         thumbnailService.Dispose();
+        artStore.Dispose();
 #if AETHERFRAME_NETWORK_PREVIEW
         sharingConnection.Dispose();
 #endif
