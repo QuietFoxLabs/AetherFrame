@@ -253,21 +253,20 @@ public static class ComponentGeometry
     }
 
     /// <summary>
-    /// A frame over a w x h box: its drawing's edges on the box's edges, the caps and any mid-edge
-    /// ornament at the artwork's own proportions (the scale that fits the whole drawing inside the
-    /// box), and the fills sharing the rest of each axis (see <see cref="ArtFrameSlices.Edges"/>).
-    /// One primitive per border cell, row by row; the clear middle is never drawn.
+    /// A frame over a w x h box: its rails' outer edges on the box's edges (what reaches past the rails
+    /// reaches past the box), the caps and any mid-edge ornament at the artwork's own proportions (the
+    /// scale at which the rails fit inside the box), and the fills sharing the rest of each axis (see
+    /// <see cref="ArtFrameSlices.Edges"/>). One primitive per border cell, row by row; the clear
+    /// middle is never drawn.
     /// </summary>
     private static void Framed(Box box, ArtFrameSlices frame, float w, float h, Vector4 color)
     {
-        var drawingWidth = frame.Columns.ContentRight - frame.Columns.ContentLeft;
-        var drawingHeight = frame.Rows.ContentRight - frame.Rows.ContentLeft;
-        var scale = Math.Min(w / drawingWidth, h / drawingHeight);
+        var scale = frame.ScaleFor(new Vector2(w, h));
 
         Span<float> xs = stackalloc float[ArtFrameSlices.Bands + 1];
         Span<float> ys = stackalloc float[ArtFrameSlices.Bands + 1];
-        ArtFrameSlices.Edges(frame.Columns, w, scale, xs);
-        ArtFrameSlices.Edges(frame.Rows, h, scale, ys);
+        frame.Edges(rows: false, w, scale, xs);
+        frame.Edges(rows: true, h, scale, ys);
 
         foreach (var piece in ArtPieces.FrameBorder)
         {

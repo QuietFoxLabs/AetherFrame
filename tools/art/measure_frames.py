@@ -1,9 +1,10 @@
 """Measures where every Plate Frame and Portrait Frame is cut so it fits any box, and writes
 AetherFrame/Domain/Components/ArtFrameData.g.cs.
 
-A frame is drawn as a grid (ArtFrameSlices: one ArtSlices for its columns, one for its rows). On
-each axis its drawing (the opaque bounds, alpha > 16) is laid edge to edge on the box it frames,
-the caps and any mid-edge ornament keep the artwork's proportions, and only the two fills stretch.
+A frame is drawn as a grid (ArtFrameSlices: one ArtSlices for its columns, one for its rows, and
+its drawing's bounds). On each axis the outer edges of its rails are laid on the edges of the box it
+frames, so the corners and crests that reach past the rails reach a little past the box; the caps
+and any mid-edge ornament keep the artwork's proportions, and only the two fills stretch.
 A fill must therefore look the same in every line: a stretch of plain rail. This reads the runtime
 PNGs (frames are bundled byte for byte from their sources) and changes none of them, so the hosted
 files and their pins stay as they are.
@@ -16,6 +17,10 @@ line on each border (catching tapering tips and slow bumps a neighbor test misse
 the longest such run on each side of the middle, or one run across the middle (no center piece),
 cut MARGIN px inside the run: far enough that the smaller copies of the artwork a small preview
 draws from (each level halves it) still sample only plain rail at the cuts.
+
+A rail's outer edge (ContentLeft and ContentRight on each axis) is the median, over the other
+axis's fill lines, of where the drawing starts and ends (alpha > BOUNDS_ALPHA): the plain rail, where
+no ornament reaches past it. The drawing's bounds are where anything reaches (alpha > BOUNDS_ALPHA).
 
 Modes, tried in order until each fill is at least ACCEPT of the axis:
   strict    the test above;
@@ -248,11 +253,34 @@ def measure_axis(img, lo, hi):
     return chosen, mode
 
 
+def median(values):
+    ordered = sorted(values)
+    return ordered[len(ordered) // 2]
+
+
+def rail_edges(mask, fills, vertical):
+    """The outer edges of the rails across the fill lines: (start, end), end exclusive. For columns
+    (vertical False) the lines are columns and the edges are the top and bottom rails' rows; for
+    rows, the lines are rows and the edges are the left and right rails' columns."""
+    w, h = mask.size
+    data = columns(mask) if not vertical else mask.tobytes()
+    span = h if not vertical else w
+    starts, ends = [], []
+    for line in fills:
+        run = data[line * span:(line + 1) * span]
+        first, last = run.find(255), run.rfind(255)
+        if first >= 0:
+            starts.append(first)
+            ends.append(last + 1)
+    return median(starts), median(ends)
+
+
 def measure(folder, piece):
     img = Image.open(os.path.join(ROOT, folder, f"{folder}_{piece}.png")).convert("RGBA")
     w, h = img.size
     alpha = img.getchannel("A")
-    left, top, right, bottom = alpha.point(lambda v: 255 if v > BOUNDS_ALPHA else 0).getbbox()
+    mask = alpha.point(lambda v: 255 if v > BOUNDS_ALPHA else 0)
+    left, top, right, bottom = mask.getbbox()
     override = FRAME_OVERRIDES.get((folder, piece))
     if override:
         x, y, modes = list(override["x"]), list(override["y"]), ("hand-set", "hand-set")
@@ -262,20 +290,28 @@ def measure(folder, piece):
         modes = (mx, my)
         if x is None or y is None:
             sys.exit(f"{folder} {piece}: no plain run on the {'x' if x is None else 'y'} axis; add FRAME_OVERRIDES")
-    columns_ = (left, x[0], x[1], x[2], x[3], right)
-    rows = (top, y[0], y[1], y[2], y[3], bottom)
-    for name, c, n in (("columns", columns_, w), ("rows", rows, h)):
-        if not (0 <= c[0] <= c[1] < c[2] <= c[3] < c[4] <= c[5] <= n):
-            sys.exit(f"{folder} {piece}: {name} {c} out of order")
+    # The rails: the top and bottom ones across the column fills, the left and right across the row fills.
+    rail_top, rail_bottom = rail_edges(mask, list(range(x[0], x[1])) + list(range(x[2], x[3])), vertical=False)
+    rail_left, rail_right = rail_edges(mask, list(range(y[0], y[1])) + list(range(y[2], y[3])), vertical=True)
+    columns_ = (rail_left, x[0], x[1], x[2], x[3], rail_right)
+    rows = (rail_top, y[0], y[1], y[2], y[3], rail_bottom)
+    drawing = (left, top, right, bottom)
+    for name, c, n, lo, hi in (("columns", columns_, w, left, right), ("rows", rows, h, top, bottom)):
+        if not (0 <= lo <= c[0] <= c[1] < c[2] <= c[3] < c[4] <= c[5] <= hi <= n):
+            sys.exit(f"{folder} {piece}: {name} {c} (drawing {lo}..{hi}) out of order")
     # The middle, between the caps on both axes, is never drawn: it must be clear.
     middle = alpha.crop((x[0], y[0], x[3], y[3])).getextrema()[1]
     if middle > CLEAR_ALPHA:
         sys.exit(f"{folder} {piece}: the middle between the caps reaches alpha {middle}; it must be clear")
-    return columns_, rows, modes
+    return columns_, rows, drawing, modes
 
 
 def cs_slices(c):
     return f"new ArtSlices({c[0]}, {c[1]}, {c[2]}, {c[3]}, {c[4]}, {c[5]})"
+
+
+def cs_frame(cols, rows, drawing):
+    return f"new ArtFrameSlices({cs_slices(cols)}, {cs_slices(rows)}, new ArtBounds({drawing[0]}, {drawing[1]}, {drawing[2]}, {drawing[3]}))"
 
 
 def main():
@@ -285,16 +321,16 @@ def main():
     for folder in folders:
         entry = []
         for piece in PIECES:
-            cols, rows, modes = measure(folder, piece)
-            print(f"{folder:22} {piece:14} x {modes[0]:9} {cols}  y {modes[1]:9} {rows}", flush=True)
-            entry.append(f"new ArtFrameSlices({cs_slices(cols)}, {cs_slices(rows)})")
+            cols, rows, drawing, modes = measure(folder, piece)
+            print(f"{folder:22} {piece:14} x {modes[0]:9} {cols}  y {modes[1]:9} {rows}  drawing {drawing}", flush=True)
+            entry.append(cs_frame(cols, rows, drawing))
         lines.append(f'            ["{folder}"] = (\n                {entry[0]},\n                {entry[1]}),')
     body = "\n".join(lines)
     text = (
         "// <auto-generated>\n"
         "// Written by tools/art/measure_frames.py from the frames' pixels: where each art set's Plate Frame\n"
-        "// and Portrait Frame is cut so it fits any box (ArtFrameSlices: columns, then rows, in runtime\n"
-        "// pixels). Edit the script and run it again rather than editing this file.\n"
+        "// and Portrait Frame is cut so it fits any box (ArtFrameSlices: columns, rows and the drawing's\n"
+        "// bounds, in runtime pixels). Edit the script and run it again rather than editing this file.\n"
         "// </auto-generated>\n"
         "\n"
         "using System;\n"

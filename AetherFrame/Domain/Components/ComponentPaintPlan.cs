@@ -629,11 +629,42 @@ public static class ComponentPaintPlan
                 continue;
             }
 
-            var (min, max) = RotationGeometry.GetVisualBounds(step.Placement.Rect.Position, step.Placement.Rect.Size, step.Placement.RotationDegrees);
+            var (min, max) = step.Definition?.Art is { } art && IsFramed(art)
+                ? FramedBounds(art.Frame!, step.Placement)
+                : RotationGeometry.GetVisualBounds(step.Placement.Rect.Position, step.Placement.Rect.Size, step.Placement.RotationDegrees);
             bounds = bounds is { } union ? (Vector2.Min(union.Min, min), Vector2.Max(union.Max, max)) : (min, max);
         }
 
         return bounds;
+    }
+
+    /// <summary>The bounds of a frame's drawing over its placement: the box, grown by what reaches past
+    /// its rails (see <see cref="ArtFrameSlices.Edges"/>), mirrored and turned as the box is.</summary>
+    private static (Vector2 Min, Vector2 Max) FramedBounds(ArtFrameSlices frame, ComponentPlacement placement)
+    {
+        var rect = placement.Rect;
+        var scale = frame.ScaleFor(rect.Size);
+        Span<float> xs = stackalloc float[ArtFrameSlices.Bands + 1];
+        Span<float> ys = stackalloc float[ArtFrameSlices.Bands + 1];
+        frame.Edges(rows: false, rect.Size.X, scale, xs);
+        frame.Edges(rows: true, rect.Size.Y, scale, ys);
+
+        var (x0, x1) = placement.MirrorX ? (rect.Size.X - xs[5], rect.Size.X - xs[0]) : (xs[0], xs[5]);
+        var (y0, y1) = placement.MirrorY ? (rect.Size.Y - ys[5], rect.Size.Y - ys[0]) : (ys[0], ys[5]);
+        var center = rect.Position + (rect.Size / 2f);
+        var rotation = float.IsFinite(placement.RotationDegrees) ? placement.RotationDegrees : 0f;
+
+        var min = new Vector2(float.MaxValue);
+        var max = new Vector2(float.MinValue);
+        foreach (var corner in new[] { new Vector2(x0, y0), new Vector2(x1, y0), new Vector2(x1, y1), new Vector2(x0, y1) })
+        {
+            var point = rect.Position + corner;
+            point = rotation == 0f ? point : RotationGeometry.RotatePoint(point, center, rotation);
+            min = Vector2.Min(min, point);
+            max = Vector2.Max(max, point);
+        }
+
+        return (min, max);
     }
 
     /// <summary>A placement box's size relative to its kind's standard procedural box (a Corner

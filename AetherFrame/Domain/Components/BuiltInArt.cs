@@ -108,8 +108,8 @@ public sealed record BuiltInArtAsset(
             }
 
             var (row, column) = ArtPieces.FrameCell(piece);
-            var (x0, x1) = ArtFrameSlices.Band(frame.Columns, column);
-            var (y0, y1) = ArtFrameSlices.Band(frame.Rows, row);
+            var (x0, x1) = frame.Band(rows: false, column);
+            var (y0, y1) = frame.Band(rows: true, row);
             return ((float)x0 / PixelWidth, (float)y0 / PixelHeight, (float)x1 / PixelWidth, (float)y1 / PixelHeight);
         }
 
@@ -131,8 +131,8 @@ public sealed record BuiltInArtAsset(
         if (ArtPieces.IsFrame(piece) && Frame is { } frame && PixelWidth > 0 && PixelHeight > 0)
         {
             var (row, column) = ArtPieces.FrameCell(piece);
-            var (y0, y1) = ArtFrameSlices.Band(frame.Rows, row);
-            var (x0, x1) = ArtFrameSlices.Band(frame.Columns, column);
+            var (y0, y1) = frame.Band(rows: true, row);
+            var (x0, x1) = frame.Band(rows: false, column);
             if (ArtFrameSlices.IsFixed(row) && y1 > y0)
             {
                 return Vector2.Distance(a, d) * longSide / (y1 - y0);
@@ -223,22 +223,31 @@ public sealed record ArtSlices(int ContentLeft, int CapLeft, int CenterLeft, int
     public int OutsideContent(int pixelWidth) => ContentLeft + (pixelWidth - ContentRight);
 }
 
+/// <summary>The bounds of an artwork's drawing, in its pixels: left and top inclusive, right and bottom exclusive.</summary>
+public readonly record struct ArtBounds(int Left, int Top, int Right, int Bottom);
+
 /// <summary>
 /// Where a frame (a Plate Frame or a Portrait Frame) is cut so it fits any box: an
-/// <see cref="ArtSlices"/> for its columns (x positions) and one for its rows (y positions), so a
-/// grid of five bands each way. On each axis the drawing, <c>ContentLeft</c> to <c>ContentRight</c>
-/// (its opaque bounds), is laid edge to edge on the box it frames; the caps and the center piece (a
+/// <see cref="ArtSlices"/> for its columns (x positions), one for its rows (y positions), so a grid
+/// of five bands each way, and the bounds of its <paramref name="Drawing"/>. On each axis
+/// <c>ContentLeft</c> to <c>ContentRight</c> is the outer edge of its rails, laid on the edges of the
+/// box it frames, so the frame runs along them; what reaches past its rails (corner ornaments, a
+/// crest) reaches past the box, out to the drawing's bounds. The caps and the center piece (a
 /// mid-edge ornament, when the frame has one) keep the artwork's proportions, and only the two fills
 /// stretch, so corners and ornaments are never distorted. Only the cells on the border are drawn:
 /// every frame is clear between its caps on both axes (tools/art/measure_frames.py checks it).
 /// </summary>
-public sealed record ArtFrameSlices(ArtSlices Columns, ArtSlices Rows)
+public sealed record ArtFrameSlices(ArtSlices Columns, ArtSlices Rows, ArtBounds Drawing)
 {
     /// <summary>The bands on each axis: a cap, a fill, the center piece, a fill and a cap.</summary>
     public const int Bands = 5;
 
-    /// <summary>True when both axes are in order inside an artwork of this size, each with fills that stretch.</summary>
-    public bool IsValidFor(int pixelWidth, int pixelHeight) => Columns.IsValidFor(pixelWidth) && Rows.IsValidFor(pixelHeight);
+    /// <summary>True when both axes are in order inside an artwork of this size, each with fills that
+    /// stretch, and the drawing reaches at least to the rails.</summary>
+    public bool IsValidFor(int pixelWidth, int pixelHeight) =>
+        Columns.IsValidFor(pixelWidth) && Rows.IsValidFor(pixelHeight)
+        && Drawing.Left >= 0 && Drawing.Left <= Columns.ContentLeft && Columns.ContentRight <= Drawing.Right && Drawing.Right <= pixelWidth
+        && Drawing.Top >= 0 && Drawing.Top <= Rows.ContentLeft && Rows.ContentRight <= Drawing.Bottom && Drawing.Bottom <= pixelHeight;
 
     /// <summary>True for a band that keeps the artwork's proportions: a cap or the center piece.</summary>
     public static bool IsFixed(int band) => band is 0 or 2 or 4;
@@ -246,25 +255,40 @@ public sealed record ArtFrameSlices(ArtSlices Columns, ArtSlices Rows)
     /// <summary>True for a cell on the frame's border (a cap row or a cap column): the cells drawn.</summary>
     public static bool IsBorder(int row, int column) => row is 0 or Bands - 1 || column is 0 or Bands - 1;
 
-    /// <summary>The pixel span of <paramref name="band"/> (0 to 4) of one axis, from the drawing's edge to its other edge.</summary>
-    public static (int Start, int End) Band(ArtSlices axis, int band) => band switch
+    /// <summary>The pixel span of <paramref name="band"/> (0 to 4) across the columns, or down the rows:
+    /// the outer bands reach out to the drawing's bounds.</summary>
+    public (int Start, int End) Band(bool rows, int band)
     {
-        0 => (axis.ContentLeft, axis.CapLeft),
-        1 => (axis.CapLeft, axis.CenterLeft),
-        2 => (axis.CenterLeft, axis.CenterRight),
-        3 => (axis.CenterRight, axis.CapRight),
-        _ => (axis.CapRight, axis.ContentRight),
-    };
+        var axis = rows ? Rows : Columns;
+        var (start, end) = rows ? (Drawing.Top, Drawing.Bottom) : (Drawing.Left, Drawing.Right);
+        return band switch
+        {
+            0 => (start, axis.CapLeft),
+            1 => (axis.CapLeft, axis.CenterLeft),
+            2 => (axis.CenterLeft, axis.CenterRight),
+            3 => (axis.CenterRight, axis.CapRight),
+            _ => (axis.CapRight, end),
+        };
+    }
+
+    /// <summary>The scale the caps keep in a box <paramref name="size"/> (logical units per pixel): the
+    /// largest at which the rails fit inside it on both axes.</summary>
+    public float ScaleFor(Vector2 size) =>
+        Math.Min(size.X / (Columns.ContentRight - Columns.ContentLeft), size.Y / (Rows.ContentRight - Rows.ContentLeft));
 
     /// <summary>
-    /// Where each band of one axis starts and ends along a box <paramref name="length"/> long, with
-    /// the fixed bands at <paramref name="scale"/> per pixel and the fills sharing the rest in
-    /// proportion to their own lengths (so at the artwork's own shape every band keeps its place).
-    /// Fixed bands longer than the box are squeezed to fit, with no fill. Six edges, the first 0
-    /// and the last <paramref name="length"/> exactly, so neighboring cells share their edges.
+    /// Where each band starts and ends across a box <paramref name="length"/> long (the columns, or
+    /// the rows): six positions, from the drawing's start (at or before 0, by what reaches past the
+    /// rail) through the four cuts to the drawing's end (at or after <paramref name="length"/>). The
+    /// rails' outer edges lie exactly at 0 and <paramref name="length"/>. The fixed bands are at
+    /// <paramref name="scale"/> per pixel (squeezed to fit when they are longer than the box, with no
+    /// fill), and the fills share the rest in proportion to their own lengths, so at the shape the
+    /// frame was drawn for every band keeps its place.
     /// </summary>
-    public static void Edges(ArtSlices axis, float length, float scale, Span<float> edges)
+    public void Edges(bool rows, float length, float scale, Span<float> edges)
     {
+        var axis = rows ? Rows : Columns;
+        var (start, end) = rows ? (Drawing.Top, Drawing.Bottom) : (Drawing.Left, Drawing.Right);
         var fixedPixels = (axis.CapLeft - axis.ContentLeft) + (axis.CenterRight - axis.CenterLeft) + (axis.ContentRight - axis.CapRight);
         var fillPixels = (axis.CenterLeft - axis.CapLeft) + (axis.CapRight - axis.CenterRight);
         var fixedLength = fixedPixels * scale;
@@ -272,12 +296,12 @@ public sealed record ArtFrameSlices(ArtSlices Columns, ArtSlices Rows)
         var perFixed = scale * squeeze;
         var perFill = fillPixels > 0 ? Math.Max(0f, length - (fixedLength * squeeze)) / fillPixels : 0f;
 
-        edges[0] = 0f;
-        edges[1] = edges[0] + ((axis.CapLeft - axis.ContentLeft) * perFixed);
+        edges[0] = -(axis.ContentLeft - start) * perFixed;
+        edges[1] = (axis.CapLeft - axis.ContentLeft) * perFixed;
         edges[2] = edges[1] + ((axis.CenterLeft - axis.CapLeft) * perFill);
         edges[3] = edges[2] + ((axis.CenterRight - axis.CenterLeft) * perFixed);
-        edges[4] = edges[3] + ((axis.CapRight - axis.CenterRight) * perFill);
-        edges[5] = length;
+        edges[4] = length - ((axis.ContentRight - axis.CapRight) * perFixed);
+        edges[5] = length + ((end - axis.ContentRight) * perFixed);
     }
 }
 
