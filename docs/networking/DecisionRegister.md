@@ -1573,7 +1573,7 @@ A focused check of `eef8d6f` found no way around that rule through the buttons o
 - the clean-up ran only with the daily copy, so a deploy or a retry that moved the copy later in the day kept a copy up to about a day longer;
 - a failed copy skipped the clean-up altogether, so while copies failed (a full disk, say), older copies stayed.
 
-The backup now runs every hour. It writes one copy a day, as before, and deletes each copy once it is 6 days and 23 hours past the start of its day, even when the day's copy fails. A copy is written no earlier than the start of its day, so each is gone within 7 days of being written, whenever the server restarted. A failed copy is tried again at the next hourly run. While the server is stopped, nothing runs, as before (the runbook says so).
+The backup now runs every hour. It writes one copy a day, as before, and deletes each copy once it is 6 days and 22 hours past the start of its day, even when the day's copy fails. A copy is written no earlier than the start of its day, so each is gone within 7 days of being written, through any restart shorter than an hour (the spare hour covers one). A failed copy is tried again at the next hourly run. While the server is stopped, nothing runs, as before (the runbook says so).
 
 **What stays as it was.** Nothing new is kept, so S5, C7 and the consent text are unchanged. The server API gains one unsigned GET (ServerApi-v1.md, section 3).
 
@@ -1588,7 +1588,17 @@ The backup now runs every hour. It writes one copy a day, as before, and deletes
 - read-only diagnostic access for Claude, also the owner's call;
 - a check that the configuration file loaded. A broken edit closes the alpha until it is fixed.
 
-**Independent review.** REVIEW_PLACEHOLDER
+**Independent review.** Three reviewers examined `142e36a` (October 2, 2026), for security and privacy, correctness and tests, and the workflows and CI.
+- **The security and privacy reviewer concurred** with what the answer and the issues reveal: the answer's bytes are the same whatever a request carries and whatever players do, and the issues carry only check names and times.
+- **One blocking point:** backup copies could outlive the 7 days by up to about a day, since the clean-up ran only with the daily copy. Fixed above: the backup now runs hourly.
+- **Five minor points, all applied:**
+  - the plugin boundary test now also scans the linked Protocol and Personas sources, and an IL check covers the plugin's strings;
+  - tests now cover the canary's and the watch's schedules;
+  - CI's Stop step stops the worker loop's subshells;
+  - the deploy job times out after 30 minutes, so the monitor's skip during a deploy is bounded;
+  - the alert issue says its text is rewritten when the failing checks change.
+
+A recheck of `d0b2fa9` confirmed every fix. It found one more minor point, also applied: a restart during a copy's last hour could keep that copy a few seconds past 7 days, so copies now go an hour earlier.
 
 ## Gates
 

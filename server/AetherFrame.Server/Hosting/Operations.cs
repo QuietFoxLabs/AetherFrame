@@ -61,9 +61,10 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
     /// <summary>
     /// Writes today's backup if there is none, then deletes those due, whether or not the copy
     /// succeeded, and records the outcome: a success only when both did. A copy of day D is due once
-    /// <see cref="Retention"/> less <see cref="Interval"/> has passed since D began, so the run in the
-    /// last interval before D plus the retention deletes it. It was written on day D, so it is gone
-    /// within the retention of its writing, whenever the server restarted or a run failed.
+    /// <see cref="Retention"/> less two <see cref="Interval"/>s has passed since D began, so a run in
+    /// the second-last interval before D plus the retention deletes it, or, after a restart shorter
+    /// than an interval, a run in the last. It was written on day D, so it is gone within the
+    /// retention of its writing, whatever the runs' phase, and whether or not a run failed.
     /// </summary>
     internal async Task RunOnceAsync(CancellationToken cancellation)
     {
@@ -84,7 +85,7 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
     {
         var folder = options.Value.BackupFolder;
         var now = time.GetUtcNow();
-        var due = Retention - Interval;
+        var due = Retention - (2 * Interval);
         var today = Path.Combine(folder, "server-" + now.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".db");
         ExceptionDispatchInfo? copyFailure = null;
         if (!File.Exists(today))

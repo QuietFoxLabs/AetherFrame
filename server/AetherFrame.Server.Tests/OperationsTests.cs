@@ -123,8 +123,8 @@ public class OperationsTests
                 server.Time.Advance(second.Interval);
             }
 
-            // It went at 23:00 on October 7, the first run 6 days and 23 hours after its day began.
-            Assert.Equal(new DateTimeOffset(2026, 10, 7, 22, 0, 0, TimeSpan.Zero), lastKept);
+            // It went at 22:00 on October 7, the first run 6 days and 22 hours after its day began.
+            Assert.Equal(new DateTimeOffset(2026, 10, 7, 21, 0, 0, TimeSpan.Zero), lastKept);
             Assert.False(File.Exists(copy));
         }
         finally

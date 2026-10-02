@@ -139,7 +139,7 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 
 ## 4. Backups and what is kept
 
-- **Backups.** The server writes a copy of its database to the `backups` volume once a day and deletes each copy within **7 days**. It checks every hour, writing the day's copy if it isn't there yet and deleting each copy in the last hour of its seventh day (UTC: a copy written on October 1 goes between 23:00 and midnight on October 7), so a restart or a failed run never keeps one longer. A Plate a player deletes, by opting out or pausing, is therefore gone from every copy within 7 days (decision D1). The consent text says so.
+- **Backups.** The server writes a copy of its database to the `backups` volume once a day and deletes each copy within **7 days**. It checks every hour, writing the day's copy if it isn't there yet and deleting each copy late on its seventh day (UTC: a copy written on October 1 goes between 22:00 and 23:00 on October 7, or before midnight after a restart), so a failed run, or a restart shorter than an hour, never keeps one longer. A Plate a player deletes, by opting out or pausing, is therefore gone from every copy within 7 days (decision D1). The consent text says so.
   - To keep a copy off the server, list the copies and copy one out, in `/opt/aetherframe`:
     ```
     docker compose exec server ls /backups

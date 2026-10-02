@@ -918,7 +918,7 @@ public class ServerHealthTests
             }
 
             // The last run, late on October 11, swept the copies of October 1 to 5: each went at the
-            // first run 6 days and 23 hours or more after its day began.
+            // first run 6 days and 22 hours or more after its day began.
             Assert.Equal(
                 Enumerable.Range(5, 7).Select(day => "server-" + first.AddDays(day).ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".db"),
                 Directory.GetFiles(copies).Select(file => Path.GetFileName(file)).Order(StringComparer.Ordinal));
