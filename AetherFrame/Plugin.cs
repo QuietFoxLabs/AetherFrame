@@ -91,6 +91,14 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly PlatePackageService packageService;
     private readonly BasicGuidance basicGuidance;
     private readonly AetherFrameCommandRegistration commands;
+
+    // An editor's unsaved changes, kept beside the Library when AetherFrame unloads and offered back
+    // at the next load (ROADMAP.md, section 8, task 4): the unload's capture and write, the drafts'
+    // files as the load reads and claims them, and the offer with its window.
+    private readonly UnsavedChangesKeeper unsavedChangesKeeper;
+    private readonly DraftStore keptChangesFiles;
+    private readonly KeptChangesOffer keptChanges;
+    private readonly KeptChangesWindow keptChangesWindow;
     private readonly IAetherFrameLog log;
 
     // The interface's typography, the tutorial (its state, and the overlay windows that show it),
@@ -185,9 +193,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // An operation stops between files if unloading ever stops waiting for it (see
             // OwnedOperations), and a save whose temporary file Dalamud has left stuck open is
             // written directly instead of failing until the game restarts (see
-            // StuckTempFallbackFileStore).
-            var fileStore = new ShutdownGuardedFileStore(
-                new StuckTempFallbackFileStore(new ReliablePlateFileStore(FileStorage), log), ownedOperations);
+            // StuckTempFallbackFileStore). Unloading's own write, the unsaved changes an editor had,
+            // goes through the same chain without that stop (see PluginFileStores).
+            var stores = new PluginFileStores(new ReliablePlateFileStore(FileStorage), ownedOperations, log);
+            var fileStore = stores.Guarded;
             plateLibrary = new PlateLibraryService(paths, fileStore, log, dispatch: work => Framework.Run(work), operations: ownedOperations);
             templateLibrary = new TemplateLibraryService(paths, fileStore, plateLibrary, log, dispatch: work => Framework.Run(work), operations: ownedOperations);
 
@@ -233,6 +242,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 editorSession.CommitPendingEdits();
                 editorSession.EndInteraction();
             });
+            unsavedChangesKeeper = new UnsavedChangesKeeper(
+                editorSession, () => editorSurfaces.ActiveSurface, paths, stores, AetherFrameBuildInfo.Current.Describe(), log);
             var gameTitleCatalog = new GameTitleCatalog();
             var textMeasurer = new ProfileTextMeasurer(fontService);
             editorSession.IdentityMeasurer = textMeasurer;
@@ -277,11 +288,20 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 basicGuidance, profileViewWindow.ShowPlate, profileViewWindow.ShowDocument,
                 packageService, new FileDialogManager(), packageImportWindow.Begin, log);
 
+            // The unsaved changes kept when AetherFrame last unloaded: read and claimed through the
+            // Libraries' own store, offered once both Libraries have loaded and a character is logged
+            // in (see LoadAsync), and restored into the editor that had them.
+            keptChangesFiles = new DraftStore(paths, fileStore, log);
+            keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowRestoredPlate, log);
+            keptChangesWindow = new KeptChangesWindow(keptChanges);
+            plateLibraryWindow.KeptChanges = keptChanges;
+
             WindowSystem.AddWindow(plateLibraryWindow);
             WindowSystem.AddWindow(basicProfileEditorWindow);
             WindowSystem.AddWindow(profileEditorWindow);
             WindowSystem.AddWindow(profileViewWindow);
             WindowSystem.AddWindow(packageImportWindow);
+            WindowSystem.AddWindow(keptChangesWindow);
 
             // The interface's own fonts (the game's Axis face for headings; built by Dalamud when it can).
             fonts = new AetherFonts(PluginInterface.UiBuilder.FontAtlas);
@@ -299,7 +319,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
             // What the tutorial's dim covers: AetherFrame's own windows. The sharing build adds its
             // sharing windows below, so a step pointing into one dims the rest of it too.
-            var dimmedWindows = new List<Window> { plateLibraryWindow, basicProfileEditorWindow, profileEditorWindow, profileViewWindow, packageImportWindow };
+            var dimmedWindows = new List<Window> { plateLibraryWindow, basicProfileEditorWindow, profileEditorWindow, profileViewWindow, packageImportWindow, keptChangesWindow };
             tutorialOverlay = new TutorialOverlay(onboarding, tutorialHost, dimmedWindows);
 
             // A player taking the tour is being shown both editors: the one-time Basic suggestion
@@ -525,6 +545,44 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
             Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not decide whether to offer the tutorial.");
         }
+
+        // The unsaved changes an editor had when AetherFrame last unloaded: read and judged against
+        // the Library now that both have loaded, and offered once a character is logged in. A
+        // failure only means they aren't offered this time; they stay kept.
+        try
+        {
+            await LoadKeptChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
+            Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not read the unsaved changes it kept; they are left as they are.");
+        }
+    }
+
+    /// <summary>
+    /// Reads the kept unsaved changes off the framework thread, as an owned operation (unloading waits
+    /// for it, and it stops between files once abandoned), retires those a save already covers, and
+    /// hands the rest to the offer on the framework thread. With the Plate Library not loaded, nothing
+    /// is touched and nothing offered.
+    /// </summary>
+    private async Task LoadKeptChangesAsync(CancellationToken cancellationToken)
+    {
+        if (!plateLibrary.IsLoaded || !ownedOperations.TryBegin(out var operation))
+        {
+            return;
+        }
+
+        IReadOnlyList<KeptDraft> found;
+        using (operation)
+        {
+            found = await Task.Run(() => KeptChangesReview.LoadAsync(keptChangesFiles, plateLibrary, log), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (found.Count > 0)
+        {
+            await Framework.RunOnTick(() => keptChanges.Present(found, ClientState.IsLoggedIn), cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private void ResolveFirstRun()
@@ -560,6 +618,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         try
         {
             tutorialOverlay.Update();
+            keptChanges.Advance();
 #if AETHERFRAME_NETWORK_PREVIEW
             livePublisher.OnFrame();
             plateViewing.OnFrame();
@@ -620,6 +679,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // First, nothing new can start: no drawing, menus, commands, login events or shortcuts.
         await OnFrameworkThreadAsync("UI shutdown", StopNewWork).ConfigureAwait(false);
 
+        // Then the open editor's unsaved changes, read as the UI stopped, are kept beside the Library
+        // for the next load to offer back: written before anything waits on running operations, for
+        // a few seconds at most, and never failing the unload.
+        await unsavedChangesKeeper.WriteAsync(UnsavedChangesKeeper.WriteTimeout).ConfigureAwait(false);
+
         // Then any save, rename, import, export, … already running finishes before anything it uses
         // is disposed (see PluginShutdown for what happens if one outlasts the timeout).
         await PluginShutdown.RunAsync(
@@ -637,6 +701,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private void StopNewWork()
     {
         PluginInterface.UiBuilder.Draw -= DrawUi;
+
+        // Nothing draws any more, and the windows are still there: the open Plate's unsaved changes,
+        // and the editor showing them, are read now, for DisposeAsync to keep.
+        unsavedChangesKeeper.Capture();
 
         // A running tutorial is remembered where it stopped; nothing else of it needs the game.
         onboarding.Suspend();
@@ -691,7 +759,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 #endif
     }
 
-    private void OnLogin() => characterIdentityService.InvalidateCharacterInfo();
+    private void OnLogin()
+    {
+        characterIdentityService.InvalidateCharacterInfo();
+        keptChanges.OnLogin();
+    }
 
     private void OnLogout(int type, int code) => characterIdentityService.InvalidateCharacterInfo();
 
@@ -723,6 +795,19 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     }
 
     private void OpenAdvancedEditor() => editorSurfaces.Show(EditorSurfaceKind.Advanced);
+
+    /// <summary>Shows a Plate the kept changes were restored into, in the editor they were made in.</summary>
+    private void ShowRestoredPlate(EditorSurfaceKind kind)
+    {
+        if (kind == EditorSurfaceKind.Basic)
+        {
+            OpenBasicEditor();
+        }
+        else
+        {
+            OpenAdvancedEditor();
+        }
+    }
 
     /// <summary>
     /// What the tutorial sees of the interface (a value, read fresh every frame) and the few safe

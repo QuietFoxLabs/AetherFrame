@@ -174,7 +174,7 @@ internal static class TutorialScript
         new TutorialChapter("saving", "Saving your work", "How saving works and where a saved Plate turns up.",
         [
             new TutorialStep("saving.state", "Saved or not",
-                "This tells you whether the open Plate has unsaved changes. Nothing is saved on its own: closing the editor with unsaved changes asks you first.",
+                "This tells you whether the open Plate has unsaved changes. Nothing is saved on its own: closing the editor with unsaved changes asks you first. If AetherFrame closes before you save (an update, or the game closing), it keeps your changes and offers them back next time.",
                 TutorialTarget.EditorSaveState, Requires: TutorialCondition.AnyEditorOpen, FallbackBody: OpenAPlate, FallbackAction: TutorialAction.OpenMyPlates),
             new TutorialStep("saving.save", "Save",
                 "Save writes the Plate to your PC (Ctrl+S does the same). Revert throws away unsaved changes and returns to the last saved version, after asking; even that can be undone.",

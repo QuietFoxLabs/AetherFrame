@@ -1,0 +1,143 @@
+{
+  "Version": 1,
+  "DraftId": "0f0f0f0f-4444-4444-8444-000000000401",
+  "PlateId": "0f0f0f0f-3333-4333-8333-000000000301",
+  "PlateName": "Evening Look",
+  "WrittenAtUtc": "2026-10-02T14:03:04.005Z",
+  "Editor": 1,
+  "Build": "AetherFrame 0.1.9 (build d7d20b6) [sharing]",
+  "BaseRevision": 3,
+  "BaseUpdatedAtUtc": "2026-10-01T09:08:07Z",
+  "Document": {
+    "Version": 2,
+    "ProfileId": "0f0f0f0f-3333-4333-8333-000000000301",
+    "OwnerContentId": 0,
+    "Name": "Evening Look",
+    "Revision": 3,
+    "CreatedAtUtc": "2026-09-30T10:00:00Z",
+    "UpdatedAtUtc": "2026-10-01T09:08:07Z",
+    "CanvasWidth": 1280,
+    "CanvasHeight": 720,
+    "Elements": [
+      {
+        "elementType": "text",
+        "Text": "Kept in the draft",
+        "Prefix": "",
+        "Suffix": "",
+        "FontSize": 32,
+        "Color": {
+          "X": 1,
+          "Y": 1,
+          "Z": 1,
+          "W": 1
+        },
+        "Alignment": 0,
+        "VerticalAlignment": 0,
+        "Wrap": true,
+        "FontFamily": "aetherframe-sans",
+        "Bold": false,
+        "Italic": false,
+        "Underline": false,
+        "Strikethrough": false,
+        "LetterSpacing": 0,
+        "LineSpacing": 1,
+        "AutoFitText": false,
+        "AutoFitMinimumSize": 8,
+        "OutlineEnabled": false,
+        "OutlineColor": {
+          "X": 0,
+          "Y": 0,
+          "Z": 0,
+          "W": 1
+        },
+        "OutlineThickness": 2,
+        "OutlineOpacity": 1,
+        "ShadowEnabled": false,
+        "ShadowColor": {
+          "X": 0,
+          "Y": 0,
+          "Z": 0,
+          "W": 1
+        },
+        "ShadowOpacity": 0.6,
+        "ShadowOffsetX": 3,
+        "ShadowOffsetY": 3,
+        "LayoutVersion": 1,
+        "Id": "0f0f0f0f-5555-4555-8555-000000000501",
+        "Name": "",
+        "Visible": true,
+        "Locked": false,
+        "Position": {
+          "X": 120,
+          "Y": 80
+        },
+        "Size": {
+          "X": 420,
+          "Y": 60
+        },
+        "ZIndex": 0,
+        "Role": 0
+      },
+      {
+        "elementType": "image",
+        "AssetId": "0f0f0f0f-6666-4666-8666-000000000601",
+        "Opacity": 1,
+        "PreserveAspectRatio": true,
+        "RotationDegrees": 0,
+        "DisplayMode": 0,
+        "FlipX": false,
+        "FlipY": false,
+        "Id": "0f0f0f0f-5555-4555-8555-000000000502",
+        "Name": "",
+        "Visible": true,
+        "Locked": false,
+        "Position": {
+          "X": 600,
+          "Y": 40
+        },
+        "Size": {
+          "X": 300,
+          "Y": 400
+        },
+        "ZIndex": 1,
+        "Role": 0
+      },
+      {
+        "elementType": "hologram",
+        "Id": "0f0f0f0f-5555-4555-8555-000000000503",
+        "Glow": 7
+      }
+    ],
+    "Background": {
+      "Mode": 0,
+      "PrimaryColor": {
+        "X": 0.11,
+        "Y": 0.12,
+        "Z": 0.18,
+        "W": 1
+      },
+      "SecondaryColor": {
+        "X": 0.33,
+        "Y": 0.27,
+        "Z": 0.5,
+        "W": 1
+      },
+      "GradientAngle": 90,
+      "Opacity": 1,
+      "Texture": 1,
+      "TextureIntensity": 0.35,
+      "TextureScale": 24,
+      "TextureRotation": 0,
+      "ImageAssetId": null,
+      "ImageFit": 2,
+      "ImageFlipX": false,
+      "ImageFlipY": false,
+      "HasImage": false
+    },
+    "BasicIdentity": null,
+    "BasicPlate": null,
+    "FutureField": {
+      "Kept": true
+    }
+  }
+}
