@@ -55,14 +55,16 @@ jobs:
         AETHERFRAME_RELEASE_PACKAGE: ${{ github.workspace }}/AetherFrame/bin/x64/Release/AetherFrame/latest.zip
       run: dotnet test tools/AetherFrame.ReleaseTools.Tests/AetherFrame.ReleaseTools.Tests.csproj --configuration Release --no-build
 
-    # The remote protocol foundation (docs/networking/NETWORK0.md): a standalone assembly the plugin
-    # does not reference yet, with its own test vectors, canonicalization proofs and adversarial suites.
+    # The remote protocol foundation (docs/networking/NETWORK0.md): its own assembly, whose sources the
+    # sharing build compiles into AetherFrame.dll (AetherFrame.csproj), with its own test vectors,
+    # canonicalization proofs and adversarial suites.
     - name: Test the protocol
       run: dotnet test AetherFrame.Protocol.Tests/AetherFrame.Protocol.Tests.csproj --configuration Release --no-build
 
-    # The local persona management foundation (docs/networking/NETWORK1_PersonaFoundation.md): a
-    # standalone assembly the plugin does not reference yet, holding the in-memory persona model and
-    # the seams for protected key storage and encrypted backups, with synthetic keys only.
+    # The local persona management foundation (docs/networking/NETWORK1_PersonaFoundation.md and
+    # NETWORK1_KeyStoreCore.md): its own assembly, whose sources the sharing build compiles into
+    # AetherFrame.dll, holding the persona model, the protected key store and the seams the plugin
+    # fills for key protection, storage and encrypted backups; its tests use synthetic keys only.
     - name: Test the persona foundation
       run: dotnet test AetherFrame.Personas.Tests/AetherFrame.Personas.Tests.csproj --configuration Release --no-build
 

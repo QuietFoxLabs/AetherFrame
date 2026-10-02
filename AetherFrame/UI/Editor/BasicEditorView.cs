@@ -72,7 +72,7 @@ internal enum PreviewZoom
 /// <param name="Customized">A section here was moved or resized in the Advanced Editor.</param>
 /// <param name="Hidden">A section here exists but is hidden.</param>
 /// <param name="Collision">A section here overlaps another section on the Plate.</param>
-/// <param name="Unsupported">The Plate holds content this version can't display (Design only).</param>
+/// <param name="Unsupported">The Plate holds content this version can't display (Style only).</param>
 internal readonly record struct BasicCategoryStatus(bool Customized, bool Hidden, bool Collision, bool Unsupported)
 {
     internal bool NeedsAttention => Collision || Unsupported;
@@ -82,7 +82,7 @@ internal readonly record struct BasicCategoryStatus(bool Customized, bool Hidden
 
 /// <summary>
 /// The Basic editor's navigation state: the selected category and the live view's zoom.
-/// Lives as long as the editor window; a different Plate opening starts over on Design. Editing
+/// Lives as long as the editor window; a different Plate opening starts over on Style. Editing
 /// never changes it, so the user always stays where they are.
 /// </summary>
 internal sealed class BasicEditorNavigation
@@ -97,7 +97,7 @@ internal sealed class BasicEditorNavigation
 
     /// <summary>
     /// Call every frame with the open Plate. When it's a different Plate (e.g. one just created),
-    /// the editor starts over on Design with the normal layout; the same Plate keeps everything.
+    /// the editor starts over on Style with the normal layout; the same Plate keeps everything.
     /// </summary>
     internal void TrackPlate(Guid? openPlateId)
     {

@@ -493,8 +493,11 @@ public class PackageValidatorTests
     [InlineData("AetherFrame.Personas.Storage")]
     public void DllHoldingNetworkingCode_Fails(string ns)
     {
-        // A networking preview build (docs/networking/DecisionRegister.md, D9b and P2) is never a
-        // release and never a test build, so the package check refuses its DLL.
+        // A configuration without sharingSince (this test's, and distribution/repository.json before
+        // October 1, 2026; docs/networking/DecisionRegister.md, D9b and P2) makes every release the
+        // player build, so the package check refuses a DLL holding the networking code. With
+        // sharingSince (0.1.8 in the real file) only releases before it are checked that way, and
+        // from it on the opposite holds: see FromSharingSince_AReleaseIsTheSharingBuild.
         using var directory = new TempDirectory();
         var (checks, _) = TestPackages.Validate(new PackageValidationRequest
         {

@@ -6,7 +6,9 @@
 .DESCRIPTION
     A tester kit is how a preview build reaches a second player (docs/networking/NETWORK2.md,
     section 3; "N2-11's tester kit" in docs/networking/DecisionRegister.md). It is never a release
-    or a test build, and never goes into the folder the owner's game loads. This script:
+    or a test build, and never goes into the folder the owner's game loads. Since October 1, 2026
+    ("Testing channel gets sharing" in the decision register) the testing channel serves the
+    sharing build, so a kit is only made when the owner asks for one. This script:
     1. reads the three plugin files from -Package, checks them against the SHA256SUMS.txt staged
        with them, and checks the DLL is the preview flavour, stamped with -BuildId's commit, and
        the manifest is AetherFrame's, so a kit always holds exactly the staged build named;
@@ -45,7 +47,8 @@ $ErrorActionPreference = 'Stop'
 
 $PluginFiles = @('AetherFrame.dll', 'AetherFrame.json', 'AetherFrame.deps.json')
 
-# Only the networking preview flavour compiles these namespaces in (as Install-TestBuild.ps1 checks).
+# The sharing build (the script's Preview, the default since 0.1.8) compiles these namespaces in; a
+# player build doesn't (as Install-TestBuild.ps1 checks).
 $NetworkingNamespaces = @('AetherFrame.Protocol', 'AetherFrame.Personas')
 
 $Instructions = Join-Path $PSScriptRoot '..\distribution\tester-kit\How to install.txt'
@@ -123,7 +126,7 @@ foreach ($namespace in $NetworkingNamespaces) {
     }
 }
 if (-not $isPreview) {
-    throw 'The DLL is a player build. A tester kit is always a networking preview build.'
+    throw 'The DLL is a player build. A tester kit is always the sharing build.'
 }
 
 $manifest = [System.Text.Encoding]::UTF8.GetString($files['AetherFrame.json']) | ConvertFrom-Json

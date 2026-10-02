@@ -40,7 +40,7 @@ public sealed class PublicationRequest
 }
 
 /// <summary>A publication that passed every check: the two files for the branch and the record of what they are.</summary>
-public sealed record PreparedPublication(PublicationTarget Target, PublicationPlan Plan, byte[] Document, byte[] Readme, bool Changed, PublicationSummary Summary, string Report, string CommitMessage);
+public sealed record PreparedPublication(PublicationTarget Target, byte[] Document, byte[] Readme, bool Changed, PublicationSummary Summary, string Report, string CommitMessage);
 
 /// <summary>
 /// Prepares a publication of the custom repository (docs/CustomRepository.md, Publishing): reads the
@@ -198,7 +198,7 @@ public static class Publication
 
         var changed = request.Current is null || !request.Current.AsSpan().SequenceEqual(document);
         var summary = Summarize(request, target!, plan, verified.Values.OrderBy(r => r.Version).ToList(), document, changed);
-        return new PreparedPublication(target!, plan, document, readme!, changed, summary, Report(summary), CommitMessage(summary));
+        return new PreparedPublication(target!, document, readme!, changed, summary, Report(summary), CommitMessage(summary));
     }
 
     /// <summary>The README the branch carries: short UTF-8 text without a byte order mark.</summary>

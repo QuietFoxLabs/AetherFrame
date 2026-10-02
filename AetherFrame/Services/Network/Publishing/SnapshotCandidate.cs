@@ -128,7 +128,7 @@ internal enum LeftOutReason
     ImageMissing,
 }
 
-/// <summary>An element or component left out of what is shared, and why; the consent screen lists these.</summary>
+/// <summary>An element or component left out of what is shared, and why; the share check (Check what would be shared) lists these.</summary>
 internal readonly record struct LeftOutItem(ProfileElement? Element, PlateComponent? Component, LeftOutReason Reason);
 
 /// <summary>
@@ -240,9 +240,10 @@ internal enum PlateSnapshotRefusal
 internal readonly record struct PlateSnapshotProblem(PlateSnapshotRefusal Refusal, ProfileElement? Element, PlateComponent? Component = null, bool Background = false);
 
 /// <summary>
-/// Everything a Plate's snapshot will say, resolved, prepared and checked before the consent
-/// screen opens: the consent screen shows exactly this, and the commit signs exactly this, adding
-/// only the profile id, the revision id and the time. Nothing is read from the Plate again.
+/// Everything a Plate's snapshot will say, resolved, prepared and checked before anything is
+/// signed: the share check shows exactly this when the player asks, and the commit signs exactly
+/// this, adding only the profile id, the revision id and the time. Nothing is read from the Plate
+/// again.
 /// </summary>
 internal sealed class SnapshotCandidate
 {
@@ -280,7 +281,7 @@ internal sealed class SnapshotCandidate
     /// <summary>The items, in paint order.</summary>
     internal IReadOnlyList<LayoutItem> Items { get; }
 
-    /// <summary>Each item's local role (null for a component's shapes), so the consent screen can flag text the game filled in.</summary>
+    /// <summary>Each item's local role (null for a component's shapes), so the share check can flag text the game filled in.</summary>
     internal IReadOnlyList<ProfileElementRole?> Roles { get; }
 
     /// <summary>The prepared copies the items and the background draw, each once.</summary>

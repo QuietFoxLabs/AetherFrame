@@ -1,6 +1,6 @@
 # AetherFrame server interface, version 1 (DRAFT)
 
-What `server/AetherFrame.Server` answers, and how the plugin (N2-9 and N2-10) talks to it. It carries the protocol of [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) over HTTPS and applies decision batches B and C ([DecisionRegister.md](DecisionRegister.md)). It is a draft, like the protocol, until the owner's two-player test (NETWORK2.md, section 2) has passed.
+What `server/AetherFrame.Server` answers, and how the plugin (N2-9 and N2-10) talks to it. It carries the protocol of [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) over HTTPS and applies decision batches B and C ([DecisionRegister.md](DecisionRegister.md)). It is a draft, like the protocol, until the owner's two-player test (NETWORK2.md, section 2) has passed. `[updated 2026-10-02: the test passed on October 1, 2026 (TwoPlayerTest.md). The interface is still marked DRAFT with the protocol, whose version 1 only the owner's freeze finalises.]`
 
 **Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed. `[updated 2026-10-02: and the health check, GET /v1/health (section 3; known bug 14).]`
 

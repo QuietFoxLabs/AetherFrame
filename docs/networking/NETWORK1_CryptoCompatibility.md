@@ -1,6 +1,6 @@
 # NETWORK1: platform cryptography compatibility
 
-**Status (2026-09-28): findings, not decisions.** This document records what is known about the cryptography NETWORK1 would rely on, on each platform FFXIV players use, and how that is known. Nothing here is implemented, and no persona key exists. What to do about these findings is recorded as unresolved owner decisions in [DecisionRegister.md](DecisionRegister.md).
+**Status (2026-09-28): findings, not decisions.** This document records what is known about the cryptography NETWORK1 would rely on, on each platform FFXIV players use, and how that is known. Nothing here is implemented, and no persona key exists. What to do about these findings is recorded as unresolved owner decisions in [DecisionRegister.md](DecisionRegister.md). `[updated 2026-10-02: the native Windows findings are implemented: the DPAPI protector (K2) and the capability probe (K3) by NETWORK2's N2-4, and a key per sharing character exists since 0.1.8 (N2-9b, V4). The Wine, Proton and macOS rows are still findings only (K9 undecided; NETWORK2 stage 2).]`
 
 Every finding carries one of five kinds of evidence. They are never merged:
 
@@ -137,7 +137,7 @@ Other projects' reports, each consistent with section 3. They are other people's
 
 ## 6. Selecting implementations
 
-- **Recommendation (not decided): choose implementations by capability tests, not by operating system labels.**
+- **Recommendation (not decided): choose implementations by capability tests, not by operating system labels.** `[updated 2026-10-02: decided as K3, APPROVED (Claude, under the owner's delegation of September 29, 2026), and implemented by N2-4's PersonaCapabilityProbe.]`
   - A check that the process is running under Wine (for example `Util.IsWine()`) says nothing about which operations work: Wine 10.8 and Wine 11.17 differ, and GnuTLS may or may not load.
   - A Windows machine with broken CNG would pass an operating-system check and still fail.
 - **What a capability test looks like.** Run the exact chain the plugin would use, once per session, off the framework thread, with a throwaway key, never a persona key: generate, export, import, sign, protocol `Verify`, protect and unprotect, derive a key. Enable persona features only if the whole chain passes.

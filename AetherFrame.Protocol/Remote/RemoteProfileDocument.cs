@@ -6,7 +6,7 @@ namespace AetherFrame.Protocol.Remote;
 /// <summary>
 /// A document about one remote profile: a <see cref="ProfileSnapshot"/> or a
 /// <see cref="ProfileRetraction"/>. Only these carry a profile id. A later document type that is
-/// not about a profile (a request proof, a share grant, a persona statement) derives from
+/// not about a profile (a persona statement, say) derives from
 /// <see cref="RemoteDocument"/> directly and has none (decision N5, docs/networking/DecisionRegister.md).
 /// The set of subtypes is closed (the constructor is private protected).
 /// </summary>

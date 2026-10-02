@@ -12,7 +12,7 @@ AetherFrame uses [semantic versioning](https://semver.org/). Before 1.0, version
 
 ## Where the version lives
 
-The version is set in one place: [`Version.props`](../Version.props) at the repository root. Both projects import it, and everything else comes from it:
+The version is set in one place: [`Version.props`](../Version.props) at the repository root. Every project in the solution imports it, and everything else comes from it:
 
 | Where | Value | Set by |
 |---|---|---|

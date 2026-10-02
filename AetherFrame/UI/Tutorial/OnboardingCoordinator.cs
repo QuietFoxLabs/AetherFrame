@@ -39,8 +39,6 @@ internal sealed class OnboardingCoordinator
 
     internal TutorialPreferences Preferences => store.Preferences;
 
-    internal int ScriptVersion => scriptVersion;
-
     /// <summary>Whether the first-run offer should be on screen.</summary>
     internal bool IsOfferOpen { get; private set; }
 

@@ -87,11 +87,7 @@ internal sealed record TutorialStep(
     TutorialTarget FallbackTarget = TutorialTarget.None,
     TutorialAction FallbackAction = TutorialAction.None,
     bool WaitsForAction = false,
-    string? WaitHint = null)
-{
-    /// <summary>Whether the step points at a control at all.</summary>
-    internal bool HasTarget => Mode != TutorialStepMode.Narrative && Target != TutorialTarget.None;
-}
+    string? WaitHint = null);
 
 /// <summary>A short, self-contained group of steps the player can also revisit on its own.</summary>
 /// <param name="Id">Stable and unique.</param>

@@ -14,16 +14,14 @@ namespace AetherFrame.Windows;
 internal enum AetherTone
 {
     Info,
-    Tip,
     Success,
     Warning,
     Danger,
-    Neutral,
 }
 
 /// <summary>
 /// AetherFrame's reusable controls, over plain ImGui widgets: the same buttons, headings,
-/// callouts, empty states and pills in every window, so a screen reads as AetherFrame at a
+/// callouts and empty states in every window, so a screen reads as AetherFrame at a
 /// glance. Every control here is a normal ImGui item (keyboard and gamepad navigation, tooltips
 /// and ids all work as usual) with the palette applied; nothing is rebuilt from scratch. Each
 /// takes unscaled sizes and scales them itself. No per-frame allocations beyond ImGui's own.
@@ -60,24 +58,6 @@ internal static class AetherControls
 
         ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, size.Y));
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceXs * scale));
-    }
-
-    /// <summary>A heading in the heading face.</summary>
-    internal static void Heading(string text)
-    {
-        using (AetherFonts.Heading())
-        {
-            ImGui.TextUnformatted(text);
-        }
-    }
-
-    /// <summary>A title in the display face.</summary>
-    internal static void Title(string text)
-    {
-        using (AetherFonts.Display())
-        {
-            ImGui.TextUnformatted(text);
-        }
     }
 
     /// <summary>Secondary text: a summary, a value, a card's status line. Wrapped.</summary>
@@ -164,52 +144,6 @@ internal static class AetherControls
         return clicked;
     }
 
-    /// <summary>
-    /// An icon beside a label in one button (FontAwesome glyph, then text). <paramref name="id"/> is
-    /// the button's ImGui id and must be unique in its scope; it never shows (pass "##Name").
-    /// </summary>
-    internal static bool IconLabelButton(string id, FontAwesomeIcon icon, string label, Vector2 size = default, string? tooltip = null, bool primary = false)
-    {
-        var scale = ImGuiHelpers.GlobalScale;
-        var style = ImGui.GetStyle();
-        string glyph;
-        Vector2 glyphSize;
-        using (DalamudServices.PluginInterface.UiBuilder.IconFontHandle.Push())
-        {
-            glyph = EditorWidgets.GetIconString(icon);
-            glyphSize = ImGui.CalcTextSize(glyph);
-        }
-
-        var textSize = ImGui.CalcTextSize(label);
-        var gap = AetherMetrics.ItemInnerSpacing * scale;
-        var content = new Vector2(glyphSize.X + gap + textSize.X, Math.Max(glyphSize.Y, textSize.Y));
-        var buttonSize = new Vector2(
-            size.X > 0f ? size.X : content.X + (style.FramePadding.X * 2f),
-            size.Y > 0f ? size.Y : ImGui.GetFrameHeight());
-
-        var clicked = primary
-            ? FilledButton(id, buttonSize, AetherPalette.Aether, AetherPalette.AetherHover, AetherPalette.AetherActive, AetherPalette.TextOnAccent)
-            : ImGui.Button(id, buttonSize);
-
-        var min = ImGui.GetItemRectMin();
-        var max = ImGui.GetItemRectMax();
-        var start = new Vector2(min.X + ((max.X - min.X - content.X) / 2f), min.Y);
-        var drawList = ImGui.GetWindowDrawList();
-        var color = ImGui.GetColorU32(primary ? AetherPalette.TextOnAccent : AetherPalette.TextPrimary);
-        using (DalamudServices.PluginInterface.UiBuilder.IconFontHandle.Push())
-        {
-            drawList.AddText(new Vector2(start.X, min.Y + ((max.Y - min.Y - glyphSize.Y) / 2f)), color, glyph);
-        }
-
-        drawList.AddText(new Vector2(start.X + glyphSize.X + gap, min.Y + ((max.Y - min.Y - textSize.Y) / 2f)), color, label);
-        EditorWidgets.Tooltip(tooltip);
-        return clicked;
-    }
-
-    /// <summary>The width a row of dialog buttons needs, for right-aligning it.</summary>
-    internal static float ButtonRowWidth(int count, float buttonWidth = AetherMetrics.DialogButtonWidth) =>
-        (count * buttonWidth * ImGuiHelpers.GlobalScale) + ((count - 1) * ImGui.GetStyle().ItemSpacing.X);
-
     /// <summary>Moves the cursor so a row of <paramref name="rowWidth"/> ends at the content's right edge.</summary>
     internal static void AlignRight(float rowWidth)
     {
@@ -221,32 +155,6 @@ internal static class AetherControls
     }
 
     // ---------------------------------------------------------------- small pieces
-
-    /// <summary>A small rounded tag (Active, New, Basic, Advanced...). Not interactive.</summary>
-    internal static void Pill(string text, Vector4 background, Vector4 foreground)
-    {
-        var scale = ImGuiHelpers.GlobalScale;
-        Vector2 textSize;
-        using (AetherFonts.Label())
-        {
-            textSize = ImGui.CalcTextSize(text);
-        }
-
-        var padding = new Vector2(AetherMetrics.SpaceSm, AetherMetrics.SpaceXs / 2f) * scale;
-        var size = textSize + (padding * 2f);
-        var min = ImGui.GetCursorScreenPos();
-        var drawList = ImGui.GetWindowDrawList();
-        drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(background), size.Y / 2f);
-        using (AetherFonts.Label())
-        {
-            drawList.AddText(min + padding, ImGui.GetColorU32(foreground), text);
-        }
-
-        ImGui.Dummy(size);
-    }
-
-    /// <summary>The Active Plate's gold pill.</summary>
-    internal static void ActivePill() => Pill("Active", AetherPalette.Gold, AetherPalette.TextOnGold);
 
     /// <summary>A keycap for a shortcut ("Ctrl+S").</summary>
     internal static void KeyHint(string keys)
@@ -261,20 +169,6 @@ internal static class AetherControls
         drawList.AddRect(min, min + size, ImGui.GetColorU32(AetherPalette.BorderStrong), AetherMetrics.RadiusSm * scale, ImDrawFlags.None, 1f);
         drawList.AddText(min + padding, ImGui.GetColorU32(AetherPalette.TextSecondary), keys);
         ImGui.Dummy(size);
-    }
-
-    /// <summary>A "?" glyph with a tooltip, for a control whose purpose isn't obvious. Place with SameLine after the control.</summary>
-    internal static void HelpMarker(string text)
-    {
-        EditorWidgets.IconText(FontAwesomeIcon.QuestionCircle, AetherPalette.TextMuted);
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-        {
-            using (ImRaii.Tooltip())
-            using (ImRaii.TextWrapPos(ImGui.GetFontSize() * 24f))
-            {
-                ImGui.TextUnformatted(text);
-            }
-        }
     }
 
     /// <summary>A wrapped tooltip for the last item (wider and softer than ImGui's default one-liner).</summary>
@@ -304,11 +198,9 @@ internal static class AetherControls
     /// <summary>The color and icon of a tone.</summary>
     internal static (Vector4 Color, Vector4 Tint, FontAwesomeIcon Icon) Of(AetherTone tone) => tone switch
     {
-        AetherTone.Tip => (AetherPalette.Glow, AetherPalette.InfoTint, FontAwesomeIcon.Lightbulb),
         AetherTone.Success => (AetherPalette.Success, AetherPalette.SuccessTint, FontAwesomeIcon.CheckCircle),
         AetherTone.Warning => (AetherPalette.Warning, AetherPalette.WarningTint, FontAwesomeIcon.ExclamationTriangle),
         AetherTone.Danger => (AetherPalette.Danger, AetherPalette.DangerTint, FontAwesomeIcon.ExclamationCircle),
-        AetherTone.Neutral => (AetherPalette.TextSecondary, new Vector4(1f, 1f, 1f, 0.05f), FontAwesomeIcon.InfoCircle),
         _ => (AetherPalette.Info, AetherPalette.InfoTint, FontAwesomeIcon.InfoCircle),
     };
 
@@ -468,46 +360,6 @@ internal static class AetherControls
     // ---------------------------------------------------------------- panels, cards, selection
 
     /// <summary>
-    /// A panel: a child region on the panel surface with rounded corners and a quiet border.
-    /// <code>using var panel = AetherControls.Panel("##Layers", size); if (!panel.Success) return;</code>
-    /// </summary>
-    internal static PanelScope Panel(string id, Vector2 size, ImGuiWindowFlags flags = ImGuiWindowFlags.None, bool padded = true, Vector4? background = null) =>
-        new(id, size, flags, padded, background ?? AetherPalette.Surface);
-
-    /// <summary>The pushes and the child a <see cref="Panel"/> is made of; popped in reverse on dispose.</summary>
-    internal readonly ref struct PanelScope
-    {
-        private readonly ImRaii.ColorDisposable background;
-        private readonly ImRaii.StyleDisposable padding;
-        private readonly ImRaii.ChildDisposable child;
-        private readonly Vector2 min;
-        private readonly Vector2 max;
-
-        internal PanelScope(string id, Vector2 size, ImGuiWindowFlags flags, bool padded, Vector4 backgroundColor)
-        {
-            var scale = ImGuiHelpers.GlobalScale;
-            background = ImRaii.PushColor(ImGuiCol.ChildBg, backgroundColor);
-            padding = ImRaii.PushStyle(ImGuiStyleVar.WindowPadding, padded ? new Vector2(AetherMetrics.PanelPadding * scale) : Vector2.Zero);
-            child = ImRaii.Child(id, size, false, flags | ImGuiWindowFlags.AlwaysUseWindowPadding);
-            min = ImGui.GetWindowPos();
-            max = min + ImGui.GetWindowSize();
-        }
-
-        internal bool Success => child.Success;
-
-        public void Dispose()
-        {
-            child.Dispose();
-            padding.Dispose();
-            background.Dispose();
-
-            // On the parent, once the child has ended: the child's own clip rectangle is inset by
-            // its padding and would cut the border away.
-            ImGui.GetWindowDrawList().AddRect(min, max, ImGui.GetColorU32(AetherPalette.Border), AetherMetrics.RadiusMd * ImGuiHelpers.GlobalScale, ImDrawFlags.None, 1f);
-        }
-    }
-
-    /// <summary>
     /// A card's frame: the raised surface, a border that brightens on hover, and when selected
     /// the accent ring with the frame-corner motif. Draw before the card's contents.
     /// </summary>
@@ -542,37 +394,5 @@ internal static class AetherControls
             var alpha = color.W * (1f - t) * 0.6f;
             drawList.AddRect(min - new Vector2(expand), max + new Vector2(expand), ImGui.GetColorU32(color with { W = alpha }), rounding + expand, ImDrawFlags.None, spread / rings + 0.5f);
         }
-    }
-
-    /// <summary>A row of tab-like buttons where the active one carries an accent underline; returns the clicked index or -1.</summary>
-    internal static int TabStrip(string id, ReadOnlySpan<string> labels, int selected)
-    {
-        var scale = ImGuiHelpers.GlobalScale;
-        var clicked = -1;
-        var drawList = ImGui.GetWindowDrawList();
-        using var pushId = ImRaii.PushId(id);
-        for (var i = 0; i < labels.Length; i++)
-        {
-            if (i > 0)
-            {
-                ImGui.SameLine(0f, AetherMetrics.SpaceXs * scale);
-            }
-
-            var active = i == selected;
-            if (FilledButton(labels[i], default, Vector4.Zero, AetherPalette.SurfaceHover, AetherPalette.SurfaceActive, active ? AetherPalette.TextPrimary : AetherPalette.TextMuted) && !active)
-            {
-                clicked = i;
-            }
-
-            if (active)
-            {
-                var min = ImGui.GetItemRectMin();
-                var max = ImGui.GetItemRectMax();
-                var inset = AetherMetrics.SpaceXs * scale;
-                drawList.AddRectFilled(new Vector2(min.X + inset, max.Y - (2f * scale)), new Vector2(max.X - inset, max.Y), ImGui.GetColorU32(AetherPalette.Aether), 1f * scale);
-            }
-        }
-
-        return clicked;
     }
 }

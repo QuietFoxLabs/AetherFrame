@@ -282,6 +282,8 @@ No specific change was stopped for being incompatible or destructive: none of th
 
 ## 8. Manual acceptance in FFXIV
 
+[updated 2026-10-02: this branch merged as 8077689 (#21) and shipped in 0.1.7, so these steps apply to any release from 0.1.7 on; ROADMAP.md section 2 (Known bugs and verification gaps) and section 8, and the Owner inbox, hold the recorded results.]
+
 These need the game. Use Windows, Dalamud API 15, and this branch's build installed as a dev plugin. Keep `/xllog` open. "Unloaded" means disabled in `/xlplugins`.
 
 **Data and backups.** Under the autopilot ([docs/process/AUTOPILOT.md](../process/AUTOPILOT.md#test-builds)), this branch reaches the game as a test build of `master`. Before installing it, the autopilot copies `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new folder under `E:\AetherFrame Archives\Acceptance backups\`, and the Owner inbox post names that folder. Step 1 runs on that real data. Step 2's rename, duplicate and delete, and steps 3 to 8, 10 and 11, change, damage, lock or edit files on purpose: use Plates made for the test, never the only copy of real work. Dalamud's own backup rows (the copy a damaged file is read from in step 3) live in Dalamud's storage, not in that folder, so the Acceptance backup is what restores the data folder if a step goes wrong.

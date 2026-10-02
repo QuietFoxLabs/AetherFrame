@@ -2,15 +2,18 @@
 
   <!--
     AetherFrame's remote protocol foundation (docs/networking/NETWORK0.md): the canonical binary
-    encoding, the signed document envelope, persona identities derived from P-256 public keys, and
-    the narrow remote profile model that future online features (NETWORK1) and a backend can build on.
+    encoding, the signed document envelope, persona identities derived from P-256 public keys,
+    and the narrow remote profile model that the plugin's sharing (NETWORK1, NETWORK2) and the
+    server build on.
 
     Plain .NET with no NuGet packages, no Dalamud reference, no game state and no network access.
     It never opens a connection, never reads or writes files, and never sees a private key it did
     not receive as a caller's ECDsa object. The plugin never references it as an assembly: decision
-    D9b (docs/networking/DecisionRegister.md) compiles these sources into AetherFrame.dll in the
-    networking preview flavour only, so the release package keeps its three files
-    (docs/CustomRepository.md) and a player build holds none of this code.
+    D9b (docs/networking/DecisionRegister.md) compiles these sources into AetherFrame.dll, so the
+    release package keeps its three files (docs/CustomRepository.md). Since 0.1.8 that sharing
+    build is the default and the one released ("Testing channel gets sharing", October 1, 2026);
+    only the player flavour, -p:AetherFrameNetworkPreview=false, which CI still builds, holds none
+    of this code.
   -->
 
   <Import Project="..\Version.props" />

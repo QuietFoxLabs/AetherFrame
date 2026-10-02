@@ -511,10 +511,4 @@ public class BasicNameColorTests
     /// <summary>Worst contrast of <paramref name="name"/> along the name's line on the theme's gradient, both orientations (1280x720).</summary>
     private static float WorstNameContrast(ProfileThemePreset theme, Vector4 name) =>
         NameLine().Min(p => Contrast(name, BackgroundAt(theme, p)));
-
-    private static Vector4 MeanBackgroundUnderName(ProfileThemePreset theme)
-    {
-        var points = NameLine().ToList();
-        return points.Aggregate(Vector4.Zero, (sum, p) => sum + BackgroundAt(theme, p)) / points.Count;
-    }
 }

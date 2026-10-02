@@ -13,9 +13,6 @@ namespace AetherFrame.Windows.Theme;
 /// </summary>
 internal static class AetherBrand
 {
-    /// <summary>The product name as it appears beside the mark.</summary>
-    internal const string Name = "AetherFrame";
-
     /// <summary>
     /// Draws the mark centered at <paramref name="center"/> inside a square of <paramref name="size"/>.
     /// The corners take <paramref name="frame"/>, the spark <paramref name="spark"/>.
@@ -101,8 +98,8 @@ internal static class AetherBrand
     }
 
     /// <summary>
-    /// The brand row at the top of a window: the mark, the product name in the small label face,
-    /// and the window's own title in the display face. Returns the row's height.
+    /// The brand row at the top of a window: the mark, the window's own title in the display face,
+    /// and an optional subtitle in the small label face.
     /// </summary>
     internal static void Header(string title, string? subtitle = null)
     {

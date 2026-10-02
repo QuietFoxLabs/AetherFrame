@@ -11,12 +11,13 @@ using AetherFrame.Protocol.Remote;
 namespace AetherFrame.Services.Network.Publishing;
 
 /// <summary>
-/// What the consent screen showed, and the player approved: the candidate, and the persona it named
-/// (decision L10, and N2-6's design, section 1). The commit signs exactly this candidate, as exactly
-/// this persona, and reads nothing from the Plate again. The candidate's Plate id is the local
-/// Plate's, as the Library names its file. Since the owner's direction of October 2, 2026, a
-/// sharing character's is the candidate the live publisher built from the saved Active Plate,
-/// under the character's key, with no screen before it; the commit's checks are the same.
+/// The candidate to sign, and the persona it is signed as (decision L10, and N2-6's design,
+/// section 1): until October 2, 2026, what the consent screen showed and the player approved; since
+/// the owner's direction of that date, the candidate the live publisher built from the saved Active
+/// Plate, under the character's key, with no screen before it. The commit signs exactly this
+/// candidate, as exactly this persona, and reads nothing from the Plate again. The candidate's
+/// Plate id is the local Plate's, as the Library names its file; the commit's checks are the same
+/// either way.
 /// </summary>
 internal sealed class PublishConsent
 {
@@ -31,7 +32,7 @@ internal sealed class PublishConsent
 
         if (shownSlot.IsEmpty)
         {
-            throw new ArgumentException("The consent screen names a persona's slot.", nameof(shownSlot));
+            throw new ArgumentException("The record names a persona's slot.", nameof(shownSlot));
         }
 
         if (bindingProfile is { IsEmpty: true })
@@ -48,10 +49,10 @@ internal sealed class PublishConsent
     /// <summary>What is shared: everything but the profile id, the revision id and the time.</summary>
     internal SnapshotCandidate Candidate { get; }
 
-    /// <summary>The slot of the persona the consent screen named.</summary>
+    /// <summary>The slot of the persona the record names.</summary>
     internal PersonaSlotId ShownSlot { get; }
 
-    /// <summary>The public key of the persona the consent screen named.</summary>
+    /// <summary>The public key of the persona the record names.</summary>
     internal PersonaPublicKey ShownKey { get; }
 
     /// <summary>
@@ -80,12 +81,12 @@ internal enum PublishResult
 
     /// <summary>
     /// The candidate was claimed by an earlier signing attempt, even one that failed: every result
-    /// past the claim needs a new candidate, and so a new consent screen.
+    /// past the claim needs a new candidate, and so a new record.
     /// </summary>
     CandidateUsed,
 
     /// <summary>
-    /// The persona the consent screen named isn't the active one any more (L10), and nothing is
+    /// The persona the record names isn't the active one any more (L10), and nothing is
     /// signed. Found before signing, the same candidate can be tried again once that persona is
     /// active; found during signing (the persona was switched away from), the candidate was already
     /// claimed, and a retry builds a new one.
@@ -102,7 +103,7 @@ internal enum PublishResult
     SigningFailed,
 
     /// <summary>
-    /// What would be stored isn't what the consent screen showed: an image that isn't exactly the
+    /// What would be stored isn't what the record holds: an image that isn't exactly the
     /// image its declaration describes, found before signing, or signed bytes that don't verify as
     /// the persona shown or don't say what was signed. Nothing was stored.
     /// </summary>

@@ -16,7 +16,7 @@ namespace AetherFrame.UI.Tutorial;
 ///
 /// <para>Bump <see cref="Version"/> when the chapters change enough that a player who completed
 /// the old tour should see Help say the tutorial was updated. Authoring conventions:
-/// docs/DesignGuide.md, "Tutorial authoring".</para>
+/// docs/DesignGuide.md, "The tutorial", under "Authoring conventions".</para>
 /// </summary>
 internal static class TutorialScript
 {

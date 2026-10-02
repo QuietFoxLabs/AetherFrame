@@ -45,7 +45,7 @@ internal sealed class PublicationFixture : IDisposable
 
     internal PersonaManager Personas { get; }
 
-    /// <summary>The persona the consent screen names: created, selected and, unless told otherwise, acknowledged.</summary>
+    /// <summary>The persona the commit is told was shown (PublishConsent): created, selected and, unless told otherwise, acknowledged.</summary>
     internal PersonaRecord Persona { get; }
 
     /// <summary>The UTC clock the commit reads.</summary>

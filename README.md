@@ -227,9 +227,17 @@ AetherFrame/            the plugin
   UI/Rendering/         Plate renderer, backgrounds, text, Components, previews
   Windows/              Dalamud/ImGui windows: My Plates, Basic Editor, Advanced Editor, Plate Viewer, import
   Hosting/              thin adapters over Dalamud services
+  Services/Network/, Hosting/Network/, Windows/Network/   sharing: the server client, personas and keys, the Sharing and AetherFrame Plates windows (left out of the player flavour, -p:AetherFrameNetworkPreview=false)
+  UI/Theme/, UI/Tutorial/   design tokens and the tutorial's logic
   Assets/               Component artwork: previews and the Astrolabe embedded, the rest hosted (ArtFiles.txt)
-  Fonts/                bundled fonts (SIL Open Font License), embedded in the DLL
+  Fonts/                bundled fonts (SIL Open Font License 1.1, or Apache License 2.0 for some library families), embedded in the DLL
 AetherFrame.Tests/      pure-logic tests that build without Dalamud
+AetherFrame.Protocol/   the signed sharing protocol (compiled into the plugin)
+AetherFrame.Personas/   persona and key management (compiled into the plugin)
+server/                 the sharing server, its image worker and the Lodestone relay, with tests
+deploy/                 the server's deployment kit (Docker, Caddy)
+tools/                  release tooling (package and repository checks), art and font pipelines, tester-kit scripts
+distribution/           the custom Dalamud repository's configuration, dry run and tester kit
 ```
 
 ### Key concepts
@@ -253,7 +261,7 @@ The Component artwork is the optimized copies in `AetherFrame/Assets/` (`ArtFile
 
 I use AI heavily while developing AetherFrame, mainly for implementation and code review. I decide what gets built, how the product works, and test the plugin in game myself. In the terms of the [Dalamud AI Usage Policy](https://dalamud.dev/plugin-publishing/ai-policy), that is the *Copilot* level.
 
-The plugin icon was generated with ChatGPT and then refined, and the Art Styles' artwork (their preview cards included) and the Celestial Dream and Celestial Sakura artwork were also created with AI assistance. The plugin's description in the Dalamud installer says so. The Celestial Sakura files are served unmodified, so they keep their embedded C2PA Content Credentials, which record how each image was made. I'd like to replace the icon with a hand-made one before AetherFrame goes into the official Dalamud repository.
+The plugin icon was generated with ChatGPT and then refined, and the Art Styles' artwork (their preview cards included) and the Celestial Dream and Celestial Sakura artwork were also created with AI assistance. The plugin's description in the Dalamud installer says so. The seven approved Celestial Sakura pieces are served unmodified, so they keep their embedded C2PA Content Credentials, which record how each image was made (the style's Section Header is a half-size copy of its source and carries none). I'd like to replace the icon with a hand-made one before AetherFrame goes into the official Dalamud repository.
 
 ## Support and feedback
 

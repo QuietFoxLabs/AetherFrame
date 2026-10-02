@@ -75,8 +75,6 @@ public class PackageSecurityTests
 
         internal string Craft(Action<System.Collections.Generic.List<ZipSpec>> edit, bool reseal = true) => PackageFiles.Rewrite(ValidPath, edit, reseal);
 
-        internal string CraftRaw(params ZipSpec[] entries) => PackageFiles.Write(Fixture.ExportDirectory, entries, $"raw-{Guid.NewGuid():N}.aetherframe");
-
         /// <summary>
         /// The package is refused with one of <paramref name="expected"/>, importing it does nothing,
         /// the installation is unchanged, and no staging is left behind.

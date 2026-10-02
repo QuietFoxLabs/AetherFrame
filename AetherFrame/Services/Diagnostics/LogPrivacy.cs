@@ -25,7 +25,8 @@ namespace AetherFrame.Services.Diagnostics;
 /// a persona identity (<c>psn_</c> and 64 hex digits) and the profile, revision and asset ids
 /// (<c>prf_</c>, <c>rev_</c>, <c>ast_</c> and 32 hex digits). They are public values, but a log is
 /// pasted into public bug reports, and two mentions of one identity would let a reader link them,
-/// so a log shows their kind and never their value. Nothing in a player build produces one yet.
+/// so a log shows their kind and never their value. Only the player flavour (no networking code)
+/// produces none; the sharing build, released since 0.1.8, does whenever a character shares.
 /// </para>
 /// </summary>
 internal static partial class LogPrivacy

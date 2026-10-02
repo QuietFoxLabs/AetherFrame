@@ -48,7 +48,7 @@ internal readonly record struct PlateViewerContent(PlateViewerState State, Profi
 /// Plate, a delete of the Active Plate, or a character change while the viewer is open.</para>
 ///
 /// <para><b>Saved vs live.</b> The default request always presents the Active Plate's last
-/// <i>saved</i> document — the Plate as the character presents it (and, later, as published) —
+/// <i>saved</i> document — the Plate as the character presents it (and, in the sharing build, as published) —
 /// even while it's open with unsaved edits in Basic or Advanced; saving is what changes it. An
 /// explicit Plate request instead shows the editors' live document when that Plate is the one open
 /// (so unsaved edits show without a reload). Editor Preview is separate and always live.</para>

@@ -108,7 +108,7 @@ $section
 
 ---
 
-**Installing:** this is a test build for the Dalamud dev plugin loader. Follow the [tester guide](https://github.com/QuietFoxLabs/AetherFrame/blob/master/docs/Testing.md).
+**Installing:** Dalamud installs AetherFrame from its custom repository once this version is published there; the ZIP also loads through the dev plugin loader. Follow the [tester guide](https://github.com/QuietFoxLabs/AetherFrame/blob/master/docs/Testing.md).
 
 ``$packageName`` SHA-256: ``$hash``
 "@

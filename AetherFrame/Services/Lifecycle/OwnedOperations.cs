@@ -25,9 +25,9 @@ namespace AetherFrame.Services.Lifecycle;
 /// way completes. What an abandoned operation still uses of AetherFrame's own is only disposed
 /// once it ends (see <see cref="Drained"/>).</para>
 ///
-/// <para>One kind of operation is the exception: the networking preview flavour's persona work
-/// never stops between committing a key and saving the record of it, since stopping there would
-/// only leave the key without a record. Once abandoned, a persona operation runs to its end.</para>
+/// <para>One kind of operation is the exception: the sharing build's persona work never stops
+/// between committing a key and saving the record of it, since stopping there would only leave
+/// the key without a record. Once abandoned, a persona operation runs to its end.</para>
 ///
 /// <para>Thread-safe; operations may begin and end on any thread.</para>
 /// </summary>

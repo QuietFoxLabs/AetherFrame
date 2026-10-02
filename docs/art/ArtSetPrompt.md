@@ -230,10 +230,11 @@ takes a dark name, and a dark band a light name.
 
 ### 1. Celestial Sakura
 
-AetherFrame already has this set, apart from a Section Header (it has two Dividers, which don't
-stretch). Instead of a new set, open a new chat, attach `CelestialSakura_Nameplate.png` and
-`CelestialSakura_Divider_Ornate.png` (in `AetherFrame/Assets/Components/CelestialSakura/`), and
-paste:
+AetherFrame already has this set, Section Header included (a half-size runtime copy of the owner's
+full-size piece, added on 2026-10-01 by tools/art/make_runtime_art.py; its two Dividers don't
+stretch). To extend it, open a new chat, attach `CelestialSakura_Nameplate.png` and
+`CelestialSakura_Divider_Ornate.png` (in `AetherFrame/Assets/Components/CelestialSakura/`), paste
+the style-matching prompt below, then the piece prompt you need.
 
 ```
 These two images are from an existing art set: champagne gold filigree, blush cherry blossoms,
@@ -241,8 +242,6 @@ pearls and a crescent moon. Make one new piece that matches them exactly in styl
 materials and line weight. Transparent background (PNG with an alpha channel), no text, no
 checkerboard, flat front view, left-right symmetrical.
 ```
-
-Then paste the Section Header prompt (piece 6) as it is.
 
 ### 2. Ishgardian Gothic: `IshgardianGothic`
 

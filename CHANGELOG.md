@@ -4,7 +4,9 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- The Basic editor's **Reset Basic Layout** prompt lists the sections it resets as they are: **Favorite Jobs** by that name, and no retired Level line.
 
 ## [0.1.9] - 2026-10-02
 

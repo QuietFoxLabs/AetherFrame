@@ -8,12 +8,14 @@ using AetherFrame.Protocol.Identity;
 namespace AetherFrame.Protocol.Remote;
 
 /// <summary>
-/// One immutable published revision of a remote profile, as far as NETWORK0 defines it: the
-/// profile and revision ids, when it was created, the Plate's display name, and the source images
-/// it references. Deliberately narrower than the local Plate (no layout, no elements, no
-/// Components, no character, no local ids or paths); the layout schema is a later payload schema
-/// version. Images are a set, held sorted by asset id so that the same set always encodes the same
-/// way. Validated on construction; immutable.
+/// One immutable published revision of a remote profile in its metadata-only form, payload schema
+/// 1: the profile and revision ids, when it was created, the Plate's display name, and the source
+/// images it references, with no layout. Schema 2, ProfileLayoutSnapshot, carries the layout and is
+/// the only snapshot a server accepts for publication (decision D8,
+/// docs/networking/DecisionRegister.md); schema 1 stays readable as part of version 1's wire
+/// format. Deliberately narrower than the local Plate (no elements, no Components, no character, no
+/// local ids or paths). Images are a set, held sorted by asset id so that the same set always
+/// encodes the same way. Validated on construction; immutable.
 /// </summary>
 public sealed class ProfileSnapshot : RemoteProfileDocument
 {

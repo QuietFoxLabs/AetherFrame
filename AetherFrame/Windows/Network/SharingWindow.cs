@@ -137,7 +137,7 @@ internal sealed class SharingWindow : Window
         if (view.Unreadable)
         {
             AetherControls.Callout(AetherTone.Danger, SharingText.Unreadable);
-            Wrapped(PersonaWindowModel.DisplayPath(System.IO.Path.GetDirectoryName(sharingFile) ?? sharingFile, applicationData, userProfile), AetherPalette.TextMuted);
+            Wrapped(PersonaPaths.DisplayPath(System.IO.Path.GetDirectoryName(sharingFile) ?? sharingFile, applicationData, userProfile), AetherPalette.TextMuted);
             if (!view.Busy && AetherControls.SecondaryButton("Try again"))
             {
                 sharing.TryLoad();

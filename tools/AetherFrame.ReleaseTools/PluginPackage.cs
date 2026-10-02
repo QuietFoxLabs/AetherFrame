@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 namespace AetherFrame.ReleaseTools;
 
 /// <summary>One file in the package, as the ZIP directory lists it.</summary>
-public sealed record PackageEntry(string Name, long Length, long CompressedLength, DateTimeOffset LastWriteTime);
+public sealed record PackageEntry(string Name, long Length);
 
 /// <summary>
 /// The release package: the ZIP DalamudPackager built (latest.zip, staged as
@@ -106,7 +106,7 @@ public sealed class PluginPackage
                 }
 
                 var entries = archive.Entries
-                    .Select(e => new PackageEntry(e.FullName, e.Length, e.CompressedLength, e.LastWriteTime))
+                    .Select(e => new PackageEntry(e.FullName, e.Length))
                     .ToList();
 
                 if (!PackageEntryPolicy.Check(entries, internalName, checks))

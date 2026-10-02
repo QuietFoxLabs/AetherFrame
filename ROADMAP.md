@@ -8,7 +8,7 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
-Verified October 2, 2026, at 16:38 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, section 3 the milestones, and section 8 the next tasks.
+Verified October 2, 2026, at 21:00 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, section 3 the milestones, and section 8 the next tasks.
 
 - **Where things stand:**
   - **Released:** [0.1.9](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.9), served by the testing channel since October 2, 16:00 UTC: Art Styles that download the first time they are used, 40 in all, mirrored backgrounds, frames that fit, the sharing tutorial, and a Plate shared as soon as it is Active (below). Before it, [0.1.8](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.8), the first release with sharing (served from October 2, 01:43 UTC), brought sharing a character's Active Plate, viewing other players' Plates, the font library, 20 Art Styles and one Plate view.
@@ -40,9 +40,10 @@ Verified October 2, 2026, at 16:38 UTC. **For the live status, see [issue #52](h
     - the publication's dry run, then the run the owner approved: the testing channel has served 0.1.9 since 16:00 UTC.
 
     Its last step, [#101](https://github.com/QuietFoxLabs/AetherFrame/pull/101), raised the server's `MinimumPlugin` to 0.1.9 (the frames decision, section 5). It merged as `e38f43f` at 16:23 UTC, and the owner deployed it at 16:35 UTC, so 0.1.9 is done.
-  - **In progress: the server health check**, [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102), section 8's task 2. It is the first of the tasks the owner chose on October 2: "ill go with all of your recommendations" (section 5).
+  - **Done: the server health check**, [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102), section 8's task 2, merged as `d7d20b6` at 17:17 UTC (known bugs 14 and 15). It was the first of the tasks the owner chose on October 2: "ill go with all of your recommendations" (section 5). Its deploy waits on the owner (below); the monitor's dry run at 19:09 UTC answered "healthy".
+  - **In progress, by other sessions:** [#103](https://github.com/QuietFoxLabs/AetherFrame/pull/103), a recovery copy of an editor's unsaved changes (section 8's task 4), and [#104](https://github.com/QuietFoxLabs/AetherFrame/pull/104), the shared SQLite pool clear (task 3). This change, a tidy-up of the repository and its GitHub state (stale documents and comments, dead code, the branches and issues; nothing a player sees changes), records them and touches nothing of theirs.
 - **Waiting on the owner:**
-  1. **Once [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102) merges: Deploy the server with its merge commit**, so that `/v1/health` answers. Until then the monitor judges the server by `/v1/status` alone. Also turn on GitHub notifications for mentions and assignments (by email or GitHub Mobile), since the monitor's issue is the alert.
+  1. **Deploy the server with `d7d20b6`**, [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102)'s merge, so that `/v1/health` answers. Until then the monitor judges the server by `/v1/status` alone. Also turn on GitHub notifications for mentions and assignments (by email or GitHub Mobile), since the monitor's issue is the alert.
   2. **ImageSharp 4.x for the image worker**, which needs the owner's licence key ([inbox](https://github.com/QuietFoxLabs/AetherFrame/issues/25#issuecomment-5917703250)).
      - Claude recommended the move before sharing opened beyond the two testers. The server opened to everyone on October 1, and the worker still runs 3.1.12.
      - None of the 2026 advisories that 3.x leaves unfixed reaches the worker (N2-7c in the register).
@@ -52,8 +53,8 @@ Verified October 2, 2026, at 16:38 UTC. **For the live status, see [issue #52](h
      - Is a notice wanted when the logged-in character has no Active Plate (task 5)?
   5. **The beta's open questions** (section 3, "External beta"): what sharing must include before outside testers are invited, and how the server reaches the Lodestone while the owner's PC is off.
 - **Next, the owner's choice of October 2** (section 5), after the health check:
-  1. the shared SQLite pool clear (known bug 12);
-  2. a recovery copy of an editor's unsaved changes;
+  1. the shared SQLite pool clear (known bug 12), open as [#104](https://github.com/QuietFoxLabs/AetherFrame/pull/104);
+  2. a recovery copy of an editor's unsaved changes, open as [#103](https://github.com/QuietFoxLabs/AetherFrame/pull/103);
   3. interface task 7, then task 2.
 
   Section 8 has the detail. Nothing else starts until the owner picks it.
@@ -67,7 +68,7 @@ Verified October 2, 2026, at 16:38 UTC. **For the live status, see [issue #52](h
 | Test build `01a14a5` (player) | superseded by 0.1.7 without a verdict; staged in `E:\AetherFrame Test Builds\2026-09-29 01a14a5\` |
 | Test build `309aebd` (sharing as soon as Active, with every October 2 build before it: art on demand, all 40 Art Styles, mirrored backgrounds, background settings, the sharing tutorial and frames that fit) | in `E:\AetherFrame Test Build\` from October 2, 08:05 UTC until `4b4507e` replaced it, with a copy in `E:\AetherFrame Test Builds\2026-10-02 309aebd preview\`. The owner passed it in game on October 2 ("in game checks are all good", as above). It supersedes `4dafd35`, `bc84d0f`, `f2f3a71`, `2703a9f` and `245b609`, and `d6f82bb`, which the owner passed as 0.1.8 |
 | Test build `4b4507e` (0.1.9's release candidate, the merge of [#100](https://github.com/QuietFoxLabs/AetherFrame/pull/100)) | in `E:\AetherFrame Test Build\` since October 2, 15:22 UTC, with a copy in `E:\AetherFrame Test Builds\2026-10-02 4b4507e preview\`. The owner passed it in game, and it was released as v0.1.9 |
-| `master` | `e38f43f` (after [#101](https://github.com/QuietFoxLabs/AetherFrame/pull/101), `MinimumPlugin` 0.1.9 and 0.1.9's record); its plugin code is `4b4507e`'s, 0.1.9 |
+| `master` | `d7d20b6` (after [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102), the server health check); its plugin code is `4b4507e`'s, 0.1.9 |
 
 ## 1. Goal and scope
 
@@ -87,14 +88,14 @@ Lightweight RP information remains optional. Full RP profiles, social networks, 
 
 ### Verified repository snapshot
 
-| Item | Verified state (October 2, 2026, 16:38 UTC) |
+| Item | Verified state (October 2, 2026, 21:00 UTC) |
 | --- | --- |
-| Default branch | `master` at `e38f43f`, after [#101](https://github.com/QuietFoxLabs/AetherFrame/pull/101) merged at 16:23 UTC: `MinimumPlugin` 0.1.9 (server code), and 0.1.9's record. Before it, [#100](https://github.com/QuietFoxLabs/AetherFrame/pull/100), 0.1.9's release prep, merged as `4b4507e` at 15:15 UTC. Its tested head `b9a57a8` passed CI and was checked locally: 0 build warnings, every suite passing (5024 plugin, 474 release tooling, 432 protocol, 483 persona and 198 server tests), and Package OK. The release candidate built from `4b4507e` passed the same checks locally, and the Release workflow's dry run on it passed its own (the plugin, release-tooling and protocol suites, the package checks and every hosted art file). The plugin code is `309aebd`'s, with the version moved to 0.1.9. |
+| Default branch | `master` at `d7d20b6`, after [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102) merged at 17:17 UTC: the server's `/v1/health`, the Server health workflow and the backup's hourly sweep (server code, scripts and documents; CI passed every job by 17:22 UTC). Before it, `e38f43f`, after [#101](https://github.com/QuietFoxLabs/AetherFrame/pull/101) merged at 16:23 UTC: `MinimumPlugin` 0.1.9 (server code), and 0.1.9's record. Before it, [#100](https://github.com/QuietFoxLabs/AetherFrame/pull/100), 0.1.9's release prep, merged as `4b4507e` at 15:15 UTC. Its tested head `b9a57a8` passed CI and was checked locally: 0 build warnings, every suite passing (5024 plugin, 474 release tooling, 432 protocol, 483 persona and 198 server tests), and Package OK. The release candidate built from `4b4507e` passed the same checks locally, and the Release workflow's dry run on it passed its own (the plugin, release-tooling and protocol suites, the package checks and every hosted art file). The plugin code is `309aebd`'s, with the version moved to 0.1.9. |
 | Released version | [v0.1.9](https://github.com/QuietFoxLabs/AetherFrame/releases/tag/v0.1.9), tagged at `4b4507e` and published October 2, 2026, at 15:37 UTC as a pre-release. v0.1.8 (tagged at `d6f82bb`), v0.1.7 and v0.1.6 before it are pre-releases too. The v0.1.5 release remains a draft. |
 | Custom repository | `plugin-repository`'s [manifest](https://github.com/QuietFoxLabs/AetherFrame/blob/plugin-repository/pluginmaster.json) serves 0.1.9 (`AssemblyVersion` and `TestingAssemblyVersion` 0.1.9.0, `IsTestingExclusive: true`) with the pinned icon address. It has done so since the owner approved its publication run (October 2, 16:00 UTC, plugin-repository commit `9c3abd2`); it served 0.1.8 from 01:43 UTC. No release has been offered outside the testing channel. |
-| Sharing server | `https://plates.aetherframe.dev`, on the owner's DigitalOcean droplet.<ul><li>**Deployed:** `e38f43f`, which the owner deployed through **Deploy the server** on October 2 at 16:35 UTC, after `309aebd` at 12:03.</li><li>**Open to everyone:** `OpenToEveryone` has been on since October 1, 22:40 UTC.</li><li>**The image worker service** has run as root since the owner's one-line fix on October 2 at 06:51 UTC (known bug 13).</li><li>**The Lodestone** is reached through the relay on the owner's PC.</li><li>**`MinimumPlugin`** is the code's default, since the deployment kit doesn't set it: 0.1.9 since the deploy of `e38f43f`, and `/v1/status` says so.</li></ul> |
+| Sharing server | `https://plates.aetherframe.dev`, on the owner's DigitalOcean droplet.<ul><li>**Deployed:** `e38f43f`, which the owner deployed through **Deploy the server** on October 2 at 16:35 UTC, after `309aebd` at 12:03. `d7d20b6`, the health check, waits for the owner's deploy.</li><li>**Open to everyone:** `OpenToEveryone` has been on since October 1, 22:40 UTC.</li><li>**The image worker service** has run as root since the owner's one-line fix on October 2 at 06:51 UTC (known bug 13).</li><li>**The Lodestone** is reached through the relay on the owner's PC.</li><li>**`MinimumPlugin`** is the code's default, since the deployment kit doesn't set it: 0.1.9 since the deploy of `e38f43f`, and `/v1/status` says so.</li></ul> |
 | Test build | `4b4507e`, 0.1.9's release candidate, the sharing build, installed in `E:\AetherFrame Test Build\` on October 2 at 15:22 UTC. The install script reported it reloaded in game, and it is staged in `E:\AetherFrame Test Builds\2026-10-02 4b4507e preview\`. The owner passed it in game, and it was released as v0.1.9. |
-| Open pull requests | This change, the server health check. |
+| Open pull requests | [#103](https://github.com/QuietFoxLabs/AetherFrame/pull/103), kept unsaved changes, and [#104](https://github.com/QuietFoxLabs/AetherFrame/pull/104), the SQLite pool clear, both by other sessions; and this change, the repository tidy-up. |
 | Checkouts | The control checkout `E:\AetherFrameWork` is clean on `master`, with one worktree per task under `.claude\worktrees\`. `E:\Plugin development` is off limits ([CLAUDE.md](CLAUDE.md)). |
 
 CI results belong to the recorded commit, not automatically to later commits. Check live CI, and [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), for anything newer.
@@ -173,7 +174,7 @@ PR #21 was receiving commits during verification. Recheck its head before contin
 
 ### In progress
 
-This change: the server's `MinimumPlugin` to 0.1.9, 0.1.9's last step, which takes effect at the owner's deploy. Apart from it, nothing. One draft waits outside the repository: read-only diagnostic access to the server for Claude, paused until the owner decides (Status at a glance).
+This change: a tidy-up of the repository and its GitHub state after 0.1.9 (stale documents and comments brought up to date, dead code removed, the merged branches and the old roadmap issues listed for the owner; nothing a player sees changes). By other sessions: [#103](https://github.com/QuietFoxLabs/AetherFrame/pull/103), a recovery copy of an editor's unsaved changes, and [#104](https://github.com/QuietFoxLabs/AetherFrame/pull/104), the shared SQLite pool clear. One draft waits outside the repository: read-only diagnostic access to the server for Claude, paused until the owner decides (Status at a glance).
 
 ### Formerly in progress, kept as history
 
@@ -516,7 +517,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
    - the release workflow's gates pass, every hosted art file downloading among them;
    - `pluginmaster.json` serves 0.1.9 in testing;
    - afterwards, `/v1/status` answers `"minimumPlugin": "0.1.9"`, a 0.1.8 client is asked to update before it shares, and turning sharing off still works there. A 0.1.8 viewer isn't held back, and still draws the new frame cells as grey placeholders until it updates. The viewer checking the minimum too is a plugin change for a later version.
-2. **A health check for the server** (section 3, "Server operations"; known bug 14). **In progress: [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102).**
+2. **A health check for the server** (section 3, "Server operations"; known bug 14). **Done: [#102](https://github.com/QuietFoxLabs/AetherFrame/pull/102), merged as `d7d20b6` on October 2 at 17:17 UTC; its deploy waits on the owner.**
    - First decide what to watch (the worker taking jobs, the daily backup, the relay answering, new reports), and how the owner is told.
    - Then build it, with tests, and a runbook step.
    - Anything that needs an account, a key or a login on the server is the owner's.
