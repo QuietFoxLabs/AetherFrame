@@ -159,7 +159,11 @@ jobs:
         printf '{"AetherFrame":{"AllowedLodestoneIds":["12345678"]}}\n' > config/aetherframe.json
         printf 'AETHERFRAME_VERSION=ci\nAETHERFRAME_DOMAIN=plates.example.com\n' > .env
         docker compose -f compose.yaml -f compose.ci.yaml up -d
-        # As root, as systemd runs it on the server: it reads the socket volume's folder.
+        # As root, as systemd runs it on the server: it reads the socket volume's folder. The unit
+        # host-setup.sh installs must say so too (no User= line), or no run ever finds its socket.
+        unit="$(sed -n '/^cat > \/etc\/systemd\/system\/aetherframe-worker.service/,/^UNIT$/p' host-setup.sh)"
+        echo "$unit" | grep -q '^ExecStart=/opt/aetherframe/aetherframe-worker.sh$'
+        if echo "$unit" | grep -Eq '^(User|Group|DynamicUser)='; then echo "The worker service must run as root."; exit 1; fi
         sudo env AETHERFRAME_ENV_FILE=.env AETHERFRAME_WORKER_LOG_DRIVER=json-file AETHERFRAME_WORKER_LIFE=8 nohup bash aetherframe-worker.sh > worker-loop.log 2>&1 &
         echo $! > worker-loop.pid
 
