@@ -82,7 +82,8 @@ public enum ComponentStatus
 /// <see cref="PlateLayer"/> relative to what they decorate: Backgrounds before everything (over the
 /// canvas, mirrored on a Mirrored Plate; see <see cref="AddBackgrounds"/>), then Section Header backings (sliced Section Header artwork, behind every element; see
 /// <see cref="IsHeaderBacking"/>); Portrait Frames then Portrait Overlays immediately after the
-/// portrait element; Plate Frame artwork after the pictures and before the text; Name Backings
+/// portrait element, on its drawn picture (see <see cref="PictureRect"/>); Plate Frame artwork after
+/// the pictures and before the text; Name Backings
 /// immediately before the first identity element (name or title); then, after every element,
 /// Decorations, then procedural Plate Frames. Within one layer: ascending
 /// <see cref="PlateComponent.LayerOrder"/>, ties by list order. When the anchor element doesn't exist
@@ -167,10 +168,13 @@ public static class ComponentPaintPlan
     /// <paramref name="measureText"/> (optional) gives a text element's natural single-line text
     /// width, or null when it can't be measured; with it the Name Backing tracks the name and
     /// title's actual text instead of their whole boxes (see <see cref="TextExtent"/>).
+    /// <paramref name="imageSize"/> (optional) gives a picture's size in pixels, or null when it isn't
+    /// known; with it the portrait's frame and overlays lie on a picture letterboxed in Fit mode
+    /// instead of its whole box (see <see cref="PictureRect"/>). Without either, placements only grow.
     /// </summary>
     public static void Build(
         ProfileDocument profile, IReadOnlyList<ProfileElement> drawnElements, IComponentCatalog catalog, List<PaintStep> output,
-        Func<TextProfileElement, float?>? measureText = null)
+        Func<TextProfileElement, float?>? measureText = null, Func<ImageProfileElement, Vector2?>? imageSize = null)
     {
         output.Clear();
 
@@ -368,7 +372,7 @@ public static class ComponentPaintPlan
 
             if (ReferenceEquals(element, portraitElement) && portraitBand.Count > 0)
             {
-                AddBand(output, portraitBand, new ElementRect(element.Position, element.Size), RotationGeometry.GetRotationDegrees(element), canvasWidth);
+                AddBand(output, portraitBand, PictureRect(element, imageSize), RotationGeometry.GetRotationDegrees(element), canvasWidth);
             }
         }
     }
@@ -404,13 +408,36 @@ public static class ComponentPaintPlan
     {
         foreach (var (component, definition, _) in band)
         {
-            // A procedural border sits just inside the edge; artwork covers the whole canvas (the
-            // drawing carries its own margin, so an inset would only shrink it).
+            // A procedural border sits just inside the edge; artwork covers the whole canvas, and a
+            // frame cut to fit (ArtFrameSlices) lays its rails on the canvas's edges, its corners and
+            // crests reaching past them (see FramedBounds).
             var canvas = CanvasRect(profile);
             var inset = definition.Art is null ? PlateFrameInset * unit : 0f;
             var rect = new ElementRect(canvas.Position + new Vector2(inset), Vector2.Max(Vector2.Zero, canvas.Size - new Vector2(2f * inset)));
             output.Add(ComponentStep(component, definition, rect, 0f, false, false));
         }
+    }
+
+    /// <summary>
+    /// Where the portrait's picture is drawn inside its box, for the frame and overlays that lie on it:
+    /// the whole box, except in Fit mode, where a picture of another shape is drawn smaller, centered
+    /// (so it turns about the same point as its box). <paramref name="imageSize"/> gives the picture's
+    /// pixel size; while it is unknown (no picture, or none read yet) the whole box, where the
+    /// renderer's placeholder is.
+    /// </summary>
+    internal static ElementRect PictureRect(ProfileElement element, Func<ImageProfileElement, Vector2?>? imageSize)
+    {
+        var box = new ElementRect(element.Position, element.Size);
+        if (element is not ImageProfileElement { DisplayMode: ProfileImageFit.Fit } image
+            || imageSize?.Invoke(image) is not { } pixels
+            || !(pixels.X > 0f) || !(pixels.Y > 0f) || !float.IsFinite(pixels.X) || !float.IsFinite(pixels.Y)
+            || !(box.Size.X > 0f) || !(box.Size.Y > 0f) || !float.IsFinite(box.Size.X) || !float.IsFinite(box.Size.Y))
+        {
+            return box;
+        }
+
+        var size = PictureFit.Size(box.Size, pixels);
+        return new ElementRect(box.Position + ((box.Size - size) / 2f), size);
     }
 
     /// <summary>Reference-canvas pixels to this Plate's logical pixels (by height, like Basic fonts).</summary>
@@ -535,6 +562,9 @@ public static class ComponentPaintPlan
     public static bool FollowsText(PlateComponentKind kind) =>
         kind is PlateComponentKind.NameBacking or PlateComponentKind.Divider or PlateComponentKind.SectionHeader;
 
+    /// <summary>True when <paramref name="art"/> is a frame cut to fit any box (valid <see cref="BuiltInArtAsset.Frame"/>).</summary>
+    public static bool IsFramed(BuiltInArtAsset art) => art.Frame is { } frame && frame.IsValidFor(art.PixelWidth, art.PixelHeight);
+
     /// <summary>True when <paramref name="art"/> stretches to any width (valid <see cref="BuiltInArtAsset.Slices"/>).</summary>
     public static bool IsSliced(BuiltInArtAsset art) => art.Slices is { } slices && slices.IsValidFor(art.PixelWidth) && art.PixelHeight > 0;
 
@@ -600,11 +630,42 @@ public static class ComponentPaintPlan
                 continue;
             }
 
-            var (min, max) = RotationGeometry.GetVisualBounds(step.Placement.Rect.Position, step.Placement.Rect.Size, step.Placement.RotationDegrees);
+            var (min, max) = step.Definition?.Art is { } art && IsFramed(art)
+                ? FramedBounds(art.Frame!, step.Placement)
+                : RotationGeometry.GetVisualBounds(step.Placement.Rect.Position, step.Placement.Rect.Size, step.Placement.RotationDegrees);
             bounds = bounds is { } union ? (Vector2.Min(union.Min, min), Vector2.Max(union.Max, max)) : (min, max);
         }
 
         return bounds;
+    }
+
+    /// <summary>The bounds of a frame's drawing over its placement: the box, grown by what reaches past
+    /// its rails (see <see cref="ArtFrameSlices.Edges"/>), mirrored and turned as the box is.</summary>
+    private static (Vector2 Min, Vector2 Max) FramedBounds(ArtFrameSlices frame, ComponentPlacement placement)
+    {
+        var rect = placement.Rect;
+        var scale = frame.ScaleFor(rect.Size);
+        Span<float> xs = stackalloc float[ArtFrameSlices.Bands + 1];
+        Span<float> ys = stackalloc float[ArtFrameSlices.Bands + 1];
+        frame.Edges(rows: false, rect.Size.X, scale, xs);
+        frame.Edges(rows: true, rect.Size.Y, scale, ys);
+
+        var (x0, x1) = placement.MirrorX ? (rect.Size.X - xs[5], rect.Size.X - xs[0]) : (xs[0], xs[5]);
+        var (y0, y1) = placement.MirrorY ? (rect.Size.Y - ys[5], rect.Size.Y - ys[0]) : (ys[0], ys[5]);
+        var center = rect.Position + (rect.Size / 2f);
+        var rotation = float.IsFinite(placement.RotationDegrees) ? placement.RotationDegrees : 0f;
+
+        var min = new Vector2(float.MaxValue);
+        var max = new Vector2(float.MinValue);
+        foreach (var corner in new[] { new Vector2(x0, y0), new Vector2(x1, y0), new Vector2(x1, y1), new Vector2(x0, y1) })
+        {
+            var point = rect.Position + corner;
+            point = rotation == 0f ? point : RotationGeometry.RotatePoint(point, center, rotation);
+            min = Vector2.Min(min, point);
+            max = Vector2.Max(max, point);
+        }
+
+        return (min, max);
     }
 
     /// <summary>A placement box's size relative to its kind's standard procedural box (a Corner
@@ -621,7 +682,10 @@ public static class ComponentPaintPlan
     /// offset, and flip the shape only when <paramref name="mirrorShape"/>. Bundled artwork is then
     /// fitted inside the box at its own aspect ratio, around the same center (never stretched; see
     /// <see cref="FitAspect"/>), so the placement — and everything derived from it, like visual
-    /// bounds — is what is drawn.</summary>
+    /// bounds — is what is drawn. A frame cut to fit (<see cref="IsFramed"/>) lays its rails on the
+    /// whole box instead (its fills take up the difference, and its corners keep their shape), and
+    /// its corners and crests reach past the box: <see cref="GetVisualBounds"/> counts them
+    /// (<see cref="FramedBounds"/>).</summary>
     private static PaintStep ComponentStep(PlateComponent component, ComponentDefinition definition, ElementRect anchor, float anchorRotation, bool mirrorX, bool mirrorY, bool mirrorShape)
     {
         var scale = PlateComponentLimits.ClampScale(component.Scale);
@@ -638,7 +702,7 @@ public static class ComponentPaintPlan
 
         var center = anchor.Position + (anchor.Size / 2f) + offset;
         var size = anchor.Size * scale;
-        if (definition.Art is { } art && !(IsSliced(art) && FollowsText(definition.Kind)))
+        if (definition.Art is { } art && !(IsSliced(art) && FollowsText(definition.Kind)) && !IsFramed(art))
         {
             size = FitAspect(size, art.AspectRatio); // sliced art was already sized by ArtBand, and Scale keeps its shape
         }

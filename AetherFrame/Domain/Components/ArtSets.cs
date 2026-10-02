@@ -151,7 +151,7 @@ public static class ArtSets
     }
 
     /// <summary>A piece's artwork: the full-size pieces at the sources' sizes, the others at half size
-    /// (see Assets/ArtSets.md), drawn in their own colors.</summary>
+    /// (see Assets/ArtSets.md), drawn in their own colors. The frames are cut to fit (ArtFrameData).</summary>
     private static BuiltInArtAsset Asset(string id, string family, string folder, string piece, PlateComponentKind kind, SlicedArtSpec? spec, IReadOnlyList<string> setKeywords)
     {
         var (width, height, factor) = kind switch
@@ -162,11 +162,18 @@ public static class ArtSets
             _ => (1086, 362, spec?.SizeFactor ?? 1f),
         };
 
+        ArtFrameSlices? frame = null;
+        if (kind is PlateComponentKind.PlateFrame or PlateComponentKind.PortraitFrame && ArtFrameData.ByFolder.TryGetValue(folder, out var frames))
+        {
+            frame = kind == PlateComponentKind.PlateFrame ? frames.PlateFrame : frames.PortraitFrame;
+        }
+
         return new BuiltInArtAsset(id, family, kind, $"{ResourceComponents}{folder}.{folder}_{piece}.png", width, height, Tintable: false, DefaultOpacity: 1f, CornerArtPlacement.Mirror, factor)
         {
             Family = family,
             Keywords = [.. setKeywords, .. RoleKeywords(kind)],
             Slices = spec?.Slices,
+            Frame = frame,
         };
     }
 

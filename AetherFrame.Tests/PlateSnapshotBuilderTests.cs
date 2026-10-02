@@ -224,9 +224,10 @@ public sealed class PlateSnapshotBuilderTests
                 Assert.Equal(Bytes(primitive.Color), color);
                 if (item is LayoutArtQuad artQuad)
                 {
-                    // A piece of sliced artwork (the Celestial Sakura nameplate) by its own ident.
+                    // A piece of sliced artwork (the Celestial Sakura nameplate) or a cell of a frame
+                    // by its own ident.
                     Assert.Equal(definition.Art!.PieceIdent(primitive.Piece), artQuad.Art);
-                    Assert.Equal(definition.Art.Slices is null, primitive.Piece == ArtPiece.Whole);
+                    Assert.Equal(definition.Art.Slices is null && definition.Art.Frame is null, primitive.Piece == ArtPiece.Whole);
                 }
             }
         }

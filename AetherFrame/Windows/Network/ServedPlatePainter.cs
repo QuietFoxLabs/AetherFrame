@@ -124,8 +124,8 @@ internal static class ServedPlatePainter
                 }
                 else if (resources.Art.GetWrapOrNull(shape.Art, ComponentRenderer.ArtScreenPixels(shape.Art, shape.Piece, a, b, d)) is { } artWrap)
                 {
-                    var (u0, u1) = shape.Art.Window(shape.Piece);
-                    drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, 0f), new Vector2(u1, 0f), new Vector2(u1, 1f), new Vector2(u0, 1f), color);
+                    var (u0, v0, u1, v1) = shape.Art.Window2D(shape.Piece);
+                    drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), color);
                 }
 
                 break;

@@ -460,17 +460,31 @@ public class CelestialSakuraTests(ITestOutputHelper output)
         Assert.Equal(new ElementRect(Vector2.Zero, new Vector2(1280, 720)), Assert.Single(ComponentDocuments.Plan(document), s => !s.IsElement).Placement.Rect);
     }
 
+    /// <summary>On a canvas of another shape the frame still runs along every edge (it is cut to fit:
+    /// ArtFrameSlices, its rails on the edges and its ornaments reaching past), and its corners keep the
+    /// artwork's proportions; only its fills stretch.</summary>
     [Fact]
-    public void OnAnotherCanvasShape_TheFrameIsFitted_NeverStretched()
+    public void OnAnotherCanvasShape_TheFrameRunsAlongEveryEdge_ItsCornersUndistorted()
     {
         var document = ClassicPlate();
         document.CanvasWidth = 1200; // the Card preset: 3:2
         document.CanvasHeight = 800;
-        var rect = Assert.Single(PlanOf(document, BuiltInComponentCatalog.PlateFrameCelestialSakura)).Placement.Rect;
+        var step = Assert.Single(PlanOf(document, BuiltInComponentCatalog.PlateFrameCelestialSakura));
+        Assert.Equal(new ElementRect(Vector2.Zero, new Vector2(1200, 800)), step.Placement.Rect);
 
-        Assert.Equal(1200f, rect.Size.X);
-        Assert.Equal(1200f * 941f / 1672f, rect.Size.Y, 3);
-        Assert.Equal(new Vector2(600, 400), rect.Position + (rect.Size / 2f));
+        var primitives = new List<ComponentPrimitive>();
+        ComponentGeometry.Build(document, step.Component!, step.Definition!, step.Placement, primitives);
+        var frame = BuiltInArtCatalog.CelestialSakuraPlateFrameArt.Frame!;
+        var scale = frame.ScaleFor(new Vector2(1200f, 800f));
+        Assert.Equal(-(frame.Columns.ContentLeft - frame.Drawing.Left) * scale, primitives.Min(p => p.A.X), 3);
+        Assert.Equal(-(frame.Rows.ContentLeft - frame.Drawing.Top) * scale, primitives.Min(p => p.A.Y), 3);
+        Assert.Equal(1200f + ((frame.Drawing.Right - frame.Columns.ContentRight) * scale), primitives.Max(p => p.C.X), 3);
+        Assert.Equal(800f + ((frame.Drawing.Bottom - frame.Rows.ContentRight) * scale), primitives.Max(p => p.C.Y), 3);
+
+        var corner = Assert.Single(primitives, p => p.Piece == ArtPieces.Frame(0, 0));
+        var (x0, x1) = frame.Band(rows: false, 0);
+        var (y0, y1) = frame.Band(rows: true, 0);
+        Assert.Equal((float)(x1 - x0) / (y1 - y0), (corner.B.X - corner.A.X) / (corner.D.Y - corner.A.Y), 3);
     }
 
     [Theory]
