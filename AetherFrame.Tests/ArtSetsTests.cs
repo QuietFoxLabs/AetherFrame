@@ -18,7 +18,7 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// The bundled art sets (<see cref="ArtSets"/>): nineteen new sets of seven pieces and Celestial Sakura's
+/// The art sets (<see cref="ArtSets"/>): thirty-nine sets of seven pieces and Celestial Sakura's
 /// Section Header, as artwork, Components and Art Styles; where their pieces paint; and what applying a
 /// style does to a Plate.
 /// </summary>

@@ -85,6 +85,16 @@ DIVIDER_HEIGHT = 24.0      # ComponentPaintPlan.DividerHeight
 HEADER_BODY = 22.0 / 24.0  # a Section Header's band: 22 px of the 24 px heading row
 CORNER_FACTOR = 3.0        # as Celestial Sakura's Corner Ornament
 
+# Cuts set by hand, in runtime pixels, where the measured ones leave a small ornament tip inside a
+# stretching span (seen with the pieces stretched: Mosaic Courtyard's carved scroll tips, Memphis
+# Playground's black arrowheads). The pixels are the measured run's; only where it stretches moves.
+CUT_OVERRIDES = {
+    ("MosaicCourtyard", "NameBacking"): (167, 189, 537, 537, 897, 908),
+    ("MosaicCourtyard", "Divider"): (137, 137, 433, 651, 953, 953),
+    ("MemphisPlayground", "NameBacking"): (152, 160, 541, 541, 925, 931),
+    ("MemphisPlayground", "Divider"): (102, 104, 395, 691, 979, 984),
+}
+
 DARK_INK = (0x2A, 0x22, 0x1C)
 LIGHT_INK = (0xF6, 0xF1, 0xE8)
 
@@ -421,7 +431,7 @@ def process(source, slug, display, folder, out_dir, only=None):
         if piece in SLICED:
             cuts, band_rows = measure_cuts(src)
             entry["cuts_full"] = cuts
-            entry["cuts"] = halve_cuts(cuts)
+            entry["cuts"] = CUT_OVERRIDES.get((folder, piece), halve_cuts(cuts))
             entry["band_rows"] = band_rows
             entry["band_color"] = band_color(src.convert("RGBA"), cuts, band_rows)
             body = band_rows[1] - band_rows[0]
@@ -614,7 +624,7 @@ def main():
     preview(sakura_dir, "CelestialSakura", None, sakura_data, sakura["colors"], os.path.join(previews, "CelestialSakura.png"),
             name_file="CelestialSakura_Nameplate.png", divider_file="CelestialSakura_Divider_Ornate.png")
 
-    short = [f'{r["display"] if "display" in r else r.get("name", "?")}' for r in records + [sakura]
+    short = [r["name"] for r in records + [sakura]
              if min(r["colors"]["name_contrast"], r["colors"]["header_contrast"], r["colors"]["text_contrast"]) < MIN_CONTRAST]
     if short:
         sys.exit("Text doesn't reach " + str(MIN_CONTRAST) + ":1 on: " + ", ".join(short))

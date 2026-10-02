@@ -180,12 +180,15 @@ file against it. The ids, Components and Art Styles are made in `ArtSets` from t
   992 x 1586), with their Content Credentials.
 - The Name Backing, Divider and Section Header (1086 x 362) and the Corner Ornament (627 x 627) are
   half size, the owner's choice of October 1, 2026, to keep the download near 77 MB instead of
-  117 MB (now each style's own download, 3 to 6 MB, since art on demand). Each is averaged exactly as `BundledArtImage.BuildLevels` makes its own half-size level,
+  117 MB (since art on demand, each style's own download: about 2.3 to 5.5 MB). Each is averaged exactly as `BundledArtImage.BuildLevels` makes its own half-size level,
   so wherever the piece is drawn at or below half its source's size it draws exactly as the source
   would. At Size 100% with the Plate full screen, that is every piece on every screen up to 1440p.
-  At 4K it is every Divider, Section Header and Corner Ornament, while 16 of the 19 Name Backings
+  At 4K it is every Divider, Section Header and Corner Ornament, while 29 of the 39 Name Backings
   (size factors above 1.68) are magnified, by up to 1.45 times (Watercolor Fantasy's), and slightly
   softer.
+- Where the measured cuts leave a small ornament tip inside a stretching span, the generator's
+  `CUT_OVERRIDES` set them by hand (Mosaic Courtyard's and Memphis Playground's Name Backing and
+  Divider).
 - Cuts are measured on each source and halved (the fills shrink by at most a texel, so they stay
   plain). Pieces whose fills meet in the middle have no center piece.
 - Size factors match Celestial Sakura's look: a Name Backing's plain band is 40 px around the

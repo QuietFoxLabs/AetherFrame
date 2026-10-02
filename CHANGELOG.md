@@ -6,7 +6,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ### Added
 
-- **20 more Art Styles**, at the owner's request, for 40 in all: Alchemist's Workshop, Corsair's Fortune, Dark Academia, Desert Oasis, Embroidered Tapestry, Enchanted Toybox, Frontier Silver, Industrial Salvage, Liquid Chrome, Memphis Playground, Mosaic Courtyard, Paper Theater, Porcelain Garden, Prehistoric Amber, Psychedelic Bloom, Racing Carbon, Retro Space Age, Sugarcraft Patisserie, Velvet Masquerade and Volcanic Forge. Each is a complete look of seven pieces, like the first twenty, with text colors that read on them, and downloads (3 to 6 MB) the first time you use it.
+- **20 more Art Styles**, at the owner's request, for 40 in all: Alchemist's Workshop, Corsair's Fortune, Dark Academia, Desert Oasis, Embroidered Tapestry, Enchanted Toybox, Frontier Silver, Industrial Salvage, Liquid Chrome, Memphis Playground, Mosaic Courtyard, Paper Theater, Porcelain Garden, Prehistoric Amber, Psychedelic Bloom, Racing Carbon, Retro Space Age, Sugarcraft Patisserie, Velvet Masquerade and Volcanic Forge. Each is a complete look of seven pieces, like the first twenty, with text colors that read on them, and downloads (2.7 to 5.5 MB) the first time you use it.
 
 ### Changed
 

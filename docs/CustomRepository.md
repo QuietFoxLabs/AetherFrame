@@ -142,7 +142,7 @@ Every command prints one line per check (`[ OK ]` or `[FAIL]`) and ends with `Pa
 - At most 64 entries; every name is a plain, relative, flat file name: no `..`, no `.` segment, no leading `/`, no drive letter, no backslash, no folder, no directory entry, no control characters, at most 255 characters.
 - No two entries with the same name, and none that differ only by case.
 - Exactly `AetherFrame.dll`, `AetherFrame.json` and `AetherFrame.deps.json`. Anything else fails and is named by kind: debug symbols, source files, test assemblies, local configuration, user data paths, development-only files.
-- Size limits: 128 MiB for the DLL (since art on demand it is about 38 MiB, but releases before it carry the art sets, about 113 MiB, and must still verify for a rollback), 1 MiB for each JSON file, checked against the declared size and again while decompressing.
+- Size limits: 128 MiB for the DLL (since art on demand it is about 40 MiB, but releases before it carry the art sets, about 113 MiB, and must still verify for a rollback), 1 MiB for each JSON file, checked against the declared size and again while decompressing.
 
 **The DLL**
 - A .NET assembly named `AetherFrame`, x64 (PE32+, `AMD64`), IL only, not 32-bit.
