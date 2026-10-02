@@ -42,6 +42,9 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     private readonly EditorSession editorSession;
     private readonly KeyboardShortcutService keyboardShortcutService;
     private readonly ProfileRenderResources renderResources;
+
+    // The artwork the canvas's Plate is missing: downloaded as the Plate is opened (art on demand).
+    private readonly ArtNeeds canvasArt = new();
     private readonly FileDialogManager fileDialogManager;
     private readonly EditorSurfaceCoordinator surfaces;
     private readonly BackgroundStylePanel backgroundPanel;
@@ -358,6 +361,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
         }
 
         TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedZoom, zoomMin, ImGui.GetItemRectMax());
+        ArtDownloadStatus.DrawInline(canvasArt, renderResources.ArtStore);
 
         var selected = GetSelectedElement(profile);
 

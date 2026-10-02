@@ -1,9 +1,11 @@
 using System;
 using System.Numerics;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Domain.Rendering;
 using AetherFrame.Services;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Theme;
 using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -57,6 +59,10 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     private readonly PlateLibraryService library;
     private readonly ActivePlateResolver activePlates;
     private readonly ProfileRenderResources renderResources;
+
+    // The artwork the shown Plate is missing, the player's own or another player's: downloaded as
+    // the Plate is viewed (art on demand).
+    private readonly ArtNeeds viewerArt = new();
     private readonly Action openMyPlates;
 
     // Where and how large the viewer shows its Plate: session UI state, kept across reopening and Plates.
@@ -371,6 +377,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             ImGui.OpenPopup(ContextMenuId);
         }
 
+        viewerArt.Begin(renderResources);
         if (presentation is { } shown)
         {
             shown.Draw(ImGui.GetWindowDrawList(), windowPos + current.CanvasOffset, current.Scale, windowPos, windowPos + current.WindowSize);
@@ -380,6 +387,8 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, windowPos + current.CanvasOffset, current.Scale, renderResources, PlateViewerPresentation.RenderOptions);
         }
 
+        viewerArt.End(renderResources);
+
         if (PresentationControls.Close("##ViewerClose", windowPos + current.CloseOffset, current.ControlSize, "Close (Esc)"))
         {
             placement.EndDrag();
@@ -388,6 +397,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
 
         DrawContextMenu(current);
         DrawHint(windowPos, current);
+        DrawArtStatus(windowPos, current);
     }
 
     private void DrawContextMenu(PlateViewerLayout current)
@@ -407,6 +417,11 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             {
                 shown.DrawMenuItems();
                 ImGui.Separator();
+            }
+
+            if (viewerArt.Summary(renderResources.ArtStore).Kind == ArtNeedKind.Failed && ImGui.MenuItem("Try Downloading the Artwork Again"))
+            {
+                viewerArt.TryAgain(renderResources.ArtStore);
             }
 
             ImGui.TextDisabled($"Size: {placement.Percent}%");
@@ -436,6 +451,30 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         {
             ImGui.PopStyleVar();
         }
+    }
+
+    /// <summary>
+    /// What the shown Plate's missing artwork is doing (art on demand): a pill at the composition's top
+    /// center, on the foreground layer like the hint, while it downloads or after it failed (Try again
+    /// is in the right-click menu). Nothing while nothing is missing.
+    /// </summary>
+    private void DrawArtStatus(Vector2 windowPos, PlateViewerLayout current)
+    {
+        var summary = viewerArt.Summary(renderResources.ArtStore);
+        if (summary.Kind == ArtNeedKind.None)
+        {
+            return;
+        }
+
+        var text = summary.Kind == ArtNeedKind.Failed ? summary.Label + " Right-click to try again." : summary.Label;
+        var textSize = ImGui.CalcTextSize(text);
+        var padding = new Vector2(10f, 5f) * ImGuiHelpers.GlobalScale;
+        var size = textSize + (padding * 2f);
+        var min = windowPos + new Vector2((current.WindowSize.X - size.X) / 2f, 12f * ImGuiHelpers.GlobalScale);
+
+        var drawList = ImGui.GetForegroundDrawList();
+        drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(PlateViewerPresentation.HintBacking), size.Y / 2f);
+        drawList.AddText(min + padding, ImGui.GetColorU32(summary.Kind == ArtNeedKind.Failed ? AetherPalette.Warning : PlateViewerPresentation.HintText), text);
     }
 
     /// <summary>The once-per-session usage hint: a small pill at the composition's bottom center, on

@@ -153,7 +153,9 @@ AetherFrame lets players design character Plates: an Adventure Plate-style Basic
 Advanced Editor, a local My Plates library, and a Plate Viewer (/af view). Editing is local, with
 no account and no data collection. Optional sharing, off until a player turns it on for a character,
 sends that character's name, World, Lodestone id and Active Plate to AetherFrame's server so other
-players who share can view it; viewing a Plate sends the name and World looked up.
+players who share can view it; viewing a Plate sends the name and World looked up. An Art Style's
+artwork (images only, checked against SHA-256s built into the plugin) downloads from GitHub the first
+time it is used.
 
 Source: https://github.com/QuietFoxLabs/AetherFrame
 Changelog: https://github.com/QuietFoxLabs/AetherFrame/blob/master/CHANGELOG.md

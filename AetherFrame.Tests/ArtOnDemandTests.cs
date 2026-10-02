@@ -191,6 +191,34 @@ public class ArtOnDemandTests
         Assert.Equal([art], misses);
     }
 
+    // What a window says.
+
+    [Fact]
+    public void TheSummary_SaysWhatIsDownloading_ThenWhatFailed_ThenWhatCantBeHad()
+    {
+        Assert.Equal(new ArtNeedSummary(ArtNeedKind.None), ArtNeedSummary.Of([]));
+        Assert.Equal(string.Empty, ArtNeedSummary.Of([new(ArtState.Embedded), new(ArtState.Cached), new(ArtState.Checking)]).Label);
+
+        var downloading = ArtNeedSummary.Of(
+        [
+            new(ArtState.Downloading, 1_000_000, 2_500_000),
+            new(ArtState.Queued, Total: 1_600_000),
+            new(ArtState.NotDownloaded, Total: 400_000),
+            new(ArtState.Failed, Total: 10, Problem: "GitHub couldn't be reached"),
+            new(ArtState.Unavailable),
+        ]);
+        Assert.Equal(new ArtNeedSummary(ArtNeedKind.Downloading, 1_000_000, 4_500_000), downloading);
+        Assert.Equal("Downloading artwork from GitHub: 1.0 of 4.5 MB", downloading.Label);
+
+        var failed = ArtNeedSummary.Of([new(ArtState.Failed, Problem: "GitHub is busy; try again in a few minutes"), new(ArtState.Unavailable), new(ArtState.Cached)]);
+        Assert.Equal(ArtNeedKind.Failed, failed.Kind);
+        Assert.Equal("Couldn't download artwork: GitHub is busy; try again in a few minutes.", failed.Label);
+
+        Assert.Equal("This build can't download artwork, so some isn't drawn.", ArtNeedSummary.Of([new(ArtState.Unavailable)]).Label);
+        Assert.Equal("Downloading artwork from GitHub", ArtNeedSummary.Of([new(ArtState.Queued)]).Label);
+        Assert.Equal("2.6", ArtNeedSummary.Megabytes(2_550_000));
+    }
+
     // The store.
 
     [Fact]

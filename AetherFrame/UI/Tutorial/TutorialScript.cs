@@ -31,7 +31,7 @@ internal static class TutorialScript
                 "AetherFrame designs Plates: character cards that start from the familiar shape of the in-game Adventure Plate and can grow into anything you like.\n\nThis short tour points at the real controls as you go. Use Next and Back, or Skip whenever you want to explore on your own.",
                 Mode: TutorialStepMode.Narrative),
             new TutorialStep("welcome.local", "Your Plates stay on your PC",
-                "Plates, Templates and the images you add are saved in AetherFrame's own folder inside Dalamud's configuration. There is no account, and nothing is sent anywhere unless you turn on sharing for a character in My Plates' Sharing window. To give someone a Plate as a file, export it.",
+                "Plates, Templates and the images you add are saved in AetherFrame's own folder inside Dalamud's configuration. There is no account. Nothing goes to AetherFrame's server unless you turn on sharing for a character in My Plates' Sharing window, and an Art Style's artwork downloads from GitHub the first time you use it. To give someone a Plate as a file, export it.",
                 Mode: TutorialStepMode.Narrative),
             new TutorialStep("welcome.modes", "Two ways to edit",
                 "The Basic Editor feels like FFXIV: fill in sections and AetherFrame lays them out like an Adventure Plate.\n\nThe Advanced Editor removes the restrictions: place text, images and decorative Components anywhere on a freeform canvas.\n\nBoth edit the same Plate, so you can switch at any time.",

@@ -136,8 +136,8 @@ jobs:
     - name: Check every pin
       run: bash .github/scripts/check-art-pins.sh
 
-    - name: Check the script
-      run: shellcheck .github/scripts/check-art-pins.sh
+    - name: Check the scripts
+      run: shellcheck .github/scripts/check-art-pins.sh .github/scripts/check-hosted-art.sh
 
   # The deployment kit (docs/networking/NETWORK2.md, N2-8): both images build, and the three
   # services start and answer on plain HTTP, with the worker as isolated as the compose file says.

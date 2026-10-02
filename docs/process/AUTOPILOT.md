@@ -116,7 +116,7 @@ On September 30, 2026 the owner asked, in chat, that whenever a milestone is com
    - refuses a zip that isn't exactly the three plugin files, a folder missing one of them, and a DLL of the other flavour;
    - stages the build in `E:\AetherFrame Test Builds\<yyyy-MM-dd> <short sha>[ preview]\` with `SHA256SUMS.txt`;
    - backs up `%APPDATA%\XIVLauncher\pluginConfigs\AetherFrame\` and `AetherFrame.json` to a new `Acceptance backups` folder, which keeps a `.partial` name until it is complete. The backup:
-     - skips the preview build's `instance.lock`, and any `*.tmp` file held open, and lists what it skipped in `NotBackedUp`;
+     - skips the preview build's `instance.lock`, any `*.tmp` file held open, and the downloaded artwork in `artwork-cache` (it downloads again when missing; "Art on demand" in the decision register), and lists what it skipped in `NotBackedUp`;
      - stops the install on any other file it can't copy, and on a link;
    - copies the two `.json` files, then the DLL last, over the old files in place, and checks each copy's hash;
    - reads Dalamud's saved settings, never writing them, and reports in `InGame`:

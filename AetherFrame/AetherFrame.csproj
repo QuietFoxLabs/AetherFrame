@@ -11,7 +11,7 @@
     <!-- The last sentence is the AI-generated asset disclosure (icon and bundled artwork) that the
          Dalamud AI Usage Policy requires in the plugin description
          (https://dalamud.dev/plugin-publishing/ai-policy). -->
-    <Description>Design character Plates: start from an Adventure Plate-style layout in the Basic Editor, or build freeform layouts with text, images and decorative Components in the Advanced Editor. Optional sharing (alpha), off until you turn it on for a character, sends that character's name, World, Lodestone id and Active Plate to AetherFrame's server so other players who share can view it; viewing a Plate sends the name and World you look up. The plugin icon is AI-generated, and the bundled Celestial Dream and Celestial Sakura Components use AI-assisted artwork.</Description>
+    <Description>Design character Plates: start from an Adventure Plate-style layout in the Basic Editor, or build freeform layouts with text, images and decorative Components in the Advanced Editor. Optional sharing (alpha), off until you turn it on for a character, sends that character's name, World, Lodestone id and Active Plate to AetherFrame's server so other players who share can view it; viewing a Plate sends the name and World you look up. An Art Style's artwork downloads from GitHub the first time you use it, and is kept on your PC. The plugin icon is AI-generated, and the Art Styles and the Celestial Dream and Celestial Sakura Components use AI-assisted artwork.</Description>
     <RepoUrl>https://github.com/QuietFoxLabs/AetherFrame</RepoUrl>
     <Tags>aetherframe;plates;adventure-plate;profile;customization</Tags>
     <!-- Approved icon (images/icon.png, 512 x 512), pinned to the commit that added it. DalamudPackager
@@ -40,14 +40,20 @@
     <EmbeddedResource Include="Fonts\Library\THIRD-PARTY-FONT-LICENSES.txt" LogicalName="AetherFrame.Fonts.Library.THIRD-PARTY-FONT-LICENSES.txt" />
   </ItemGroup>
 
-  <!-- Built-in Component artwork (optimized runtime copies; the full-size sources live in
-       a separate repository that no longer exists, and are never needed at runtime). Embedded, never copied to the output
-       folder, and addressed only by manifest resource name: "AetherFrame.Assets." + the path
-       below Assets with '.' separators (see BuiltInArtCatalog). Plates store logical ids only. -->
+  <!-- Built-in artwork the plugin carries: the Art Styles' preview cards, so the Theme browser shows
+       every style before anything is downloaded, and Celestial Dream's Astrolabe (tintable, in no
+       style). Every other runtime PNG under Assets\Components is hosted and downloaded the first
+       time a player uses it (art on demand, "Art on demand" in docs/networking/DecisionRegister.md;
+       AetherFrame/Assets/ArtFiles.txt). Embedded, never copied to the output folder, and addressed
+       only by manifest resource name: "AetherFrame.Assets." + the path below Assets with '.'
+       separators (see BuiltInArtCatalog). Plates store logical ids only. -->
   <ItemGroup>
     <None Remove="Assets\**" />
-    <EmbeddedResource Include="Assets\**\*.png">
-      <LogicalName>AetherFrame.Assets.$([System.String]::Copy('%(RecursiveDir)').Replace('\', '.').Replace('/', '.'))%(Filename)%(Extension)</LogicalName>
+    <EmbeddedResource Include="Assets\StylePreviews\*.png">
+      <LogicalName>AetherFrame.Assets.StylePreviews.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\Components\CelestialDream\**\*.png">
+      <LogicalName>AetherFrame.Assets.Components.CelestialDream.$([System.String]::Copy('%(RecursiveDir)').Replace('\', '.').Replace('/', '.'))%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

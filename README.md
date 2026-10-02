@@ -135,13 +135,13 @@ The finished idea is simple: start with something that feels familiar to anyone 
 
 ## Local first
 
-Everything AetherFrame does happens on your own machine, apart from sharing, which you turn on yourself.
+Everything AetherFrame does happens on your own machine, apart from sharing, which you turn on yourself, and Art Styles' artwork, which downloads from GitHub the first time you use a style and is then kept on your PC.
 
 - No account is needed.
 - Editing is entirely local.
 - Plates, Templates and images are stored in the plugin's local configuration folder.
 - Import and export are file-based: you choose what to export and who you give it to.
-- No online service is required for any of the core experience.
+- No online service is required for the core experience. An Art Style needs GitHub once, the first time you use it; until its artwork arrives, a Plate shows the style's colors.
 
 ## Privacy
 

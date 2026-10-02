@@ -91,7 +91,9 @@ internal sealed partial class ProfileEditorWindow
 
         var showGuides = editorSession.ShowGuides;
         var renderOptions = showGuides ? EditorPlaceholders.CanvasOptions : EditorPlaceholders.CanvasOptionsWithoutGuides;
+        canvasArt.Begin(renderResources);
         ProfileRenderer.Draw(drawList, profile, canvasOrigin, zoom, renderResources, renderOptions);
+        canvasArt.End(renderResources);
 
         if (showGuides)
         {

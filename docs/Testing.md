@@ -3,7 +3,7 @@
 Thanks for helping test AetherFrame. This page covers how to install a test build, what to look at, and how to report what you find.
 
 > [!IMPORTANT]
-> **Current status:** AetherFrame is in testing through its own custom Dalamud repository: see [From the Dalamud plugin installer](#from-the-dalamud-plugin-installer-aetherframes-custom-repository). Dalamud installs it and keeps it up to date. Since 0.1.8, its builds carry sharing (alpha), which is off until you turn it on for a character.
+> **Current status:** AetherFrame is in testing through its own custom Dalamud repository: see [From the Dalamud plugin installer](#from-the-dalamud-plugin-installer-aetherframes-custom-repository). Dalamud installs it and keeps it up to date. Since 0.1.8, its builds carry sharing (alpha), which is off until you turn it on for a character. Since 0.1.9, an Art Style's artwork downloads from GitHub the first time you use it, and is kept in `artwork-cache` in the plugin's folder.
 
 AetherFrame is an early alpha. Expect rough edges, and keep a backup of anything you care about (see [Before you start](#before-you-start)).
 

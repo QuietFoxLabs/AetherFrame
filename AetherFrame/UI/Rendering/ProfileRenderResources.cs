@@ -1,4 +1,5 @@
 using AetherFrame.Services;
+using AetherFrame.Services.Art;
 using AetherFrame.Services.Fonts;
 
 namespace AetherFrame.UI.Rendering;
@@ -12,12 +13,13 @@ namespace AetherFrame.UI.Rendering;
 internal sealed class ProfileRenderResources
 {
     internal ProfileRenderResources(
-        ImageTextureCache images, ProfileFontService fonts, ProceduralTextureCache textures, BuiltInArtTextureCache art, UI.Editor.IFavoriteJobSource jobs)
+        ImageTextureCache images, ProfileFontService fonts, ProceduralTextureCache textures, BuiltInArtTextureCache art, ArtStore artStore, UI.Editor.IFavoriteJobSource jobs)
     {
         Images = images;
         Fonts = fonts;
         Textures = textures;
         Art = art;
+        ArtStore = artStore;
         Jobs = jobs;
     }
 
@@ -28,6 +30,9 @@ internal sealed class ProfileRenderResources
     internal ProceduralTextureCache Textures { get; }
 
     internal BuiltInArtTextureCache Art { get; }
+
+    /// <summary>Where the artwork's bytes come from, and what downloads them (art on demand; see <see cref="ArtNeeds"/>).</summary>
+    internal ArtStore ArtStore { get; }
 
     /// <summary>Game job names and abbreviations, for the Favorite Jobs' derived display (<see cref="FavoriteJobsDisplay"/>).</summary>
     internal UI.Editor.IFavoriteJobSource Jobs { get; }

@@ -18,11 +18,11 @@ public sealed record PackageEntry(string Name, long Length, long CompressedLengt
 /// </summary>
 public sealed class PluginPackage
 {
-    /// <summary>The largest plugin assembly a package may hold: 128 MiB. The art sets embedded in it
-    /// (AetherFrame/Assets, about 84 MiB) and the font library (AetherFrame/Fonts/Library, about
-    /// 29 MiB) make it about 113 MiB, which leaves about 15 MiB; the limit still stops a runaway or
-    /// hostile file.</summary>
-    public const long MaxAssemblyBytes = 128L * 1024 * 1024;
+    /// <summary>The largest plugin assembly a package may hold: 64 MiB. Since art on demand the Art
+    /// Styles' artwork is downloaded, not embedded, and the assembly is about 38 MiB, mostly the font
+    /// library (AetherFrame/Fonts/Library, about 29 MiB), so embedding the art sets again by
+    /// accident (about 79 MiB) fails here; the limit also stops a runaway or hostile file.</summary>
+    public const long MaxAssemblyBytes = 64L * 1024 * 1024;
     public const long MaxTextBytes = 1024 * 1024;
     public const int MaxEntries = 64;
 
