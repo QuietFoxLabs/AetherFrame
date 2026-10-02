@@ -409,7 +409,8 @@ public static class ComponentPaintPlan
         foreach (var (component, definition, _) in band)
         {
             // A procedural border sits just inside the edge; artwork covers the whole canvas, and a
-            // frame cut to fit (ArtFrameSlices) lays its drawing's edges on the canvas's edges.
+            // frame cut to fit (ArtFrameSlices) lays its rails on the canvas's edges, its corners and
+            // crests reaching past them (see FramedBounds).
             var canvas = CanvasRect(profile);
             var inset = definition.Art is null ? PlateFrameInset * unit : 0f;
             var rect = new ElementRect(canvas.Position + new Vector2(inset), Vector2.Max(Vector2.Zero, canvas.Size - new Vector2(2f * inset)));
@@ -681,8 +682,10 @@ public static class ComponentPaintPlan
     /// offset, and flip the shape only when <paramref name="mirrorShape"/>. Bundled artwork is then
     /// fitted inside the box at its own aspect ratio, around the same center (never stretched; see
     /// <see cref="FitAspect"/>), so the placement — and everything derived from it, like visual
-    /// bounds — is what is drawn. A frame cut to fit (<see cref="IsFramed"/>) fills the whole box
-    /// instead: its fills take up the difference, and its corners keep their shape.</summary>
+    /// bounds — is what is drawn. A frame cut to fit (<see cref="IsFramed"/>) lays its rails on the
+    /// whole box instead (its fills take up the difference, and its corners keep their shape), and
+    /// its corners and crests reach past the box: <see cref="GetVisualBounds"/> counts them
+    /// (<see cref="FramedBounds"/>).</summary>
     private static PaintStep ComponentStep(PlateComponent component, ComponentDefinition definition, ElementRect anchor, float anchorRotation, bool mirrorX, bool mirrorY, bool mirrorShape)
     {
         var scale = PlateComponentLimits.ClampScale(component.Scale);

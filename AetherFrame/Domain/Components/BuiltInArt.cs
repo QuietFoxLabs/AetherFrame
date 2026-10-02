@@ -461,8 +461,9 @@ public static class BuiltInArtCatalog
         CelestialSakuraBackground, "Celestial Sakura", PlateComponentKind.Background, "CelestialSakura_Background.png", 1672, 941, 1f,
         "background", "sky", "twilight", "landscape");
 
-    /// <summary>A gold filigree border with blossom corners and a crescent crest, its drawing laid edge to
-    /// edge on the Plate (cut where it is least busy: it is ornamented all along; see ArtFrameData).</summary>
+    /// <summary>A gold filigree border with blossom corners and a crescent crest, its rails laid on the
+    /// Plate's edges and its ornaments reaching past (cut where it is least busy: it is ornamented all
+    /// along; see ArtFrameData).</summary>
     public static readonly BuiltInArtAsset CelestialSakuraPlateFrameArt = CelestialSakura(
         CelestialSakuraPlateFrame, "Celestial Sakura", PlateComponentKind.PlateFrame, "CelestialSakura_PlateFrame.png", 1672, 941, 1f,
         "frame", "plate frame", "border") with
@@ -470,8 +471,8 @@ public static class BuiltInArtCatalog
         Frame = ArtFrameData.ByFolder["CelestialSakura"].PlateFrame,
     };
 
-    /// <summary>A slim gold portrait border with blossoms at opposing corners, its drawing laid on the
-    /// portrait's edges.</summary>
+    /// <summary>A slim gold portrait border with blossoms at opposing corners, its rails laid on the
+    /// picture's edges and its ornaments reaching past.</summary>
     public static readonly BuiltInArtAsset CelestialSakuraPortraitFrameArt = CelestialSakura(
         CelestialSakuraPortraitFrame, "Celestial Sakura", PlateComponentKind.PortraitFrame, "CelestialSakura_PortraitFrame.png", 992, 1586, 1f,
         "frame", "portrait", "portrait frame", "border") with
