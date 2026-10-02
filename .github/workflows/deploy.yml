@@ -23,6 +23,10 @@ jobs:
   deploy:
     runs-on: ubuntu-24.04
     environment: production
+    # The Server health monitor skips its check while a deploy runs, so a deploy that hangs (on a
+    # connection that stopped answering, say) is cancelled after 30 minutes, not GitHub's default 6
+    # hours. The time spent waiting for the owner's approval doesn't count.
+    timeout-minutes: 30
     steps:
       - name: Check the inputs
         env:
@@ -70,7 +74,9 @@ jobs:
           DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
         run: |
           target="aetherframe-deploy@$DEPLOY_HOST"
-          ssh_opts=(-i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          # For ssh and scp both: a connection that doesn't open within 20 seconds, or stops answering
+          # for a minute, fails the step rather than hanging it.
+          ssh_opts=(-i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           docker save "aetherframe-server:$COMMIT" "aetherframe-worker:$COMMIT" | gzip | ssh "${ssh_opts[@]}" "$target" 'gunzip | docker load'
           scp "${ssh_opts[@]}" deploy/compose.yaml deploy/Caddyfile deploy/aetherframe-worker.sh "$target:/opt/aetherframe/"
           # Start the new version: the worker service restarts with the new script first, so every run

@@ -255,7 +255,7 @@ meaning() {
     answer) echo "**The server answered with something else.** \`/v1/status\` answers, but \`/v1/health\` didn't give its usual answer." ;;
     worker) echo "**\`worker\` is false.** No image worker run has connected for 2 minutes, so publishes with images get \"try again later\"." ;;
     images) echo "**\`images\` is false.** The server's own test image didn't come back right twice in a row, or not for 3 hours." ;;
-    backup) echo "**\`backup\` is false.** The daily backup failed, or hasn't finished in 26 hours." ;;
+    backup) echo "**\`backup\` is false.** The last backup run failed (the day's copy, or the deletion of old copies), or none has finished for 3 hours." ;;
   esac
 }
 
@@ -277,7 +277,8 @@ alert_body() {
     printf -- '- %s\n' "$(meaning "$name")"
   done
   printf '\nWhat to do: see [Health alerts](%s) in the runbook.\n\n' "$runbook"
-  printf 'The **Server health** workflow keeps this issue: it updates "Last checked" while the problem lasts, comments when the failing checks change, and closes the issue when the server is healthy again.\n'
+  printf 'The **Server health** workflow keeps this issue: it updates "Last checked" while the problem lasts, comments when the failing checks change, and closes the issue when the server is healthy again.\n\n'
+  printf 'When the failing checks change, it rewrites this text, so put notes in a comment.\n'
 }
 
 # Body $1 with its "Last checked" line set to ISO time $2, and nothing else changed.

@@ -1550,7 +1550,7 @@ A focused check of `eef8d6f` found no way around that rule through the buttons o
   - It never touches the database, a character, a limit or a budget.
   - It is true when the last canary succeeded within 3 hours. It turns false after two failures in a row, and a busy queue counts neither way.
   - It catches a worker that connects but can't re-encode. Real jobs could show that only by revealing who shared.
-- **`backup`:** the last daily backup finished both its copy and its 7-day clean-up within 26 hours.
+- **`backup`:** the backup, which now runs every hour, last finished both its copy and its clean-up within 3 hours.
 - **Defaults:** a value that isn't known, or isn't configured, is false. After a start, `worker` is false until a run connects, which takes seconds on a healthy host. Images and the backup read true for their first 15 minutes, while their first results come in.
 
 **Not watched, on purpose.**
@@ -1569,9 +1569,11 @@ A focused check of `eef8d6f` found no way around that rule through the buttons o
 - **The deploy.** It now restarts the worker service before the new server starts, so every run that connects to the new server comes from the restarted service. It then waits up to 150 seconds for `worker` to be true. A deploy that breaks the worker then fails in front of the owner, who approves every deploy. A rollback to a commit without the route only warns.
 - **CI.** The deployment-kit job stages known bug 13: it runs the worker service's loop as a user that can't read the socket volume. `/v1/health` must then report `worker: false`, and the monitor's decision must be to alert. The loop then runs as root again, and the worker recovers.
 
-**Two fixes in the daily backup.**
-- The 7-day clean-up now runs even when the day's copy fails. Before, while copies failed, older copies were kept past D1's and the consent text's 7 days.
-- A failed backup is now tried again after an hour instead of a day.
+**The backup's 7 days, kept** (ROADMAP.md, known bug 15). D1 and the consent text promise that backups keep copies for up to 7 days, and two things broke it:
+- the clean-up ran only with the daily copy, so a deploy or a retry that moved the copy later in the day kept a copy up to about a day longer;
+- a failed copy skipped the clean-up altogether, so while copies failed (a full disk, say), older copies stayed.
+
+The backup now runs every hour. It writes one copy a day, as before, and deletes each copy once it is 6 days and 23 hours past the start of its day, even when the day's copy fails. A copy is written no earlier than the start of its day, so each is gone within 7 days of being written, whenever the server restarted. A failed copy is tried again at the next hourly run. While the server is stopped, nothing runs, as before (the runbook says so).
 
 **What stays as it was.** Nothing new is kept, so S5, C7 and the consent text are unchanged. The server API gains one unsigned GET (ServerApi-v1.md, section 3).
 

@@ -116,7 +116,7 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
   - If the file can't be read (a missing comma, say), or an entry isn't a Lodestone id, the server allows **no one** until the file is fixed. The log says so, and `admin allowlist` points to the entry at fault.
   - At a restart, a file it can't read stops the server until it is fixed.
   - It never lets anyone in by mistake, but a broken edit locks both testers out, so check it each time.
-- **While the server is stopped**, its daily backup and its clean-up don't run, so older copies aren't deleted. Stop it only briefly, or delete old copies by hand (section 4).
+- **While the server is stopped**, its backup runs don't happen, neither the day's copy nor the hourly clean-up, so older copies aren't deleted. Stop it only briefly, or delete old copies by hand (section 4).
 
 - **Reports** are kept for 30 days, or until you close them (decision C5). To act on one, look at the reported character's Plate in game. If it has to go, remove the character, and take its id off the allowlist if needed.
 - **Removal on request** (decision S3). A tester who asks to be removed, and whom you've confirmed out of band (in person, or in game), is removed with `remove-character`. Removing deletes at once exactly what opting out deletes.
@@ -131,15 +131,15 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 - **What each one means, and what to do:**
   - **`worker` is false:** no image worker run has connected for 2 minutes, so publishes with images get "try again later". See the worker rows in the table above: `systemctl status aetherframe-worker`, then the one-time fix if the service doesn't run as root.
   - **`images` is false:** runs connect, but the server's own test image didn't come back right twice in a row. Read `docker compose logs --since 3h server`, then deploy the commit again, which rebuilds the worker image.
-  - **`backup` is false:** the day's copy failed or didn't run. Check `df -h` for a full disk, and `docker compose logs --since 26h server` for "A backup failed". A failed backup is tried again after an hour.
+  - **`backup` is false:** the last backup run failed, or none has finished for 3 hours. The server runs one every hour: it writes one copy a day, and checks for old copies to delete each time. Check `df -h` for a full disk, and `docker compose logs --since 3h server` for "A backup failed". A failed run is tried again at the next, an hour later.
   - **The server didn't answer:** run `docker compose ps`, then read the logs. Caddy answers 502 while the server is down.
-- **During a deploy** the workflow skips its check. The deploy itself waits for a worker run to connect, and fails if none does.
+- **During a deploy** the workflow skips its check, for 30 minutes at most: GitHub cancels a deploy that has run for 30 minutes, so it doesn't complete. The deploy itself waits for a worker run to connect, and fails if none does.
 - **To pause the alerts:** go to **Actions → Server health → Disable workflow**, and **Enable workflow** to resume. GitHub also turns the schedule off after 60 days without activity in the repository. Turn it on again the same way.
 - **Reports** raise no alert, on purpose: the alert would be public. Look once a week with `admin reports`.
 
 ## 4. Backups and what is kept
 
-- **Backups.** The server writes a copy of its database to the `backups` volume once a day and deletes each copy after **7 days**. A Plate a player deletes, by opting out or pausing, is therefore gone from every copy within 7 days (decision D1). The consent text says so.
+- **Backups.** The server writes a copy of its database to the `backups` volume once a day and deletes each copy within **7 days**. It checks every hour, writing the day's copy if it isn't there yet and deleting each copy in the last hour of its seventh day (UTC: a copy written on October 1 goes between 23:00 and midnight on October 7), so a restart or a failed run never keeps one longer. A Plate a player deletes, by opting out or pausing, is therefore gone from every copy within 7 days (decision D1). The consent text says so.
   - To keep a copy off the server, list the copies and copy one out, in `/opt/aetherframe`:
     ```
     docker compose exec server ls /backups

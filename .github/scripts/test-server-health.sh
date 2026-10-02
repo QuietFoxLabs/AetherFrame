@@ -316,6 +316,7 @@ expect "records the time" grep -q -x -F -e '<!-- server-health-since: 2026-10-02
 expect "says when it was last checked" grep -q -x -F -e '- Last checked: 2026-10-02 10:22 UTC' "$dir/call-$opened.body"
 expect "says what failed" grep -q -F -e 'No image worker run has connected for 2 minutes' "$dir/call-$opened.body"
 expect "links the runbook" grep -q -F -e "(https://github.com/$repository/blob/master/docs/networking/Runbook.md#health-alerts)" "$dir/call-$opened.body"
+expect "ends by saying it rewrites the text, so notes go in comments" test "$(tail -n 1 "$dir/call-$opened.body")" = 'When the failing checks change, it rewrites this text, so put notes in a comment.'
 expect "changes nothing else" test "$(writes)" = 2
 finish
 cp "$dir/call-$opened.body" "$work/opened.body" 2>/dev/null || : > "$work/opened.body"
@@ -376,6 +377,9 @@ expect "retitles it, since the first failure" test "$(field "$edited" title)" = 
 expect "records the new checks" grep -q -x -F -e '<!-- server-health-checks: images -->' "$dir/call-$edited.body"
 expect "keeps the first failure's time" grep -q -x -F -e '<!-- server-health-since: 2026-10-02T10:07:00Z -->' "$dir/call-$edited.body"
 expect "sets Last checked" grep -q -x -F -e '- Last checked: 2026-10-02 10:22 UTC' "$dir/call-$edited.body"
+expect "rewrites the body, as its footer says" grep -q -x -F -e 'When the failing checks change, it rewrites this text, so put notes in a comment.' "$dir/call-$edited.body"
+expect "rewrites it whole, dropping the owner's line" test "$(grep -c -x -F -e 'A line the owner added.' "$dir/call-$edited.body")" = 0
+expect "rewrites the stored lines too" test "$(grep -c -x -F -e '- Failing since: earlier' "$dir/call-$edited.body")" = 0
 expect "changes nothing else" test "$(writes)" = 2
 finish
 
@@ -491,7 +495,8 @@ opened="$(call POST issues)"
 expect "decides to open one for both" test "$(decided)" = "open images,backup"
 expect "names both in the title" test "$(field "$opened" title)" = "Server health: images, backup failing since 2026-10-02 10:22 UTC"
 expect "says what images means" grep -q -F -e "The server's own test image didn't come back right" "$dir/call-$opened.body"
-expect "says what backup means" grep -q -F -e 'The daily backup failed' "$dir/call-$opened.body"
+expect "says what backup means" grep -q -F -e 'The last backup run failed' "$dir/call-$opened.body"
+expect "says when backup turns false" grep -q -F -e 'or none has finished for 3 hours.' "$dir/call-$opened.body"
 finish
 
 begin "only the check that failed both times counts"

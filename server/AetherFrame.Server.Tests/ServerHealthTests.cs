@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -121,12 +122,12 @@ public class ServerHealthTests
     }
 
     [Fact]
-    public void TheBackup_IsHealthyFor26HoursAfterAGoodRun_AndNotAfterAFailedOne()
+    public void TheBackup_IsHealthyForThreeHoursAfterAGoodRun_AndNotAfterAFailedOne()
     {
         var time = new ManualTime(Start);
         var health = NewHealth(time);
         health.BackupFinished(succeeded: true);
-        time.Advance(TimeSpan.FromHours(26) - TimeSpan.FromTicks(1));
+        time.Advance(TimeSpan.FromHours(3) - TimeSpan.FromTicks(1));
         Assert.True(health.Current.Backup);
         time.Advance(TimeSpan.FromTicks(1));
         Assert.False(health.Current.Backup);
@@ -195,6 +196,45 @@ public class ServerHealthTests
         Assert.Equal(
             ["Server health: the image worker turned unhealthy.", "Server health: image processing turned unhealthy."],
             log.Lines.Skip(3).Select(Message));
+    }
+
+    [Fact]
+    public async Task AStartedWatch_LooksOnItsTimer_AndLogsEachChangeOnce()
+    {
+        var time = new ManualTime(Start);
+        var health = new ServerHealth(Options.Create(new ServerOptions { ImageWorkerRuns = "runs" }), time);
+        health.WorkerConnected();
+        var log = new CapturedLog();
+        using var factory = LoggerFactory.Create(logging => logging.AddProvider(log));
+        using (var defaults = new HealthWatch(health, time, NullLogger<HealthWatch>.Instance))
+        {
+            Assert.Equal(TimeSpan.FromMinutes(1), defaults.Interval);
+        }
+
+        using var watch = new HealthWatch(health, time, factory.CreateLogger<HealthWatch>()) { Interval = TimeSpan.FromMilliseconds(20) };
+        await watch.StartAsync(default);
+        try
+        {
+            // No backup folder: unhealthy at the first look, and said once however many looks follow.
+            await UntilAsync(() => !log.Lines.IsEmpty);
+
+            // Two later changes, each waited for, show that it kept looking.
+            health.CanaryFinished(succeeded: false);
+            health.CanaryFinished(succeeded: false);
+            await UntilAsync(() => log.Lines.Count >= 2);
+            health.CanaryFinished(succeeded: true);
+            await UntilAsync(() => log.Lines.Count >= 3);
+
+            // And nothing more a little later.
+            await Task.Delay(TimeSpan.FromMilliseconds(200));
+            Assert.Equal(
+                ["Server health: the backup turned unhealthy.", "Server health: image processing turned unhealthy.", "Server health: image processing turned healthy again."],
+                log.Lines.Select(Message));
+        }
+        finally
+        {
+            await watch.StopAsync(default);
+        }
     }
 
     [Fact]
@@ -538,6 +578,108 @@ public class ServerHealthTests
     }
 
     [Fact]
+    public async Task AStartedCanary_FirstRunsAfterItsFirstPause_AndAfterASuccessWaitsItsInterval()
+    {
+        var time = new ManualTime(Start);
+        var health = NewHealth(time);
+        var worker = new FakeImages();
+        using var canary = new ImageCanary(worker, health, time, NullLogger<ImageCanary>.Instance)
+        {
+            FirstRun = TimeSpan.FromMilliseconds(400),
+            Interval = TimeSpan.FromHours(1),
+            Retry = TimeSpan.FromMilliseconds(20),
+        };
+        var clock = Stopwatch.StartNew();
+        await canary.StartAsync(default);
+        try
+        {
+            // The clock started before the canary and is read after its first job: that job came no
+            // earlier than the first pause, give or take the timer's resolution.
+            await UntilAsync(() => worker.Jobs >= 1);
+            Assert.True(clock.Elapsed >= TimeSpan.FromMilliseconds(300), "the first canary ran " + clock.ElapsedMilliseconds + " ms after the start");
+            await UntilAsync(() => health.State.LastCanarySuccess is not null);
+            Assert.True(health.Current.Images);
+
+            // A success waits the interval, an hour, and not the retry's 20 milliseconds.
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+            Assert.Equal(1, worker.Jobs);
+        }
+        finally
+        {
+            await canary.StopAsync(default);
+        }
+    }
+
+    [Fact]
+    public async Task AStartedCanary_RunsAgainAtItsRetry_AfterAFailureOrABusyWorker()
+    {
+        var time = new ManualTime(Start);
+        var health = NewHealth(time);
+        var worker = new FakeImages { Answer = _ => null };
+        using var canary = new ImageCanary(worker, health, time, NullLogger<ImageCanary>.Instance)
+        {
+            FirstRun = TimeSpan.FromMilliseconds(20),
+            Interval = TimeSpan.FromHours(1),
+            Retry = TimeSpan.FromMilliseconds(20),
+        };
+        await canary.StartAsync(default);
+        try
+        {
+            // Refused: each failure is followed by another canary at the retry, not the hour's interval.
+            await UntilAsync(() => worker.Jobs >= 3);
+            Assert.False(health.Current.Images);
+
+            // Busy: the same, and counted neither way.
+            var before = health.State;
+            worker.Busy = true;
+            var jobs = worker.Jobs;
+            await UntilAsync(() => worker.Jobs >= jobs + 3);
+            Assert.Equal(before, health.State);
+
+            // A success at a retry, and then the interval's wait.
+            worker.Answer = bytes => bytes;
+            worker.Busy = false;
+            await UntilAsync(() => health.Current.Images);
+            jobs = worker.Jobs;
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+            Assert.Equal(jobs, worker.Jobs);
+        }
+        finally
+        {
+            await canary.StopAsync(default);
+        }
+    }
+
+    [Fact]
+    public async Task AStartedCanary_WithNoWorkerConfigured_NeverRuns()
+    {
+        var time = new ManualTime(Start);
+        var health = new ServerHealth(Options.Create(new ServerOptions { BackupFolder = "backups" }), time);
+        var worker = new FakeImages();
+        using var canary = new ImageCanary(worker, health, time, NullLogger<ImageCanary>.Instance)
+        {
+            FirstRun = TimeSpan.FromMilliseconds(1),
+            Interval = TimeSpan.FromMilliseconds(1),
+            Retry = TimeSpan.FromMilliseconds(1),
+        };
+        await canary.StartAsync(default);
+        try
+        {
+            // It ends at once, with no timer started.
+            await canary.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(canary.ExecuteTask.IsCompletedSuccessfully);
+            await Task.Delay(TimeSpan.FromMilliseconds(200));
+            Assert.Equal(0, worker.Jobs);
+            Assert.Null(health.State.LastCanarySuccess);
+            Assert.Equal(0, health.State.CanaryFailures);
+        }
+        finally
+        {
+            await canary.StopAsync(default);
+        }
+    }
+
+    [Fact]
     public async Task TheCanary_TouchesNoCharactersLimitsNoRowAndNoLodestone()
     {
         using var server = new TestServer();
@@ -580,7 +722,7 @@ public class ServerHealthTests
     }
 
     [Fact]
-    public async Task AGoodBackupRun_IsHealthy_UntilItIs26HoursOld()
+    public async Task AGoodBackupRun_IsHealthy_UntilItIsThreeHoursOld_AndARunThatFindsTheDaysCopyIsGood()
     {
         using var server = new TestServer();
         using var player = server.NewPlayer();
@@ -597,7 +739,15 @@ public class ServerHealthTests
             await backups.RunOnceAsync(default);
             Assert.Single(Directory.GetFiles(folder));
             Assert.True(health.Current.Backup);
-            server.Time.Advance(TimeSpan.FromHours(26) - TimeSpan.FromTicks(1));
+
+            // The next hour's run finds the day's copy in place, so it only sweeps: a success too.
+            server.Time.Advance(TimeSpan.FromHours(1));
+            await backups.RunOnceAsync(default);
+            Assert.Single(Directory.GetFiles(folder));
+            Assert.Equal(server.Time.Now, health.State.LastBackupSuccess);
+
+            // No run after it: unhealthy 3 hours on.
+            server.Time.Advance(TimeSpan.FromHours(3) - TimeSpan.FromTicks(1));
             Assert.True(health.Current.Backup);
             server.Time.Advance(TimeSpan.FromTicks(1));
             Assert.False(health.Current.Backup);
@@ -664,7 +814,7 @@ public class ServerHealthTests
     }
 
     [Fact]
-    public async Task AFailedBackup_IsTriedAgainSoon_AndAGoodOneWaitsTheDay()
+    public async Task TheBackup_RunsEveryInterval_AfterAGoodRunOrAFailedOne()
     {
         var folder = TempFolder();
         try
@@ -673,40 +823,105 @@ public class ServerHealthTests
             var (defaults, _) = NewBackups(folder, folder, time);
             using (defaults)
             {
-                Assert.Equal(TimeSpan.FromHours(24), defaults.Interval);
-                Assert.Equal(TimeSpan.FromHours(1), defaults.RetryAfterFailure);
+                Assert.Equal(TimeSpan.FromHours(1), defaults.Interval);
             }
 
-            // A good run (today's copy is there already, so only the sweep runs) waits the whole interval.
+            // A good run (today's copy is there already, so only the sweep runs) is followed by
+            // another an interval later: a copy planted after the first is swept by a later one.
             var good = Path.Combine(folder, "good");
             Directory.CreateDirectory(good);
-            await File.WriteAllBytesAsync(Path.Combine(good, "server-20260930.db"), [1]);
+            var today = Path.Combine(good, "server-20260930.db");
+            await File.WriteAllBytesAsync(today, [1]);
             var (backups, health) = NewBackups(good, folder, time);
             using (backups)
             {
-                backups.RetryAfterFailure = TimeSpan.FromMilliseconds(20);
+                backups.Interval = TimeSpan.FromMilliseconds(20);
                 await backups.StartAsync(default);
-                await UntilAsync(() => health.State.LastBackupSuccess is not null);
-                var old = Path.Combine(good, "server-20260901.db");
-                await File.WriteAllBytesAsync(old, [1]);
-                await Task.Delay(500);
-                Assert.True(File.Exists(old), "a good run was followed by another before its interval");
-                await backups.StopAsync(default);
+                try
+                {
+                    await UntilAsync(() => health.State.LastBackupSuccess is not null);
+                    var old = Path.Combine(good, "server-20260901.db");
+                    await File.WriteAllBytesAsync(old, [1]);
+                    await UntilAsync(() => !File.Exists(old));
+                    Assert.Equal([today], Directory.GetFiles(good));
+                    Assert.True(health.Current.Backup);
+                }
+                finally
+                {
+                    await backups.StopAsync(default);
+                }
             }
 
-            // A failing one is tried again after its retry pause, again and again.
+            // A failing one is tried again at the same interval, again and again.
             var file = Path.Combine(folder, "not-a-folder");
             await File.WriteAllBytesAsync(file, [1]);
             var log = new CapturedLog();
             using var factory = LoggerFactory.Create(logging => logging.AddProvider(log));
-            var (failing, _) = NewBackups(file, folder, time, factory.CreateLogger<Backups>());
+            var (failing, failingHealth) = NewBackups(file, folder, time, factory.CreateLogger<Backups>());
             using (failing)
             {
-                failing.RetryAfterFailure = TimeSpan.FromMilliseconds(20);
+                failing.Interval = TimeSpan.FromMilliseconds(20);
                 await failing.StartAsync(default);
-                await UntilAsync(() => log.Lines.Count(line => line.Contains("A backup failed with", StringComparison.Ordinal)) >= 3);
-                await failing.StopAsync(default);
+                try
+                {
+                    await UntilAsync(() => log.Lines.Count(line => line.Contains("A backup failed with", StringComparison.Ordinal)) >= 3);
+                    Assert.False(failingHealth.Current.Backup);
+                }
+                finally
+                {
+                    await failing.StopAsync(default);
+                }
             }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(37 * 60 + 12)]
+    [InlineData(59 * 60 + 59)]
+    public async Task EveryCopy_IsGoneBeforeItsDayPlusSevenDays_WhateverMinuteTheHourlyRunsFallOn(int offsetSeconds)
+    {
+        // Only the sweep's timing, with no database: each day's copy is in place before its runs, so
+        // every run only sweeps. After a run, a copy stays until the next, an interval later: that
+        // must still be before its day plus the retention, and so within the retention of its writing.
+        var folder = TempFolder();
+        try
+        {
+            var copies = Path.Combine(folder, "backups");
+            Directory.CreateDirectory(copies);
+            var first = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            for (var day = 0; day < 12; day++)
+            {
+                await File.WriteAllBytesAsync(Path.Combine(copies, "server-" + first.AddDays(day).ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".db"), [1]);
+            }
+
+            // The server restarted at 22:00 on October 3, give or take the offset, and runs hourly from then.
+            var time = new ManualTime(new DateTimeOffset(first.AddDays(2).AddHours(22).AddSeconds(offsetSeconds)));
+            var (backups, health) = NewBackups(copies, folder, time);
+            using var disposing = backups;
+            while (time.Now < new DateTimeOffset(first.AddDays(11)))
+            {
+                await backups.RunOnceAsync(default);
+                Assert.True(health.Current.Backup);
+                foreach (var file in Directory.GetFiles(copies))
+                {
+                    var day = DateTime.ParseExact(Path.GetFileName(file)["server-".Length..^".db".Length], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                    Assert.True(time.Now + backups.Interval <= new DateTimeOffset(day) + Backups.Retention, Path.GetFileName(file) + " is kept past its 7 days, after the run at " + time.Now.ToString("u", CultureInfo.InvariantCulture));
+                }
+
+                time.Advance(backups.Interval);
+            }
+
+            // The last run, late on October 11, swept the copies of October 1 to 5: each went at the
+            // first run 6 days and 23 hours or more after its day began.
+            Assert.Equal(
+                Enumerable.Range(5, 7).Select(day => "server-" + first.AddDays(day).ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".db"),
+                Directory.GetFiles(copies).Select(file => Path.GetFileName(file)).Order(StringComparer.Ordinal));
         }
         finally
         {

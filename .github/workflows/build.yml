@@ -314,6 +314,9 @@ jobs:
 
     # Every worker loop still running: as root under sudo (worker-loop.pid, signalled with the loop
     # under it) or as the runner's user (worker-loop-user.pid). A step that stops one deletes its file.
+    # Then the loops' own subshells, which outlive them (a run's killer, which removes its container
+    # too): each is a fork of "bash aetherframe-worker.sh", as nohup started it. Only then are the
+    # containers removed, quietly, since a killer still running could remove one first.
     - name: Stop it
       if: always()
       working-directory: deploy
@@ -325,5 +328,6 @@ jobs:
             sudo kill $(pgrep -P "$loop") "$loop" 2>/dev/null || true
           fi
         done
-        docker ps -q --filter name=aetherframe-worker | xargs -r docker rm -f
+        sudo pkill -f '^bash aetherframe-worker\.sh$' || true
+        docker ps -aq --filter name='^aetherframe-worker-' | xargs -r docker rm -f > /dev/null 2>&1 || true
         docker compose -f compose.yaml -f compose.ci.yaml down -v

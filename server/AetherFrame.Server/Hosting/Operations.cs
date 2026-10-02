@@ -15,21 +15,24 @@ using Microsoft.Extensions.Options;
 namespace AetherFrame.Server.Hosting;
 
 /// <summary>
-/// The daily backup (decision D1; N2-8): a consistent copy of the database, written with
-/// <c>VACUUM INTO</c>, kept for <see cref="Retention"/> and then deleted, so a deletion has reached
-/// every copy once that time has passed. The consent text quotes the retention. Each run's outcome
-/// is <c>/v1/health</c>'s <c>backup</c> (<see cref="ServerHealth"/>).
+/// The backup (decision D1; N2-8): a consistent copy of the database once a UTC day, written with
+/// <c>VACUUM INTO</c>, and deleted within <see cref="Retention"/> of its writing, so a deletion has
+/// reached every copy once that time has passed. The consent text quotes the retention. A run every
+/// <see cref="Interval"/> writes the day's copy if it isn't there yet and deletes the copies due, so
+/// neither a restart nor a failed run moves a deletion later. Each run's outcome is
+/// <c>/v1/health</c>'s <c>backup</c> (<see cref="ServerHealth"/>).
 /// </summary>
 internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase database, ServerHealth health, TimeProvider time, ILogger<Backups> logger) : BackgroundService
 {
-    /// <summary>How long a backup is kept.</summary>
+    /// <summary>How long a backup is kept, at most.</summary>
     public static readonly TimeSpan Retention = TimeSpan.FromDays(7);
 
-    /// <summary>How long after a good run the next one starts.</summary>
-    internal TimeSpan Interval { get; set; } = TimeSpan.FromHours(24);
-
-    /// <summary>How long after a failed run the next one starts: a run writes only the copy its UTC day lacks, so trying again is safe.</summary>
-    internal TimeSpan RetryAfterFailure { get; set; } = TimeSpan.FromHours(1);
+    /// <summary>
+    /// How long after one run the next starts, whether it succeeded or not. A run writes only the
+    /// copy its UTC day lacks, so there is still one copy a day, and a failed run is simply tried
+    /// again at the next.
+    /// </summary>
+    internal TimeSpan Interval { get; set; } = TimeSpan.FromHours(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -38,9 +41,11 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
             return;
         }
 
-        while (!stoppingToken.IsCancellationRequested)
+        // A timer, not a pause after each run, so the runs stay an interval apart however long a copy
+        // takes: the sweep's margin relies on it.
+        using var timer = new PeriodicTimer(Interval, time);
+        do
         {
-            var pause = Interval;
             try
             {
                 await RunOnceAsync(stoppingToken);
@@ -48,16 +53,17 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 logger.LogWarning("A backup failed with {ErrorKind}.", e.GetType().Name);
-                pause = RetryAfterFailure;
             }
-
-            await Task.Delay(pause, time, stoppingToken);
         }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
     /// <summary>
-    /// Writes today's backup if there is none, then deletes those past the retention, whether or not
-    /// the copy succeeded, and records the outcome: a success only when both did.
+    /// Writes today's backup if there is none, then deletes those due, whether or not the copy
+    /// succeeded, and records the outcome: a success only when both did. A copy of day D is due once
+    /// <see cref="Retention"/> less <see cref="Interval"/> has passed since D began, so the run in the
+    /// last interval before D plus the retention deletes it. It was written on day D, so it is gone
+    /// within the retention of its writing, whenever the server restarted or a run failed.
     /// </summary>
     internal async Task RunOnceAsync(CancellationToken cancellation)
     {
@@ -78,6 +84,7 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
     {
         var folder = options.Value.BackupFolder;
         var now = time.GetUtcNow();
+        var due = Retention - Interval;
         var today = Path.Combine(folder, "server-" + now.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".db");
         ExceptionDispatchInfo? copyFailure = null;
         if (!File.Exists(today))
@@ -105,7 +112,7 @@ internal sealed class Backups(IOptions<ServerOptions> options, ServerDatabase da
 
             if (name.Length >= "server-yyyyMMdd".Length
                 && DateTime.TryParseExact(name.Substring("server-".Length, 8), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day)
-                && now.UtcDateTime - day >= Retention)
+                && now.UtcDateTime - day >= due)
             {
                 File.Delete(file);
             }

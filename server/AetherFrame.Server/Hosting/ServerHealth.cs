@@ -10,9 +10,10 @@ namespace AetherFrame.Server.Hosting;
 /// <summary>
 /// What <c>GET /v1/health</c> answers (ServerApi-v1.md, section 3; known bug 14): whether image
 /// worker runs are connecting, whether an image goes through the worker and passes the server's
-/// check, and whether the daily backup is written. Each is true or false and nothing more: no count,
-/// time, version or identifier. It lives in memory, written by the worker client, the image canary
-/// and the backup as they finish, and a request only reads it.
+/// check, and whether the hourly backup run keeps the day's copy and deletes the old ones. Each is
+/// true or false and nothing more: no count, time, version or identifier. It lives in memory,
+/// written by the worker client, the image canary and the backup as they finish, and a request only
+/// reads it.
 /// </summary>
 internal sealed class ServerHealth
 {
@@ -25,8 +26,11 @@ internal sealed class ServerHealth
     /// <summary>How long after the last good canary images count as going through.</summary>
     public static readonly TimeSpan ImagesWindow = TimeSpan.FromHours(3);
 
-    /// <summary>How long after the last good backup run the backup counts as written: a day, and two hours to spare.</summary>
-    public static readonly TimeSpan BackupWindow = TimeSpan.FromHours(26);
+    /// <summary>
+    /// How long after the last good backup run the backup counts as working: three of its hourly
+    /// runs, so a loop that stopped shows within 3 hours. A run that failed shows at once.
+    /// </summary>
+    public static readonly TimeSpan BackupWindow = TimeSpan.FromHours(3);
 
     /// <summary>How long after the server's start images or the backup, with nothing finished yet, counts as healthy. The worker has no such grace.</summary>
     public static readonly TimeSpan StartGrace = TimeSpan.FromMinutes(15);
@@ -102,7 +106,7 @@ internal sealed class ServerHealth
         }
     }
 
-    /// <summary>A backup run finished: the copy and the retention sweep both succeeded, or either failed.</summary>
+    /// <summary>A backup run finished: the day's copy is in place and the retention sweep is done, or either failed.</summary>
     public void BackupFinished(bool succeeded)
     {
         var now = time.GetUtcNow();
@@ -160,7 +164,7 @@ internal sealed record HealthAnswer(bool Worker, bool Images, bool Backup);
 internal sealed class HealthWatch(ServerHealth health, TimeProvider time, ILogger<HealthWatch> logger) : BackgroundService
 {
     /// <summary>How often the signals are looked at, and how long after the start the first look is.</summary>
-    public static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
+    internal TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(1);
 
     private readonly object gate = new();
     private HealthAnswer last = new(true, true, true);

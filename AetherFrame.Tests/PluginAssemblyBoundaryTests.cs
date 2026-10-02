@@ -88,6 +88,9 @@ public class PluginAssemblyBoundaryTests
     /// </summary>
     private static readonly string[] PreviewNetworkAssemblies = ["System.Net.Http", "System.Net.Primitives"];
 
+    /// <summary>What no string in the plugin may hold, in any case (decision R2): the server's health check is the operator's monitor's alone.</summary>
+    private static readonly string[] HealthCheckPaths = ["v1/health", "/health"];
+
     /// <summary>The only <c>System.Net</c> types outside HTTP's namespaces the preview flavour may use (decision R3).</summary>
     private static readonly string[] PreviewNetworkTypes = ["System.Net.HttpStatusCode", "System.Net.Sockets.AddressFamily"];
 
@@ -760,13 +763,14 @@ public class PluginAssemblyBoundaryTests
     /// <summary>
     /// Calls no plugin source may make, in any flavour, each ruled out by a decision in
     /// docs/networking/DecisionRegister.md: the call, the one file allowed to name it (where it is
-    /// defined), and the rule.
+    /// defined, by its path in the repository), and the rule. The protocol and persona sources the
+    /// plugin compiles in are held to them too.
     /// </summary>
     public static TheoryData<string, string, string> CallsTheDecisionsRuleOut => new()
     {
-        { "TryOpenActiveSigner", "", "L10: every signer the plugin opens is bound to the persona an operation showed, through TryOpenSigner" },
-        { "RunWithDpapiClaim", "PersonaCapabilityProbe.cs", "K3: the plugin calls only the probe's public entry point, which binds the protection claim" },
-        { "new PersonaManager(", "", "P3: the plugin makes its manager with PersonaManager.Load, never without its registry" },
+        { "TryOpenActiveSigner", "AetherFrame.Personas/PersonaManager.cs", "L10: every signer the plugin opens is bound to the persona an operation showed, through TryOpenSigner" },
+        { "RunWithDpapiClaim", "AetherFrame/Services/Network/Personas/PersonaCapabilityProbe.cs", "K3: the plugin calls only the probe's public entry point, which binds the protection claim" },
+        { "new PersonaManager(", "AetherFrame.Personas/PersonaManager.cs", "P3: the plugin makes its manager with PersonaManager.Load, never without its registry" },
         { "v1/health", "", "R2: no polling and no background traffic; the server's health check is for the operator's monitor alone" },
     };
 
@@ -774,12 +778,14 @@ public class PluginAssemblyBoundaryTests
     [MemberData(nameof(CallsTheDecisionsRuleOut))]
     public void PluginSources_NeverMakeACallTheDecisionsRuleOut(string call, string definedIn, string rule)
     {
+        var root = RepositoryPaths.Root().FullName;
         var offending = new List<string>();
         var scanned = 0;
-        foreach (var (file, relative) in PluginSources())
+        foreach (var (file, _) in PluginSources().Concat(LinkedSources()))
         {
             scanned++;
-            if (definedIn.Length > 0 && string.Equals(Path.GetFileName(file), definedIn, StringComparison.Ordinal))
+            var relative = Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/');
+            if (definedIn.Length > 0 && string.Equals(relative, definedIn, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -797,6 +803,37 @@ public class PluginAssemblyBoundaryTests
 
         Assert.True(scanned > 0, "no plugin source was scanned");
         Assert.True(offending.Count == 0, rule + ". Found at: " + string.Join(", ", offending));
+    }
+
+    [Fact]
+    public void ThePlugin_HoldsNoStringThatNamesTheHealthCheck()
+    {
+        // R2: the plugin never calls /v1/health. The source scan above reads only what a line spells
+        // out; the compiled user strings hold every string literal the plugin compiles, in any
+        // flavour, from its own sources and the libraries it links in.
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var metadata = pe.GetMetadataReader();
+        Assert.True(metadata.GetHeapSize(HeapIndex.UserString) > 1, "The plugin holds no user string.");
+        var offending = new List<string>();
+        var scanned = 0;
+        for (var handle = MetadataTokens.UserStringHandle(1); !handle.IsNil; handle = metadata.GetNextHandle(handle))
+        {
+            var text = metadata.GetUserString(handle);
+            scanned++;
+            if (HealthCheckPaths.Any(named => text.Contains(named, StringComparison.OrdinalIgnoreCase)))
+            {
+                offending.Add(text);
+            }
+        }
+
+        Assert.True(scanned > 0, "no user string was read");
+        Assert.True(offending.Count == 0, "R2: no polling and no background traffic; the server's health check is for the operator's monitor alone. The plugin holds: " + string.Join(", ", offending));
     }
 
     [Fact]
