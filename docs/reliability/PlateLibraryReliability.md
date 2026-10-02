@@ -4,7 +4,7 @@ This report covers a review of the local Plate Library, its persistence, backup,
 
 **Revised after an independent audit.** An independent adversarial review of this branch at `c724cd6` confirmed that one of its fixes, the treatment of text that isn't valid (fix 2, `be5d5b0`), lost data in several ways, and that the Recovery copy's central behaviour was not tested under a copy that fails partway. Both are corrected, with regression tests. Section 10 describes the audit's findings and the corrections; sections 3 to 8 describe the branch as it now stands.
 
-**Scope.** It covers local files only: Plates, Templates, character bindings, the Plate order (`library.json`), images and their metadata, Recovery and backup copies, and `.aetherframe` packages. The NETWORK0 protocol, networking, the plugin's distribution and the saved file formats are out of scope and unchanged.
+**Scope.** It covers local files only: Plates, Templates, character bindings, the Plate order (`library.json`), images and their metadata, Recovery and backup copies, and `.aetherframe` packages. Section 11, added later, covers the unsaved changes an editor had when AetherFrame unloaded, kept in `Drafts/`. The NETWORK0 protocol, networking, the plugin's distribution and the saved file formats are out of scope and unchanged.
 
 **Summary.** v0.1.6 had already made the Library robust. Each write replaces its file atomically, although a write and Dalamud's backup row of it are not one transaction (section 2). Damaged files are left untouched and copied to Recovery. Newer-version files are never written. Import validates everything on a staging copy before committing. Nothing deletes images. This review found no way for an ordinary save, load or import to corrupt or lose a Plate. It did find narrower gaps, and those are fixed here:
 
@@ -256,7 +256,7 @@ D1 and D18 can lose data in the narrow cases they describe, and D16 an original'
 | D4 | Prerequisites before asset cleanup is ever switched on. See the list below the table. | Cleanup has no caller. Each of these must be settled when it is activated. |
 | D5 | A Plate with repeated element ids from a hand edit can't be exported until it is saved with the ids repaired. | Exporting the repaired ids would change export output. That is a product decision. |
 | D6 | When a Plate is served from a stale backup, only the log says so. | UI and product decision (a notice in My Plates). The card note added for text that isn't valid (fix 2) could carry it, once its wording and when it clears are decided. |
-| D7 | No autosave, draft or version history: unsaved edits are lost on a crash, and each save replaces both the file and its backup. | Product decision. |
+| D7 | No autosave, draft or version history: unsaved edits are lost on a crash, and each save replaces both the file and its backup. **Partly addressed (October 2, 2026, section 11):** an editor's unsaved changes are now kept when AetherFrame unloads (a test build's reload, an update, a disable, the game closing) and offered back at the next load. A crash still loses them, since nothing is written while editing, and there is still no autosave or version history. | Product decision: autosave stays an OPEN product choice. |
 | D8 | Two game clients sharing one configuration folder can overwrite each other's changes. | Needs a cross-process locking design. |
 | D9 | `WriteAtomically`'s cleanup can mask the original error if the delete itself fails. Hidden `.{name}.{guid}.tmp` leftovers from the stuck-temp fallback are swept only for thumbnails. | Cosmetic; no data risk. |
 | D10 | A crash mid-export leaves `.{guid}.aetherframe.tmp` in the player's chosen folder. The suggested export name doesn't avoid reserved Windows names (a Plate named "Con"). | Outside AetherFrame's folder, so it can't be swept safely. The Windows case is untested here. |
@@ -273,6 +273,7 @@ The D4 prerequisites, before asset cleanup is ever switched on:
 
 - **A folder that can't be listed must block cleanup.** A missing or inaccessible `Profiles` folder currently gives an empty scan that calls itself complete.
 - **`Recovery/` and `Backups/` must be scanned.**
+- **Kept unsaved changes, `Drafts/` and `Trash/Drafts/`, must stay scanned.** A draft may be the only thing still using an image added while editing (section 11). The dormant scan already reads both folders, counting every GUID string in each file; one it can't read, or that a newer version wrote, leaves the scan incomplete.
 - **The editor's `AssetsInUse` must be a required input to `Plan`.**
 - **Uppercase-named asset files need handling.** They can be trashed but not restored.
 - **A save that landed but reported failure (D17) must be scanned from disk.** Memory still holds the previous document, so the scan would miss images only the new file references. Reading every loaded Plate from disk instead would leave the scan incomplete for any Plate recovered from its backup.
@@ -375,3 +376,68 @@ A new adversarial review of the correction (`c724cd6..17ff3ea`), across data los
 | A Plate read from a stale backup gets no card note while one with invalid text does | Not a regression (unchanged from `c724cd6`); recorded under D6 |
 | The dormant scan trusts memory for a save that landed but reported failure | Latent; added to the D4 prerequisites |
 | Mutation counts, the byte order mark case count, CI coverage, manual steps 4 to 6, the Move comment, section 7's introduction and other wording | Corrected here; UTF-32 big-endian added to the fixture re-encodings |
+
+## 11. Unsaved changes kept when AetherFrame unloads
+
+Added on October 2, 2026, as ROADMAP.md's section 8, task 4 (the owner's choice that day); its design was decided under the owner's delegation. It partly addresses D7: before it, a test build's reload, an update, a disable or the game closing lost whatever an editor had not saved, because nothing in unloading touched the open document. A crash still loses it: nothing is written while editing, and autosave stays an OPEN product choice.
+
+### Where and how it is kept
+
+- **Beside the Library, never in the Plate.** Each unload with unsaved changes writes one draft to `Drafts/`, beside `Profiles/`, `Recovery/` and `Trash/`. Not the plugin configuration (rule 3, and D1's fragility), not `Recovery/` (damaged files' copies only), and not `Profiles/` (every Guid-named file there is loaded as a Plate).
+- **Write-once names.** `{plateId}.unsaved-{yyyyMMdd-HHmmss-fff}-{draft id, 32 hex}.json`, with the invariant stamp Recovery and trash names use. A name is unique to its write, and one that is somehow taken gets a new id, so a draft never writes over anything: not an earlier draft, not one another game client wrote (D8), and Dalamud's backup row, keyed by the exact path, can only ever hold what was written under it. Names are parsed strictly, as Plate names are; anything else in the folder, a `.tmp` leftover included, is ignored and left alone.
+- **Nothing deletes a draft.** A draft that is answered, or retired because a save already holds it, moves intact, never over another file, to `Trash/Drafts/`.
+- **The format.** An envelope with its own schema (`PersistenceSchemas.Draft`, version 1), in the Template envelope's two-layer pattern: `Version`, `DraftId`, `PlateId`, `PlateName` (display only), `WrittenAtUtc`, `Editor` (Basic, Advanced or None), `Build`, `BaseRevision` and `BaseUpdatedAtUtc` (the saved version the edits started from), and `Document`, the whole open document as a save would write it, unknown fields and elements included. It never holds undo history, selection, zoom, sharing or persona state, or a character's Content ID: a legacy owner is written as 0. `AetherFrame.Tests/DraftFixtures/draft-v1.json` pins the format.
+- **The same proof as a Plate write.** The text is serialized, put through a file's byte-level round trip, and read back through the draft reader as a usable draft before it is written. Text that fails is not written, and the log says so.
+
+### When it is written
+
+- **Read as the UI stops.** `StopNewWork` reads the open document on the framework thread, once drawing has stopped and before the windows are removed, while the editor showing it is still known. `EditorSession.CaptureUnsavedChanges` uses neither ImGui nor the editors' once-a-frame dirty memo. It keeps a copy only when the document differs from its saved state (or that state couldn't be captured). An edit still in progress, a slider or a drag, is already in the document, so it is kept too. The copy is taken under `ProfileService`'s lock even while a save is being written, so a save in flight still leaves a draft; the next load finds it equal to the saved Plate if the save landed, and retires it.
+- **Written before anything waits.** `DisposeAsync` writes it right after `StopNewWork`, before unloading waits for running operations, and waits for it 5 seconds at most. It never throws: a refusal, a failure or a timeout is logged. It goes through the same reliable chain as every Plate write, `StuckTempFallbackFileStore` over Dalamud's `IReliableFileStorage` (`PluginFileStores.Unguarded`), but without `ShutdownGuardedFileStore`, which refuses every step once operations are abandoned. It is never a Library operation and never dispatched to the framework thread, either of which unloading or a closing game can refuse or never run.
+
+### What the next load offers
+
+Once both Libraries have loaded and the tutorial's first-run question is settled, the drafts are read off the framework thread as an owned operation, newest first, at most 20 (the rest wait, untouched, and the log says how many). A Plate Library that failed to load means nothing is read, touched or offered. Each draft is judged against the Library:
+
+| Case | The Plate | Offered |
+|---|---|---|
+| (a) | Its saved content equals the draft (compared as dirty state compares) | Nothing: retired silently to `Trash/Drafts/` |
+| (b) | Ready, saved at the draft's base revision and modified time | **Restore**, Discard, Decide Later |
+| (c) | Ready, but saved since (here, in another game client, a save that landed while reporting failure, D17), or edited by hand | **Restore as New Plate**, Discard, Decide Later. It is never written |
+| (d) | Deleted or missing | **Restore as New Plate**, Discard, Decide Later. Its id never comes back |
+| (e) | A newer version's, or damaged | As (c) |
+| (f) | Couldn't be opened this session (locked) | **Restore as New Plate** or Decide Later; the draft stays |
+| (g) | The draft itself is damaged, can't be opened, or a newer version's | Nothing; it is left exactly as it is, and logged |
+
+The "Unsaved changes kept" window offers them one at a time, once a character is logged in: at once on a reload while logged in, otherwise at the next login. Closing it keeps every draft, My Plates then shows a reminder with Review, and the next load asks again. There is no limit on asking.
+
+- **Claimed before acting** (D8: no lock spans game clients). Restore, Restore as New Plate and Discard first move the draft to `Trash/Drafts/`. A draft already gone was taken by another game window: the window says "These changes were already handled in another game window." and nothing else happens. A move that fails leaves the draft where it was, and nothing is restored.
+- **Restore** never writes. When another Plate is open with unsaved changes, or the same Plate is, it first asks My Plates' Save, Discard or Cancel. Then the Plate opens, the editor takes its saved state as the baseline, and the kept changes go in as one undoable edit. The editor reads as unsaved, the Plate's file is unchanged until the player chooses Save (through the normal path, with its validation and sharing), Revert to Saved discards them, and one Undo returns to the saved Plate. The Library's name and the saved file's unknown data are kept. A restore that can't be done puts the draft back, still offered.
+- **Restore as New Plate** inserts the kept document through the Library's own new-Plate path, with a new id, unbound and never Active, named "{name} (kept changes)" and made unique. It keeps every field of the draft, unknown ones included, and opens clean in the editor the changes were made in.
+- **Renames.** A rename writes only a Plate's name and modified time. So the open document takes the rename's modified time too, and changes kept after renaming a Plate in the editor's Plate menu still restore over it. Just before acting, the offer checks the Plate again: it is restorable while it is Ready at the same revision, since only Library operations change a loaded Plate.
+
+### Images
+
+The draft holds only references: images added in the editor are already final files in `assets/`. The dormant cleanup's scan (`ScanAssetReferencesAsync`, and through it `LiveAssetReferences`) reads `Drafts/` and `Trash/Drafts/`, counting every GUID string in each file; one it can't read, or that a newer version wrote, makes the scan incomplete (a D4 prerequisite).
+
+### Tests
+
+`KeptChangesWriteTests`, `KeptChangesReadTests`, `KeptChangesConflictTests`, `KeptChangesClaimTests` and `KeptChangesOfferTests`, over the Library doubles (`LibraryFixture`, `FakeClock`, `BackupSimulatingStore`, `HeldWriteStore`, `FaultInjectingStore`), 64 cases. Negative checks, each guard removed in turn and the 64 run:
+
+- **Unique names:** the draft id taken out of the name (and the retry and the name-against-content check with it) fails 3, among them `TwoDraftsInTheSameMillisecond_GetTwoFiles_AndNeitherIsWrittenOver` (the second draft wrote over the first). The retry alone fails `ANameThatIsSomehowTaken_GetsANewId_AndTheFileThereStaysAsItIs`.
+- **Claim by move:** fails 12, among them `TwoGameWindows_SeeTheSameDraft_TheFirstClaimWins_TheSecondSaysItWasHandledThere` and `AFailedMove_KeepsTheDraft_AndRestoresNothing`.
+- **The base check:** fails `AChangedBase_OffersOnlyANewPlate_AndTheOriginalStaysByteIdentical`.
+- **The unguarded store:** writing through the guarded store fails `Unloading_KeepsTheDraft_AfterRunningOperationsWereAbandoned`.
+- **The baseline before the changes:** applying the changes before the editor takes the saved state as its baseline fails 7, among them `AMatchingBase_RestoresIntoTheEditorUnsaved_FileUnchangedUntilSave_OneUndoBack_RenameKept`.
+- **The rename's modified time:** fails `AMatchingBase_RestoresIntoTheEditorUnsaved_FileUnchangedUntilSave_OneUndoBack_RenameKept`.
+
+### Manual acceptance in FFXIV
+
+Use Plates made for the test. The build that adds this can't keep anything when it is itself installed: the reload that installs it unloads the build before it.
+
+1. Open a Plate in the Basic editor, change it, don't save, and reload (install the same build again, or disable and enable AetherFrame). "Unsaved changes kept" names the Plate, Basic editor and the time. Restore: the Basic editor opens with the change, the save state says unsaved, and the Plate file's modified time hasn't changed. Ctrl+Z goes back to the saved Plate; Ctrl+Y brings the change back; Save keeps it.
+2. The same in the Advanced editor, with a drag still held when the reload happens if you can: it opens in the Advanced editor.
+3. Change a Plate, don't save, rename it from the Plate menu, and reload: Restore is offered, and the Plate keeps its new name.
+4. Change a Plate, reload, and choose Decide Later: My Plates shows "Unsaved changes were kept for 1 Plate." with Review, which offers it again. Discard: the draft is in `Trash/Drafts/` and the Plate is as saved.
+5. Change a Plate, reload, close the offer, save a different change to the same Plate, and reload: the offer says it was saved again and offers Restore as New Plate, which makes "{name} (kept changes)", opens it, and leaves the original as saved.
+6. Change a Plate, reload while logged out (or at the title screen): the offer appears at the next login.
+7. Close the game with an unsaved change: the next start offers it.

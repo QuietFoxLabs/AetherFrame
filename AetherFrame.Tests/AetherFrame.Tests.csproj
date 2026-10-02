@@ -100,6 +100,13 @@
     <None Update="ImageFixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- A draft of unsaved changes as version 1 of its envelope writes it, copied next to the test
+       binaries byte for byte, so KeptChangesReadTests reads exactly that format for as long as it
+       must load. Kept apart from Fixtures, whose guards cover released builds' installations. -->
+  <ItemGroup>
+    <None Update="DraftFixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The plugin's bundled artwork under the same manifest resource names, so the resource
        integrity tests read exactly what BuiltInArtCatalog names. -->
   <ItemGroup>

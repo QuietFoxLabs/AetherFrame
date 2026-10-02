@@ -170,6 +170,24 @@ internal sealed class ProfileService
     }
 
     /// <summary>
+    /// An independent copy of the open document as it is now, made exactly as a save makes its
+    /// snapshot (unknown data and unrecognized elements included), with the revision and modified
+    /// time of the saved version it was opened at or last saved as. Unlike a save, it is taken while
+    /// a save is being written too: it is what AetherFrame keeps of the unsaved changes when it
+    /// unloads (see <c>EditorSession.CaptureUnsavedChanges</c>), and must not miss them. Null when no
+    /// Plate is open.
+    /// </summary>
+    internal OpenDocumentCopy? CopyOpenDocument()
+    {
+        lock (gate)
+        {
+            return currentProfile is { } profile
+                ? new OpenDocumentCopy(profile, CloneForSave(profile, profile.Revision, profile.UpdatedAtUtc), profile.Revision, profile.UpdatedAtUtc)
+                : null;
+        }
+    }
+
+    /// <summary>
     /// Adds a text element to the currently loaded profile. Synchronous UI mutation; safe to
     /// call directly from ImGui Draw. Returns the new element's id.
     /// </summary>
@@ -713,14 +731,25 @@ internal sealed class ProfileService
         MalformedComponentsValue = source.MalformedComponentsValue,
     };
 
-    /// <summary>A rename in My Plates also relabels the open copy, so the next save keeps it.</summary>
+    /// <summary>
+    /// A rename in My Plates also relabels the open copy, so the next save keeps it. A rename writes
+    /// only the name and the modified time, so the open copy still starts from that same saved
+    /// version, now stamped with the rename's time: it takes that time too, so unsaved changes kept
+    /// when AetherFrame unloads still match the saved Plate and can be restored over it.
+    /// </summary>
     private void OnPlateRenamed(Guid plateId, string name)
     {
+        // Read before taking this lock: the Library has its own.
+        var saved = library.FindPlate(plateId);
         lock (gate)
         {
             if (currentProfile?.ProfileId == plateId)
             {
                 currentProfile.Name = name;
+                if (saved is { IsReady: true } && saved.Revision == currentProfile.Revision)
+                {
+                    currentProfile.UpdatedAtUtc = saved.ModifiedUtc;
+                }
             }
         }
     }
@@ -767,7 +796,98 @@ internal sealed class ProfileService
             profile.BasicPlate?.Clone(),
             profile.Elements.Select(e => e.Clone()).ToList(),
             PlateComponent.CloneList(profile.Components));
+
+        /// <summary>Whether <paramref name="other"/> holds exactly this content: the structural comparison dirty state uses.</summary>
+        internal bool ContentEquals(DocumentState other) =>
+            Matches(other.CanvasWidth, other.CanvasHeight, other.Background, other.BasicIdentity, other.BasicPlate, other.Elements, other.Components);
+
+        /// <summary>Value equality of this state against another state's (or the live profile's) parts.</summary>
+        internal bool Matches(
+            float canvasWidth,
+            float canvasHeight,
+            ProfileBackground? background,
+            BasicIdentityHeader? identity,
+            BasicPlateSettings? basicPlate,
+            List<ProfileElement> live,
+            List<PlateComponent>? components)
+        {
+            if (!CanvasWidth.Equals(canvasWidth) || !CanvasHeight.Equals(canvasHeight))
+            {
+                return false;
+            }
+
+            if (Background is null ? background is not null : !Background.ContentEquals(background))
+            {
+                return false;
+            }
+
+            if (BasicIdentity is null ? identity is not null : !BasicIdentity.ContentEquals(identity))
+            {
+                return false;
+            }
+
+            if (BasicPlate is null ? basicPlate is not null : !BasicPlate.ContentEquals(basicPlate))
+            {
+                return false;
+            }
+
+            if (!PlateComponent.ListsEqual(Components, components))
+            {
+                return false;
+            }
+
+            var saved = Elements;
+            if (saved.Count != live.Count)
+            {
+                return false;
+            }
+
+            // Fast path: same order (the usual case: reorders only renumber ZIndex, and adds append).
+            var sameOrder = true;
+            for (var i = 0; i < live.Count; i++)
+            {
+                if (saved[i].Id != live[i].Id)
+                {
+                    sameOrder = false;
+                    break;
+                }
+
+                if (!saved[i].ContentEquals(live[i]))
+                {
+                    return false;
+                }
+            }
+
+            if (sameOrder)
+            {
+                return true;
+            }
+
+            var savedById = new Dictionary<Guid, ProfileElement>(saved.Count);
+            foreach (var element in saved)
+            {
+                savedById[element.Id] = element;
+            }
+
+            foreach (var element in live)
+            {
+                if (!savedById.TryGetValue(element.Id, out var savedElement) || !savedElement.ContentEquals(element))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
+
+    /// <summary>
+    /// A copy of the open document (see <see cref="CopyOpenDocument"/>): <see cref="Source"/> is the
+    /// live instance it was taken from, for telling documents apart by reference only; the copy is
+    /// <see cref="Document"/>, and <see cref="BaseRevision"/> and <see cref="BaseUpdatedAtUtc"/> name
+    /// the saved version it started from.
+    /// </summary>
+    internal sealed record OpenDocumentCopy(ProfileDocument Source, ProfileDocument Document, int BaseRevision, DateTime BaseUpdatedAtUtc);
 
     /// <summary>Immutable snapshot of a profile's canvas size and every element's Position/Size, for undo/redo of a canvas resize.</summary>
     internal readonly record struct CanvasLayoutState(

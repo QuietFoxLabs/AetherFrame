@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Assets;
-using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Diagnostics;
@@ -893,7 +892,75 @@ internal sealed partial class EditorSession
             return baseline is null && profile is null;
         }
 
-        return StateMatches(baseline, profile.CanvasWidth, profile.CanvasHeight, profile.Background, profile.BasicIdentity, profile.BasicPlate, profile.Elements, profile.Components);
+        return baseline.Matches(profile.CanvasWidth, profile.CanvasHeight, profile.Background, profile.BasicIdentity, profile.BasicPlate, profile.Elements, profile.Components);
+    }
+
+    /// <summary>
+    /// What AetherFrame keeps when it unloads (see <see cref="UnsavedChangesKeeper"/>): a copy of the
+    /// open Plate as it is now when it differs from its last loaded or saved state, or when that state
+    /// couldn't be captured. An edit still in progress (a slider being dragged, text being typed, a
+    /// drag on the canvas) is already in the document, so it is kept too. Null when no Plate is open,
+    /// when nothing changed, and for a document no editor frame has seen yet (opened since the last
+    /// frame, so exactly as saved). Reads no frame counter and nothing of ImGui, records no history
+    /// and changes nothing: it runs while the plugin unloads, on whichever thread that is. The copy is
+    /// taken even while a save is being written, so a save in flight still leaves one; the next load
+    /// finds it equal to the saved Plate if the save landed, and retires it.
+    /// </summary>
+    internal ProfileService.OpenDocumentCopy? CaptureUnsavedChanges()
+    {
+        if (profileService.CopyOpenDocument() is not { } copy || !ReferenceEquals(copy.Source, baselineSourceProfile))
+        {
+            return null;
+        }
+
+        // A save that completed since the last frame is the baseline its frame would adopt.
+        var baseline = completedSave is { } save && ReferenceEquals(save.Profile, copy.Source) ? save.State : savedBaseline;
+        return baseline is not null && baseline.ContentEquals(ProfileService.DocumentState.Capture(copy.Document)) ? null : copy;
+    }
+
+    /// <summary>
+    /// Puts unsaved changes AetherFrame kept when it last unloaded back into the open Plate, as one
+    /// undoable history entry, the way an undoable Revert to Saved works: the document becomes
+    /// <paramref name="state"/> and reads as unsaved, nothing is written, and one Undo returns to
+    /// what it held before. Call <see cref="SyncWithCurrentProfile"/> first, once the Plate is open,
+    /// so its saved state is the baseline and the restored changes don't become it. Returns whether
+    /// they were applied: false, with the document untouched and <see cref="ErrorMessage"/> set, when
+    /// the Plate can't be changed right now (no Plate open, a save in flight).
+    /// </summary>
+    internal bool ApplyRecoveredState(ProfileService.DocumentState state)
+    {
+        ErrorMessage = null;
+        CommitPendingEdits();
+        CancelInteraction();
+
+        ProfileService.DocumentState before;
+        try
+        {
+            before = profileService.CaptureDocumentState();
+            profileService.RestoreDocumentState(state);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            return false;
+        }
+
+        DropSelectionIfMissing();
+        InvalidateDirtyMemo();
+
+        // Its assets join AssetsInUse here, as every recorded edit's do.
+        RecordHistory(
+            undo: () =>
+            {
+                profileService.RestoreDocumentState(before);
+                DropSelectionIfMissing();
+            },
+            redo: () =>
+            {
+                profileService.RestoreDocumentState(state);
+                DropSelectionIfMissing();
+            });
+        return true;
     }
 
     /// <summary>
@@ -909,91 +976,10 @@ internal sealed partial class EditorSession
         }
 
         return profileService.CurrentProfile is { } profile
-            && StateMatches(state, profile.CanvasWidth, profile.CanvasHeight, profile.Background, profile.BasicIdentity, profile.BasicPlate, profile.Elements, profile.Components);
+            && state.Matches(profile.CanvasWidth, profile.CanvasHeight, profile.Background, profile.BasicIdentity, profile.BasicPlate, profile.Elements, profile.Components);
     }
 
-    private static bool StatesEqual(ProfileService.DocumentState a, ProfileService.DocumentState b) =>
-        StateMatches(a, b.CanvasWidth, b.CanvasHeight, b.Background, b.BasicIdentity, b.BasicPlate, b.Elements, b.Components);
-
-    /// <summary>Value equality of a captured state against another state's (or the live profile's) parts.</summary>
-    private static bool StateMatches(
-        ProfileService.DocumentState state,
-        float canvasWidth,
-        float canvasHeight,
-        ProfileBackground? background,
-        BasicIdentityHeader? identity,
-        BasicPlateSettings? basicPlate,
-        List<ProfileElement> live,
-        List<PlateComponent>? components)
-    {
-        if (!state.CanvasWidth.Equals(canvasWidth) || !state.CanvasHeight.Equals(canvasHeight))
-        {
-            return false;
-        }
-
-        if (state.Background is null ? background is not null : !state.Background.ContentEquals(background))
-        {
-            return false;
-        }
-
-        if (state.BasicIdentity is null ? identity is not null : !state.BasicIdentity.ContentEquals(identity))
-        {
-            return false;
-        }
-
-        if (state.BasicPlate is null ? basicPlate is not null : !state.BasicPlate.ContentEquals(basicPlate))
-        {
-            return false;
-        }
-
-        if (!PlateComponent.ListsEqual(state.Components, components))
-        {
-            return false;
-        }
-
-        var saved = state.Elements;
-        if (saved.Count != live.Count)
-        {
-            return false;
-        }
-
-        // Fast path: same order (the usual case — reorders only renumber ZIndex, and adds append).
-        var sameOrder = true;
-        for (var i = 0; i < live.Count; i++)
-        {
-            if (saved[i].Id != live[i].Id)
-            {
-                sameOrder = false;
-                break;
-            }
-
-            if (!saved[i].ContentEquals(live[i]))
-            {
-                return false;
-            }
-        }
-
-        if (sameOrder)
-        {
-            return true;
-        }
-
-        var savedById = new Dictionary<Guid, ProfileElement>(saved.Count);
-        foreach (var element in saved)
-        {
-            savedById[element.Id] = element;
-        }
-
-        foreach (var element in live)
-        {
-            if (!savedById.TryGetValue(element.Id, out var savedElement) || !savedElement.ContentEquals(element))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private static bool StatesEqual(ProfileService.DocumentState a, ProfileService.DocumentState b) => a.ContentEquals(b);
 
     private sealed record HistoryEntry(Action Undo, Action Redo);
 
