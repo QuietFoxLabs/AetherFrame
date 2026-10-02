@@ -8,6 +8,10 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 - **Unsaved changes are kept when AetherFrame closes.** If AetherFrame closes while an editor has unsaved changes (an update, turning it off, or closing the game), it keeps them beside your Plates, in its `Drafts` folder, and never in the Plate itself. The next time it loads, once a character is logged in, **Unsaved changes kept** offers them back. **Restore** opens the Plate with them in the editor you were using. Nothing is saved until you choose **Save**, and one Undo or Revert to Saved goes back to the saved Plate. **Discard** moves them to AetherFrame's Trash folder, and **Decide Later** keeps them: My Plates reminds you, with **Review**, and AetherFrame asks again next time. If the Plate was saved again since, was deleted, or can't be opened, they can be restored as a new Plate instead, named after the Plate followed by "(kept changes)", and the saved Plate stays as it is. A crash still loses unsaved changes, since nothing is written while you edit.
 
+### Changed
+
+- The Basic editor's **Reset Basic Layout** prompt lists the sections it resets as they are: **Favorite Jobs** by that name, and no retired Level line.
+
 ## [0.1.9] - 2026-10-02
 
 Art Styles download from GitHub the first time you use them, so the plugin is about 75 MB smaller, and there are 20 more, for 40 in all. For a character that shares, making a Plate Active shares it at once, with a small window that shows how it is going. Also frames that fit what they frame, mirrored backgrounds that follow a Mirrored Plate, and a tutorial for sharing.

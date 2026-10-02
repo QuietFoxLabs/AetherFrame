@@ -14,7 +14,7 @@ body:
     attributes:
       label: AetherFrame version
       description: Type `/af version` in game and paste what it prints.
-      placeholder: AetherFrame 0.1.6 (build 1a2b3c4)
+      placeholder: AetherFrame 0.1.9 (build 1a2b3c4) [sharing]
     validations:
       required: true
 
@@ -42,8 +42,9 @@ body:
         - Plate Viewer (/af view)
         - Templates
         - Import or export (.aetherframe files)
-        - Components or bundled artwork
+        - Components or Art Style artwork (including its download)
         - Loading, unloading or updating the plugin
+        - "Sharing (alpha): sharing a Plate or viewing someone else's"
         - Something else
     validations:
       required: true

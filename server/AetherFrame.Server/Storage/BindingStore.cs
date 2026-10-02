@@ -11,8 +11,8 @@ namespace AetherFrame.Server.Storage;
 /// <summary>A key's binding to a character (decisions C1 and C4).</summary>
 internal sealed record Binding(PersonaId Persona, long LodestoneId, string Name, string World, ProfileId ProfileId, bool Hidden);
 
-/// <summary>What a successful check did.</summary>
-internal sealed record BindResult(ProfileId ProfileId, bool DeletedContent);
+/// <summary>What a successful check did: the binding's profile id.</summary>
+internal sealed record BindResult(ProfileId ProfileId);
 
 /// <summary>What a re-read did to a binding.</summary>
 internal enum RereadResult
@@ -178,7 +178,7 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
             await database.CheckpointAsync(CancellationToken.None);
         }
 
-        return new BindResult(profileId, deleted);
+        return new BindResult(profileId);
     }
 
     /// <summary>

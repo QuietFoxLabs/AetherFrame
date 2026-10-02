@@ -25,9 +25,6 @@ internal ref struct CanonicalReader
     /// <summary>The bytes not yet read.</summary>
     public readonly int Remaining => input.Length - position;
 
-    /// <summary>The bytes read so far.</summary>
-    public readonly int Position => position;
-
     public byte ReadU8(string field) => Take(1, field)[0];
 
     public ushort ReadU16(string field) => BinaryPrimitives.ReadUInt16BigEndian(Take(2, field));

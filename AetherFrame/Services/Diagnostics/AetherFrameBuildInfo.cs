@@ -51,10 +51,11 @@ internal sealed record AetherFrameBuildInfo(string Version, string? Revision)
     }
 
     /// <summary>
-    /// Whether this is the networking preview flavour (docs/networking/DecisionRegister.md, P2): the
-    /// build that compiles the protocol and persona sources in, and later the preview commands. A
-    /// player build, and every official build, is never the preview flavour, and nothing in one can
-    /// create a persona key or a signed document.
+    /// Whether this is the sharing build (AetherFrameNetworkPreview; docs/networking/DecisionRegister.md,
+    /// P2 and D9b): the build that compiles the protocol and persona sources in and carries the
+    /// sharing client. Since 0.1.8 it is the default and the released build (distribution/repository.json's
+    /// sharingSince). The player flavour (-p:AetherFrameNetworkPreview=false), which CI still builds,
+    /// holds none of that code and can create neither a persona key nor a signed document.
     /// </summary>
     internal static bool NetworkPreview =>
 #if AETHERFRAME_NETWORK_PREVIEW

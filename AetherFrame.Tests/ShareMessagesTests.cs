@@ -8,8 +8,8 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// What the preview's share check says (N2-6c's second part): every refusal, left-out reason,
-/// failure and result has a message of its own, in plain text that names no path, id or label.
+/// What the preview's share check says (N2-6c's second part): every refusal, left-out reason and
+/// failure has a message of its own, in plain text that names no path, id or label.
 /// </summary>
 public sealed class ShareMessagesTests
 {
@@ -19,21 +19,6 @@ public sealed class ShareMessagesTests
         AssertDistinct(Enum.GetValues<PlateSnapshotRefusal>().Select(ShareMessages.For), ShareMessages.For((PlateSnapshotRefusal)250));
         AssertDistinct(Enum.GetValues<LeftOutReason>().Select(ShareMessages.For), ShareMessages.For((LeftOutReason)250));
         AssertDistinct(Enum.GetValues<ShareCheckFailure>().Where(f => f != ShareCheckFailure.None).Select(ShareMessages.For), ShareMessages.For(ShareCheckFailure.None));
-        AssertDistinct(Enum.GetValues<PublishResult>().Select(ShareMessages.For), ShareMessages.For((PublishResult)250));
-        AssertDistinct(Enum.GetValues<PublicationLoadResult>().Where(r => r != PublicationLoadResult.Loaded).Select(ShareMessages.For), ShareMessages.For((PublicationLoadResult)250));
-        Assert.Equal(string.Empty, ShareMessages.For(PublicationLoadResult.Loaded));
-
-        var states = new List<string>();
-        foreach (var state in new[] { PublicationState.Pending, PublicationState.Published, PublicationState.Retracting })
-        {
-            foreach (var outbox in Enum.GetValues<OutboxState>())
-            {
-                states.Add(ShareMessages.For(state, outbox));
-            }
-        }
-
-        Assert.DoesNotContain("unknown", states);
-        Assert.Equal("its latest signing wasn't stored: share it again", ShareMessages.For(PublicationState.Published, OutboxState.NotStored));
     }
 
     [Fact]

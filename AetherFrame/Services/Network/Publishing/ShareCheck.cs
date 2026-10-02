@@ -122,15 +122,15 @@ internal sealed class ShareCheckSeams
 }
 
 /// <summary>
-/// The preview's share check (N2-6c's second part; N2-6's design, sections 1 and 3): a saved Plate
-/// becomes a candidate, exactly what would be shared, or the reasons it can't be. It reads a private
-/// copy of the Plate's saved JSON, never an editor's document. It resolves that copy as the
-/// renderer draws it on the framework thread, a frame at a time while the Plate's fonts are built,
-/// and gives up after <see cref="ShareCheckSeams.ResolveFrames"/>, never measuring with a stand-in.
-/// Then, off the framework thread, and only once image preparation's known-answer check has passed
-/// this session, it prepares the images drawn and maps the result. A new check drops the one before
-/// it, and a result that arrives after that is never shown. Compiled only in the networking preview
-/// flavour.
+/// The share check ("Check what would be shared (preview)" in My Plates; N2-6c's second part; N2-6's
+/// design, sections 1 and 3): a saved Plate becomes a candidate, exactly what would be shared, or
+/// the reasons it can't be. It reads a private copy of the Plate's saved JSON, never an editor's
+/// document. It resolves that copy as the renderer draws it on the framework thread, a frame at a
+/// time while the Plate's fonts are built, and gives up after
+/// <see cref="ShareCheckSeams.ResolveFrames"/>, never measuring with a stand-in. Then, off the
+/// framework thread, and only once image preparation's known-answer check has passed this session,
+/// it prepares the images drawn and maps the result. A new check drops the one before it, and a
+/// result that arrives after that is never shown. Compiled only in the networking preview flavour.
 /// </summary>
 internal sealed class ShareCheck : IDisposable
 {

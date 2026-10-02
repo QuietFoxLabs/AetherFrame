@@ -14,11 +14,11 @@ Section 7 adds a second, deeper pass (September 30, 2026): every journey counted
 | **Basic Editor** and **Advanced Editor** | One editing session shared by both: the same document, unsaved state and undo history. The action bar holds My Plates, the Basic/Advanced switch (which hands the Plate over in place), the Plate's name (display only, and hidden when the bar is too narrow), Undo and Redo, the save state, Preview (Clean Preview), Revert, Save and Help. | Double-click a card (the editor is chosen by the Plate's content; the Plate already open stays in the editor showing it), the card menu, or Use Template |
 | **Plate Viewer** (`ProfileViewWindow`) | A read-only overlay of one Plate, drawn over the game. | `/aetherframe view` (the character's Active Plate), a card's Preview, or Preview in Manage Templates |
 | **Package Import** | Checks an `.aetherframe` file and previews it; it is always added as a new Plate. | My Plates' Import, after the file dialog |
-| **Tutorial and Help** | Twelve chapters that spotlight the real controls, and Help menus. | The Help buttons; offered once to new installs |
+| **Tutorial and Help** | Twelve chapters `[updated 2026-10-02: the tour has 14 chapters in the sharing build (two SharingOnly), 12 in the player build]` that spotlight the real controls, and Help menus. | The Help buttons; offered once to new installs |
 
 AetherFrame has no settings window: Dalamud's settings button toggles My Plates.
 
-`[updated 2026-09-30: this table is the audit's snapshot. Since then, task 1 ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)) gave both editors a Plate menu under the Plate's name, and the card menu's Preview became View; section 7.5 records the choices.]`
+`[updated 2026-09-30: this table is the audit's snapshot. Since then, task 1 ([#59](https://github.com/QuietFoxLabs/AetherFrame/pull/59)) gave both editors a Plate menu under the Plate's name, and the card menu's Preview became View; section 7.5 records the choices.]` `[updated 2026-10-02: Clean Preview was removed by [#79](https://github.com/QuietFoxLabs/AetherFrame/pull/79) (02468e6); the editors' Preview and the Plate menus' View both open the Plate Viewer. The tour has 14 chapters in the sharing build (two SharingOnly), 12 in the player build.]`
 
 ## 2. Tasks and the trips they take
 
@@ -83,6 +83,8 @@ The tutorial moves with the interface. Every control a proposal adds or moves ge
 - The editors' Plate menu (proposal 1) and the card menu are where **Share...** and **Unpublish** go when N2-9 adds them. Sharing then needs no trip either, and the consent screen opens from either place.
 - A Plate's sharing state (not shared, shared, or changed since sharing) belongs on its card and next to its name in the editor bar, from N2-6 and N2-9.
 - The persona window (N2-5) is reached from My Plates' header and from the share flow.
+
+`[updated 2026-10-02: this section is history. Sharing became per character and a Plate is shared as soon as it is Active ([#95](https://github.com/QuietFoxLabs/AetherFrame/pull/95)), so there is no per-Plate Share..., Unpublish or pre-share consent screen; the Personas window was removed by [#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71) (personas are hidden, V4); share codes were retired (R5, [DecisionRegister.md](networking/DecisionRegister.md)); and since 0.1.8 every release carries sharing, so nothing is "preview builds only".]`
 
 ## 6. Not proposed
 
@@ -408,6 +410,8 @@ The tasks below follow the queue's tasks 1 to 6. Each is one pull request and me
 - *Tutorial:* none.
 - *In game:* a player build has no Share item. Share follows Export in a preview build, checked once N2-11's tester kit exists (UNRESOLVED).
 
+`[updated 2026-10-02: this task is history. Sharing became per character and a Plate is shared as soon as it is Active ([#95](https://github.com/QuietFoxLabs/AetherFrame/pull/95)), so there is no Share item to hook; and since 0.1.8 every release carries sharing, so nothing is "preview builds only".]`
+
 ### 7.7 Sharing, in more detail
 
 This adds to section 5. Section 5's Share... and Unpublish in the Plate and card menus open the This Plate page below. The sharing screens compile only in preview builds (AetherFrame.csproj:61-64, from the repository root). They reach the shared windows only through hooks that the preview composition root fills: the persona window already does, through My Plates' `OpenPersonas` (Windows/PlateLibraryWindow.cs:144, 290-297, at `5d6e3e2`), and the others would use task 16's. No tutorial step anchors to them, and every local feature works without an account or a network. N2-5 has built the persona window; the rest is a proposal for N2-9 and N2-10 to weigh.
@@ -419,6 +423,8 @@ This adds to section 5. Section 5's Share... and Unpublish in the Plate and card
 | N2-9 consent and publish | The This Plate page, reached from Share in the Plate menu. It starts with the save-first question of task 1, because the builder reads only the saved Plate (NETWORK2.md, section 5). A name refused under D4 is fixed with the Plate menu's Rename. The share code comes with a Copy button. It is a page, not a modal, so it never blocks the tutorial card. |
 | Update and unpublish | The same page, which shows the consent content again each time. Unpublish is also in My Shares, the P1 index, which includes Plates that no longer exist. The Delete prompt says that deleting a Plate doesn't unpublish it. Its wording follows D1 (DecisionRegister.md). |
 | N2-10 viewer | Open Code in My Plates' header, kept apart from Import. The Plate Viewer gains a read-only source that draws the served profile's paint list (specification, section 8.5; D6), which is task 16's "viewer source" hook. Nothing becomes a local Plate and nothing is saved: the paint list shares nothing with the local Plate model. A strip holds Refresh, notes, "no longer shared" and the outdated-client message. There is no author line. Stage 2's "save a copy" is left to stage 2 (NETWORK2.md, section 5). |
+
+`[updated 2026-10-02: this table is history. Sharing became per character and a Plate is shared as soon as it is Active ([#95](https://github.com/QuietFoxLabs/AetherFrame/pull/95)), so there is no Share..., Unpublish or consent page; the Personas window was removed by [#71](https://github.com/QuietFoxLabs/AetherFrame/pull/71) (personas are hidden, V4); share codes were retired (R5, [DecisionRegister.md](networking/DecisionRegister.md)); and since 0.1.8 every release carries sharing, so the sharing screens no longer compile only in preview builds.]`
 
 These rules hold throughout ([DecisionRegister.md](networking/DecisionRegister.md)):
 - Remote text is never an ImGui label, window title or ID, and is drawn only by calls that don't format it (N7).

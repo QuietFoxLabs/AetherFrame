@@ -53,7 +53,9 @@ printf 'restrict %s\n' "$deploy_key" > /home/aetherframe-deploy/.ssh/authorized_
 chown aetherframe-deploy:aetherframe-deploy /home/aetherframe-deploy/.ssh/authorized_keys
 chmod 600 /home/aetherframe-deploy/.ssh/authorized_keys
 
-# The deployment's folder, and the configuration the operator edits: the testers' Lodestone ids.
+# The deployment's folder, and the configuration the operator edits: whether the server is open to
+# everyone (Runbook, step 8), the Lodestone relay (step 7) and, while the server is closed, the
+# allowed Lodestone ids (step 6).
 install -d -m 755 -o aetherframe-deploy -g aetherframe-deploy /opt/aetherframe /opt/aetherframe/config
 if [[ ! -f /opt/aetherframe/config/aetherframe.json ]]; then
   cat > /opt/aetherframe/config/aetherframe.json <<'JSON'

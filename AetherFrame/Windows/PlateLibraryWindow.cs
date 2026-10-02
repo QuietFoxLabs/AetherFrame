@@ -635,13 +635,13 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         }
     }
 
-    /// <summary>A small warning glyph in the thumbnail's lower-left corner (the card's tooltip explains it).</summary>
     /// <summary>A card's hover text: its note, the unsupported-elements warning, or both.</summary>
     private static string? CardTooltip(string? problem, bool hasUnsupportedElements) =>
         !hasUnsupportedElements ? problem
         : problem is null ? EditorWidgets.UnsupportedElementsWarning
         : problem + "\n\n" + EditorWidgets.UnsupportedElementsWarning;
 
+    /// <summary>A small warning glyph in the thumbnail's lower-left corner (the card's tooltip explains it).</summary>
     private static void DrawCompatibilityMarker(ImDrawListPtr drawList, Vector2 thumbnailMin, Vector2 thumbnailMax)
     {
         var icon = EditorWidgets.GetIconString(FontAwesomeIcon.ExclamationTriangle);

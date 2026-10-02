@@ -42,15 +42,15 @@ internal sealed class PublicationFileException : Exception
 /// throughout:
 /// <code>
 /// magic "AFPI" | version u16 = 1 | slot[16] | count u16 (0..256) | entries | sha256[32] of everything before it
-/// entry = plateId[16] | profileId[16] | latestRevision[16] | state u8 | lastPublishedAt i64 | pendingEntry[16] | shareCode[16]
+/// entry = plateId[16] | profileId[16] | latestRevision[16] | state u8 | lastPublishedAt i64 | pendingEntry[16] | reserved[16]
 /// </code>
 /// The slot is the persona's, so an index moved to another persona's name is refused. The Plate id
 /// is the local Plate's, in RFC 4122 order; the profile and revision ids are the protocol's; the
 /// state is <see cref="PublicationState"/>'s value; the last publish time is 0 until the server
 /// acknowledges a revision; the pending entry is an outbox entry's name, all zero for none. The
-/// share code field is all zero: N2-9 stores the code the server returns there, so this build
-/// refuses anything else in it. The largest index, 256 entries, is 22,840 bytes, inside the
-/// design's bound of 36,000.
+/// last 16 bytes of an entry are reserved and all zero: they were laid out for a share code, which
+/// R5 retired before one was ever stored, so this build refuses anything else in them. The largest
+/// index, 256 entries, is 22,840 bytes, inside the design's bound of 36,000.
 /// <para>
 /// The checksum guards against corruption only, as the registry's does (P3). Decoding refuses
 /// anything but exactly this layout and <see cref="PublicationIndex.Problem"/>'s rules, and never
@@ -113,7 +113,7 @@ internal static class PublicationIndexCodec
             entry.PendingEntry.WriteBytes(span.Slice(offset, OutboxEntryName.ByteLength));
             offset += OutboxEntryName.ByteLength;
 
-            // The share code field stays zero until N2-9 stores one.
+            // The reserved field (laid out for a share code, which R5 retired) stays zero.
             offset += ShareCodeLength;
         }
 
@@ -232,7 +232,7 @@ internal static class PublicationIndexCodec
         offset += OutboxEntryName.ByteLength;
         if (entry.Slice(offset, ShareCodeLength).IndexOfAnyExcept((byte)0) >= 0)
         {
-            throw Damaged("An entry holds a share code, which this build doesn't read yet.");
+            throw Damaged("An entry holds data in its reserved field, which this build doesn't read.");
         }
 
         return new PublicationEntry(plate, profile, revision, (PublicationState)state, lastPublishedAt, pending);

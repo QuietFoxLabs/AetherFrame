@@ -21,7 +21,7 @@ Avoided on purpose: neon, gradients on chrome, decorative borders, more than one
 Everything comes from two Dalamud-free files under `AetherFrame/UI/Theme/`:
 
 - `AetherPalette`: colors by role (surfaces, lines, text tones, accents, semantic tones and their tints, dimming). Values are sRGB 0..1 as ImGui takes them. `AetherPalette.Contrast` and `Luminance` implement the WCAG formulas the tests use.
-- `AetherMetrics`: measurements in unscaled pixels. Spacing follows a 4 px grid (`SpaceXs` 4, `SpaceSm` 8, `SpaceMd` 12, `SpaceLg` 16, `SpaceXl` 24, `SpaceXxl` 32); radii are 4 / 6 / 10 for inputs, panels and cards; borders 1 / 2; a property label column of 92 px; dialog buttons 120 px wide.
+- `AetherMetrics`: measurements in unscaled pixels. Spacing follows a 4 px grid (`SpaceXs` 4, `SpaceSm` 8, `SpaceMd` 12, `SpaceLg` 16, `SpaceXl` 24, `SpaceXxl` 32); radii are 4 / 6 / 10 for inputs, panels and cards; borders 1 / 2; dialog buttons 120 px wide. The editors' property label column (92 px) lives in `EditorWidgets.LabelColumnWidth`.
 
 A window never hardcodes a color or a spacing; it names a role. Multiply every metric by `ImGuiHelpers.GlobalScale` (or use `EditorWidgets.Scaled`) at draw time: Dalamud scales its own style the same way, so the interface stays usable at 150 % and 200 %.
 
@@ -45,16 +45,14 @@ Dalamud calls `PostDraw` whenever it called `PreDraw`, including the frame in wh
 | Control | Use |
 |---|---|
 | `SectionHeader(text)` | A small uppercase accent label with a rule: the heading of a group of controls. |
-| `Title`, `Heading`, `Secondary`, `Muted`, `MutedInline` | Text in the display / heading face, or in the secondary / muted tone (wrapped). |
-| `PrimaryButton`, `SecondaryButton`, `DangerButton`, `GhostButton`, `IconLabelButton` | One primary action per screen; destructive actions red; quiet actions ghost. |
-| `Pill`, `ActivePill`, `KeyHint` | Small tags and keycaps. |
-| `HelpMarker`, `Tooltip` | A "?" with a wrapped tooltip; a wrapped tooltip for the last item. |
+| `Secondary`, `Muted`, `MutedInline` | Text in the secondary / muted tone (wrapped). |
+| `PrimaryButton`, `SecondaryButton`, `DangerButton`, `GhostButton` | One primary action per screen; destructive actions red; quiet actions ghost. |
+| `KeyHint` | Keycaps for shortcuts. |
+| `Tooltip` | A wrapped tooltip for the last item. |
 | `StatusLine(tone, text)` | Saved / working / error lines with an icon. |
 | `Callout(tone, text, title)` | A tinted box with an accent bar: on-screen help, a warning, an error. |
 | `EmptyState(icon, title, description, action)` | The centered invitation shown when a list or panel is empty. |
-| `Panel(id, size)` | A child region on the panel surface with rounded corners and a quiet border. |
 | `CardFrame`, `SelectionRing`, `Glow` | A card's surface and its selected state; the accent ring with the frame corners. |
-| `TabStrip` | Tab-like buttons with an accent underline. |
 
 `EditorWidgets` (the editors' compact building blocks: property labels, icon buttons and toggles, segmented choices, swatches, collapsible sections) stays, with its colors now aliasing the palette.
 
@@ -62,7 +60,7 @@ Dalamud calls `PostDraw` whenever it called `PreDraw`, including the frame in wh
 
 - **My Plates** is the home: a brand row, one primary action (Create Plate), the search, Import and Help; then the card grid; then a status footer. Cards are 196 px wide with a 16:9 preview and the name below.
 - **Both editors** share the action bar (My Plates, Basic | Advanced, the Plate menu under the Plate's name, Undo/Redo, the save state, Preview / Revert / Save), always in view above everything that scrolls. The Plate menu's control keeps its icon and caret at every width; the name fills the room that's left. When one row can't hold the bar, the save state and its buttons take a second row, so nothing is cut off. The menu's results and errors show on a line of their own under the save state.
-- **Plate menus** are one component (`PlateMenu`): a card's right-click menu in My Plates and the Plate menu in the editors offer the same actions with the same words, in the same order, and ask the same prompts. Delete is only on cards, where the whole Library is in view. A Plate menu shows the Plate over the game with View; Preview is only the editors' own. An action that uses the saved Plate says so while the editor has unsaved changes, and nothing saves on its own.
+- **Plate menus** are one component (`PlateMenu`): a card's right-click menu in My Plates and the Plate menu in the editors offer the same actions with the same words, in the same order, and ask the same prompts. Delete is only on cards, where the whole Library is in view. A Plate menu shows the Plate over the game with View; the action bar's Preview opens the same Plate Viewer on the editor's live document, edits in progress committed first (there is no in-editor preview). An action that uses the saved Plate says so while the editor has unsaved changes, and nothing saves on its own.
 - **The Basic editor** is a navigator rail (Style, Portrait, Identity, Details, Message), the selected category's controls with its title and summary pinned, and the live Plate. Narrow windows fold the rail into a strip.
 - **The Advanced editor** is Layers, the canvas and the Inspector side by side, with a tool row above and a status bar below.
 - **Prompts** (unsaved changes, revert, delete, rename) are modal popups with the question, one line of consequence in the muted tone, and a right-aligned button row: the destructive choice red, the safe one primary or secondary, Cancel ghost.

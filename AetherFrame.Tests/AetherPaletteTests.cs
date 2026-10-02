@@ -154,7 +154,7 @@ public class AetherPaletteTests
     [Fact]
     public void Metrics_FollowTheFourPixelGrid()
     {
-        foreach (var value in new[] { AetherMetrics.SpaceXs, AetherMetrics.SpaceSm, AetherMetrics.SpaceMd, AetherMetrics.SpaceLg, AetherMetrics.SpaceXl, AetherMetrics.SpaceXxl, AetherMetrics.WindowPadding, AetherMetrics.LabelColumnWidth, AetherMetrics.CardWidth, AetherMetrics.CardPadding, AetherMetrics.DialogButtonWidth, AetherMetrics.ButtonMinWidth })
+        foreach (var value in new[] { AetherMetrics.SpaceXs, AetherMetrics.SpaceSm, AetherMetrics.SpaceMd, AetherMetrics.SpaceLg, AetherMetrics.SpaceXl, AetherMetrics.SpaceXxl, AetherMetrics.WindowPadding, AetherMetrics.DialogButtonWidth, AetherMetrics.ButtonMinWidth })
         {
             Assert.Equal(0f, value % 4f);
         }

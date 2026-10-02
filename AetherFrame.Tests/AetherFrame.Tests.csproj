@@ -61,10 +61,11 @@
     <Compile Include="..\AetherFrame\UI\Rendering\PlateViewerTarget.cs" Link="Linked\UI\Rendering\PlateViewerTarget.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\PlateCardPreview.cs" Link="Linked\UI\Rendering\PlateCardPreview.cs" />
     <Compile Include="..\AetherFrame\UI\Rendering\ImageFitLayout.cs" Link="Linked\UI\Rendering\ImageFitLayout.cs" />
-    <!-- NETWORK2's snapshot builder (N2-6a) is compiled into the plugin only in the networking
-         preview flavour. It is free of Dalamud and ImGui, so it is tested here, against the real
-         Plate model and the protocol library's own codec (referenced below). The player DLL is
-         unaffected: its boundary tests keep proving that it holds no protocol type. -->
+    <!-- NETWORK2's snapshot builder (N2-6a) is part of the sharing build, the default build since
+         October 1, 2026 (releases carry sharing from 0.1.8). It is free of Dalamud and ImGui, so it
+         is tested here, against the real Plate model and the protocol library's own codec
+         (referenced below). The player flavour (-p:AetherFrameNetworkPreview=false, built once in
+         CI) leaves it out: its boundary tests keep proving that it holds no protocol type. -->
     <Compile Include="..\AetherFrame\Services\Network\Publishing\**\*.cs" Link="Linked\Services\Network\Publishing\%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- The publication index and outbox (N2-6c) write their files as the persona registry does,
          with the persona folder's written-through move, and sign through the persona library
@@ -107,8 +108,9 @@
     <None Update="DraftFixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- The plugin's bundled artwork under the same manifest resource names, so the resource
-       integrity tests read exactly what BuiltInArtCatalog names. -->
+  <!-- Every PNG under the plugin's Assets folder, under the manifest resource names BuiltInArtCatalog
+       uses: the previews and Celestial Dream the plugin embeds, and the hosted art players download
+       (art on demand), so the art tests read each file from this assembly. -->
   <ItemGroup>
     <EmbeddedResource Include="..\AetherFrame\Assets\**\*.png">
       <LogicalName>AetherFrame.Assets.$([System.String]::Copy('%(RecursiveDir)').Replace('\', '.').Replace('/', '.'))%(Filename)%(Extension)</LogicalName>

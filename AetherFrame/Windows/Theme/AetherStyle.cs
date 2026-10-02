@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Numerics;
 using AetherFrame.UI.Theme;
@@ -120,7 +119,7 @@ internal static class AetherStyle
     /// <summary>How many style variables <see cref="Push"/> pushes.</summary>
     internal static int VarCount => FloatVars.Length + VectorVars.Length;
 
-    /// <summary>Pushes the whole style. Pair with <see cref="Pop"/>, or use <see cref="Scope"/> inside Draw.</summary>
+    /// <summary>Pushes the whole style. Pair with <see cref="Pop"/>.</summary>
     internal static void Push()
     {
         var scale = ImGuiHelpers.GlobalScale;
@@ -146,9 +145,6 @@ internal static class AetherStyle
         ImGui.PopStyleVar(VarCount);
         ImGui.PopStyleColor(ColorCount);
     }
-
-    /// <summary>The style for the rest of a <c>using</c> block (an ImGui window drawn outside a Dalamud Window, say).</summary>
-    internal static StyleScope Scope() => new(true);
 
     /// <summary>Records that <paramref name="owner"/> has pushes on ImGui's stacks until it pops them.</summary>
     internal static void NotePushed(IOutstandingStyle owner)
@@ -176,39 +172,6 @@ internal static class AetherStyle
 
         Outstanding.Clear();
     }
-
-    /// <summary>Pushed on creation, popped on dispose; exception-safe inside <c>using</c>.</summary>
-    internal struct StyleScope : IDisposable
-    {
-        private bool pushed;
-
-        internal StyleScope(bool push)
-        {
-            pushed = push;
-            if (push)
-            {
-                Push();
-            }
-        }
-
-        public void Dispose()
-        {
-            if (pushed)
-            {
-                pushed = false;
-                Pop();
-            }
-        }
-    }
-
-    /// <summary>A length in unscaled pixels at Dalamud's global UI scale.</summary>
-    internal static float Scaled(float pixels) => pixels * ImGuiHelpers.GlobalScale;
-
-    /// <summary>A size in unscaled pixels at Dalamud's global UI scale.</summary>
-    internal static Vector2 Scaled(Vector2 pixels) => pixels * ImGuiHelpers.GlobalScale;
-
-    /// <summary>A color as ImGui's packed form.</summary>
-    internal static uint U32(Vector4 color) => ImGui.GetColorU32(color);
 }
 
 /// <summary>Something that has pushed onto ImGui's style stacks and can pop it on demand.</summary>

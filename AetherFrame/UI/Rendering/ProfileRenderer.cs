@@ -21,9 +21,9 @@ namespace AetherFrame.UI.Rendering;
 /// profile looks. Anything editor-only (element bounds, placeholders) must be requested
 /// explicitly through <see cref="ProfileRenderOptions"/>; the default is the finished profile.
 ///
-/// Deliberately takes only a <see cref="ProfileDocument"/> and shared render resources — no
-/// character/ownership identity — so it can later render a profile that didn't originate from the
-/// locally logged-in character (e.g. one received over the network) without change.
+/// Deliberately takes only a <see cref="ProfileDocument"/> and shared render resources, no character or
+/// ownership identity, so a Plate that didn't originate on this PC (another player's, received over
+/// the network) draws through the same code: see <c>ServedPlatePainter</c>.
 /// </summary>
 internal static class ProfileRenderer
 {

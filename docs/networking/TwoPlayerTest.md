@@ -6,13 +6,15 @@ Player A is the owner. Player B is a tester. With more testers, each one is a pl
 
 ## Before the test
 
+`[updated 2026-10-02: since "Releases carry sharing" (DecisionRegister.md) a tester installs the release from the custom repository's testing channel instead of a kit, and the server has been open to everyone since October 1, 2026 ("Opening the alpha" in DecisionRegister.md; Runbook.md, step 8), so step 1 below and the allowlist line under Afterwards apply only while it is closed again. Steps 1 to 3 stay for a closed server or a build no release carries.]`
+
 **The owner:**
 1. Collect each tester's Lodestone character page address, and send them to Claude in chat. Claude replies with one command that adds them to the server's allowlist (decision C8). Paste it into the droplet's console, where it prints how many ids the allowlist now holds.
 2. Ask Claude for a tester kit. Claude builds it from the newest `master` that has passed in your own game, and stages it as `E:\AetherFrame Test Builds\<date> <commit> tester kit\AetherFrame-tester-kit-<commit>.zip`.
 3. Give each tester the zip, by a channel you trust. It holds its own install steps in `How to install.txt`.
 4. Start the Lodestone relay on your PC (`E:\AetherFrame Test Builds\Lodestone relay\Start relay.cmd`), and keep its window open while anyone links a character. Viewing doesn't need it.
 
-**Each tester** follows `How to install.txt`: Windows only, any other AetherFrame disabled, the test build added under Dev Plugin Locations, and `/af version` showing "network preview".
+**Each tester** follows `How to install.txt`: Windows only, any other AetherFrame disabled, the test build added under Dev Plugin Locations, and `/af version` showing "network preview". `[updated 2026-10-02: since 26aed03 (0.1.8 and later) the line ends with "[sharing]"; the October 1 builds still said "[network preview]".]`
 
 ## The checks
 
