@@ -11,9 +11,9 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// A Mirrored Plate mirrors its background artwork (the owner's request of October 2, 2026): an Art
-/// Style's background is drawn calm behind the details and busy behind the portrait, so the details
-/// sit over its calm side in both orientations. The Plate Frame and Portrait Frame stay as drawn.
+/// A Mirrored Plate mirrors its background artwork (the owner's request of October 2, 2026): most Art
+/// Styles' backgrounds are drawn calm behind the details and busy behind the portrait, so the details
+/// sit over the same side of the art in both orientations. The Plate Frame and Portrait Frame stay as drawn.
 /// </summary>
 public class MirroredBackgroundTests
 {

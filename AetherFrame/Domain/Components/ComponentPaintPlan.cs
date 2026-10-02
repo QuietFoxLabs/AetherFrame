@@ -385,8 +385,8 @@ public static class ComponentPaintPlan
 
     /// <summary>
     /// Background artwork over the whole canvas. On a Mirrored Plate it is mirrored with the Plate:
-    /// the picture, and its Offset and Rotation with it. An Art Style's background is drawn calm
-    /// behind the details and busy behind the portrait, so the details then sit over the same part of
+    /// the picture, and its Offset and Rotation with it. Most Art Styles' backgrounds are drawn calm
+    /// behind the details and busy behind the portrait, and the details then sit over the same part of
     /// the art as in Normal, and read as well: a Mirrored Plate is the Normal one seen in a mirror,
     /// its text aside. Only Backgrounds turn: every Plate Frame and Portrait Frame is drawn
     /// symmetric, and Corner Ornaments already mirror per corner.
