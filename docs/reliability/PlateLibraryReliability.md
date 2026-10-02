@@ -419,11 +419,11 @@ The "Unsaved changes kept" window offers them one at a time, once a character is
 
 ### Images
 
-The draft holds only references: images added in the editor are already final files in `assets/`. The dormant cleanup's scan (`ScanAssetReferencesAsync`, and through it `LiveAssetReferences`) reads `Drafts/` and `Trash/Drafts/`, counting every GUID string in each file; one it can't read, or that a newer version wrote, makes the scan incomplete (a D4 prerequisite).
+The draft holds only references: images added in the editor are already final files in `assets/`. The dormant cleanup's scan (`ScanAssetReferencesAsync`, and through it `LiveAssetReferences`) reads `Drafts/` and `Trash/Drafts/`, counting every GUID string in each file; one it can't read, whose bytes aren't all valid text (the offer reads such a draft from its backup copy), or that a newer version wrote, makes the scan incomplete (a D4 prerequisite).
 
 ### Tests
 
-`KeptChangesWriteTests`, `KeptChangesReadTests`, `KeptChangesConflictTests`, `KeptChangesClaimTests` and `KeptChangesOfferTests`, over the Library doubles (`LibraryFixture`, `FakeClock`, `BackupSimulatingStore`, `HeldWriteStore`, `FaultInjectingStore`), 88 cases: 64 at first, 18 added with the independent review's fixes, and 6 with its recheck's. `TheOffersSources_HoldNoRawSpecialCharacters` covers every C# file the feature added or changed. Negative checks, each guard removed in turn and the 64 run:
+`KeptChangesWriteTests`, `KeptChangesReadTests`, `KeptChangesConflictTests`, `KeptChangesClaimTests` and `KeptChangesOfferTests`, over the Library doubles (`LibraryFixture`, `FakeClock`, `BackupSimulatingStore`, `HeldWriteStore`, `FaultInjectingStore`), 89 cases: 64 at first, 18 added with the independent review's fixes, and 7 with its recheck's. `TheOffersSources_HoldNoRawSpecialCharacters` covers every C# file the feature added or changed. Negative checks, each guard removed in turn and the 64 run:
 
 - **Unique names:** the draft id taken out of the name (and the retry and the name-against-content check with it) fails 3, among them `TwoDraftsInTheSameMillisecond_GetTwoFiles_AndNeitherIsWrittenOver` (the second draft wrote over the first). The retry alone fails `ANameThatIsSomehowTaken_GetsANewId_AndTheFileThereStaysAsItIs`.
 - **Claim by move:** fails 12, among them `TwoGameWindows_SeeTheSameDraft_TheFirstClaimWins_TheSecondSaysItWasHandledThere` and `AFailedMove_KeepsTheDraft_AndRestoresNothing`.
@@ -441,10 +441,11 @@ The review's fixes, each removed in turn and the 82 run:
 - **Wording:** newer and damaged Plates called saved again fail `ANewerVersionsPlate_IsNeverWritten` and `ADamagedPlate_IsNeverWritten`; the Deleted variant's discard tooltip fails its case of `EachVariant_HasItsWordsAndButtons`; the same Plate's question worded as another's fails `TheSamePlateOpenWithUnsavedChanges_IsAskedAboutToo` and `TwoDraftsForTheSamePlate_AreBothRestorable_AndNothingIsLost`.
 - **The busy check before Restore:** fails `RestoreWhileASaveIsBeingWritten_SaysSo_AndTakesNothing`.
 
-The recheck's fixes, each removed in turn and the 88 run:
+The recheck's fixes, each removed in turn and the 89 run:
 
 - **The question's Discard, the draft first:** discarding before the draft is checked again and claimed fails 3, `TheQuestionsDiscard_WhenTheDraftCantBeMoved_DiscardsNothing_AndTheDraftStaysKept`, `TheQuestionsDiscard_AfterAnotherGameWindowTookTheDraft_DiscardsNothing` and `TheQuestionsDiscard_AfterTheKeptPlateWasDeleted_DiscardsNothing_AndOffersItAsANewPlate`. Before them, the open Plate's changes were gone, with no undo, and nothing was restored.
 - **Cancel while the question's Save is written:** ignoring it fails `CancelWhileTheQuestionsSaveIsWritten_SavesThePlate_AndRestoresNothing` (the kept changes were restored anyway).
+- **The scan, a draft whose bytes aren't all valid text:** dropping the check fails `KeptChangesWithBytesThatAreNotValidText_MakeTheScanIncomplete` (the scan counted the damaged text's ids, though the offer restores the draft's backup copy).
 - **Review while a draft is acted on:** a round rebuilt newest first fails both `ReviewWhileTheQuestionWaits_KeepsItsDraftOnOffer_AndTheAnswerRestoresIt` and `ReviewWhileAnOlderDraftsNewPlateIsMade_KeepsItOnOffer_AndItsFailureShowsWithIt`: a newer draft was shown while the answer acted on the older one, or the older one's failure showed beside it.
 
 ### Manual acceptance in FFXIV

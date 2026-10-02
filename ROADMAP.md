@@ -172,7 +172,7 @@ PR #21 was receiving commits during verification. Recheck its head before contin
 
 ### In progress
 
-This change: the server's `MinimumPlugin` to 0.1.9, 0.1.9's last step, which takes effect at the owner's deploy. Apart from it, nothing. One draft waits outside the repository: read-only diagnostic access to the server for Claude, paused until the owner decides (Status at a glance).
+This change: kept unsaved changes ([#103](https://github.com/QuietFoxLabs/AetherFrame/pull/103)), section 8's task 4, in review. Apart from it, nothing. One draft waits outside the repository: read-only diagnostic access to the server for Claude, paused until the owner decides (Status at a glance).
 
 ### Formerly in progress, kept as history
 
