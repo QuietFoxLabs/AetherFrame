@@ -239,6 +239,11 @@ internal sealed class SharingProgress
         }
 
         floor = share;
+        if (result is { } kept && kept.Share < share)
+        {
+            result = null;
+        }
+
         if (share != hiddenShare)
         {
             result = (view, share, now, plate);

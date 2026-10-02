@@ -111,7 +111,16 @@ internal sealed class LivePublisher : IDisposable
 
         // Until the Library and the sharing file are both read, nothing is known: arriving waits,
         // so a value becoming known is never taken for a change.
-        if (!sharingView.Loaded || sharingView.Unreadable || !libraryLoaded() || currentCharacter() is not { } character)
+        if (!sharingView.Loaded || sharingView.Unreadable || !libraryLoaded())
+        {
+            Leave();
+            return;
+        }
+
+        // Whoever is logged in, and when nobody is: a send stops once its Plate is no longer its
+        // character's Active Plate. A logout or a switch of characters alone never stops one.
+        sharing.StopStaleSends();
+        if (currentCharacter() is not { } character)
         {
             Leave();
             return;
@@ -163,13 +172,6 @@ internal sealed class LivePublisher : IDisposable
 
         if (!shared || active is null)
         {
-            // No Active Plate any more: a send of the one there was stops. A logout or another
-            // character never stops a send.
-            if (shared)
-            {
-                sharing.StopStaleSend(character.ContentId, null);
-            }
-
             Drop(character.ContentId);
             return;
         }
@@ -212,15 +214,11 @@ internal sealed class LivePublisher : IDisposable
                     view = view with { PreparingImages = true };
                     return;
                 case ShareCheckStage.Refused:
-                    // The Active Plate can't be shared as it is: a send of another Plate stops, as
-                    // that one isn't Active any more; a send of an earlier version of this one goes on.
                     view = new LiveView(target.ContentId, false, built.Problems, ShareCheckFailure.None, Share: target.Generation);
-                    sharing.StopStaleSend(target.ContentId, target.PlateId);
                     Finish();
                     return;
                 case ShareCheckStage.Failed:
                     view = new LiveView(target.ContentId, false, Array.Empty<PlateSnapshotProblem>(), built.Failure, Share: target.Generation);
-                    sharing.StopStaleSend(target.ContentId, target.PlateId);
                     Finish();
                     return;
                 default:

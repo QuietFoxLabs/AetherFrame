@@ -305,6 +305,57 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
+    public async Task ASendForACharacterSwitchedAwayFrom_StopsWhenItsPlateStopsBeingActive_AndOtherwiseFinishes()
+    {
+        foreach (var unset in new[] { true, false })
+        {
+            using var harness = new SharingHarness(background: true);
+            var entry = harness.Bound();
+            var held = new TaskCompletionSource();
+            harness.Server.PublishGate = held.Task;
+            using var live = new LiveHarness(harness);
+            var plate = live.Save();
+            live.Active = plate.ProfileId;
+            live.Frames(2);
+            live.Publisher.PlateSaved(plate.ProfileId);
+            await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Sending });
+
+            try
+            {
+                // The player switches to another character while Aria's Plate is sent.
+                live.LoggedIn = Bram;
+                live.Frames(5);
+                Assert.Equal(PublishStep.Sending, harness.Sharing.View.Publish!.Step);
+
+                if (unset)
+                {
+                    // Then deletes Aria's Active Plate in My Plates, which unsets it.
+                    live.Active = null;
+                    await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Ended });
+                    harness.WaitIdle();
+                    Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
+                    Assert.Empty(harness.Server.Publishes);
+                    Assert.Null(harness.Sharing.View.Find(Aria)!.PublishedPlate);
+                    Assert.Empty(harness.Publications.ListOutbox(entry.Slot).Entries);
+                }
+                else
+                {
+                    held.SetResult();
+                    await live.Until(() => harness.Sharing.View.Publish is { Step: PublishStep.Ended });
+                    harness.WaitIdle();
+                    Assert.Single(harness.Server.Publishes);
+                    Assert.Equal(SharingNoticeKind.Published, harness.Sharing.View.Notice!.Kind);
+                    Assert.Equal(plate.ProfileId, harness.Sharing.View.Find(Aria)!.PublishedPlate);
+                }
+            }
+            finally
+            {
+                held.TrySetResult();
+            }
+        }
+    }
+
+    [Fact]
     public void AtLogin_ARenamedCharacterAsksForARereadOnce()
     {
         using var harness = new SharingHarness();

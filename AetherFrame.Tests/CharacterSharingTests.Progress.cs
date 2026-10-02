@@ -193,6 +193,17 @@ public partial class CharacterSharingTests
         Assert.False(progress3.Update(Aria, sendingOlder, refused, At(1)).Visible);
         Assert.False(progress3.Update(Aria, olderShared, refused, At(2)).Visible);
 
+        // The older send ending in the same frame as the hidden newer build's refusal leaves
+        // nothing to show either, whether it was shared or waits.
+        foreach (var kind in new[] { SharingNoticeKind.Published, SharingNoticeKind.PublishWaiting })
+        {
+            var sameFrame = new SharingProgress();
+            sameFrame.Update(Aria, sendingOlder, Build(2), At(0));
+            sameFrame.Dismiss();
+            var olderEnded = sendingOlder.With(publish: sendingOlder.Publish! with { Step = PublishStep.Ended, Outcome = new SharingNotice(Aria, kind) });
+            Assert.False(sameFrame.Update(Aria, olderEnded, refused, At(1)).Visible);
+        }
+
         // Closed: the older share's progress and result stay out of sight too.
         progress.Dismiss();
         Assert.False(progress.Update(Aria, olderShared, refused, At(4)).Visible);

@@ -445,7 +445,7 @@ internal sealed class CharacterSharing
     /// made out of date is never signed when that happened before its signing, and never sent when
     /// it happened before its send began: its revision then waits on this PC, and the newer build's
     /// replaces it. A send that has begun is stopped by <see cref="StopOlderSend"/>, once a newer
-    /// candidate is ready to take its place, or by <see cref="StopStaleSend"/>.
+    /// candidate is ready to take its place, or by <see cref="StopStaleSends"/>.
     /// </summary>
     internal bool TryPublish(ulong contentId, SnapshotCandidate candidate, long? generation = null)
     {
@@ -554,17 +554,18 @@ internal sealed class CharacterSharing
     }
 
     /// <summary>
-    /// The character's Active Plate is no longer the Plate a send under way for it carries: there
-    /// is none any more, or another Plate that couldn't be shared took its place. The send stops,
-    /// its revision is dropped rather than left to be sent later, and the notice says so. A send of
-    /// <paramref name="activePlate"/> itself goes on, and so does another character's.
+    /// Stops the send under way, whichever character it is for, when its Plate is no longer that
+    /// character's Active Plate (there is none any more, or another Plate took its place, even
+    /// while another character is logged in). Its revision is dropped rather than left to be sent
+    /// later, and the notice says so. A send of the Active Plate goes on; a logout or a switch of
+    /// characters alone never stops one. The live publisher calls this every frame.
     /// </summary>
-    internal void StopStaleSend(ulong contentId, Guid? activePlate)
+    internal void StopStaleSends()
     {
         CancellationTokenSource? stop = null;
         lock (gate)
         {
-            if (upload is { GaveWay: false, Withdrawn: false } stale && stale.ContentId == contentId && stale.Plate != activePlate)
+            if (upload is { GaveWay: false, Withdrawn: false } stale && stale.Plate != activePlateOf(stale.ContentId))
             {
                 stale.Withdrawn = true;
                 stop = stale.Stop;
@@ -771,8 +772,8 @@ internal sealed class CharacterSharing
             // recorded together, under the lock: a revision is sent only while its Plate is the
             // character's Active Plate (otherwise it is dropped), and only while no newer build has
             // started (otherwise it waits, and the newer build's replaces it). Once recorded, a
-            // newer candidate finds the send to stop (StopOlderSend), and so does the Active Plate
-            // going (StopStaleSend).
+            // newer candidate finds the send to stop (StopOlderSend), and so does its Plate no
+            // longer being the Active Plate (StopStaleSends).
             SendAdmission Admit(Guid plate)
             {
                 lock (gate)
@@ -1190,17 +1191,17 @@ internal sealed class CharacterSharing
     }
 
     /// <summary>
-    /// A send under way: how to stop it, the character and the local Plate it is for (null when the
-    /// index couldn't say), and whether a newer candidate, or its Plate no longer being the Active
-    /// Plate, stopped it (both guarded by the service's lock).
+    /// A send under way: how to stop it, the character and the local Plate it is for, and whether
+    /// a newer candidate, or its Plate no longer being the Active Plate, stopped it (both guarded by
+    /// the service's lock).
     /// </summary>
-    private sealed class Upload(CancellationTokenSource stop, ulong contentId, Guid? plate)
+    private sealed class Upload(CancellationTokenSource stop, ulong contentId, Guid plate)
     {
         internal CancellationTokenSource Stop { get; } = stop;
 
         internal ulong ContentId { get; } = contentId;
 
-        internal Guid? Plate { get; } = plate;
+        internal Guid Plate { get; } = plate;
 
         internal bool GaveWay { get; set; }
 

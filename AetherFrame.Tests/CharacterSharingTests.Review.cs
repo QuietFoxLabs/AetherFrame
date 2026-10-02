@@ -173,7 +173,11 @@ public partial class CharacterSharingTests
 
         // The Active Plate is unset while another Plate is being sent: it stops, says so, and its
         // revision is dropped rather than left to be sent later.
-        harness.Server.PublishHook = () => harness.Sharing.StopStaleSend(Aria, null);
+        harness.Server.PublishHook = () =>
+        {
+            harness.Actives[Aria] = null;
+            harness.Sharing.StopStaleSends();
+        };
         harness.Publish(PublicationCandidates.Simple());
         Assert.Single(harness.Server.Publishes);
         Assert.Equal(SharingNoticeKind.PublishWithdrawn, harness.Sharing.View.Notice!.Kind);
@@ -187,8 +191,8 @@ public partial class CharacterSharingTests
         var active = PublicationCandidates.Simple();
         harness.Server.PublishHook = () =>
         {
-            harness.Sharing.StopStaleSend(Aria, active.PlateId);
-            harness.Sharing.StopStaleSend(Bram, null);
+            harness.Actives[Bram] = null;
+            harness.Sharing.StopStaleSends();
         };
         harness.Publish(active);
         Assert.Equal(2, harness.Server.Publishes.Count);
