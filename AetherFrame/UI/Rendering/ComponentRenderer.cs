@@ -72,35 +72,7 @@ internal static class ComponentRenderer
         PrimitiveBuffer.Clear();
     }
 
-    /// <summary>
-    /// The on-screen size, in pixels, of the whole artwork a quad A-B-C-D (D below A) draws
-    /// <paramref name="piece"/> of: what picks its level. A whole artwork's longer side; a piece of
-    /// sliced artwork scales its full-height strip by the artwork's long side over its height, and a
-    /// cell of a frame scales by a side that keeps the artwork's proportions (a cap or the center
-    /// piece), so every piece of one placement draws from the same level (a stretched fill never
-    /// needs a larger one).
-    /// </summary>
-    internal static float ArtScreenPixels(BuiltInArtAsset art, ArtPiece piece, Vector2 a, Vector2 b, Vector2 d)
-    {
-        var longSide = Math.Max(art.PixelWidth, art.PixelHeight);
-        if (ArtPieces.IsFrame(piece) && art.Frame is { } frame && art.PixelWidth > 0 && art.PixelHeight > 0)
-        {
-            var (row, column) = ArtPieces.FrameCell(piece);
-            var (y0, y1) = ArtFrameSlices.Band(frame.Rows, row);
-            var (x0, x1) = ArtFrameSlices.Band(frame.Columns, column);
-            if (ArtFrameSlices.IsFixed(row) && y1 > y0)
-            {
-                return Vector2.Distance(a, d) * longSide / (y1 - y0);
-            }
-
-            if (ArtFrameSlices.IsFixed(column) && x1 > x0)
-            {
-                return Vector2.Distance(a, b) * longSide / (x1 - x0);
-            }
-        }
-
-        return piece == ArtPiece.Whole || ArtPieces.IsFrame(piece) || art.PixelHeight <= 0
-            ? MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d))
-            : Vector2.Distance(a, d) * longSide / art.PixelHeight;
-    }
+    /// <summary>The on-screen size of the whole artwork a quad draws a piece of: what picks its level
+    /// (see <see cref="BuiltInArtAsset.ScreenPixels"/>).</summary>
+    internal static float ArtScreenPixels(BuiltInArtAsset art, ArtPiece piece, Vector2 a, Vector2 b, Vector2 d) => art.ScreenPixels(piece, a, b, d);
 }

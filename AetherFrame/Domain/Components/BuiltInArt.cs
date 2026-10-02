@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace AetherFrame.Domain.Components;
 
@@ -114,6 +115,38 @@ public sealed record BuiltInArtAsset(
 
         var (u0, u1) = Window(piece);
         return (u0, 0f, u1, 1f);
+    }
+
+    /// <summary>
+    /// The on-screen size, in pixels, of the whole artwork a quad A-B-C-D (D below A) draws
+    /// <paramref name="piece"/> of: what picks the level it draws from. A whole artwork's longer side;
+    /// a piece of sliced artwork scales its full-height strip by the artwork's long side over its
+    /// height; a cell of a frame scales by a side that keeps the artwork's proportions (a cap or the
+    /// center piece). So every piece of one placement draws from the same level, and a stretched
+    /// fill never needs a larger one.
+    /// </summary>
+    public float ScreenPixels(ArtPiece piece, Vector2 a, Vector2 b, Vector2 d)
+    {
+        var longSide = Math.Max(PixelWidth, PixelHeight);
+        if (ArtPieces.IsFrame(piece) && Frame is { } frame && PixelWidth > 0 && PixelHeight > 0)
+        {
+            var (row, column) = ArtPieces.FrameCell(piece);
+            var (y0, y1) = ArtFrameSlices.Band(frame.Rows, row);
+            var (x0, x1) = ArtFrameSlices.Band(frame.Columns, column);
+            if (ArtFrameSlices.IsFixed(row) && y1 > y0)
+            {
+                return Vector2.Distance(a, d) * longSide / (y1 - y0);
+            }
+
+            if (ArtFrameSlices.IsFixed(column) && x1 > x0)
+            {
+                return Vector2.Distance(a, b) * longSide / (x1 - x0);
+            }
+        }
+
+        return piece == ArtPiece.Whole || ArtPieces.IsFrame(piece) || PixelHeight <= 0
+            ? MathF.Max(Vector2.Distance(a, b), Vector2.Distance(a, d))
+            : Vector2.Distance(a, d) * longSide / PixelHeight;
     }
 
     /// <summary>The ident a shared Plate names <paramref name="piece"/> by: <see cref="Id"/> for the whole
