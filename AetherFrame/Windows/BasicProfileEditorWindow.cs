@@ -74,6 +74,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     private readonly BasicEditorSession basicEditorSession;
     private readonly ImageTextureCache imageTextureCache;
     private readonly ProfileRenderResources renderResources;
+
+    // The artwork the live view's Plate is missing: downloaded as the Plate is opened (art on demand).
+    private readonly ArtNeeds previewArt = new();
     private readonly FileDialogManager fileDialogManager;
     private readonly GameTitleCatalog titleCatalog;
     private readonly JobCatalog jobCatalog;
@@ -747,7 +750,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         ImGui.InvisibleButton("##PreviewCanvas", Vector2.Max(available, fit.Size));
         HandlePreviewInput(profile, canvasOrigin, scale, zoomed);
 
+        previewArt.Begin(renderResources);
         ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, canvasOrigin, scale, renderResources, ProfileRenderOptions.Finished);
+        previewArt.End(renderResources);
     }
 
     /// <summary>Pan (drag while zoomed) and click-to-navigate on the preview. Never edits the Plate.</summary>
@@ -807,6 +812,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         TutorialAnchorMarks.MarkRect(TutorialTarget.BasicPreviewZoom, zoomMin, ImGui.GetItemRectMax());
+        ArtDownloadStatus.DrawInline(previewArt, renderResources.ArtStore);
     }
 
     private void DrawResetLayoutPopup()

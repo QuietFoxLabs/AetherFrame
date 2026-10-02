@@ -131,6 +131,20 @@ jobs:
           "${tag_option[@]}" \
           --summary dist/package-summary.json
 
+    # Art on demand (docs/networking/DecisionRegister.md, "Art on demand"): the release's plugin
+    # downloads its Art Styles' artwork from the commits AetherFrame/Assets/ArtFiles.txt pins, so
+    # every pin must be in master's history and hold the table's bytes, and every hosted file must
+    # download from its address as exactly those bytes, before a release is drafted.
+    - name: Check the hosted artwork's pins
+      shell: bash
+      env:
+        PYTHON: python
+      run: bash .github/scripts/check-art-pins.sh
+
+    - name: Check that every hosted artwork file downloads
+      shell: bash
+      run: bash .github/scripts/check-hosted-art.sh
+
     # What the custom repository would serve for this release, in both channel shapes, kept with the
     # package as an artifact. Nothing is published: the pluginmaster.json Dalamud reads is updated
     # only by the Publish custom repository workflow, after the GitHub Release has been published by hand.

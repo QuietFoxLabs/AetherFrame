@@ -495,12 +495,14 @@ public class BuiltInArtTests
     }
 
     [Fact]
-    public void PluginAssembly_EmbedsTheArtUnderTheNamesTheTextureCacheRequests()
+    public void PluginAssembly_EmbedsThePreviewsAndTheAstrolabe_AndHostsEveryOtherArtwork()
     {
-        // BuiltInArtTextureCache reads from the plugin assembly, which this project deliberately
-        // doesn't reference; its manifest is read as metadata, so no Dalamud type ever loads.
-        // CI builds the plugin first and names it in AETHERFRAME_PLUGIN_ASSEMBLY (then it must
-        // exist); locally the plugin's own build output is checked when there is one.
+        // Art on demand: the plugin carries the Art Styles' preview cards and Celestial Dream's
+        // Astrolabe, under the names the texture cache requests; every other runtime PNG is hosted
+        // (ArtFiles), and the plugin carries none of it. The plugin's manifest is read as metadata,
+        // so no Dalamud type ever loads. CI builds the plugin first and names it in
+        // AETHERFRAME_PLUGIN_ASSEMBLY (then it must exist); locally the plugin's own build output is
+        // checked when there is one.
         var path = RepositoryPaths.PluginAssembly();
         if (path is null)
         {
@@ -511,7 +513,15 @@ public class BuiltInArtTests
         var metadata = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe);
         var names = metadata.ManifestResources.Select(h => metadata.GetString(metadata.GetManifestResource(h).Name));
 
-        Assert.Equal(ExpectedArtResourceNames(), EmbeddedPngNames(names));
+        var embedded = ExpectedArtResourceNames()
+            .Where(name => name.StartsWith(BuiltInArtCatalog.ResourcePrefix + "StylePreviews.", StringComparison.Ordinal)
+                || name.StartsWith(BuiltInArtCatalog.ResourcePrefix + "Components.CelestialDream.", StringComparison.Ordinal))
+            .ToList();
+        Assert.Contains(BuiltInArtCatalog.AstrolabePivot.ResourceName, embedded);
+        Assert.Equal(embedded, EmbeddedPngNames(names));
+        Assert.All(BuiltInArtCatalog.All, art => Assert.True(
+            embedded.Contains(art.ResourceName) || ArtFiles.Find(art.AssetPath) is not null,
+            $"{art.Id} is neither in the plugin nor hosted"));
     }
 
     [Fact]

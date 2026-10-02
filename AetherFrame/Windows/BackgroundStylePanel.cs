@@ -397,7 +397,11 @@ internal sealed class BackgroundStylePanel
         var max = ImGui.GetItemRectMax();
         var hovered = ImGui.IsItemHovered();
         var clicked = ImGui.IsItemClicked(ImGuiMouseButton.Left);
-        EditorWidgets.Tooltip($"{preset.Name}\n{preset.Description}");
+        if (hovered)
+        {
+            EditorWidgets.Tooltip($"{preset.Name}\n{preset.Description}{(preset.IsArtStyle ? ArtStyleDownloadNote(preset) : string.Empty)}");
+        }
+
         if (!ImGui.IsRectVisible(min, max))
         {
             return clicked;
@@ -433,6 +437,22 @@ internal sealed class BackgroundStylePanel
         drawList.PopClipRect();
 
         return clicked;
+    }
+
+    /// <summary>For an Art Style whose artwork isn't on this PC yet: how much downloads from GitHub the
+    /// first time it is used (art on demand). Empty once it is all here.</summary>
+    private string ArtStyleDownloadNote(ProfileThemePreset preset)
+    {
+        long missing = 0;
+        foreach (var id in preset.Components)
+        {
+            if (BuiltInComponentCatalog.Find(id)?.Art is { } art && !renderResources.ArtStore.Status(art).Readable && renderResources.ArtStore.HostedFile(art) is { } file)
+            {
+                missing += file.Length;
+            }
+        }
+
+        return missing > 0 ? $"\n\nIts artwork ({ArtNeedSummary.Megabytes(missing)} MB) downloads from GitHub the first time you use it." : string.Empty;
     }
 
     /// <summary>An Art Style's card: its bundled preview, a sample Plate in the style. While the preview

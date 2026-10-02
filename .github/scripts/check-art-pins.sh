@@ -39,7 +39,7 @@ while read -r commit sha length path; do
   fi
 done < "$table"
 
-python3 tools/art/write_art_files.py
+"${PYTHON:-python3}" tools/art/write_art_files.py
 
 # What players already download never changes: every file the base branch's table names is still
 # named, at the same commit, with the same bytes. The base is the merge base with master (on a

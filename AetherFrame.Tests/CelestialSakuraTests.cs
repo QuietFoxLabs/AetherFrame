@@ -207,13 +207,17 @@ public class CelestialSakuraTests(ITestOutputHelper output)
         }
     }
 
-    [Theory]
-    [InlineData("AetherFrame/AetherFrame.csproj")]
-    [InlineData("AetherFrame.Tests/AetherFrame.Tests.csproj")]
-    public void ProjectFiles_UseTheLogicalNameRuleTheTestsReplicate(string project)
+    [Fact]
+    public void ProjectFiles_UseTheLogicalNameRuleTheTestsReplicate()
     {
-        var text = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, project));
-        Assert.Contains("<LogicalName>AetherFrame.Assets.$([System.String]::Copy('%(RecursiveDir)').Replace('\\', '.').Replace('/', '.'))%(Filename)%(Extension)</LogicalName>", text, StringComparison.Ordinal);
+        // The tests embed every runtime PNG under the plugin's names; the plugin embeds only the
+        // previews and Celestial Dream's (art on demand), under the same names, folder by folder.
+        var tests = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame.Tests", "AetherFrame.Tests.csproj"));
+        Assert.Contains("<LogicalName>AetherFrame.Assets.$([System.String]::Copy('%(RecursiveDir)').Replace('\\', '.').Replace('/', '.'))%(Filename)%(Extension)</LogicalName>", tests, StringComparison.Ordinal);
+
+        var plugin = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "AetherFrame.csproj"));
+        Assert.Contains("<LogicalName>AetherFrame.Assets.StylePreviews.%(Filename)%(Extension)</LogicalName>", plugin, StringComparison.Ordinal);
+        Assert.Contains("<LogicalName>AetherFrame.Assets.Components.CelestialDream.$([System.String]::Copy('%(RecursiveDir)').Replace('\\', '.').Replace('/', '.'))%(Filename)%(Extension)</LogicalName>", plugin, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -230,8 +234,19 @@ public class CelestialSakuraTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void PluginAssembly_EmbedsEveryPiece_UnderItsCanonicalName()
+    public void EveryPiece_IsHosted_WithItsApprovedBytes_AndThePluginCarriesNone()
     {
+        // Art on demand: Celestial Sakura's pieces download the first time they are used, from the
+        // hosted table, which must name exactly the approved files.
+        foreach (var (definitionId, _, _, file, _, _, sha256) in Family)
+        {
+            var art = Definition(definitionId).Art!;
+            Assert.Equal(ResourceFolder + file, art.ResourceName);
+            var hosted = ArtFiles.Find(art.AssetPath);
+            Assert.NotNull(hosted);
+            Assert.Equal(sha256, hosted!.Sha256);
+        }
+
         // As BuiltInArtTests: CI names the built plugin in AETHERFRAME_PLUGIN_ASSEMBLY; locally the
         // checkout's own build of this configuration is inspected when it exists.
         var path = RepositoryPaths.PluginAssembly();
@@ -243,14 +258,7 @@ public class CelestialSakuraTests(ITestOutputHelper output)
         using var pe = new System.Reflection.PortableExecutable.PEReader(File.OpenRead(path));
         var metadata = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe);
         var names = metadata.ManifestResources.Select(h => metadata.GetString(metadata.GetManifestResource(h).Name)).ToHashSet(StringComparer.Ordinal);
-
-        foreach (var (definitionId, _, _, file, _, _, _) in Family)
-        {
-            Assert.Contains(ResourceFolder + file, names);
-            Assert.Contains(Definition(definitionId).Art!.ResourceName, names);
-        }
-
-        Assert.DoesNotContain(names, n => n.Contains("CelestialSakura", StringComparison.Ordinal) && (n.Contains('/') || n.Contains('\\')));
+        Assert.DoesNotContain(names, n => n.Contains("Components.CelestialSakura", StringComparison.Ordinal));
     }
 
     // ---- Loading (the texture cache's own path) -----------------------------------------------

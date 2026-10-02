@@ -72,6 +72,8 @@ $NetworkingNamespaces = @('AetherFrame.Protocol', 'AetherFrame.Personas')
 
 # Held open with no sharing while a preview build runs (PersonaInstanceLock.cs). It holds no data.
 $LockFileName = 'instance.lock'
+# Downloaded artwork (art on demand): kept out of backups, since it downloads again when it is missing.
+$ArtworkCacheFolder = 'artwork-cache'
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
@@ -224,6 +226,13 @@ function Backup-PluginData([string] $Source, [string] $Destination) {
     foreach ($item in Get-ChildItem -LiteralPath $root -Recurse -Force) {
         $relative = $item.FullName.Substring($root.Length + 1)
         $target = Join-Path $Destination $relative
+        if ($relative -eq $ArtworkCacheFolder) {
+            $skipped += $relative + '\'
+            continue
+        }
+        if ($relative.StartsWith($ArtworkCacheFolder + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
         if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
             throw "$($item.FullName) is a link, which the backup can't follow. Back that folder up by hand; nothing was installed."
         }

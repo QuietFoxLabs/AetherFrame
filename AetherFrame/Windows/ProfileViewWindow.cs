@@ -1,9 +1,11 @@
 using System;
 using System.Numerics;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Domain.Rendering;
 using AetherFrame.Services;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Theme;
 using AetherFrame.Windows.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -57,6 +59,10 @@ internal sealed class ProfileViewWindow : Window, IDisposable
     private readonly PlateLibraryService library;
     private readonly ActivePlateResolver activePlates;
     private readonly ProfileRenderResources renderResources;
+
+    // The artwork the shown Plate is missing, the player's own or another player's: downloaded as
+    // the Plate is viewed (art on demand).
+    private readonly ArtNeeds viewerArt = new();
     private readonly Action openMyPlates;
 
     // Where and how large the viewer shows its Plate: session UI state, kept across reopening and Plates.
@@ -371,6 +377,7 @@ internal sealed class ProfileViewWindow : Window, IDisposable
             ImGui.OpenPopup(ContextMenuId);
         }
 
+        viewerArt.Begin(renderResources);
         if (presentation is { } shown)
         {
             shown.Draw(ImGui.GetWindowDrawList(), windowPos + current.CanvasOffset, current.Scale, windowPos, windowPos + current.WindowSize);
@@ -379,6 +386,11 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         {
             ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, windowPos + current.CanvasOffset, current.Scale, renderResources, PlateViewerPresentation.RenderOptions);
         }
+
+        viewerArt.End(renderResources);
+
+        // Before Close, so Close always paints over it.
+        DrawArtStatus(windowPos, current);
 
         if (PresentationControls.Close("##ViewerClose", windowPos + current.CloseOffset, current.ControlSize, "Close (Esc)"))
         {
@@ -409,6 +421,18 @@ internal sealed class ProfileViewWindow : Window, IDisposable
                 ImGui.Separator();
             }
 
+            var art = viewerArt.Summary(renderResources.ArtStore);
+            if (art.Kind == ArtNeedKind.Failed)
+            {
+                ImGui.TextDisabled(art.Label);
+                if (ImGui.MenuItem("Try Downloading the Artwork Again"))
+                {
+                    viewerArt.TryAgain(renderResources.ArtStore);
+                }
+
+                ImGui.Separator();
+            }
+
             ImGui.TextDisabled($"Size: {placement.Percent}%");
             ImGui.Separator();
             foreach (var percent in PlateViewerPlacement.PresetPercents)
@@ -436,6 +460,39 @@ internal sealed class ProfileViewWindow : Window, IDisposable
         {
             ImGui.PopStyleVar();
         }
+    }
+
+    /// <summary>
+    /// What the shown Plate's missing artwork is doing (art on demand): a pill at the composition's top
+    /// center, in the viewer's own window (so other windows cover it), while it downloads or after it
+    /// failed (Try again is in the right-click menu). Nothing while nothing is missing.
+    /// </summary>
+    private void DrawArtStatus(Vector2 windowPos, PlateViewerLayout current)
+    {
+        var summary = viewerArt.Summary(renderResources.ArtStore);
+        if (summary.Kind == ArtNeedKind.None)
+        {
+            return;
+        }
+
+        var text = summary.Kind == ArtNeedKind.Failed ? "Artwork didn't download. Right-click to try again." : summary.Label;
+        var padding = new Vector2(10f, 5f) * ImGuiHelpers.GlobalScale;
+        var room = current.WindowSize.X - (2f * (current.ControlSize + (16f * ImGuiHelpers.GlobalScale)));
+        if (ImGui.CalcTextSize(text).X + (padding.X * 2f) > room)
+        {
+            // A narrow viewer: the short form, clear of the Close control.
+            text = summary.Kind == ArtNeedKind.Failed ? "Artwork failed: right-click"
+                : summary.Total > 0 ? $"{ArtNeedSummary.Megabytes(summary.Received)} / {ArtNeedSummary.Megabytes(summary.Total)} MB"
+                : "Downloading artwork";
+        }
+
+        var textSize = ImGui.CalcTextSize(text);
+        var size = textSize + (padding * 2f);
+        var min = windowPos + new Vector2((current.WindowSize.X - size.X) / 2f, 12f * ImGuiHelpers.GlobalScale);
+
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(min, min + size, ImGui.GetColorU32(PlateViewerPresentation.HintBacking), size.Y / 2f);
+        drawList.AddText(min + padding, ImGui.GetColorU32(summary.Kind == ArtNeedKind.Failed ? AetherPalette.Warning : PlateViewerPresentation.HintText), text);
     }
 
     /// <summary>The once-per-session usage hint: a small pill at the composition's bottom center, on

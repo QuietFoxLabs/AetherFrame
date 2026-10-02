@@ -208,7 +208,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             startup.OnFailure("artwork store", artStore.Dispose);
             builtInArtTextureCache = new BuiltInArtTextureCache(artStore);
             startup.OnFailure("artwork textures", builtInArtTextureCache.Dispose);
-            var renderResources = new ProfileRenderResources(imageTextureCache, fontService, proceduralTextureCache, builtInArtTextureCache, jobCatalog);
+            var renderResources = new ProfileRenderResources(imageTextureCache, fontService, proceduralTextureCache, builtInArtTextureCache, artStore, jobCatalog);
             var fileDialogManager = new FileDialogManager();
             var basicFileDialogManager = new FileDialogManager();
 

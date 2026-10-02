@@ -32,6 +32,10 @@ public class ReleaseMetadataTests
         Assert.Contains("AI-assisted artwork", description);
         Assert.Contains("Celestial Dream", description);
         Assert.Contains("Celestial Sakura", description);
+        Assert.Contains("Art Styles", description);
+
+        // Art on demand: the installer says where Art Styles' artwork comes from.
+        Assert.Contains("downloads from GitHub the first time you use it", description);
     }
 
     [Fact]

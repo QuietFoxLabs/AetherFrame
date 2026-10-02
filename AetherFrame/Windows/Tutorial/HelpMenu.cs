@@ -223,7 +223,7 @@ internal sealed class HelpMenu
         }
 
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceXs * scale));
-        AetherControls.Muted("Your Plates stay on your PC; nothing is sent unless you turn on sharing for a character. Bugs and ideas: the AetherFrame repository's issue tracker.");
+        AetherControls.Muted("Your Plates stay on your PC. Nothing goes to AetherFrame's server unless you turn on sharing for a character, and an Art Style's artwork downloads from GitHub the first time you use it. Bugs and ideas: the AetherFrame repository's issue tracker.");
     }
 
     private static void Shortcut(string keys, string meaning)

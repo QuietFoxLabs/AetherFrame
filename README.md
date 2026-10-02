@@ -80,7 +80,7 @@ A freeform canvas for when the Basic layout isn't enough.
 Reusable decorative pieces you add to a Plate and restyle without redrawing anything.
 
 - **Procedural Components**: Plate frames, portrait frames and overlays, name backings, dividers, section headers and corner ornaments, all drawn in code and tintable.
-- **Bundled graphical Components**: original artwork created with AI assistance, shipped inside the plugin. This currently means the Celestial Dream *Astrolabe Pivot* corner ornament and the full-color **Celestial Sakura** set: a background, Plate frame, portrait frame, name backing, two dividers and a corner ornament.
+- **Graphical Components and Art Styles**: original artwork created with AI assistance. The Celestial Dream *Astrolabe Pivot* corner ornament ships inside the plugin. The Art Styles' artwork, the full-color **Celestial Sakura** set included (a background, Plate frame, portrait frame, name backing, two dividers, a section header and a corner ornament), downloads from GitHub the first time you use it and is kept on your PC; only the styles' preview cards ship inside the plugin.
 - **Corner-specific placement**: choose which corners a corner ornament appears on.
 - **Overflow**: Components can deliberately extend past the Plate's edges, and previews account for it.
 
@@ -135,13 +135,13 @@ The finished idea is simple: start with something that feels familiar to anyone 
 
 ## Local first
 
-Everything AetherFrame does happens on your own machine, apart from sharing, which you turn on yourself.
+Everything AetherFrame does happens on your own machine, apart from sharing, which you turn on yourself, and Art Styles' artwork, which downloads from GitHub the first time you use a style and is then kept on your PC.
 
 - No account is needed.
 - Editing is entirely local.
 - Plates, Templates and images are stored in the plugin's local configuration folder.
 - Import and export are file-based: you choose what to export and who you give it to.
-- No online service is required for any of the core experience.
+- No online service is required for the core experience. An Art Style needs GitHub once, the first time you use it; until its artwork arrives, a Plate shows the style's colors.
 
 ## Privacy
 
@@ -227,7 +227,7 @@ AetherFrame/            the plugin
   UI/Rendering/         Plate renderer, backgrounds, text, Components, previews
   Windows/              Dalamud/ImGui windows: My Plates, Basic Editor, Advanced Editor, Plate Viewer, import
   Hosting/              thin adapters over Dalamud services
-  Assets/               bundled Component artwork, embedded in the DLL
+  Assets/               Component artwork: previews and the Astrolabe embedded, the rest hosted (ArtFiles.txt)
   Fonts/                bundled fonts (SIL Open Font License), embedded in the DLL
 AetherFrame.Tests/      pure-logic tests that build without Dalamud
 ```
@@ -240,12 +240,12 @@ AetherFrame.Tests/      pure-logic tests that build without Dalamud
 - **Basic Editor.** Structured input (identity, portrait, playstyle, message, theme) mapped onto an Adventure Plate-style layout.
 - **Advanced Editor.** Direct manipulation of every element on the canvas, with layers, snapping and undo.
 - **Templates.** Starting points for new Plates: built-in ones compiled into the plugin, plus user Templates saved locally.
-- **Components.** Decorations described by a stable definition id and per-instance settings. Procedural ones are drawn in code, graphical ones use embedded artwork. Plates store only ids, never the art itself.
+- **Components.** Decorations described by a stable definition id and per-instance settings. Procedural ones are drawn in code, graphical ones use artwork that is inside the plugin (the Astrolabe) or downloaded from GitHub the first time it is used (the Art Styles). Plates store only ids, never the art itself.
 - **Rendering.** One renderer draws a Plate for the editors, the Plate Viewer and My Plates previews, so all of them match.
 - **Assets.** User images are copied into a local asset store, checked on import and tracked by reference. Unused images are not cleaned up automatically in this version.
 - **Packages.** `.aetherframe` files are ZIP-based packages containing a manifest, the Plate document and its images. They are validated in a staging area before anything is imported.
 
-The plugin's bundled Component artwork is the optimized copies in `AetherFrame/Assets/`, and its icon is [`AetherFrame/images/icon.png`](AetherFrame/images/icon.png).
+The Component artwork is the optimized copies in `AetherFrame/Assets/` (`ArtFiles.txt` lists the hosted ones), and its icon is [`AetherFrame/images/icon.png`](AetherFrame/images/icon.png).
 
 ---
 
@@ -253,7 +253,7 @@ The plugin's bundled Component artwork is the optimized copies in `AetherFrame/A
 
 I use AI heavily while developing AetherFrame, mainly for implementation and code review. I decide what gets built, how the product works, and test the plugin in game myself. In the terms of the [Dalamud AI Usage Policy](https://dalamud.dev/plugin-publishing/ai-policy), that is the *Copilot* level.
 
-The plugin icon was generated with ChatGPT and then refined, and the bundled Celestial Dream and Celestial Sakura artwork was also created with AI assistance. The plugin's description in the Dalamud installer says so. The Celestial Sakura files are shipped unmodified, so they keep their embedded C2PA Content Credentials, which record how each image was made. I'd like to replace the icon with a hand-made one before AetherFrame goes into the official Dalamud repository.
+The plugin icon was generated with ChatGPT and then refined, and the Art Styles' artwork (their preview cards included) and the Celestial Dream and Celestial Sakura artwork were also created with AI assistance. The plugin's description in the Dalamud installer says so. The Celestial Sakura files are served unmodified, so they keep their embedded C2PA Content Credentials, which record how each image was made. I'd like to replace the icon with a hand-made one before AetherFrame goes into the official Dalamud repository.
 
 ## Support and feedback
 
