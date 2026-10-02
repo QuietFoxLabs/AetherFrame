@@ -163,7 +163,12 @@ the thread pool (`BuiltInArtLoader`), not inside Draw. The piece appears a frame
 If that ever matters, the Celestial Dream route is available: approved, reduced runtime copies
 made from the full-size sources.
 
-## The art sets: 19 sets of seven pieces, and Celestial Sakura's Section Header
+## The art sets: 39 sets of seven pieces, and Celestial Sakura's Section Header
+
+The first 19 came on October 1, 2026; art sets 21 to 40 (the owner's second twenty, `expansion-*`
+in the source folder) the next day, with Celestial Sakura the 40th style. Where neither ink reads at
+4.6:1 on a style's background (Alchemist's Workshop's details), the generator picks a deeper one, and
+it stops if any style still falls short.
 
 Made by `tools/art/make_runtime_art.py` from the owner's sources (run it from the repository root,
 with the source folder as its argument). [ArtSets.md](ArtSets.md) lists every runtime file with
@@ -175,12 +180,15 @@ file against it. The ids, Components and Art Styles are made in `ArtSets` from t
   992 x 1586), with their Content Credentials.
 - The Name Backing, Divider and Section Header (1086 x 362) and the Corner Ornament (627 x 627) are
   half size, the owner's choice of October 1, 2026, to keep the download near 77 MB instead of
-  117 MB. Each is averaged exactly as `BundledArtImage.BuildLevels` makes its own half-size level,
+  117 MB (since art on demand, each style's own download: about 2.3 to 5.5 MB). Each is averaged exactly as `BundledArtImage.BuildLevels` makes its own half-size level,
   so wherever the piece is drawn at or below half its source's size it draws exactly as the source
   would. At Size 100% with the Plate full screen, that is every piece on every screen up to 1440p.
-  At 4K it is every Divider, Section Header and Corner Ornament, while 16 of the 19 Name Backings
+  At 4K it is every Divider, Section Header and Corner Ornament, while 29 of the 39 Name Backings
   (size factors above 1.68) are magnified, by up to 1.45 times (Watercolor Fantasy's), and slightly
   softer.
+- Where the measured cuts leave a small ornament tip inside a stretching span, the generator's
+  `CUT_OVERRIDES` set them by hand (Mosaic Courtyard's and Memphis Playground's Name Backing and
+  Divider).
 - Cuts are measured on each source and halved (the fills shrink by at most a texel, so they stay
   plain). Pieces whose fills meet in the middle have no center piece.
 - Size factors match Celestial Sakura's look: a Name Backing's plain band is 40 px around the

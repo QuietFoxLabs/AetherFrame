@@ -30,24 +30,44 @@ from PIL import Image, ImageDraw, ImageFont
 
 # slug (ids), display name, folder (and file prefix), theme words (descriptions), search keywords
 FAMILIES = [
+    ("alchemists-workshop", "Alchemist's Workshop", "AlchemistsWorkshop", "colored glass, potion bottles, copper fittings and wax seals", ["alchemist", "potion", "glass", "copper", "emerald", "amber"]),
     ("allagan-tech", "Allagan Tech", "AllaganTech", "ancient high technology, gunmetal panels and glowing circuitry", ["allagan", "tech", "magitek", "circuit", "metal", "orange", "cyan"]),
     ("ancient-amaurot", "Ancient Amaurot", "AncientAmaurot", "art deco meets an ancient city, black stone, gold lines and stars", ["amaurot", "art deco", "black", "gold", "stars", "geometric"]),
     ("anime-pop", "Anime Pop", "AnimePop", "bright colors, bold outlines, halftone dots and stars", ["anime", "pop", "comic", "bright", "stars", "halftone"]),
     ("art-nouveau", "Art Nouveau", "ArtNouveau", "flowing lines, lilies and stained-glass colors with gold", ["art nouveau", "lily", "floral", "stained glass", "gold", "cream"]),
     ("botanical-cottage", "Botanical Cottage", "BotanicalCottage", "wildflowers, vines and pressed leaves on parchment", ["botanical", "cottage", "flowers", "vines", "green", "parchment"]),
+    ("corsairs-fortune", "Corsair's Fortune", "CorsairsFortune", "carved mahogany, aged brass, rope and compass ornaments", ["corsair", "pirate", "nautical", "compass", "rope", "mahogany"]),
     ("crystarium-crystal", "Crystarium Crystal", "CrystariumCrystal", "faceted crystal, white marble and blue and violet light", ["crystarium", "crystal", "marble", "blue", "violet", "white"]),
     ("cute-kawaii", "Cute Kawaii", "CuteKawaii", "pastel hearts, stars, clouds and bows", ["kawaii", "cute", "pastel", "hearts", "pink", "clouds"]),
     ("cyberpunk-neon", "Cyberpunk Neon", "CyberpunkNeon", "neon grids and holographic panels in cyan, magenta and purple", ["cyberpunk", "neon", "hologram", "purple", "magenta", "cyan"]),
+    ("dark-academia", "Dark Academia", "DarkAcademia", "leather book covers, ribbon bookmarks, quills and wax seals", ["academia", "library", "books", "scholar", "green", "brass"]),
     ("dark-fantasy", "Dark Fantasy", "DarkFantasy", "blackened iron, thorns, ravens and blood-red gems", ["dark", "gothic", "thorns", "raven", "red", "iron"]),
+    ("desert-oasis", "Desert Oasis", "DesertOasis", "warm sandstone, turquoise tile and pierced brass", ["desert", "oasis", "sandstone", "turquoise", "tile", "teal"]),
+    ("embroidered-tapestry", "Embroidered Tapestry", "EmbroideredTapestry", "woven fabric, raised embroidery, braids and tassels", ["embroidery", "tapestry", "fabric", "tassel", "burgundy", "indigo"]),
+    ("enchanted-toybox", "Enchanted Toybox", "EnchantedToybox", "painted wooden toys, puzzle pieces, beads and stars", ["toybox", "toys", "wooden", "puzzle", "playful", "stars"]),
+    ("frontier-silver", "Frontier Silver", "FrontierSilver", "tooled leather, silver conchos and turquoise stones", ["frontier", "western", "leather", "silver", "turquoise", "cowboy"]),
     ("high-fantasy-royal", "High Fantasy Royal", "HighFantasyRoyal", "ornate gold, marble, royal blue velvet and gemstones", ["royal", "gold", "marble", "velvet", "blue", "lion"]),
+    ("industrial-salvage", "Industrial Salvage", "IndustrialSalvage", "painted steel, bolts, vent grilles and hazard stripes", ["industrial", "salvage", "steel", "rust", "hazard", "bolts"]),
     ("ishgardian-gothic", "Ishgardian Gothic", "IshgardianGothic", "cathedral stone, silver filigree and deep blue stained glass", ["ishgard", "gothic", "cathedral", "silver", "blue", "frost"]),
+    ("liquid-chrome", "Liquid Chrome", "LiquidChrome", "fluid silver forms and glossy iridescent accents", ["chrome", "liquid", "silver", "metallic", "iridescent", "y2k"]),
+    ("memphis-playground", "Memphis Playground", "MemphisPlayground", "triangles, circles, squiggles and terrazzo flecks", ["memphis", "geometric", "eighties", "squiggle", "terrazzo", "playful"]),
     ("minimalist-modern", "Minimalist Modern", "MinimalistModern", "clean lines in quiet slate and sand tones", ["minimal", "modern", "clean", "slate", "grey", "simple"]),
+    ("mosaic-courtyard", "Mosaic Courtyard", "MosaicCourtyard", "glazed tile fragments, geometric mosaic and terracotta", ["mosaic", "tile", "courtyard", "terracotta", "turquoise", "geometric"]),
     ("oceanic-siren", "Oceanic Siren", "OceanicSiren", "pearls, coral, seashells and deep sea blues", ["ocean", "siren", "sea", "pearl", "coral", "teal"]),
+    ("paper-theater", "Paper Theater", "PaperTheater", "layered cut paper, origami and stacked silhouettes", ["paper", "theater", "origami", "papercut", "coral", "teal"]),
+    ("porcelain-garden", "Porcelain Garden", "PorcelainGarden", "white porcelain with cobalt flowers and gold trim", ["porcelain", "china", "cobalt", "blue", "white", "floral"]),
+    ("prehistoric-amber", "Prehistoric Amber", "PrehistoricAmber", "polished amber, fossils, ferns and carved stone", ["prehistoric", "amber", "fossil", "dinosaur", "fern", "stone"]),
+    ("psychedelic-bloom", "Psychedelic Bloom", "PsychedelicBloom", "flowing waves, big daisies and bold color blocks", ["psychedelic", "groovy", "daisy", "seventies", "flower", "bold"]),
+    ("racing-carbon", "Racing Carbon", "RacingCarbon", "carbon fiber, aerodynamic fins and racing stripes", ["racing", "carbon", "speed", "sport", "red", "checkered"]),
     ("retro-rpg", "Retro RPG", "RetroRPG", "16-bit menu windows, pixel crystals and gold trim", ["retro", "rpg", "pixel", "16-bit", "blue", "menu"]),
+    ("retro-space-age", "Retro Space Age", "RetroSpaceAge", "rounded spacecraft panels, orbital rings and chrome", ["space age", "retro", "rocket", "orbit", "chrome", "atomic"]),
     ("steampunk-machinist", "Steampunk Machinist", "SteampunkMachinist", "brass, copper, gears and gauges", ["steampunk", "machinist", "brass", "gears", "copper", "gauge"]),
+    ("sugarcraft-patisserie", "Sugarcraft Patisserie", "SugarcraftPatisserie", "piped icing, biscuit borders, candy glass and ribbons", ["sweets", "patisserie", "cake", "candy", "pastel", "dessert"]),
     ("tarot-arcana", "Tarot Arcana", "TarotArcana", "tarot card borders, suns, moons and constellations in gold", ["tarot", "arcana", "mystic", "sun", "moon", "gold"]),
     ("ukiyoe-fantasy", "Ukiyo-e Fantasy", "UkiyoeFantasy", "woodblock waves, clouds and mountains in indigo and vermilion", ["ukiyo-e", "japanese", "waves", "woodblock", "indigo", "cream"]),
+    ("velvet-masquerade", "Velvet Masquerade", "VelvetMasquerade", "theater curtains, masks, feathers and gold trim", ["masquerade", "velvet", "mask", "theater", "wine", "feathers"]),
     ("void-cosmic-horror", "Void Cosmic Horror", "VoidCosmicHorror", "warped stars, violet void cracks and unsettling eyes", ["void", "cosmic", "horror", "purple", "eyes", "space"]),
+    ("volcanic-forge", "Volcanic Forge", "VolcanicForge", "black basalt, hammered iron and glowing molten seams", ["volcanic", "forge", "lava", "basalt", "ember", "orange"]),
     ("watercolor-fantasy", "Watercolor Fantasy", "WatercolorFantasy", "soft watercolor washes, pale flowers and clouds", ["watercolor", "painted", "pastel", "flowers", "soft", "blue"]),
 ]
 
@@ -65,8 +85,23 @@ DIVIDER_HEIGHT = 24.0      # ComponentPaintPlan.DividerHeight
 HEADER_BODY = 22.0 / 24.0  # a Section Header's band: 22 px of the 24 px heading row
 CORNER_FACTOR = 3.0        # as Celestial Sakura's Corner Ornament
 
+# Cuts set by hand, in runtime pixels, where the measured ones leave a small ornament tip inside a
+# stretching span (seen with the pieces stretched: Mosaic Courtyard's carved scroll tips, Memphis
+# Playground's black arrowheads). The pixels are the measured run's; only where it stretches moves.
+CUT_OVERRIDES = {
+    ("MosaicCourtyard", "NameBacking"): (167, 189, 537, 537, 897, 908),
+    ("MosaicCourtyard", "Divider"): (137, 137, 433, 651, 953, 953),
+    ("MemphisPlayground", "NameBacking"): (152, 160, 541, 541, 925, 931),
+    ("MemphisPlayground", "Divider"): (102, 104, 395, 691, 979, 984),
+}
+
 DARK_INK = (0x2A, 0x22, 0x1C)
 LIGHT_INK = (0xF6, 0xF1, 0xE8)
+
+# When neither ink reads at MIN_CONTRAST on a mid-tone (Alchemist's Workshop's background), a deeper
+# one does; the tests require WCAG AA's 4.5:1, and the margin covers their slightly different averaging.
+DEEP_INK = (0x14, 0x10, 0x0C)
+MIN_CONTRAST = 4.6
 DARK_SOFT = (0x5E, 0x54, 0x4C)
 LIGHT_SOFT = (0xD3, 0xCC, 0xC2)
 
@@ -396,7 +431,7 @@ def process(source, slug, display, folder, out_dir, only=None):
         if piece in SLICED:
             cuts, band_rows = measure_cuts(src)
             entry["cuts_full"] = cuts
-            entry["cuts"] = halve_cuts(cuts)
+            entry["cuts"] = CUT_OVERRIDES.get((folder, piece), halve_cuts(cuts))
             entry["band_rows"] = band_rows
             entry["band_color"] = band_color(src.convert("RGBA"), cuts, band_rows)
             body = band_rows[1] - band_rows[0]
@@ -430,6 +465,20 @@ def dark_ink_reads_better(behind):
     return contrast(DARK_INK, behind) >= contrast(LIGHT_INK, behind)
 
 
+def ink_on(behind):
+    """The ink for text on behind: the one that reads better, or, when it falls short of MIN_CONTRAST,
+    a deeper dark (then black) or white."""
+    if dark_ink_reads_better(behind):
+        for ink in (DARK_INK, DEEP_INK, (0, 0, 0)):
+            if contrast(ink, behind) >= MIN_CONTRAST:
+                return ink
+        return (0, 0, 0)
+    for ink in (LIGHT_INK, (0xFF, 0xFF, 0xFF)):
+        if contrast(ink, behind) >= MIN_CONTRAST:
+            return ink
+    return (0xFF, 0xFF, 0xFF)
+
+
 def style_colors(background_path, name_band, header_band):
     background = Image.open(background_path).convert("RGB")
     W, H = background.size
@@ -437,21 +486,22 @@ def style_colors(background_path, name_band, header_band):
     dark_panel = not dark_ink_reads_better(panel)
     light_name_band = dark_ink_reads_better(name_band)
     light_header_band = dark_ink_reads_better(header_band)
+    text, accent, name = ink_on(panel), ink_on(header_band), ink_on(name_band)
     return {
         "primary": mean_color(background.convert("RGBA"), (0, 0, W // 2, H // 2)),
         "secondary": mean_color(background.convert("RGBA"), (W // 2, H // 2, W, H)),
-        "text": LIGHT_INK if dark_panel else DARK_INK,
+        "text": text,
         "soft": LIGHT_SOFT if dark_panel else DARK_SOFT,
-        "accent": DARK_INK if light_header_band else LIGHT_INK,
-        "name": DARK_INK if light_name_band else LIGHT_INK,
+        "accent": accent,
+        "name": name,
         "name_outline": LIGHT_INK if light_name_band else DARK_INK,
         "name_outline_strength": 0.2 if light_name_band else 0.35,
         "light_name_band": light_name_band,
         "light_header_band": light_header_band,
         "panel_luminance": round(relative_luminance(panel), 3),
-        "name_contrast": round(contrast(DARK_INK if light_name_band else LIGHT_INK, name_band), 2),
-        "header_contrast": round(contrast(DARK_INK if light_header_band else LIGHT_INK, header_band), 2),
-        "text_contrast": round(contrast(LIGHT_INK if dark_panel else DARK_INK, panel), 2),
+        "name_contrast": round(contrast(name, name_band), 2),
+        "header_contrast": round(contrast(accent, header_band), 2),
+        "text_contrast": round(contrast(text, panel), 2),
     }
 
 
@@ -573,6 +623,11 @@ def main():
     }
     preview(sakura_dir, "CelestialSakura", None, sakura_data, sakura["colors"], os.path.join(previews, "CelestialSakura.png"),
             name_file="CelestialSakura_Nameplate.png", divider_file="CelestialSakura_Divider_Ornate.png")
+
+    short = [r["name"] for r in records + [sakura]
+             if min(r["colors"]["name_contrast"], r["colors"]["header_contrast"], r["colors"]["text_contrast"]) < MIN_CONTRAST]
+    if short:
+        sys.exit("Text doesn't reach " + str(MIN_CONTRAST) + ":1 on: " + ", ".join(short))
 
     write_csharp(os.path.join("AetherFrame", "Domain", "Components", "ArtSetData.g.cs"), records, sakura)
     write_markdown(os.path.join(assets, "ArtSets.md"), records + [sakura])

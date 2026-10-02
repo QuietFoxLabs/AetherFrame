@@ -18,7 +18,7 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// The bundled art sets (<see cref="ArtSets"/>): nineteen new sets of seven pieces and Celestial Sakura's
+/// The art sets (<see cref="ArtSets"/>): thirty-nine sets of seven pieces and Celestial Sakura's
 /// Section Header, as artwork, Components and Art Styles; where their pieces paint; and what applying a
 /// style does to a Plate.
 /// </summary>
@@ -39,13 +39,15 @@ public class ArtSetsTests
     // ---- Catalog --------------------------------------------------------------------------------
 
     [Fact]
-    public void NineteenNewSets_OfSevenPieces_AndSakurasSectionHeader_WithIdsMadeFromTheirSlugs()
+    public void ThirtyNineSets_OfSevenPieces_AndSakurasSectionHeader_WithIdsMadeFromTheirSlugs()
     {
-        Assert.Equal(19, ArtSetData.Sets.Length);
-        Assert.Equal((19 * 7) + 1, ArtSets.Assets.Count);
+        // The first 19 sets (October 1, 2026) and art sets 21 to 40 (the owner's second twenty),
+        // with Celestial Sakura the 40th style.
+        Assert.Equal(39, ArtSetData.Sets.Length);
+        Assert.Equal((39 * 7) + 1, ArtSets.Assets.Count);
         Assert.Equal(ArtSets.Assets.Count, ArtSets.Definitions.Count);
-        Assert.Equal(20, ArtSets.Styles.Count);
-        Assert.Equal(19, ArtSetData.Sets.Select(s => s.Slug).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(40, ArtSets.Styles.Count);
+        Assert.Equal(39, ArtSetData.Sets.Select(s => s.Slug).Distinct(StringComparer.Ordinal).Count());
 
         foreach (var set in ArtSetData.Sets)
         {
@@ -150,9 +152,17 @@ public class ArtSetsTests
             Assert.Equal(7, Directory.GetFiles(Path.Combine(assets, "Components", set.Folder)).Length);
         }
 
-        // The owner's choice: every set, with the small pieces at half size, about 77 MB.
-        bytes += Directory.GetFiles(Path.Combine(assets, "StylePreviews")).Sum(f => new FileInfo(f).Length);
-        Assert.InRange(bytes, 50_000_000L, 80_000_000L);
+        // Art on demand: every set is hosted and downloads the first time it is used, so what
+        // counts is each style's download (the small pieces at half size, the owner's choice) and
+        // the preview cards the plugin carries.
+        foreach (var set in ArtSetData.Sets)
+        {
+            var download = Directory.GetFiles(Path.Combine(assets, "Components", set.Folder)).Sum(f => new FileInfo(f).Length);
+            Assert.True(download <= 8_000_000L, $"{set.Name} downloads {download} bytes");
+        }
+
+        Assert.InRange(bytes, 100_000_000L, 170_000_000L);
+        Assert.True(Directory.GetFiles(Path.Combine(assets, "StylePreviews")).Sum(f => new FileInfo(f).Length) <= 6_000_000L, "the preview cards the plugin carries");
     }
 
     // ---- Readability -----------------------------------------------------------------------------
@@ -390,7 +400,7 @@ public class ArtSetsTests
     {
         var groups = ThemeBrowser.Group(ProfileThemePresets.All, string.Empty, null);
         Assert.Equal(ThemeFamily.ArtStyle, groups[0].Family);
-        Assert.Equal(20, groups[0].Themes.Count);
+        Assert.Equal(40, groups[0].Themes.Count);
         Assert.All(groups.Skip(1), g => Assert.All(g.Themes, t => Assert.False(t.IsArtStyle)));
 
         Assert.Equal("Art Styles", ThemeBrowser.FamilyLabel(ThemeFamily.ArtStyle));
