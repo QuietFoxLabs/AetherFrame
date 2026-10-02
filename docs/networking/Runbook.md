@@ -100,7 +100,8 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 | To | Run |
 | --- | --- |
 | See that it's up | `docker compose ps`, and open `https://<hostname>/v1/status` |
-| See the image worker's runs | `systemctl status aetherframe-worker` and `docker ps --filter name=aetherframe-worker` |
+| See the image worker's runs | `systemctl status aetherframe-worker` and `docker ps --filter name=aetherframe-worker` (one `aetherframe-worker-` container is up, or starts within seconds, whenever the server is up) |
+| The server logs "No image worker connected in time." and no worker container ever starts | The worker service must run as root (it reads the socket volume's folder). On a server set up before October 2, 2026, run once: `sudo sed -i '/^User=aetherframe-deploy$/d' /etc/systemd/system/aetherframe-worker.service && sudo systemctl daemon-reload && sudo systemctl restart aetherframe-worker` |
 | Read the logs (14 days, no addresses or names) | `docker compose logs --since 1h` |
 | List bound characters | `docker compose exec server dotnet AetherFrame.Server.dll admin characters` |
 | List reports | `docker compose exec server dotnet AetherFrame.Server.dll admin reports` |
