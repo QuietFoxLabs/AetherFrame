@@ -32,13 +32,15 @@ internal static class WebSocketStandIn
 
     /// <summary>
     /// Accepts the upgrade and runs <paramref name="serve"/> on the server's end in the background.
-    /// Whatever it throws is kept in <paramref name="faults"/>, so a test can see it.
+    /// Whatever it throws is kept in <paramref name="faults"/>, so a test can see it. With
+    /// <paramref name="socketBuffer"/>, the connection's buffers are that small, so the plugin's
+    /// sends wait while the server doesn't read, as over a slow network.
     /// </summary>
-    internal static async Task<HttpResponseMessage> AcceptAsync(HttpRequestMessage request, Func<WebSocket, Task> serve, ConcurrentQueue<Exception> faults)
+    internal static async Task<HttpResponseMessage> AcceptAsync(HttpRequestMessage request, Func<WebSocket, Task> serve, ConcurrentQueue<Exception> faults, int? socketBuffer = null)
     {
         var key = request.Headers.GetValues("Sec-WebSocket-Key").Single();
         var accept = Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(key + AcceptGuid)));
-        var (client, server) = await ConnectedPairAsync();
+        var (client, server) = await ConnectedPairAsync(socketBuffer);
         var socket = WebSocket.CreateFromStream(server, new WebSocketCreationOptions { IsServer = true, KeepAliveInterval = TimeSpan.Zero });
         _ = Task.Run(async () =>
         {
@@ -114,15 +116,28 @@ internal static class WebSocketStandIn
         }
     }
 
-    private static async Task<(Stream Client, Stream Server)> ConnectedPairAsync()
+    private static async Task<(Stream Client, Stream Server)> ConnectedPairAsync(int? socketBuffer)
     {
         using var listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        if (socketBuffer is { } bytes)
+        {
+            listener.ReceiveBufferSize = bytes;
+            client.SendBufferSize = bytes;
+            client.ReceiveBufferSize = bytes;
+        }
+
         listener.Bind(new IPEndPoint(IPAddress.Loopback, 0));
         listener.Listen(1);
-        var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         var connecting = client.ConnectAsync(listener.LocalEndPoint!);
         var server = await listener.AcceptAsync();
         await connecting;
+        if (socketBuffer is { } serverBytes)
+        {
+            server.SendBufferSize = serverBytes;
+            server.ReceiveBufferSize = serverBytes;
+        }
+
         return (new NetworkStream(client, ownsSocket: true), new NetworkStream(server, ownsSocket: true));
     }
 
@@ -153,6 +168,7 @@ internal sealed class FakeLodestoneLink : LodestonePipe.Link
 {
     private readonly Channel<byte[]> answers = Channel.CreateUnbounded<byte[]>();
     private readonly MemoryStream received = new();
+    private int reads;
 
     internal FakeLodestoneLink(IPAddress? address) => Address = address;
 
@@ -176,6 +192,9 @@ internal sealed class FakeLodestoneLink : LodestonePipe.Link
             }
         }
     }
+
+    /// <summary>How many of the Lodestone's answers the pipe has read.</summary>
+    internal int Reads => Volatile.Read(ref reads);
 
     /// <summary>Signalled each time bytes arrive toward the Lodestone.</summary>
     internal SemaphoreSlim Arrived { get; } = new(0);
@@ -216,6 +235,7 @@ internal sealed class FakeLodestoneLink : LodestonePipe.Link
         }
 
         var next = await answers.Reader.ReadAsync(cancellation);
+        Interlocked.Increment(ref reads);
         Assert.True(next.Length <= buffer.Length, "a test answers in pieces the pipe can read whole");
         next.CopyTo(buffer);
         return next.Length;

@@ -33,7 +33,7 @@ public partial class CharacterSharingTests
     {
         using var harness = new SharingHarness();
         harness.Sharing.TryStart(Aria, newKey: false);
-        byte[] hello = [0x16, 0x03, 0x01, 0x00, 0x05, 1, 2, 3, 4, 5];
+        var hello = TlsBytes.ClientHello();
         byte[] page = [0x17, 0x03, 0x03, 0x00, 0x02, 9, 9];
         harness.Server.Pipe = async socket =>
         {
@@ -187,6 +187,48 @@ public partial class CharacterSharingTests
         harness.Now = harness.Now.AddMinutes(61);
         Assert.True(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Gilgamesh"));
         Assert.Equal("Aria Starfall", harness.Sharing.View.Find(Aria)!.Name);
+    }
+
+    [Fact]
+    public void ARereadAnsweredWithTheOldName_IsntAskedForAgainThisSession_UntilTheGameShowsAnother()
+    {
+        // The Lodestone can take a while to show a rename: the page still says Aria Starfall.
+        using var harness = new SharingHarness();
+        harness.Bound();
+        harness.Server.Answers["/v1/lodestone/reread"] = _ => (HttpStatusCode.OK, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}");
+        Assert.True(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Gilgamesh"));
+        Assert.True(harness.Sharing.TryReread(Aria, "Aria Moonfall", "Gilgamesh"));
+        Assert.Equal("Aria Starfall", harness.Sharing.View.Find(Aria)!.Name);
+
+        // Not within the hour, answered or not; and after it, not for the same name and World.
+        Assert.False(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Gilgamesh"));
+        harness.Now = harness.Now.AddHours(2);
+        Assert.False(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Gilgamesh"));
+        Assert.True(harness.Sharing.RereadDue(Aria, "Aria Skyfall", "Gilgamesh"));
+        Assert.True(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Cactuar"));
+
+        // The fifteen days still apply.
+        harness.Now = harness.Now.AddDays(CharacterSharing.RereadAfterDays);
+        Assert.True(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Gilgamesh"));
+        Assert.Single(harness.Server.Upgrades, upgrade => upgrade.Path == "/v1/lodestone/reread");
+    }
+
+    [Fact]
+    public void NoRereadIsDue_BeforeThePlayerHasSeenTheOneTimeNotice()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        System.IO.File.Delete(System.IO.Path.Combine(harness.Root, CharacterSharing.ConnectionNoticeFileName));
+        harness.Restart();
+        Assert.True(harness.Sharing.View.ConnectionNotice);
+
+        Assert.False(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Gilgamesh"));
+        Assert.True(harness.Sharing.TryReread(Aria, "Aria Moonfall", "Gilgamesh"));
+        harness.WaitIdle();
+        Assert.DoesNotContain(harness.Server.Upgrades, upgrade => upgrade.Path == "/v1/lodestone/reread");
+
+        Assert.True(harness.Sharing.TryDismissConnectionNotice());
+        Assert.True(harness.Sharing.RereadDue(Aria, "Aria Moonfall", "Gilgamesh"));
     }
 
     [Fact]

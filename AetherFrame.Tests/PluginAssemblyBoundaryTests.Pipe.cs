@@ -37,6 +37,29 @@ public partial class PluginAssemblyBoundaryTests
     /// <summary>What the decision names as never used on the socket; the list above leaves each out, and this says so in the decision's words.</summary>
     private static readonly string[] NeverOnTheSocket = ["Bind", "Listen", "Accept", "AcceptAsync", "SendTo", "SendToAsync", "ReceiveFrom", "ReceiveFromAsync", "IOControl", "SetRawSocketOption", "DuplicateAndClose", "get_Handle", "get_SafeHandle"];
 
+    /// <summary>
+    /// What would reach a member the rules above never see: reflection, an
+    /// <c>[UnsafeAccessor]</c>, <c>Unsafe</c> and the interop marshallers, a delegate made by name,
+    /// expression trees and <c>dynamic</c>. The pipe names none of them, but for the marker the
+    /// compiler puts on an <c>in</c> parameter. <c>System.Type</c> is named by the compiler's own
+    /// attributes on async methods, so its members are held in the IL instead.
+    /// </summary>
+    private static readonly string[] WaysAroundTheMemberRules =
+    [
+        "System.Reflection.",
+        "System.Runtime.InteropServices.",
+        "System.Linq.Expressions.",
+        "System.Dynamic.",
+        "Microsoft.CSharp.",
+        "System.Runtime.CompilerServices.UnsafeAccessorAttribute",
+        "System.Runtime.CompilerServices.Unsafe",
+        "System.Runtime.CompilerServices.RuntimeHelpers",
+        "System.Activator",
+        "System.Delegate",
+        "System.AppDomain",
+        "System.Runtime.Loader.",
+    ];
+
     /// <summary>The WebSocket's members the pipe may use, on <c>WebSocket</c> or <c>ClientWebSocket</c>: the exchange's own, never one that makes a WebSocket over a stream.</summary>
     private static readonly string[] PipeWebSocketMembers = ["get_State", "SendAsync", "ReceiveAsync", "CloseAsync", "Abort", "Dispose"];
 
@@ -180,10 +203,12 @@ public partial class PluginAssemblyBoundaryTests
                         }
                         else if (step.Name == "ConnectAsync")
                         {
-                            // Connected only to the endpoint made just before it, with nothing run between.
+                            // Connected only to the endpoint made just before it: between them nothing
+                            // runs, nothing is stored or dropped, and only the token is loaded.
                             connected++;
-                            var before = LastCallBefore(steps, index);
-                            if (before is not { OpCode: ILOpCode.Newobj, Parent: "System.Net.DnsEndPoint", Name: ".ctor" })
+                            var endpoint = LastCallBefore(steps, index);
+                            if (endpoint < 0 || steps[endpoint] is not { OpCode: ILOpCode.Newobj, Parent: "System.Net.DnsEndPoint", Name: ".ctor" }
+                                || index - endpoint - 1 > 2 || steps.GetRange(endpoint + 1, index - endpoint - 1).Any(between => !LoadsTheToken(between)))
                             {
                                 offending.Add(where + " (not to the one DnsEndPoint made just before)");
                             }
@@ -314,6 +339,34 @@ public partial class PluginAssemblyBoundaryTests
     }
 
     [Fact]
+    public void ThePipe_HasNoWayAroundItsMemberRules()
+    {
+        var path = RepositoryPaths.PluginAssembly();
+        if (path is null)
+        {
+            return;
+        }
+
+        using var pe = new PEReader(File.OpenRead(path));
+        var byType = NetworkTypeUse.ReferencesByType(pe);
+        if (!PreviewFlavour)
+        {
+            Assert.False(byType.ContainsKey(Pipe), "the player flavour compiles no pipe");
+            return;
+        }
+
+        var around = byType[Pipe].Select(WithoutTypeArgumentPrefix)
+            .Where(name => name != "System.Runtime.InteropServices.InAttribute"
+                && WaysAroundTheMemberRules.Any(way => way.EndsWith('.') ? name.StartsWith(way, StringComparison.Ordinal) : name == way || name.StartsWith(way + "`", StringComparison.Ordinal)))
+            .ToList();
+        around.AddRange(NetworkTypeUse.MethodBodies(pe, Pipe)
+            .SelectMany(body => body.Steps.Where(step => step.Parent == "System.Type" && step.Name != "GetTypeFromHandle").Select(step => body.Method + ": " + step)));
+        Assert.True(around.Count == 0, "R3 as amended: the pipe names " + string.Join(", ", around));
+        var bodiless = NetworkTypeUse.BodilessMethods(pe, Pipe);
+        Assert.True(bodiless.Count == 0, "R3 as amended: the pipe declares methods with no body: " + string.Join(", ", bodiless));
+    }
+
+    [Fact]
     public void NothingLeaksOutOfThePipe()
     {
         var path = RepositoryPaths.PluginAssembly();
@@ -350,19 +403,23 @@ public partial class PluginAssemblyBoundaryTests
         || (name.StartsWith("System.Net.Sockets.", StringComparison.Ordinal) && name != "System.Net.Sockets.AddressFamily")
         || name.StartsWith("System.Net.WebSockets.", StringComparison.Ordinal) || name.StartsWith("System.Net.Security.", StringComparison.Ordinal);
 
-    /// <summary>The last step before <paramref name="index"/> that runs code, or null.</summary>
-    private static IlStep? LastCallBefore(List<IlStep> steps, int index)
+    /// <summary>The index of the last step before <paramref name="index"/> that runs code, or -1.</summary>
+    private static int LastCallBefore(List<IlStep> steps, int index)
     {
         for (var at = index - 1; at >= 0; at--)
         {
             if (steps[at].Calls)
             {
-                return steps[at];
+                return at;
             }
         }
 
-        return null;
+        return -1;
     }
+
+    /// <summary>A step that only loads an argument or a field: how the token reaches a call in a method or its state machine.</summary>
+    private static bool LoadsTheToken(IlStep step) =>
+        step.OpCode is ILOpCode.Ldarg_0 or ILOpCode.Ldarg_1 or ILOpCode.Ldarg_2 or ILOpCode.Ldarg_3 or ILOpCode.Ldarg_s or ILOpCode.Ldarg or ILOpCode.Ldfld;
 
     /// <summary>The steps strictly between the last one before <paramref name="index"/> that <paramref name="start"/> matches and <paramref name="index"/>; null when none matches.</summary>
     private static List<IlStep>? StepsSince(List<IlStep> steps, int index, Func<IlStep, bool> start)

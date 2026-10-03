@@ -24,8 +24,10 @@ namespace AetherFrame.Services.Network.Transport;
 /// only encrypted bytes pass here: nothing here can read or change the page.
 /// <para>
 /// The host and the port are constants, never an address from the server. The connected address
-/// must be a global unicast one on the allowed list before any byte is forwarded, and the first
-/// bytes toward the Lodestone must start a TLS handshake record. At most 16 KiB go toward the
+/// must be a global unicast one on the allowed list before any byte is forwarded, and the bytes
+/// toward the Lodestone must be TLS records that start with a ClientHello naming the Lodestone
+/// alone (<see cref="TlsRecords"/>), so the server can't reach another site at the same address.
+/// At most 16 KiB go toward the
 /// Lodestone and 2 MiB come from it, in messages of at most 64 KiB, with one <c>open</c>, within
 /// 45 seconds for the whole exchange. The WebSocket's handshake runs on the plugin's one handler
 /// (<see cref="SharingHandler"/>), through an invoker, with the version header and nothing else
@@ -51,6 +53,14 @@ internal sealed class LodestonePipe : IDisposable
     // The one place the pipe ever connects. Constants, so the compiled IL names them literally.
     private const string LodestoneHost = "na.finalfantasyxiv.com";
     private const int LodestonePort = 443;
+
+    private const byte HandshakeRecord = 22;
+    private const byte ClientHelloType = 1;
+    private const int ServerNameExtension = 0;
+    private const int EncryptedClientHelloExtension = 0xFE0D;
+
+    /// <summary>The largest TLS record's body: 2^14 bytes of plaintext, and 256 more once protected (RFC 8446, section 5.2).</summary>
+    private const int MaxRecordBytes = 16 * 1024 + 256;
 
     private static readonly byte[] Opened = "opened"u8.ToArray();
     private static readonly byte[] Failed = "failed"u8.ToArray();
@@ -288,9 +298,84 @@ internal sealed class LodestonePipe : IDisposable
             || (a[0] == 0x3F && a[1] == 0xFF && (a[2] & 0xF0) == 0x00));       // documentation, 3fff::/20
     }
 
-    /// <summary>Whether the first bytes toward the Lodestone start a TLS handshake record: content type 22, then a 3.x version.</summary>
-    private static bool StartsTlsHandshake(ReadOnlySpan<byte> bytes) =>
-        bytes.Length >= 3 && bytes[0] == 0x16 && bytes[1] == 0x03 && bytes[2] is >= 0x01 and <= 0x04;
+    /// <summary>
+    /// Whether a handshake record's body is exactly one TLS ClientHello (RFC 8446, section 4.1.2)
+    /// that names the Lodestone, and only it: one <c>server_name</c> extension (RFC 6066, section
+    /// 3) holding one <c>host_name</c>, <see cref="LodestoneHost"/> in any case, and no Encrypted
+    /// Client Hello, whose hidden name could choose another site at the same address. The
+    /// ClientHello is the one plaintext part of the server's TLS that says which site answers.
+    /// </summary>
+    private static bool IsClientHelloForTheLodestone(ReadOnlySpan<byte> record)
+    {
+        if (record.Length < 4 || record[0] != ClientHelloType || ((record[1] << 16) | (record[2] << 8) | record[3]) != record.Length - 4)
+        {
+            return false;
+        }
+
+        var hello = record[4..];
+        var at = 2 + 32;                                                           // legacy_version, random
+        if (!Skip(hello, ref at, lengthBytes: 1, max: 32)                          // legacy_session_id
+            || !Skip(hello, ref at, lengthBytes: 2, max: 0xFFFE)                   // cipher_suites
+            || !Skip(hello, ref at, lengthBytes: 1, max: 0xFF)                     // legacy_compression_methods
+            || hello.Length < at + 2 || ((hello[at] << 8) | hello[at + 1]) != hello.Length - at - 2)
+        {
+            return false;
+        }
+
+        at += 2;
+        var named = false;
+        while (at < hello.Length)
+        {
+            if (hello.Length < at + 4)
+            {
+                return false;
+            }
+
+            var type = (hello[at] << 8) | hello[at + 1];
+            var length = (hello[at + 2] << 8) | hello[at + 3];
+            at += 4;
+            if (hello.Length < at + length || type == EncryptedClientHelloExtension)
+            {
+                return false;
+            }
+
+            if (type == ServerNameExtension)
+            {
+                // ServerNameList: one entry, host_name (0), the Lodestone's name.
+                var names = hello.Slice(at, length);
+                if (named || names.Length < 5 || ((names[0] << 8) | names[1]) != names.Length - 2 || names[2] != 0
+                    || ((names[3] << 8) | names[4]) != names.Length - 5 || !Ascii.EqualsIgnoreCase(names[5..], LodestoneHost))
+                {
+                    return false;
+                }
+
+                named = true;
+            }
+
+            at += length;
+        }
+
+        return named;
+    }
+
+    /// <summary>Steps over a vector with a length prefix of <paramref name="lengthBytes"/> bytes and at most <paramref name="max"/> bytes; false when it doesn't fit.</summary>
+    private static bool Skip(ReadOnlySpan<byte> bytes, ref int at, int lengthBytes, int max)
+    {
+        if (bytes.Length < at + lengthBytes)
+        {
+            return false;
+        }
+
+        var length = lengthBytes == 1 ? bytes[at] : (bytes[at] << 8) | bytes[at + 1];
+        at += lengthBytes;
+        if (length > max || bytes.Length < at + length)
+        {
+            return false;
+        }
+
+        at += length;
+        return true;
+    }
 
     /// <summary>
     /// The pipe's one connection to the Lodestone, as the exchange uses it. The plugin's is a TCP
@@ -364,6 +449,103 @@ internal sealed class LodestonePipe : IDisposable
         }
     }
 
+    /// <summary>
+    /// The server's bytes toward the Lodestone, read as TLS records (RFC 8446, section 5.1), which
+    /// may arrive split across messages or several in one. The first record must be a handshake,
+    /// and every handshake record one whole ClientHello for the Lodestone, held back until it is
+    /// whole and checked (<see cref="IsClientHelloForTheLodestone"/>); a second one, after a
+    /// HelloRetryRequest, is checked the same way. Change cipher spec, alerts and protected
+    /// records pass as they come. Anything else ends the exchange.
+    /// </summary>
+    private sealed class TlsRecords
+    {
+        private readonly byte[] held = new byte[5 + MaxRecordBytes];
+        private int heldCount;
+        private int passing;
+        private bool started;
+
+        /// <summary>The bytes that may go on now, in order: all but a header or a handshake record not yet whole.</summary>
+        /// <exception cref="SharingException">The bytes break the rules above.</exception>
+        internal ReadOnlyMemory<byte> Take(ReadOnlySpan<byte> bytes)
+        {
+            var output = new byte[heldCount + bytes.Length];
+            var count = 0;
+            var at = 0;
+            while (at < bytes.Length)
+            {
+                if (passing > 0)
+                {
+                    var through = Math.Min(passing, bytes.Length - at);
+                    bytes.Slice(at, through).CopyTo(output.AsSpan(count));
+                    count += through;
+                    at += through;
+                    passing -= through;
+                    continue;
+                }
+
+                if (heldCount < 5)
+                {
+                    var header = Math.Min(5 - heldCount, bytes.Length - at);
+                    bytes.Slice(at, header).CopyTo(held.AsSpan(heldCount));
+                    heldCount += header;
+                    at += header;
+                    if (heldCount == 5)
+                    {
+                        count += Begin(output.AsSpan(count));
+                    }
+
+                    continue;
+                }
+
+                var whole = 5 + Length;
+                var body = Math.Min(whole - heldCount, bytes.Length - at);
+                bytes.Slice(at, body).CopyTo(held.AsSpan(heldCount));
+                heldCount += body;
+                at += body;
+                if (heldCount == whole)
+                {
+                    if (!IsClientHelloForTheLodestone(held.AsSpan(5, Length)))
+                    {
+                        throw new SharingException(null, "The server's handshake toward the Lodestone isn't a ClientHello for it alone.");
+                    }
+
+                    held.AsSpan(0, whole).CopyTo(output.AsSpan(count));
+                    count += whole;
+                    heldCount = 0;
+                }
+            }
+
+            return output.AsMemory(0, count);
+        }
+
+        private int Length => (held[3] << 8) | held[4];
+
+        /// <summary>A record's header is whole: checks it, and lets it through at once unless the record is a handshake, which is held whole first.</summary>
+        private int Begin(Span<byte> output)
+        {
+            var type = held[0];
+            if (held[1] != 0x03 || held[2] is < 0x01 or > 0x04 || Length > MaxRecordBytes || (!started && type != HandshakeRecord))
+            {
+                throw new SharingException(null, "The server's bytes toward the Lodestone aren't a TLS handshake.");
+            }
+
+            started = true;
+            switch (type)
+            {
+                case HandshakeRecord when Length is > 0 and <= 16 * 1024:
+                    return 0;
+                case 20 or 21 or 23:
+                    // Change cipher spec, an alert, or a protected record.
+                    held.AsSpan(0, 5).CopyTo(output);
+                    passing = Length;
+                    heldCount = 0;
+                    return 5;
+                default:
+                    throw new SharingException(null, "The server sent a TLS record toward the Lodestone the pipe doesn't carry.");
+            }
+        }
+    }
+
     /// <summary>One exchange over one WebSocket: the signed body, then the server's requests, until its final message.</summary>
     private sealed class Exchange(LodestonePipe pipe, ClientWebSocket socket, CancellationToken deadline) : IDisposable
     {
@@ -374,7 +556,7 @@ internal sealed class LodestonePipe : IDisposable
         private bool openSeen;
         private bool open;
         private bool closed;
-        private bool tlsStarted;
+        private readonly TlsRecords records = new();
         private long toLodestone;
         private long fromLodestone;
         private volatile bool pumpFailed;
@@ -483,7 +665,7 @@ internal sealed class LodestonePipe : IDisposable
             pump = Task.Run(FromLodestoneAsync, CancellationToken.None);
         }
 
-        /// <summary>The server's bytes toward the Lodestone: only while the pipe is open, within the total, the first of them a TLS handshake record.</summary>
+        /// <summary>The server's bytes toward the Lodestone: only while the pipe is open, within the total, as TLS records that <see cref="TlsRecords"/> lets through.</summary>
         private async Task TowardLodestoneAsync(ReadOnlyMemory<byte> bytes)
         {
             if (!open || closed || link is null)
@@ -497,19 +679,15 @@ internal sealed class LodestonePipe : IDisposable
                 throw new SharingException(null, "The server sent more toward the Lodestone than a pipe carries.");
             }
 
-            if (!tlsStarted)
+            var passing = records.Take(bytes.Span);
+            if (passing.IsEmpty)
             {
-                if (!StartsTlsHandshake(bytes.Span))
-                {
-                    throw new SharingException(null, "The server's first bytes toward the Lodestone aren't a TLS handshake.");
-                }
-
-                tlsStarted = true;
+                return;
             }
 
             try
             {
-                await link.SendAsync(bytes, deadline).ConfigureAwait(false);
+                await link.SendAsync(passing, deadline).ConfigureAwait(false);
             }
             catch (Exception e) when (e is SocketException or IOException or ObjectDisposedException)
             {
@@ -603,13 +781,18 @@ internal sealed class LodestonePipe : IDisposable
 
         private Task SendAsync(ReadOnlyMemory<byte> bytes, WebSocketMessageType type) => SendAsync(bytes, type, deadline);
 
-        /// <summary>Sends one whole message, one at a time.</summary>
+        /// <summary>
+        /// Sends one whole message, one at a time. <paramref name="cancellation"/> stops a send that
+        /// hasn't begun; one under way runs to its end within the exchange's time, since cancelling a
+        /// WebSocket's send part way aborts the WebSocket, and the server's final answer with it.
+        /// </summary>
         private async Task SendAsync(ReadOnlyMemory<byte> bytes, WebSocketMessageType type, CancellationToken cancellation)
         {
             await sending.WaitAsync(cancellation).ConfigureAwait(false);
             try
             {
-                await socket.SendAsync(bytes, type, endOfMessage: true, cancellation).ConfigureAwait(false);
+                cancellation.ThrowIfCancellationRequested();
+                await socket.SendAsync(bytes, type, endOfMessage: true, deadline).ConfigureAwait(false);
             }
             finally
             {

@@ -178,7 +178,7 @@ internal sealed class CharacterSharing
     /// <summary>The server API version this build speaks (ServerApi-v1.md).</summary>
     private const int Api = 1;
 
-    /// <summary>How long after a re-read that got no answer a player's action asks for another.</summary>
+    /// <summary>How long after a re-read started, answered or not, a player's action asks for another.</summary>
     private static readonly TimeSpan RereadRetry = TimeSpan.FromHours(1);
 
     private readonly Func<string, Action<PersonaManager>, bool> tryRun;
@@ -205,10 +205,13 @@ internal sealed class CharacterSharing
     private bool statusChecked;
 
     // Each character's day of last read, as the server's answers through the pipe gave it this
-    // session (UTC days since the Unix epoch), and when a re-read last started for it. Kept in
-    // memory only: one not known yet is due at the player's next action. Guarded by gate.
+    // session (UTC days since the Unix epoch); when a re-read last started for it; and the name and
+    // World the game showed when a re-read answered with others, which the Lodestone hasn't caught
+    // up with yet. Kept in memory only: a day not known yet is due at the player's next action.
+    // Guarded by gate.
     private readonly Dictionary<ulong, long> readDays = new();
     private readonly Dictionary<ulong, DateTimeOffset> rereadsStarted = new();
+    private readonly Dictionary<ulong, (string Name, string World)> notYetOnTheLodestone = new();
 
     internal CharacterSharing(
         Func<string, Action<PersonaManager>, bool> tryRun,
@@ -698,14 +701,17 @@ internal sealed class CharacterSharing
     /// <summary>
     /// Whether a player's action should ask for the character's re-read now ("Checking a character
     /// through the player's own connection" in the decision register): it is bound, and the game
-    /// shows it under another name or World than its binding's (C1), or its last read is
-    /// <see cref="RereadAfterDays"/> days old or more, or not known this session. A re-read that got
-    /// no answer isn't asked for again within the hour. Nothing is sent: a caller that finds it due
-    /// calls <see cref="TryReread"/> during the player's action, never at login.
+    /// shows it under another name or World than its binding's (C1) and a re-read this session
+    /// hasn't already found the page without them, or its last read is <see cref="RereadAfterDays"/>
+    /// days old or more, or not known this session. No re-read is asked for within the hour after
+    /// the last one started, answered or not, and none before the player has seen the one-time
+    /// notice about their own connection. Nothing is sent: a caller that finds it due calls
+    /// <see cref="TryReread"/> during the player's action, never at login.
     /// </summary>
     internal bool RereadDue(ulong contentId, string name, string world)
     {
-        if (view.Find(contentId) is not { IsBound: true } entry)
+        var current = view;
+        if (current.ConnectionNotice || current.Find(contentId) is not { IsBound: true } entry)
         {
             return false;
         }
@@ -718,7 +724,9 @@ internal sealed class CharacterSharing
                 return false;
             }
 
-            return !SameCharacter(entry, name, world) || !readDays.TryGetValue(contentId, out var day) || DayOf(now) - day >= RereadAfterDays;
+            var renamed = !SameCharacter(entry, name, world)
+                && !(notYetOnTheLodestone.TryGetValue(contentId, out var shown) && SameCharacter(entry with { Name = shown.Name, World = shown.World }, name, world));
+            return renamed || !readDays.TryGetValue(contentId, out var day) || DayOf(now) - day >= RereadAfterDays;
         }
     }
 
@@ -755,6 +763,20 @@ internal sealed class CharacterSharing
                 {
                     var (readName, readWorld) = SharingWire.ReadReread(response.Body);
                     Read(contentId, response);
+                    lock (gate)
+                    {
+                        // A name or World the page doesn't show yet isn't asked about again this
+                        // session: the Lodestone can take a while to catch up with the game.
+                        if (SameCharacter(entry with { Name = readName, World = readWorld }, name, world))
+                        {
+                            notYetOnTheLodestone.Remove(contentId);
+                        }
+                        else
+                        {
+                            notYetOnTheLodestone[contentId] = (name, world);
+                        }
+                    }
+
                     if (entry.Name == readName && entry.World == readWorld)
                     {
                         // Read again, and found as it was: nothing changes here.
@@ -1200,7 +1222,6 @@ internal sealed class CharacterSharing
         lock (gate)
         {
             readDays[contentId] = day;
-            rereadsStarted.Remove(contentId);
         }
     }
 

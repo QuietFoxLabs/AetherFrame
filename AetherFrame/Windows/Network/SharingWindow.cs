@@ -41,6 +41,7 @@ internal sealed class SharingWindow : Window
     private readonly AetherWindowChrome chrome = new();
     private bool agreed;
     private bool opened;
+    private ulong openedFor;
     private bool consentShown;
     private ulong shownCharacter;
     private string address = "";
@@ -78,8 +79,12 @@ internal sealed class SharingWindow : Window
 
     public override void PostDraw() => chrome.PopStyle();
 
-    /// <summary>Opening the window is a player's action: a re-read that is due may go then, once.</summary>
-    public override void OnOpen() => opened = true;
+    /// <summary>Opening the window is a player's action: a re-read that is due may go then, once, for the character it first shows.</summary>
+    public override void OnOpen()
+    {
+        opened = true;
+        openedFor = 0;
+    }
 
     public override void OnClose()
     {
@@ -150,6 +155,21 @@ internal sealed class SharingWindow : Window
         }
 
         var character = currentCharacter();
+
+        // The opening counts for the character it first shows: arriving at another while the window
+        // stays open (or hidden with the interface) is not the player opening it.
+        if (opened && character is { } first)
+        {
+            if (openedFor == 0)
+            {
+                openedFor = first.ContentId;
+            }
+            else if (openedFor != first.ContentId)
+            {
+                opened = false;
+            }
+        }
+
         if ((character?.ContentId ?? 0) != shownCharacter)
         {
             shownCharacter = character?.ContentId ?? 0;

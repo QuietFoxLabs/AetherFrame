@@ -34,8 +34,8 @@ internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<Pl
 /// <see cref="CharacterSharing.TryPublish"/>), and a send of an older revision for the character
 /// gives way once a newer candidate is ready and waits for the service
 /// (<see cref="CharacterSharing.StopOlderSend"/>). A change that publishes is a player's action, so
-/// it first asks for C1's re-read when one is due (<see cref="CharacterSharing.RereadDue"/>), through
-/// the player's own connection; arriving at a character never does. It runs on the framework thread,
+/// once its send has gone it asks for C1's re-read when one is due (<see cref="CharacterSharing.RereadDue"/>),
+/// through the player's own connection; arriving at a character never does. It runs on the framework thread,
 /// a frame at a time; saves may be reported from any thread. Compiled only in the networking preview
 /// flavour.
 /// </summary>
@@ -53,6 +53,7 @@ internal sealed class LivePublisher : IDisposable
     private PersonaId? watchedKey;
     private ProfileId? watchedBinding;
     private (ulong ContentId, Guid PlateId, long Generation)? building;
+    private ulong rereadAfterSend;
     private SnapshotCandidate? ready;
     private volatile LiveView view = LiveView.Idle;
     private volatile bool retry;
@@ -173,12 +174,10 @@ internal sealed class LivePublisher : IDisposable
 
         if (changed)
         {
-            // A save that publishes is a player's action: a re-read that is due goes first, and the
-            // candidate waits for the service while it runs.
-            if (character.Name is { } name && character.HomeWorld is { } world && sharing.RereadDue(character.ContentId, name, world))
-            {
-                sharing.TryReread(character.ContentId, name, world);
-            }
+            // A save that publishes is a player's action: a re-read that is due goes once the send
+            // has gone, so what it found (the Lodestone turning the connection away, say) is the
+            // last word in Sharing, not overwritten by the publish's.
+            rereadAfterSend = character.ContentId;
 
             // A candidate built or handed over before this one is out of date, and never sent.
             sharing.Supersede(character.ContentId);
@@ -188,6 +187,7 @@ internal sealed class LivePublisher : IDisposable
             check.Begin(active.Value);
         }
 
+        RereadAfterSend(character, sharingView);
         if (building is not { } target)
         {
             return;
@@ -251,6 +251,21 @@ internal sealed class LivePublisher : IDisposable
 
     public void Dispose() => check.Dispose();
 
+    /// <summary>The re-read a save that publishes asked for, once nothing is being built or sent and the service is free; asked again next frame if it was taken first.</summary>
+    private void RereadAfterSend(CharacterContext character, CharacterSharingView sharingView)
+    {
+        if (rereadAfterSend != character.ContentId || building is not null || sharingView.Busy)
+        {
+            return;
+        }
+
+        if (character.Name is not { } name || character.HomeWorld is not { } world || !sharing.RereadDue(character.ContentId, name, world)
+            || sharing.TryReread(character.ContentId, name, world))
+        {
+            rereadAfterSend = 0;
+        }
+    }
+
     /// <summary>No character is watched: what was being built for the last one goes, and so does a try again asked for it.</summary>
     private void Leave()
     {
@@ -260,6 +275,7 @@ internal sealed class LivePublisher : IDisposable
         }
 
         watchedCharacter = 0;
+        rereadAfterSend = 0;
         retry = false;
         saved.Clear();
     }

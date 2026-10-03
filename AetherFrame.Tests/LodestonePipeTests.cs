@@ -23,7 +23,7 @@ public class LodestonePipeTests
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
     private static readonly DeploymentName Deployment = DeploymentName.Parse("plates.example.com");
-    private static readonly byte[] Hello = [0x16, 0x03, 0x01, 0x00, 0x02, 0x01, 0x00];
+    private static readonly byte[] Hello = TlsBytes.ClientHello();
     private static readonly byte[] Body = [0x00, 0x01, 0x2A, 0x7B, 0x7D];
 
     [Theory]
@@ -192,15 +192,151 @@ public class LodestonePipeTests
             await WebSocketStandIn.ReceiveAsync(socket);
             await WebSocketStandIn.SendTextAsync(socket, "open");
             await WebSocketStandIn.ExpectTextAsync(socket, "opened");
-            var first = new byte[LodestonePipe.MaxBytesToLodestone];
-            Hello.CopyTo(first, 0);
-            await WebSocketStandIn.SendBinaryAsync(socket, first);
+            await WebSocketStandIn.SendBinaryAsync(socket, [.. Hello, .. TlsBytes.ApplicationData(LodestonePipe.MaxBytesToLodestone - Hello.Length - 5)]);
             await WebSocketStandIn.SendBinaryAsync(socket, [1]);
             await WebSocketStandIn.ReceiveAsync(socket);
         });
 
         await Assert.ThrowsAsync<SharingException>(() => server.Pipe.RunAsync(RequestProofKind.LodestoneCheck, Body, CancellationToken.None));
         Assert.Equal(LodestonePipe.MaxBytesToLodestone, Assert.Single(server.Links).Received.Length);
+    }
+
+    [Fact]
+    public async Task AClientHelloForTheLodestone_AndTheRecordsAfterIt_Pass_HoweverTheyAreSplit()
+    {
+        // The handshake record is held until whole; a protected record passes as it comes.
+        var hello = TlsBytes.ClientHello();
+        var after = new byte[][] { TlsBytes.ChangeCipherSpec(), TlsBytes.ApplicationData(300), TlsBytes.Record(21, [0x01, 0x00]) }.SelectMany(record => record).ToArray();
+        var (ended, received) = await CarryAsync(hello[..3], hello[3..40], [.. hello[40..], .. after[..10]], after[10..]);
+
+        Assert.False(ended);
+        Assert.Equal([.. hello, .. after], received);
+    }
+
+    [Fact]
+    public async Task ASecondClientHelloForTheLodestone_Passes_AsAfterAHelloRetryRequest()
+    {
+        var hello = TlsBytes.ClientHello();
+        var (ended, received) = await CarryAsync([.. hello, .. TlsBytes.ChangeCipherSpec()], hello);
+
+        Assert.False(ended);
+        Assert.Equal([.. hello, .. TlsBytes.ChangeCipherSpec(), .. hello], received);
+    }
+
+    public static TheoryData<string, byte[]> HandshakesThatArentForTheLodestoneAlone => new()
+    {
+        { "another site", TlsBytes.ClientHello("example.com") },
+        { "another site on the Lodestone's domain", TlsBytes.ClientHello("jp.finalfantasyxiv.com") },
+        { "the name with a trailing dot", TlsBytes.ClientHello(TlsBytes.Lodestone + ".") },
+        { "the name and more", TlsBytes.ClientHello(TlsBytes.Lodestone + "x") },
+        { "no server name", TlsBytes.ClientHelloWith((0x002B, [0x02, 0x03, 0x04])) },
+        { "two names in one extension", TlsBytes.ClientHelloWith((0x0000, TlsBytes.ServerName(TlsBytes.Lodestone, "example.com"))) },
+        { "two server_name extensions", TlsBytes.ClientHelloWith((0x0000, TlsBytes.ServerName(TlsBytes.Lodestone)), (0x0000, TlsBytes.ServerName("example.com"))) },
+        { "a name that isn't a host name", TlsBytes.ClientHelloWith((0x0000, TlsBytes.ServerNameOfType(1, TlsBytes.Lodestone))) },
+        { "an Encrypted Client Hello", TlsBytes.ClientHelloWith((0x0000, TlsBytes.ServerName(TlsBytes.Lodestone)), (0xFE0D, [0x00, 0x01])) },
+        { "a ServerHello", TlsBytes.Handshake(2, [0x03, 0x03]) },
+        { "a ClientHello whose length overruns its record", Overrun() },
+        { "a ClientHello with bytes after it", TlsBytes.Record(22, [.. TlsBytes.ClientHello()[5..], 0x00]) },
+        { "an extension list that overruns", TlsBytes.ClientHelloWith((0x0000, [0x00, 0x40, 0x00])) },
+    };
+
+    [Theory]
+    [MemberData(nameof(HandshakesThatArentForTheLodestoneAlone))]
+    public async Task AHandshakeThatIsntAClientHelloForTheLodestoneAlone_EndsTheExchange_AndReachesNothing(string what, byte[] handshake)
+    {
+        var (ended, received) = await CarryAsync(handshake);
+
+        Assert.True(ended, what);
+        Assert.Empty(received);
+    }
+
+    [Theory]
+    [InlineData(24)]
+    [InlineData(25)]
+    [InlineData(0)]
+    public async Task ARecordTypeThePipeDoesntCarry_EndsTheExchange(byte contentType)
+    {
+        var hello = TlsBytes.ClientHello();
+        var (ended, received) = await CarryAsync(hello, TlsBytes.Record(contentType, [0x01, 0x00]));
+
+        Assert.True(ended);
+        Assert.Equal(hello, received);
+    }
+
+    [Fact]
+    public async Task ASecondHandshakeForAnotherSite_EndsTheExchange()
+    {
+        var hello = TlsBytes.ClientHello();
+        var (ended, received) = await CarryAsync(hello, TlsBytes.ClientHello("example.com"));
+
+        Assert.True(ended);
+        Assert.Equal(hello, received);
+    }
+
+    [Fact]
+    public async Task ProtectedBytesBeforeTheClientHello_EndTheExchange()
+    {
+        var (ended, received) = await CarryAsync(TlsBytes.ApplicationData(10), TlsBytes.ClientHello());
+
+        Assert.True(ended);
+        Assert.Empty(received);
+    }
+
+    [Fact]
+    public async Task ARecordLongerThanTlsAllows_EndsTheExchange()
+    {
+        var hello = TlsBytes.ClientHello();
+        var (ended, received) = await CarryAsync(hello, [23, 0x03, 0x03, 0x41, 0x01]);
+
+        Assert.True(ended);
+        Assert.Equal(hello, received);
+    }
+
+    [Fact]
+    public async Task TheServersClose_WhileTheLodestonesBytesAreOnTheirWay_KeepsTheFinalAnswer()
+    {
+        // The server stops reading and closes the pipe while the Lodestone is still sending, so the
+        // pipe is part way through a send over a connection with small buffers: that send finishes
+        // or not, but the server's final answer still arrives (cancelling a WebSocket's send part
+        // way would abort the WebSocket).
+        var link = new FakeLodestoneLink(IPAddress.Parse("104.18.32.1"));
+        using var server = new PipeServer(async socket =>
+        {
+            await WebSocketStandIn.ReceiveAsync(socket);
+            await WebSocketStandIn.SendTextAsync(socket, "open");
+            await WebSocketStandIn.ExpectTextAsync(socket, "opened");
+            await WebSocketStandIn.SendBinaryAsync(socket, Hello);
+            for (var piece = 0; piece < 64; piece++)
+            {
+                link.Answer(new byte[16 * 1024]);
+            }
+
+            Assert.True(await link.Arrived.WaitAsync(Patience));
+
+            // Until the pipe stops reading the Lodestone: it is held in a send the server doesn't read.
+            var seen = -1;
+            while (link.Reads != seen)
+            {
+                seen = link.Reads;
+                await Task.Delay(150);
+            }
+
+            Assert.InRange(seen, 1, 63);
+            await WebSocketStandIn.SendTextAsync(socket, "close");
+            await WebSocketStandIn.SendTextAsync(socket, "{\"status\":503,\"reason\":\"lodestone:refused\"}");
+            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+            using var patience = new CancellationTokenSource(Patience);
+            while ((await WebSocketStandIn.ReceiveAsync(socket, patience.Token)).Type != WebSocketMessageType.Close)
+            {
+            }
+        }, () => link, socketBuffer: 4096);
+
+        var answer = await server.Pipe.RunAsync(RequestProofKind.LodestoneReread, Body, CancellationToken.None);
+
+        Assert.True(answer.LodestoneRefused);
+        await server.Served;
+        server.AssertNoFaults();
+        Assert.True(link.Disposed);
     }
 
     [Fact]
@@ -336,16 +472,68 @@ public class LodestonePipeTests
         Assert.Throws<SharingException>(() => LodestonePipe.ReadFinal(Encoding.UTF8.GetBytes(final)));
     }
 
+    /// <summary>A ClientHello record whose handshake length claims one byte more than the record holds.</summary>
+    private static byte[] Overrun()
+    {
+        var bytes = TlsBytes.ClientHello();
+        var length = (bytes[6] << 16) | (bytes[7] << 8) | bytes[8];
+        length++;
+        bytes[6] = (byte)(length >> 16);
+        bytes[7] = (byte)(length >> 8);
+        bytes[8] = (byte)length;
+        return bytes;
+    }
+
+    /// <summary>
+    /// An exchange in which the server, once the pipe is open, sends <paramref name="messages"/>
+    /// toward the Lodestone, then <c>close</c> and a final answer. Whether the plugin ended the
+    /// exchange over them, and what reached the Lodestone.
+    /// </summary>
+    private static async Task<(bool Ended, byte[] Received)> CarryAsync(params byte[][] messages)
+    {
+        using var server = new PipeServer(async socket =>
+        {
+            await WebSocketStandIn.ReceiveAsync(socket);
+            await WebSocketStandIn.SendTextAsync(socket, "open");
+            await WebSocketStandIn.ExpectTextAsync(socket, "opened");
+            foreach (var message in messages)
+            {
+                await WebSocketStandIn.SendBinaryAsync(socket, message);
+            }
+
+            await WebSocketStandIn.SendTextAsync(socket, "close");
+            await WebSocketStandIn.FinishAsync(socket, "{\"status\":503}");
+        });
+
+        bool ended;
+        try
+        {
+            await server.Pipe.RunAsync(RequestProofKind.LodestoneCheck, Body, CancellationToken.None);
+            ended = false;
+            server.AssertNoFaults();
+        }
+        catch (SharingException)
+        {
+            ended = true;
+        }
+
+        var link = Assert.Single(server.Links);
+        Assert.True(link.Disposed);
+        return (ended, link.Received);
+    }
+
     /// <summary>A handler that accepts the pipe's WebSocket and serves it with a test's script, and the pipe over it.</summary>
     private sealed class PipeServer : HttpMessageHandler
     {
         private readonly Func<WebSocket, Task> serve;
         private readonly ConcurrentQueue<Exception> faults = new();
         private readonly TaskCompletionSource served = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly int? socketBuffer;
 
-        internal PipeServer(Func<WebSocket, Task> serve, Func<FakeLodestoneLink>? links = null, TimeSpan? connectTimeout = null, TimeSpan? exchangeTimeout = null)
+        internal PipeServer(Func<WebSocket, Task> serve, Func<FakeLodestoneLink>? links = null, TimeSpan? connectTimeout = null, TimeSpan? exchangeTimeout = null, int? socketBuffer = null)
         {
             this.serve = serve;
+            this.socketBuffer = socketBuffer;
             var make = links ?? (() => new FakeLodestoneLink(IPAddress.Parse("104.18.32.1")));
             Pipe = new LodestonePipe(Deployment, this, new Version(0, 1, 7), () =>
             {
@@ -393,7 +581,7 @@ public class LodestonePipeTests
                 {
                     served.TrySetResult();
                 }
-            }, faults);
+            }, faults, socketBuffer);
         }
 
         protected override void Dispose(bool disposing)

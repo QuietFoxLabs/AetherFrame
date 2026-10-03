@@ -268,6 +268,36 @@ internal static class NetworkTypeUse
         return surface;
     }
 
+    /// <summary>
+    /// The methods of the types whose outermost type is <paramref name="outermost"/> that have no
+    /// body in IL and aren't abstract: an <c>extern</c> (a P/Invoke, an internal call, or an
+    /// <c>[UnsafeAccessor]</c>, which reaches a member the IL never names) or a runtime-provided one.
+    /// </summary>
+    internal static List<string> BodilessMethods(PEReader pe, string outermost)
+    {
+        var reader = pe.GetMetadataReader();
+        var names = new TypeNames(reader);
+        var found = new List<string>();
+        foreach (var handle in reader.TypeDefinitions)
+        {
+            if (names.NameOf(Outermost(reader, handle)) != outermost)
+            {
+                continue;
+            }
+
+            foreach (var methodHandle in reader.GetTypeDefinition(handle).GetMethods())
+            {
+                var method = reader.GetMethodDefinition(methodHandle);
+                if (method.RelativeVirtualAddress == 0 && (method.Attributes & System.Reflection.MethodAttributes.Abstract) == 0)
+                {
+                    found.Add(names.NameOf(handle) + "." + reader.GetString(method.Name));
+                }
+            }
+        }
+
+        return found;
+    }
+
     /// <summary>Every member reference in the assembly: its parent type's full name and its own name.</summary>
     internal static List<(string Parent, string Name)> MemberReferences(MetadataReader reader)
     {
