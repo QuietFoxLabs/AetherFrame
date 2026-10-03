@@ -1076,8 +1076,8 @@ Batch C turns the owner's V1 to V5 into decisions that N2-7 to N2-10 can build. 
   - The server re-reads each binding's Lodestone page at least once a day, within C2's fetch budget, and updates the name and World players search by. `[updated 2026-10-03: while an operator relay is set. Otherwise the player's own re-read during a player action updates them, and a binding not read within 30 days stops answering lookups ("Checking a character through the player's own connection")]`
   - The binding is removed, as opting out removes it, only when the Lodestone's own "not found" page shows on two re-reads a day apart.
   - Any other failure leaves the binding alone: an outage, maintenance or a changed layout. One bad day can't wipe every binding.
-  - The plugin also asks for a re-read at login when the logged-in character's name or World differs from its binding's.
-  - A renamed or transferred character is therefore found by its old name for at most about a day. After a re-read, the old name answers "not found".
+  - The plugin also asks for a re-read at login when the logged-in character's name or World differs from its binding's. `[updated 2026-10-03: through the player's own connection, it waits for a player action; at login the plugin only notes that a re-read is due ("Checking a character through the player's own connection")]`
+  - A renamed or transferred character is therefore found by its old name for at most about a day. After a re-read, the old name answers "not found". `[updated 2026-10-03: without an operator relay, until its player next acts, and for 30 days at most ("Checking a character through the player's own connection")]`
 
 #### C2: the Lodestone check
 
@@ -1322,7 +1322,7 @@ Scope: how the plugin turns sharing on and off for a character (N2-9b). It **ame
 - **Turning sharing off** keeps the key, so turning it on again reuses it; the server deletes the binding (C4). Turning every character off goes on past one that fails and then says whether all were turned off. Opting out is never held back by the version check below: the server doesn't enforce the minimum version, so an older plugin can always leave.
 - **A key that can't be opened** (K2's words) is replaced by a new one at the player's choice: a new check moves the character to it (C1). Until that check passes, the binding stays recorded under the old key, beside the new one, so cancelling drops only the new key, and nothing claims a deletion that didn't happen.
 - **Versions.** Before its first request other than an opt-out in a session, the plugin reads `/v1/status` and stops, saying so, unless the protocol version is this build's, the API is 1, and the minimum plugin (exactly major.minor.build) is no newer than this one.
-- **Re-reads.** In N2-9b the plugin asks for a re-read when the sharing window shows a bound character under another name or World than its binding's, at most once a session for each character. A re-read the server answers "not found" is followed by an opt-out with the same key before sharing is recorded as off, since the server also answers "not found" for a character taken off the test's allowlist, whose binding it keeps. That opt-out is the one request R2's "traffic only on a player's action" doesn't cover beyond the re-read itself: it deletes, never shares, and the window says so (NoLongerBound). N2-9c adds C1's login trigger with publishing.
+- **Re-reads.** In N2-9b the plugin asks for a re-read when the sharing window shows a bound character under another name or World than its binding's, at most once a session for each character. `[updated 2026-10-03: and when its last read is older than 15 days, through the player's own connection ("Checking a character through the player's own connection")]` A re-read the server answers "not found" is followed by an opt-out with the same key before sharing is recorded as off, since the server also answers "not found" for a character taken off the test's allowlist, whose binding it keeps. That opt-out is the one request R2's "traffic only on a player's action" doesn't cover beyond the re-read itself: it deletes, never shares, and the window says so (NoLongerBound). N2-9c adds C1's login trigger with publishing.
 - **Deferred to N2-9c:** pausing and resuming (C3), emptying a character's outbox when sharing is turned off (C4), and dropping the share check's signings (C3). Until N2-9c nothing is published, so no outbox entry can be sent. The persona window, which still lists every key in N2-9b, leaves My Plates in N2-9c (V4).
 
 **Rationale.** The two-step consent keeps D5's point (6), as C3 amends it: what is signed is exactly what the player saw. Recording the key before any request keeps a lost answer from leaving a binding no file knows about, and keeping the old binding beside a new key keeps the file true to what the server holds.
@@ -1355,7 +1355,7 @@ Scope: how the plugin publishes a sharing character's Active Plate (N2-9c), with
 - **Turning off, a takeover, and a re-read the server answers "not found" (C4, C1).** The character key's index is emptied and its waiting revisions deleted. Emptying replaces the index even when it can't be read or was written by a newer AetherFrame, which amends P1's "never overwritten" for this case: the server holds none of what it named, and nothing it named may be sent.
 - **Loading.** Once the sharing file is read, each character key's outbox loses the files its index doesn't name (as a load always deleted them), and the share check's signings are dropped, each persona on its own: one that can't be read is logged and skipped, and never makes the sharing file read as unreadable.
 - **What players see.** My Plates marks **Shared** the Plate the server shows for the logged-in character, which the sharing file records once the server accepts it (its version 2; N2-9b's version 1 is still read, but a build of N2-9b reads version 2 as unreadable, so going back to one stops sharing there until the file is moved aside), and **Not shared yet** its Active Plate while that is another. Pausing, turning off and a takeover forget it. Personas stay hidden (V4): the Personas window is gone, and the share check signs nothing (C3). What it signed and kept before, under a persona that is no character's key, is dropped when the sharing file is first read.
-- **Re-reads at login (C1).** When the game shows the logged-in character under another name or World than its binding's, the plugin asks for a re-read once, at login.
+- **Re-reads at login (C1).** When the game shows the logged-in character under another name or World than its binding's, the plugin asks for a re-read once, at login. `[updated 2026-10-03: through the player's own connection, it waits for the next player action, and at login the plugin only notes that it is due ("Checking a character through the player's own connection")]`
 
 **Rationale.** It keeps C3's promise with the fewest screens that still show every new Plate before it leaves the PC, and D5's point (6): what is signed is the candidate, never the Plate read again. One live entry per key matches the server, which keeps only the latest revision per binding (C4). `[updated 2026-10-02: the first part, showing every new Plate before it leaves the PC, is retired by the owner's direction; D5's point (6) and the rest stand]`
 
@@ -1628,10 +1628,10 @@ The owner chose the second: "Let's try option 2, seems like the best route, no?"
 **The plugin's side** (amending R2 and R3):
 - **When a pipe opens:** within a check the player starts, or a re-read during a player action (below). Never in the background, and never at login.
 - **Its one TCP connection** goes only to `na.finalfantasyxiv.com`, port 443: constants in code, never an address from the server. There is one connection per pipe, opened only after `open`.
-  - Before forwarding any byte, the connected address must be a global unicast address. Loopback, private, link-local, shared (100.64.0.0/10), unique local, multicast and unspecified addresses are refused, since DNS blockers and hosts files map names to them.
+  - Before forwarding any byte, the connected address must fall in a global unicast range on an allowed list, not merely outside a refused one. An IPv4 address mapped into IPv6 is read as IPv4 first, as the relay reads it. Loopback, private, link-local, shared (100.64.0.0/10), unique local, multicast and unspecified addresses never pass, since DNS blockers and hosts files map names to them.
   - The first bytes toward the Lodestone must start a TLS handshake record.
   - The connection ignores the system proxy, so a player who can reach the web only through a proxy can't check.
-- **Limits:** at most 16 KiB go toward the Lodestone and 2 MiB come from it, within 30 seconds for the whole exchange, in WebSocket messages of at most 64 KiB, with one `open`.
+- **Limits:** at most 16 KiB go toward the Lodestone and 2 MiB come from it, within 45 seconds for the whole exchange, a little longer than the server's own deadline, in WebSocket messages of at most 64 KiB, with one `open`.
 - **The WebSocket** goes through the plugin's one handler (R2): `ClientWebSocket.ConnectAsync` with an invoker over `SharingHandler`. Its handshake therefore gets Dalamud's Happy Eyeballs, and no redirects, cookies or credentials, as every other request does.
   - The only header it sets is R2's version header.
   - Compression stays off, and the HTTP version isn't set.
@@ -1643,13 +1643,14 @@ The owner chose the second: "Let's try option 2, seems like the best route, no?"
     - `ConnectAsync` only to the one `DnsEndPoint` built from the two constants, with the literal host and 443 checked in the IL;
     - otherwise only sending, receiving, `Shutdown`, `Dispose`, `NoDelay` and reading the remote address;
     - never `Bind`, `Listen`, `Accept`, `SendTo`, `ReceiveFrom`, `IOControl`, `SetRawSocketOption`, `DuplicateAndClose` or `Handle`;
+    - `ClientWebSocket.ConnectAsync` only through the overload that takes an invoker, never null, so the handshake runs on `SharingHandler`;
     - on `ClientWebSocketOptions`, only the version header, never the options .NET copies into its own handler, compression or the HTTP version.
   - **Nothing leaks out.** `LodestonePipe`'s non-private surface exposes no stream, socket or WebSocket, and no delegate over them: only one call that runs the whole exchange. A reflection test holds this.
   - **The source scan** lifts `WebSocket`, `NetworkStream`, `SocketException` and `SocketError` for that one file only. It keeps `SslStream`, `Dns.`, `TcpClient`, `UdpClient` and `HttpListener` refused there, and adds `TcpListener` everywhere.
   - `SslStream` stays refused everywhere: the plugin never runs TLS with the Lodestone.
 
 **The server's side** (C2 holds):
-- **Before accepting the upgrade:** the address limit (C6), taken first, as for a `POST`. At most 2 open WebSockets per address group and 20 in all. A request with an `Origin` header is refused, since plugins send none.
+- **Before accepting the upgrade:** the address limit (C6), taken first, as for a `POST`, and only there: processing the signed body doesn't take it again. At most 2 open WebSockets per address group and 20 in all. A request with an `Origin` header is refused, since plugins send none.
 - **Messages:**
   - the first arrives within 10 seconds, binary, at most the signed body's limit, assembled in a bounded buffer;
   - later ones are at most 64 KiB, within the same byte totals each way;
@@ -1657,12 +1658,12 @@ The owner chose the second: "Let's try option 2, seems like the best route, no?"
   - any unexpected message ends the session.
 
   Compression stays off on both sides (Microsoft's WebSockets guidance on CRIME and BREACH).
-- **One deadline** over the whole session, 30 seconds from the upgrade, with Caddy's `stream_timeout` as an outer bound. Kestrel and Caddy don't bound upgraded connections by themselves.
+- **Deadlines that fit together.** The first message comes within 10 seconds of the upgrade. The fetch ends within 20 seconds of `open`, the wait for `opened` included. The whole session ends within 40 seconds of the upgrade, which leaves room for the delay after the read and the final answer. Caddy's `stream_timeout` is an outer bound that applies to upgraded connections only, or is scoped to the two paths, so a publish, which may take up to 820 seconds, is never cut. Kestrel and Caddy don't bound upgraded connections by themselves.
 - **The pipe's place:**
   - taken only after the challenge is consumed and the code is valid, or the binding found for a re-read, and released on every exit;
   - piped reads have their own counter, at most 20, and never take the lock that reads through the relay take, so one slow pipe can't stall other checks, the daily re-read or old plugins' requests;
   - they don't count against the hour's 60, which were meant for one shared address. C6's limits per key, per Lodestone id and per address still apply.
-- **The fetch** is C2's: the fixed address and `User-Agent`, no redirect, at most 1 MiB, HTTP/1.1. Its deadline is 20 seconds, against 10 today, since the bytes travel through the player. It runs over a handler made directly for that one pipe, not through the client factory:
+- **The fetch** is C2's: the fixed address and `User-Agent`, no redirect, at most 1 MiB, HTTP/1.1. Its deadline is 20 seconds from `open`, against 10 today, since the bytes travel through the player. It runs over a handler made directly for that one pipe, not through the client factory:
   - at most one connection, no proxy, no redirects, no cookies;
   - its connect callback hands out the pipe once and fails on a second call;
   - never a certificate-validation callback;
@@ -1676,15 +1677,16 @@ The owner chose the second: "Let's try option 2, seems like the best route, no?"
 
 **Re-reads** (amending C1 and C7):
 - **The day of the last read.** The server keeps, for each binding, the day number of its last successful read. It is added to C7's list and the consent text.
-- **Hidden after 30 days.** A binding not read within 30 days stops answering lookups. It is hidden, not deleted, like a displaced binding, and answers again after its next successful read.
-- **The plugin's re-reads** go through its own pipe, only during a player action: a save that publishes, or opening the sharing window. It re-reads then when the game shows its character under another name or World than its binding's, or when the last read is older than 15 days. At login it only notes that a re-read is due.
+- **Hidden after 30 days.** A binding not read within 30 days stops answering lookups. It is hidden, not deleted, like a displaced binding, and answers again after its next successful read. Hiding affects lookups only: the key still finds its binding to re-read it, publish and opt out, so it can always come back.
+- **The plugin's re-reads** go through its own pipe, only during a player action: a save that publishes, opening the sharing window, or looking up another player's Plate. It re-reads then when the game shows its character under another name or World than its binding's, or when the last read is older than 15 days. At login it only notes that a re-read is due.
 - **The daily re-read** keeps running while an operator relay is set. The relay stays set until this rule is in place.
 
 So a renamed character is found by its old name until its player next acts, and for 30 days at most. A deleted character's binding stops answering within 30 days. A newer check of the same name and World still displaces the old binding (C1). Removal after two "not found" re-reads a day apart applies to the re-reads that happen. How long a hidden binding is kept stays S3's question.
 
 **Privacy:**
 - **What the Lodestone sees:** the player's address, with C2's `User-Agent`, which names AetherFrame and the server's hostname. C2 already marks the player publicly as an AetherFrame user while the code is in their profile, and the player signs in to the Lodestone to place it. The consent text and the installer's description ("what it sends") say so, and players already sharing get a one-time notice.
-- **What the server learns:** nothing new. It already sees the player's address (C7).
+- **The 30 days.** The consent text, the one-time notice and the plugin's Shared marker say that a character not read for 30 days stops showing its Plate until its player next uses sharing.
+- **What the server keeps:** one thing more, the day of each binding's last read (C7). It already sees the player's address, and keeps it nowhere (C7).
 - **A compromised server** could send any HTTPS request it likes to the Lodestone from a player's address, within the bounds above, during a check or re-read. The plugin can't see inside TLS.
 
 **Rationale.**
@@ -1704,7 +1706,17 @@ So a renamed character is found by its old name until its player next acts, and 
 - once the relay went, C1's staleness had no bound, though the daily re-read was one of batch C's conditions;
 - the WebSocket path had no limits on the server, and a server-wide lock would have let one slow pipe stall every check.
 
-All three are fixed above. So are its non-blocking points: framed responses, what TLS proves, the new TLS surface, the test-only trust, the delay after the read, the plugin's address and handshake checks, the exact re-read triggers, the disclosures, the compromised-server limit, and refusing an `Origin` header. Its recheck follows.
+All three are fixed above. So are its non-blocking points: framed responses, what TLS proves, the new TLS surface, the test-only trust, the delay after the read, the plugin's address and handshake checks, the exact re-read triggers, the disclosures, the compromised-server limit, and refusing an `Origin` header.
+
+Its recheck of `31176d8` (October 3, 2026) **concurred**: all three blocking issues are resolved, and the revision introduces no new problem. It noted eight smaller points, all applied here:
+- dated notes on C1's and N2-9's re-reads at login;
+- the invoker overload checked on the DLL;
+- addresses normalised before an allowed-list check;
+- deadlines that fit together;
+- Caddy's timeout kept to upgraded connections;
+- the address limit taken once;
+- hiding that affects lookups only;
+- telling players about the 30 days, with what the server keeps stated.
 
 ## Gates
 
