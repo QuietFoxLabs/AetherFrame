@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using AetherFrame.Domain.Basic;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Rendering;
 
@@ -351,7 +352,42 @@ internal static class BasicEditorView
     /// what the finished Plate actually shows: hidden elements and suppressed empty headings don't
     /// count, and elements that aren't Basic sections are looked through.
     /// </summary>
-    internal static BasicEditorCategory? CategoryAt(ProfileDocument profile, Vector2 logicalPoint, List<ProfileElement> paintOrderBuffer)
+    internal static BasicEditorCategory? CategoryAt(ProfileDocument profile, Vector2 logicalPoint, List<ProfileElement> paintOrderBuffer) =>
+        CategoryAtElements(profile, logicalPoint, paintOrderBuffer);
+
+    /// <summary>
+    /// What a click on the live view at <paramref name="logicalPoint"/> opens (issue #115): the
+    /// topmost thing drawn there in <paramref name="plan"/> (the finished rendering's paint sequence;
+    /// see <see cref="ProfileRenderer.BuildPaintPlan"/>), either a Basic section, which opens its
+    /// category as before, or a Component (a Corner Ornament, a frame, a backing...), which opens the
+    /// category holding its slot and is returned so the editor can select it. Elements that aren't
+    /// Basic sections are looked through, as are Components that take no clicks (<see cref="CanvasHitTest"/>).
+    /// </summary>
+    internal static (BasicEditorCategory? Category, PlateComponent? Component) TargetAt(ProfileDocument profile, IReadOnlyList<PaintStep> plan, Vector2 logicalPoint)
+    {
+        var hit = CanvasHitTest.Find(
+            plan,
+            logicalPoint,
+            ComponentPaintPlan.Unit(profile),
+            element => BasicSections.SectionOf(element.Role) is null || !BasicSections.IsDrawnInFinishedRendering(profile, element));
+
+        if (hit.Component is { } component)
+        {
+            return (CategoryOf(component.Kind), component);
+        }
+
+        return (hit.Element is { } element && BasicSections.SectionOf(element.Role) is { } section ? CategoryOf(section) : null, null);
+    }
+
+    /// <summary>The category whose page holds a Component kind's Basic slot.</summary>
+    internal static BasicEditorCategory CategoryOf(PlateComponentKind kind) => kind switch
+    {
+        PlateComponentKind.PortraitFrame or PlateComponentKind.PortraitOverlay => BasicEditorCategory.Portrait,
+        PlateComponentKind.NameBacking => BasicEditorCategory.Identity,
+        _ => BasicEditorCategory.Style,
+    };
+
+    private static BasicEditorCategory? CategoryAtElements(ProfileDocument profile, Vector2 logicalPoint, List<ProfileElement> paintOrderBuffer)
     {
         ProfilePaintOrder.Fill(profile, paintOrderBuffer, includeHidden: false);
         var hit = ProfilePaintOrder.HitTest(
