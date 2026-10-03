@@ -292,7 +292,8 @@ public sealed class LodestonePipeTests
     public async Task AFetchPastItsDeadline_IsTryAgainLater()
     {
         using var server = NewServer();
-        server.Services.GetRequiredService<LodestoneSockets>().FetchDeadline = TimeSpan.FromMilliseconds(1500);
+        // Long enough for the TLS handshake and the request on a loaded runner: the request must arrive.
+        server.Services.GetRequiredService<LodestoneSockets>().FetchDeadline = TimeSpan.FromSeconds(5);
         await using var lodestone = new TlsLodestone { Stall = true };
         using var player = server.NewPlayer();
         var code = await player.CodeAsync();
@@ -449,7 +450,8 @@ public sealed class LodestonePipeTests
     [Fact]
     public async Task WhatWasInFlightAtClose_IsDropped_ButAnythingElseEndsTheSession()
     {
-        using var server = NewServer(afterRead: TimeSpan.FromMilliseconds(500));
+        // The delay after the read is the window in which the stray "opened" below must arrive.
+        using var server = NewServer(afterRead: TimeSpan.FromSeconds(2));
         await using var lodestone = new TlsLodestone();
         using var player = server.NewPlayer();
         var code = await player.CodeAsync();
@@ -788,7 +790,7 @@ public sealed class LodestonePipeTests
     [Fact]
     public async Task APipedCheck_OpensThePipeBeforeTheAllowlist_AndEveryLaterFailureLeavesAlike()
     {
-        var afterRead = TimeSpan.FromMilliseconds(1200);
+        var afterRead = TimeSpan.FromSeconds(3);
         using var server = NewServer(afterRead);
         await using var lodestone = new TlsLodestone();
         using var player = server.NewPlayer();
@@ -805,11 +807,12 @@ public sealed class LodestonePipeTests
         var noCode = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, CheckPath, await player.CheckBodyAsync(Aria, code));
         Assert.Equal(["open", "close"], noCode.Texts);
 
-        // The same answer, no sooner than the fixed delay after the read ended, for both.
+        // The same answer, no sooner than the fixed delay after the read ended, for both. "close" is
+        // sent as the read ends; the slack covers this side seeing it late on a loaded runner.
         foreach (var run in new[] { offList, noCode })
         {
             Assert.Equal("{\"status\":422}", run.Final!.Value.GetRawText());
-            Assert.True(run.FinalAt - run.CloseAt >= afterRead - TimeSpan.FromMilliseconds(400), $"the answer came {run.FinalAt - run.CloseAt} after close");
+            Assert.True(run.FinalAt - run.CloseAt >= afterRead - TimeSpan.FromSeconds(1), $"the answer came {run.FinalAt - run.CloseAt} after close");
         }
 
         await AssertLoggedAsync(server, "socket:422:check:allowlist");
@@ -1061,6 +1064,237 @@ public sealed class LodestonePipeTests
         {
             Assert.DoesNotContain(secret, log, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task ALookup_HidesABindingNotReadFor30Days_OnlyWhileNoRelayIsSet()
+    {
+        // While an operator relay is set, the daily re-read keeps the day of the last read, but only
+        // while the relay is open, so lookups don't hide by it; without a relay, they do.
+        foreach (var (relay, expected) in new[] { ("100.101.102.103:8443", HttpStatusCode.OK), ("", HttpStatusCode.NotFound) })
+        {
+            using var server = new TestServer { LodestoneRelay = relay };
+            using var aria = server.NewPlayer();
+            using var bram = server.NewPlayer();
+            var profile = ProfileId.Parse((await aria.BindAsync(Aria)).GetProperty("profileId").GetString()!);
+            await bram.BindAsync(Bram, "Bram Oakes", "Gilgamesh");
+            using (var published = await aria.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(profile, "Plate"), aria.Key)))
+            {
+                Assert.Equal(HttpStatusCode.NoContent, published.StatusCode);
+            }
+
+            server.Time.Advance(TimeSpan.FromDays(45));
+            using var lookup = await bram.SendAsync("/v1/lookup", RequestProofKind.Lookup, "{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}");
+            Assert.Equal(expected, lookup.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task TheSameKeyCheckingAgain_RecordsTheDayOfTheRead()
+    {
+        using var server = NewServer();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria);
+        var first = Today(server);
+        server.Time.Advance(TimeSpan.FromDays(10));
+
+        await player.BindAsync(Aria);
+
+        Assert.Equal(first + 10, await server.CountAsync("SELECT read_day FROM bindings;"));
+    }
+
+    [Fact]
+    public async Task ReadsThatFail_OrFindTheNotFoundPageOnce_LeaveTheDayOfTheLastRead()
+    {
+        using var server = NewServer();
+        await using var lodestone = new TlsLodestone();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria);
+        var day = Today(server);
+        server.Time.Advance(TimeSpan.FromDays(5));
+
+        // The plugin couldn't connect.
+        var failed = await new PluginPipe { OnOpen = OpenAnswer.Fail }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
+        Assert.Equal(503, failed.Status);
+
+        // The Lodestone's own "not found" page, the first time: the binding stays, and wasn't read.
+        lodestone.Answer = _ => TlsLodestone.Framed(404, LodestoneHtml.NotFoundPage);
+        var notFound = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
+        Assert.Equal(200, notFound.Status);
+
+        // A POST re-read whose fetch fails.
+        server.Lodestone.Pages[Aria] = new LodestoneResponse(0, null);
+        using (var refused = await player.SendAsync(RereadPath, RequestProofKind.LodestoneReread, "{}"))
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
+        }
+
+        Assert.Equal(day, await server.CountAsync("SELECT read_day FROM bindings;"));
+        await AssertReleasedAsync(server);
+    }
+
+    [Fact]
+    public async Task APipedReread_OfABindingOffTheAllowlist_Is404_AndOpensNoPipe()
+    {
+        using var server = NewServer();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria);
+        await ExecuteAsync(server.DatabasePath, "UPDATE bindings SET lodestone_id = " + OffTheAllowlist + ";");
+
+        var run = await new PluginPipe().RunAsync(server, RereadPath, await player.RereadBodyAsync());
+
+        Assert.Equal(404, run.Status);
+        Assert.Empty(run.Texts);
+        await AssertReleasedAsync(server);
+    }
+
+    [Fact]
+    public async Task AStaleBinding_IsStillDisplacedByANewerRead_AndTakenOverByANewKey()
+    {
+        using var server = NewServer();
+        using var aria = server.NewPlayer();
+        using var newcomer = server.NewPlayer();
+        using var newKey = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        server.Time.Advance(TimeSpan.FromDays(40));
+        var store = server.Services.GetRequiredService<BindingStore>();
+
+        // Another character now shows the same name and World: its check displaces the stale binding.
+        await newcomer.BindAsync(Bram, "Aria Starfall", "Gilgamesh");
+        Assert.Equal(Bram, (await store.FindShownAsync("aria starfall", "Gilgamesh", default))?.LodestoneId);
+
+        // A new key checks the stale character: the binding moves to it, read today, and the old key learns so.
+        await newKey.BindAsync(Aria);
+        Assert.Equal(Today(server), await server.CountAsync("SELECT read_day FROM bindings WHERE lodestone_id = " + Aria + ";"));
+        using var reread = await aria.SendAsync(RereadPath, RequestProofKind.LodestoneReread, "{}");
+        Assert.Equal(HttpStatusCode.Gone, reread.StatusCode);
+    }
+
+    [Fact]
+    public async Task APipedReread_OvertakenByATakeover_AnswersTakenOver()
+    {
+        using var server = NewServer();
+        await using var lodestone = new TlsLodestone();
+        using var player = server.NewPlayer();
+        using var newKey = server.NewPlayer();
+        await player.BindAsync(Aria);
+        var store = server.Services.GetRequiredService<BindingStore>();
+
+        // While the page is on its way, another key takes the character over.
+        lodestone.Answer = _ =>
+        {
+            store.BindCharacterAsync(newKey.Key.PublicKey.Id, Aria, new LodestoneCharacter("Aria Starfall", "Gilgamesh", ""), default).GetAwaiter().GetResult();
+            return TlsLodestone.Framed(200, Page("Aria Starfall", "Gilgamesh", ""));
+        };
+        var run = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
+
+        Assert.Equal(410, run.Status);
+        await AssertReleasedAsync(server);
+        await AssertLoggedAsync(server, "socket:410:reread:taken-over");
+    }
+
+    [Fact]
+    public async Task FreshAndMigratedDatabases_DefineTheDayOfTheLastReadAlike()
+    {
+        using var fresh = new TestServer();
+        _ = fresh.Services.GetRequiredService<BindingStore>();
+        using var migrated = new TestServer();
+        await CreateBindingsBeforeTheReadDayAsync(migrated.DatabasePath);
+        _ = migrated.Services.GetRequiredService<BindingStore>();
+
+        Assert.Equal("INTEGER|1|0", await ReadDayColumnAsync(fresh.DatabasePath));
+        Assert.Equal("INTEGER|1|0", await ReadDayColumnAsync(migrated.DatabasePath));
+    }
+
+    [Fact]
+    public async Task ABindingAServerFromBeforeTheReadDayWrote_GetsTheDayOfTheNextStart()
+    {
+        using var server = NewServer();
+        using var key = EcdsaPersonaSigner.CreateEphemeral();
+        var store = server.Services.GetRequiredService<BindingStore>();
+
+        // As an older server writes it after a rollback: without the column, so it takes its default.
+        await ExecuteAsync(
+            server.DatabasePath,
+            "INSERT INTO bindings (persona, lodestone_id, name, name_key, world, profile_id, hidden, not_found_day) VALUES ('" + key.PublicKey.Id + "', " + Aria + ", 'Aria Starfall', 'aria starfall', 'Gilgamesh', '" + ProfileId.NewId() + "', 0, NULL);");
+        Assert.Equal(0L, await server.CountAsync("SELECT read_day FROM bindings;"));
+        Assert.Null(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+
+        server.Time.Advance(TimeSpan.FromDays(2));
+        await server.Services.GetRequiredService<ServerDatabase>().InitializeAsync(default);
+
+        Assert.Equal(Today(server), await server.CountAsync("SELECT read_day FROM bindings;"));
+        Assert.NotNull(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+    }
+
+    [Fact]
+    public async Task TwoServersStartingTogether_OnAFileFromBefore_AddTheDayOfTheLastReadOnce()
+    {
+        var folder = Directory.CreateTempSubdirectory("af-read-day-");
+        var path = Path.Combine(folder.FullName, "server.db");
+        try
+        {
+            await CreateBindingsBeforeTheReadDayAsync(path);
+            var options = Options.Create(new ServerOptions { DatabasePath = path });
+            var first = new ServerDatabase(options, NullLogger<ServerDatabase>.Instance);
+            var second = new ServerDatabase(options, NullLogger<ServerDatabase>.Instance);
+
+            await Task.WhenAll(first.InitializeAsync(default), second.InitializeAsync(default));
+
+            Assert.Equal("INTEGER|1|0", await ReadDayColumnAsync(path));
+        }
+        finally
+        {
+            // Only this file's pool: clearing every pool would close other tests' connections.
+            SqliteConnection.ClearPool(new SqliteConnection(ServerDatabase.ConnectionStringFor(path)));
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AdminCharacters_ShowsTheDayOfEachBindingsLastRead()
+    {
+        using var server = NewServer();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria);
+        using var output = new StringWriter();
+
+        await AdminCommands.RunAsync(["characters"], server.Services.GetRequiredService<ServerDatabase>(), server.Services.GetRequiredService<BindingStore>(), output);
+
+        Assert.Contains(server.Time.Now.UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>A database file as a server from before the day of the last read left it: the bindings table without the column.</summary>
+    private static Task CreateBindingsBeforeTheReadDayAsync(string path) => ExecuteAsync(path, """
+        CREATE TABLE bindings (
+            persona TEXT PRIMARY KEY,
+            lodestone_id INTEGER NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            name_key TEXT NOT NULL,
+            world TEXT NOT NULL,
+            profile_id TEXT NOT NULL UNIQUE,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            not_found_day INTEGER
+        ) WITHOUT ROWID;
+        """);
+
+    /// <summary>The day of the last read's column as SQLite records it: its type, whether it is NOT NULL, and its default.</summary>
+    private static async Task<string> ReadDayColumnAsync(string path)
+    {
+        await using var connection = new SqliteConnection("Data Source=" + path + ";Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT type || '|' || \"notnull\" || '|' || dflt_value FROM pragma_table_info('bindings') WHERE name = 'read_day';";
+        return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task ExecuteAsync(string path, string sql)
+    {
+        await using var connection = new SqliteConnection("Data Source=" + path + ";Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
     }
 
     private static TestServer NewServer(TimeSpan? afterRead = null)

@@ -43,9 +43,13 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
 
     /// <summary>
     /// How many day numbers a binding answers lookups for after its last successful read ("Checking a
-    /// character through the player's own connection"): read on day D, it answers through day D + 29,
-    /// so for 30 days at most and 29 at least, then is hidden from lookups until its next successful
-    /// read. Its key still finds it, to re-read it, publish and opt out.
+    /// character through the player's own connection"), once no operator relay is set: read on day D,
+    /// it answers through day D + 29, so for 30 days at most and 29 at least, then is hidden from
+    /// lookups until its next successful read. Its key still finds it, to re-read it, publish and opt
+    /// out. Its purpose is to bound how long a renamed, transferred or deleted character's Plate keeps
+    /// answering under its old name and World, once the daily re-read no longer runs. The 30 is
+    /// provisional: Claude chose it under the September 29, 2026 delegation, the owner was told on
+    /// October 3, 2026 and hasn't approved it, and it awaits GPT's product review.
     /// </summary>
     public const int ReadWithinDays = 30;
 
@@ -101,11 +105,22 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
     /// the name and World) and read within <see cref="ReadWithinDays"/>. Everything that finds a
     /// binding for a viewer comes here; a binding's own key finds it by <see cref="FindByPersonaAsync"/>.
     /// </summary>
-    public async Task<Binding?> FindShownAsync(string nameKey, string world, CancellationToken cancellation)
+    public Task<Binding?> FindShownAsync(string nameKey, string world, CancellationToken cancellation) =>
+        FindShownAsync(nameKey, world, hideUnread: true, cancellation);
+
+    /// <summary>
+    /// As <see cref="FindShownAsync(string, string, CancellationToken)"/>, with the read rule applied
+    /// only when <paramref name="hideUnread"/> is set: lookups set it while no operator relay is set
+    /// (<see cref="Endpoints.Viewing"/>), since the daily re-read keeps the day of the last read only
+    /// while a relay is open, and an operator's relay is open only some of the time.
+    /// </summary>
+    public async Task<Binding?> FindShownAsync(string nameKey, string world, bool hideUnread, CancellationToken cancellation)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT persona, lodestone_id, name, world, profile_id, hidden FROM bindings WHERE name_key = $name AND world = $world AND hidden = 0 AND read_day > $stale;";
+        command.CommandText = hideUnread
+            ? "SELECT persona, lodestone_id, name, world, profile_id, hidden FROM bindings WHERE name_key = $name AND world = $world AND hidden = 0 AND read_day > $stale;"
+            : "SELECT persona, lodestone_id, name, world, profile_id, hidden FROM bindings WHERE name_key = $name AND world = $world AND hidden = 0;";
         command.Parameters.AddWithValue("$name", nameKey);
         command.Parameters.AddWithValue("$world", world);
         command.Parameters.AddWithValue("$stale", Today - ReadWithinDays);

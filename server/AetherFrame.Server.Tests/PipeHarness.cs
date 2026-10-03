@@ -34,6 +34,22 @@ internal static class TestAuthority
 
     private static readonly Lazy<X509Certificate2> SelfSignedCertificate = new(() => SelfSigned(LodestoneHttpPages.Origin.Host));
 
+    static TestAuthority()
+    {
+        // Each key comes from a PFX, which on Windows leaves a key file until its certificate is
+        // disposed: disposing them as the test process ends leaves none behind.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            foreach (var certificate in new[] { LodestoneCertificate, OtherNameCertificate, SelfSignedCertificate, Root })
+            {
+                if (certificate.IsValueCreated)
+                {
+                    certificate.Value.Dispose();
+                }
+            }
+        };
+    }
+
     /// <summary>The Lodestone's name, issued by the test authority: what a pipe to the right place answers with.</summary>
     public static X509Certificate2 Lodestone => LodestoneCertificate.Value;
 

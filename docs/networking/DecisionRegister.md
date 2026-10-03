@@ -1677,7 +1677,7 @@ The owner chose the second: "Let's try option 2, seems like the best route, no?"
 
 **Re-reads** (amending C1 and C7):
 - **The day of the last read.** The server keeps, for each binding, the day number of its last successful read. It is added to C7's list and the consent text.
-- **Hidden after 30 days.** A binding not read within 30 days stops answering lookups. It is hidden, not deleted, like a displaced binding, and answers again after its next successful read. Hiding affects lookups only: the key still finds its binding to re-read it, publish and opt out, so it can always come back.
+- **Hidden after 30 days.** A binding not read within 30 days stops answering lookups. It is hidden, not deleted, like a displaced binding, and answers again after its next successful read. Hiding affects lookups only: the key still finds its binding to re-read it, publish and opt out, so it can always come back. `[updated 2026-10-03: as built, this applies only while no operator relay is set (below). The 30 days are provisional: Claude chose them under the delegation, the owner was told on October 3, 2026 and hasn't approved them, and they await GPT's product review. Their purpose is to bound how long a renamed, transferred or deleted character's Plate keeps answering under its old name and World once the daily re-read no longer runs]`
 - **The plugin's re-reads** go through its own pipe, only during a player action: a save that publishes, opening the sharing window, or looking up another player's Plate. It re-reads then when the game shows its character under another name or World than its binding's, or when the last read is older than 15 days. At login it only notes that a re-read is due.
 - **The daily re-read** keeps running while an operator relay is set. The relay stays set until this rule is in place.
 
@@ -1718,7 +1718,7 @@ Its recheck of `31176d8` (October 3, 2026) **concurred**: all three blocking iss
 - hiding that affects lookups only;
 - telling players about the 30 days, with what the server keeps stated.
 
-**Applied by the server's change, October 3, 2026** (ROADMAP.md, section 8, the owner's choice of October 3, step 2). `server/AetherFrame.Server` answers the check and the re-read as WebSockets at their own paths, reads through each pipe with a client of its own, and keeps each binding's day of last read. [ServerApi-v1.md](ServerApi-v1.md), section 2.3, states the exchange exactly. The details the design left to the build, within it:
+**Applied by the server's change, October 3, 2026** (ROADMAP.md, section 8, the owner's choice of October 3, step 2). `server/AetherFrame.Server` answers the check and the re-read as WebSockets at their own paths, reads through each pipe with a client of its own, and keeps each binding's day of last read. [ServerApi-v1.md](ServerApi-v1.md), section 2.3, states the exchange exactly. The details the design left to the build, within it, PROPOSED (Claude, October 3, 2026, as the implementation agent) for GPT's review:
 - **The final message** is one JSON object: the `status`, and the `body` a `POST` would get, a `409`'s fresh `challenge` in base64, or the `reason` `lodestone:refused`.
 - **The delay after the read** is 2 seconds (`CheckFailureAfterRead`), besides the 3-second floor from the start. It is longer than parsing a page and the steps after the allowlist take.
 - **Before the upgrade:** a `GET` that isn't a WebSocket gets `400`; then the address limit, the `Origin` header and the places, in that order, each refused with its status and no body.
@@ -1727,6 +1727,13 @@ Its recheck of `31176d8` (October 3, 2026) **concurred**: all three blocking iss
 - **"Try again later"** covers every pipe failure: `failed`, no `opened` in time, the fetch's deadline, a broken or cut-off connection, a failed handshake and a body ended only by the close; and all 20 places taken.
 - **After `close`,** bytes, `eof` or a late answer to `open` already in flight are dropped, within the byte totals. Anything else the exchange doesn't expect ends the session with no final message.
 - **Bindings from before the change** get the day the server first starts with it.
+- **The 30 days apply only while no relay is set.** While `LodestoneRelay` is set, a lookup doesn't hide a binding by the day of its last read. The daily re-read keeps that day only while the operator's relay is open, which is only some of the time, so the rule would otherwise hide every released plugin's binding about 30 days after the change, with no way back for those plugins. The bound applies once the relay is unset (step 5), when plugins re-read through their own pipes. The 30 days stay provisional (above).
+- **The column's definition** is `read_day INTEGER NOT NULL DEFAULT 0`, for a new file and for one the change brings up to date alike, and every write names it. At each start, a binding still at 0, which only a server from before the change writes (after a rollback), gets the day of that start.
+- **A piped re-read overtaken by a takeover** answers `410` "taken over", as one that finds the takeover first does, never `404`: a plugin follows a `404` with an opt-out, which would forget the takeover. A `POST` keeps today's answer.
+
+**Independent review** of `081ef59`, October 3, 2026, by two reviewers with no shared context:
+- **Security:** no blocking issue. It accepted the choices above, and confirmed from Caddy's documentation and source that the two paths take the upgrade and that `stream_timeout` applies to upgraded connections alone.
+- **Correctness, persistence and tests:** two blocking issues, both fixed above. The 30 days weren't marked provisional, or given their purpose. And the hiding would have hidden every released plugin's binding about 30 days after the change, since the relay is open only some of the time. Its smaller points are applied too: one column definition, the start's repair for 0, the takeover answer, sturdier test timings and the missing tests.
 
 ## Gates
 

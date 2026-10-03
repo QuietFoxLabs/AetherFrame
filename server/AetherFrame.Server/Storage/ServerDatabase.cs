@@ -35,7 +35,7 @@ internal sealed class ServerDatabase
             profile_id TEXT NOT NULL UNIQUE,
             hidden INTEGER NOT NULL DEFAULT 0,
             not_found_day INTEGER,
-            read_day INTEGER NOT NULL
+            read_day INTEGER NOT NULL DEFAULT 0
         ) WITHOUT ROWID;
         CREATE UNIQUE INDEX IF NOT EXISTS bindings_shown ON bindings (name_key, world) WHERE hidden = 0;
         CREATE TABLE IF NOT EXISTS revisions (
@@ -111,13 +111,16 @@ internal sealed class ServerDatabase
         await ExecuteAsync(connection, "PRAGMA journal_mode = WAL;", cancellation);
         await ExecuteAsync(connection, Schema, cancellation);
         await AddReadDayAsync(connection, cancellation);
+        await DateUnreadBindingsAsync(connection, cancellation);
     }
 
     /// <summary>
     /// The day of each binding's last successful Lodestone read ("Checking a character through the
-    /// player's own connection"), for a file from before it: the column is added, and every binding
-    /// already there gets the day of this change, so none stops answering lookups at once. The check
-    /// and the change are one transaction, so two processes starting together add it once.
+    /// player's own connection"), for a file from before it: the column is added, with the same
+    /// definition a new file's table has, and every binding already there gets the day of this change,
+    /// so none stops answering lookups at once. The check and the change are one transaction, begun
+    /// with <c>BEGIN IMMEDIATE</c> (Microsoft.Data.Sqlite's default), so it holds the write lock before
+    /// it checks, and two processes starting together add the column once.
     /// </summary>
     private async Task AddReadDayAsync(SqliteConnection connection, CancellationToken cancellation)
     {
@@ -141,6 +144,20 @@ internal sealed class ServerDatabase
         }
 
         await transaction.CommitAsync(cancellation);
+    }
+
+    /// <summary>
+    /// Gives the day of this start to any binding whose last read is 0: one that a server from before
+    /// the day of the last read wrote into this file, after a rollback, takes the column's default. A
+    /// successful read never records 0, so only such a binding has it, and it would otherwise stop
+    /// answering lookups at once once no relay is set.
+    /// </summary>
+    private async Task DateUnreadBindingsAsync(SqliteConnection connection, CancellationToken cancellation)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE bindings SET read_day = $today WHERE read_day = 0;";
+        command.Parameters.AddWithValue("$today", time.GetUtcNow().ToUnixTimeSeconds() / 86_400);
+        await command.ExecuteNonQueryAsync(cancellation);
     }
 
     /// <summary>

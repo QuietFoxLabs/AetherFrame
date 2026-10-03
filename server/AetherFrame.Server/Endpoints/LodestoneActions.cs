@@ -197,12 +197,26 @@ internal sealed class LodestoneActions(RateLimiter limiter, BindingStore binding
         }
 
         var result = await bindings.ApplyRereadAsync(persona, binding.LodestoneId, read.Character, cancellation);
+
+        // A takeover that landed while a piped read was under way answers as one found before it
+        // did: "taken over", never "not bound", which a plugin follows with an opt-out that would
+        // forget the takeover. A POST keeps today's answer.
+        if (pipe is not null && result is RereadResult.NotBound && await bindings.WasTakenOverAsync(persona, cancellation))
+        {
+            return ActionAnswer.Fail(StatusCodes.Status410Gone, "reread:taken-over");
+        }
+
         if (result is RereadResult.Removed or RereadResult.NotBound)
         {
             return ActionAnswer.Fail(StatusCodes.Status404NotFound, "reread:" + result);
         }
 
         var current = await bindings.FindByPersonaAsync(persona, cancellation);
+        if (current is null && pipe is not null && await bindings.WasTakenOverAsync(persona, cancellation))
+        {
+            return ActionAnswer.Fail(StatusCodes.Status410Gone, "reread:taken-over");
+        }
+
         return current is null
             ? ActionAnswer.Fail(StatusCodes.Status404NotFound, "reread:not-bound")
             : ActionAnswer.Ok(new CharacterEndpoints.RereadAnswer(current.Name, current.World));

@@ -84,6 +84,12 @@ internal sealed class TestServer : WebApplicationFactory<Program>
     /// <summary>A failed piped check's delay after its read: none, unless a test sets one before the server starts.</summary>
     public TimeSpan CheckFailureAfterRead { get; set; } = TimeSpan.Zero;
 
+    /// <summary>
+    /// The operator's Lodestone relay setting: none, unless a test sets one before the server starts.
+    /// The fake Lodestone still answers every read, so nothing is ever sent to it.
+    /// </summary>
+    public string LodestoneRelay { get; set; } = "";
+
     public string DatabasePath => Path.Combine(folder, "server.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -94,6 +100,11 @@ internal sealed class TestServer : WebApplicationFactory<Program>
         builder.UseSetting("AetherFrame:AllowTestDeploymentName", "true");
         builder.UseSetting("AetherFrame:DatabasePath", DatabasePath);
         builder.UseSetting("AetherFrame:RereadsEnabled", "false");
+        if (LodestoneRelay.Length > 0)
+        {
+            builder.UseSetting("AetherFrame:LodestoneRelay", LodestoneRelay);
+        }
+
         if (UseImageWorker)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ImageWorkerSocket)!);
