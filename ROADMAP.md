@@ -544,11 +544,11 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 5. **Interface task 7, stopping the stray trips, then task 2** (section 3, "Interface, second pass"). First, the audit is refreshed against today's windows. **Done: [#106](https://github.com/QuietFoxLabs/AetherFrame/pull/106) (task 7), merged as `7fe489e` on October 2 at 22:56 UTC, and [#107](https://github.com/QuietFoxLabs/AetherFrame/pull/107) (task 2), merged as `cb40e98` on October 3 at 02:07 UTC; test build `cb40e98` waits for the owner's checks.**
 
 **The owner's choice of October 3, 2026: checking a character through each player's own connection** (section 3, "External beta"; the register's "Checking a character through the player's own connection"). In order:
-1. **The design**, with a security reviewer's concurrence before any code. This change.
-2. **The server:** the check and the re-read over a WebSocket, read through the player's pipe, and the daily re-read only while a relay is set. Tests drive the exchange end to end against a local TLS server. Its deploy is the owner's.
-3. **The plugin:** the pipe in one type (R3 amended, and the boundary tests with it), the check and the re-read through it, and the Lodestone's refusal explained. Then a test build.
+1. **The design**, with a security reviewer's concurrence before any code. This change. The first review withheld concurrence with three blocking issues, all fixed in the design.
+2. **The server:** the check and the re-read over a WebSocket, read through the player's pipe, with the WebSocket's limits; the day of each binding's last read, and bindings not read within 30 days hidden. Tests drive the exchange end to end against a local TLS server. Its deploy is the owner's.
+3. **The plugin:** the pipe in one type (R3 amended exactly, with member rules, and the boundary tests with it); the check and the re-read through it, re-reads only during a player's action; the Lodestone's refusal explained; the disclosures and a one-time notice. Then a test build.
 4. **In game:** with the relay off, the owner checks a character, after opting out or with another character, and sees a new name or World arrive.
-5. **A release**, then `MinimumPlugin` raised to it and the relay unset.
+5. **A release**, then `MinimumPlugin` raised to it, which stops old plugins, and only then the relay unset.
 
 After these, Claude's next candidates are:
 - releasing GPU textures not drawn for a while (section 3, "Art Styles and typography");
