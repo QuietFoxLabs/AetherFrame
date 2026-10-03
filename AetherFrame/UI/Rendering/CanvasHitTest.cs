@@ -26,7 +26,10 @@ internal readonly record struct CanvasHit(ProfileElement? Element, PlateComponen
 /// stay selectable from the editors' lists;</item>
 /// <item>frames (Plate Frame, Portrait Frame) are hit only along their edges
 /// (<see cref="FrameBand"/>), so the portrait or the text inside a frame is still clicked through it;</item>
-/// <item>everything else is hit inside its drawn box.</item>
+/// <item>everything else is hit inside its drawn box;</item>
+/// <item>a decoration drawn over text (<see cref="YieldsToText"/>: a Section Header over its heading,
+/// a Divider by the name) lets the text it covers take the click, so the heading or name is still
+/// clicked through it. Where nothing is under it, it is hit as usual.</item>
 /// </list>
 /// A Component drawn invisible (opacity 0) takes no clicks.
 /// </summary>
@@ -46,9 +49,15 @@ internal static class CanvasHitTest
     /// </summary>
     internal static CanvasHit Find(
         IReadOnlyList<PaintStep> plan, Vector2 point, float unit,
-        Func<ProfileElement, bool>? skipElement = null, Func<PlateComponent, bool>? skipComponent = null)
+        Func<ProfileElement, bool>? skipElement = null, Func<PlateComponent, bool>? skipComponent = null) =>
+        FindBelow(plan, plan.Count, point, unit, skipElement, skipComponent);
+
+    /// <summary>The topmost hit among the steps below index <paramref name="above"/>.</summary>
+    private static CanvasHit FindBelow(
+        IReadOnlyList<PaintStep> plan, int above, Vector2 point, float unit,
+        Func<ProfileElement, bool>? skipElement, Func<PlateComponent, bool>? skipComponent)
     {
-        for (var i = plan.Count - 1; i >= 0; i--)
+        for (var i = above - 1; i >= 0; i--)
         {
             var step = plan[i];
             if (step.Element is { } element)
@@ -63,12 +72,17 @@ internal static class CanvasHitTest
 
             if (step.Component is { } component && (skipComponent is null || !skipComponent(component)) && Hits(step, point, unit))
             {
-                return new CanvasHit(null, component);
+                return YieldsToText(component.Kind) && FindBelow(plan, i, point, unit, skipElement, skipComponent) is { Element: { } covered }
+                    ? new CanvasHit(covered, null)
+                    : new CanvasHit(null, component);
             }
         }
 
         return default;
     }
+
+    /// <summary>True for decorations drawn over the text they go with, which let that text take the click.</summary>
+    internal static bool YieldsToText(PlateComponentKind kind) => kind is PlateComponentKind.SectionHeader or PlateComponentKind.Divider;
 
     /// <summary>True when a Component of <paramref name="kind"/> can be clicked on the canvas at all.</summary>
     internal static bool IsClickable(PlateComponentKind kind) => kind is not (PlateComponentKind.Background or PlateComponentKind.PortraitOverlay);

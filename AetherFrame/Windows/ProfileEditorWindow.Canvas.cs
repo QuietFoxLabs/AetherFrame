@@ -291,9 +291,11 @@ internal sealed partial class ProfileEditorWindow
             return;
         }
 
+        var onHandle = false;
         if (selectedElement is not null && !selectedElement.Locked && selectedScreenCorners is not null
             && TryGetHoveredHandle(mouseScreen, selectedScreenCorners, out var hoveredHandle))
         {
+            onHandle = true;
             ImGui.SetMouseCursor(GetResizeCursor(selectedScreenCorners, hoveredHandle));
 
             if (leftClicked)
@@ -312,8 +314,9 @@ internal sealed partial class ProfileEditorWindow
         }
 
         // A Component is selected by a click (either button), which opens its controls in the
-        // Canvas tab; it never moves from the canvas, since its layer and anchor place it.
-        if (hoverComponent is not null && (leftClicked || rightClicked))
+        // Canvas tab; it never moves from the canvas, since its layer and anchor place it. The
+        // selected element's resize handles stay its own, even over a Component.
+        if (!onHandle && hoverComponent is not null && (leftClicked || rightClicked))
         {
             editorSession.SelectComponent(hoverComponent.Id);
             return;
