@@ -666,6 +666,7 @@ internal sealed partial class ProfileEditorWindow
         // outline, and shadow together.
         var color = text.Color;
         EditorWidgets.PropertyLabel("Color");
+        ScreenEyedropper.LeaveRoom();
         if (ImGui.ColorEdit4("##TextColor", ref color, ImGuiColorEditFlags.NoAlpha))
         {
             var rgb = color;
@@ -676,6 +677,11 @@ internal sealed partial class ProfileEditorWindow
         TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedTextColor);
 
         CommitOnRelease();
+        if (ScreenEyedropper.Button("TextColor", ref color))
+        {
+            var rgb = color;
+            ApplyImmediateTextEdit(text.Id, element => element.Color = rgb with { W = element.Color.W });
+        }
 
         // A Basic Plate's character name follows its theme until given a custom color; this puts it
         // back under the theme (one undo step; opacity kept).
@@ -724,6 +730,11 @@ internal sealed partial class ProfileEditorWindow
             }
 
             CommitOnRelease();
+            if (ScreenEyedropper.Button("OutlineColor", ref outlineColor))
+            {
+                var rgb = outlineColor;
+                ApplyImmediateTextEdit(text.Id, element => element.OutlineColor = rgb with { W = 1f });
+            }
 
             var thickness = text.OutlineThickness;
             EditorWidgets.PropertyLabel("  Thickness");
@@ -765,6 +776,11 @@ internal sealed partial class ProfileEditorWindow
             }
 
             CommitOnRelease();
+            if (ScreenEyedropper.Button("ShadowColor", ref shadowColor))
+            {
+                var rgb = shadowColor;
+                ApplyImmediateTextEdit(text.Id, element => element.ShadowColor = rgb with { W = 1f });
+            }
 
             var shadowOpacity = text.ShadowOpacity * 100f;
             EditorWidgets.PropertyLabel("  Opacity");

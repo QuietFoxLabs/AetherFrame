@@ -799,23 +799,31 @@ internal sealed class BackgroundStylePanel
     {
         var color = current;
         EditorWidgets.PropertyLabel(label);
+        ScreenEyedropper.LeaveRoom();
         if (ImGui.ColorEdit4(id, ref color, ImGuiColorEditFlags.NoAlpha))
         {
             var value = color with { W = 1f };
-            editorSession.BeginOrContinueBackgroundEdit(style =>
-            {
-                if (primary)
-                {
-                    style.PrimaryColor = value;
-                }
-                else
-                {
-                    style.SecondaryColor = value;
-                }
-            });
+            editorSession.BeginOrContinueBackgroundEdit(style => SetColor(style, value));
         }
 
         CommitBackgroundOnRelease();
+        if (ScreenEyedropper.Button(id, ref color))
+        {
+            var value = color with { W = 1f };
+            editorSession.ApplyBackgroundEdit(style => SetColor(style, value));
+        }
+
+        void SetColor(ProfileBackground style, Vector4 value)
+        {
+            if (primary)
+            {
+                style.PrimaryColor = value;
+            }
+            else
+            {
+                style.SecondaryColor = value;
+            }
+        }
     }
 
     private void CommitBackgroundOnRelease()
