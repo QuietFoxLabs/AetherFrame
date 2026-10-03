@@ -298,6 +298,10 @@ internal sealed class ProfileFontService : IDisposable
                     {
                         available();
                     }
+                    else
+                    {
+                        _ = task.Exception; // disposed before it was built: observed, so it isn't logged as an error
+                    }
                 },
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,

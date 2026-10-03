@@ -210,7 +210,7 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         var entry = new Entry(key, backend.CreateHandle(family.Atlas, key), family, FontTierPolicy.EstimatedSurfacePixels(key.FamilyId, key.SizePx), now);
         entries[key] = entry;
         entry.Node = accessOrder.AddLast(entry);
-        backend.WhenAvailable(entry.Handle, () => appeared.Enqueue((entry, clock())));
+        WatchBuild(entry);
         family.Handles++;
         family.LastUsed = now;
         surfacePixels += entry.Surface;
@@ -218,6 +218,9 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         EvictHandles(entry, now);
         return entry;
     }
+
+    // Its own method, so the callback's closure is allocated only for a new face, not on every lookup.
+    private void WatchBuild(Entry entry) => backend.WhenAvailable(entry.Handle, () => appeared.Enqueue((entry, clock())));
 
     private Family GetOrCreateFamily(string familyId, long now)
     {
