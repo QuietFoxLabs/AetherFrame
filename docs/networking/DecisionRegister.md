@@ -615,7 +615,7 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 ### R2: the transport. APPROVED (Claude, under the owner's delegation of September 29, 2026), September 29, 2026
 
 **Option and scope.** Applied by N2-9 and N2-7.
-- **HTTPS only**, to one DNS hostname fixed in the preview build (set in N2-8): `[updated 2026-10-01, "Art on demand": and GitHub's raw file host, for hosted artwork only, by GET at commit-pinned addresses built from the plugin's compiled table]`
+- **HTTPS only**, to one DNS hostname fixed in the preview build (set in N2-8): `[updated 2026-10-01, "Art on demand": and GitHub's raw file host, for hosted artwork only, by GET at commit-pinned addresses built from the plugin's compiled table]` `[updated 2026-10-03: and, within a check or re-read the player started, a WebSocket to that hostname and one TCP connection to na.finalfantasyxiv.com, port 443, which carries the server's own TLS ("Checking a character through the player's own connection")]`
   - the certificate is validated normally, never disabled or pinned to a self-signed one;
   - there is no plain HTTP, no user-entered server address, and redirects are not followed.
 - **The client stack.** .NET's `HttpClient` over `SocketsHttpHandler`, with Dalamud's `Dalamud.Networking.Http.HappyEyeballsCallback` as its connect callback for dual-stack connections (Dalamud v9 and later). Every call runs off the framework thread. The handler's defaults are overridden where they matter:
@@ -650,7 +650,7 @@ Once the backup exists (stage 2), the first publish offers the backup first and 
 - Dalamud's `HappyEyeballsCallback`;
 - `System.Net.Sockets.AddressFamily`, only as the type of that callback's constructor parameter. Dalamud's shared instance is internal, so the plugin must construct the callback itself.
 
-**Refused everywhere:** every other type in `System.Net.Sockets` (`Socket`, `TcpClient`, `NetworkStream` and the rest); `SslStream`; WebSockets; QUIC; `Dns`; `WebRequest`, `WebClient` and `HttpListener`; mail; and Dalamud's `Util.OpenLink`.
+**Refused everywhere:** every other type in `System.Net.Sockets` (`Socket`, `TcpClient`, `NetworkStream` and the rest); `SslStream`; WebSockets; QUIC; `Dns`; `WebRequest`, `WebClient` and `HttpListener`; mail; and Dalamud's `Util.OpenLink`. `[updated 2026-10-03: except in exactly one type, LodestonePipe: ClientWebSocket and its message types, and Socket, NetworkStream, DnsEndPoint and the enumerations they need, for the pipe ("Checking a character through the player's own connection"). SslStream stays refused everywhere]`
 
 The boundary tests change in N2-9, the first change that brings network code, to enforce exactly this list, both by referenced types in the compiled flavour and by a source scan. Until then they keep refusing every networking API everywhere, which is NETWORK1.md's safeguard 1. The source scan's `Sockets` substring would match `SocketsHttpHandler`, so N2-9 makes it match whole names.
 
@@ -1073,7 +1073,7 @@ Batch C turns the owner's V1 to V5 into decisions that N2-7 to N2-10 can build. 
 - **A name and World belong to one binding at a time.** (Canonical name, World) is unique among bindings. A newer check that reads the same name and World displaces the older binding: the older one is hidden, not deleted, and is found again once its own re-read updates its name and World.
 - **Moving a character to a new key.** A later check of the same Lodestone id by another key moves the binding to the new key, and deletes everything the old key published for it. That is also the recovery when a key is lost (a new PC, a reinstalled Windows). The old key's plugin learns it at its next request, when the server says the character is no longer bound to it, and it tells the player that another AetherFrame took the character over.
 - **Keeping names current:**
-  - The server re-reads each binding's Lodestone page at least once a day, within C2's fetch budget, and updates the name and World players search by.
+  - The server re-reads each binding's Lodestone page at least once a day, within C2's fetch budget, and updates the name and World players search by. `[updated 2026-10-03: only while an operator relay is set; otherwise a player's own re-read updates them ("Checking a character through the player's own connection")]`
   - The binding is removed, as opting out removes it, only when the Lodestone's own "not found" page shows on two re-reads a day apart.
   - Any other failure leaves the binding alone: an outage, maintenance or a changed layout. One bad day can't wipe every binding.
   - The plugin also asks for a re-read at login when the logged-in character's name or World differs from its binding's.
@@ -1082,7 +1082,7 @@ Batch C turns the owner's V1 to V5 into decisions that N2-7 to N2-10 can build. 
 #### C2: the Lodestone check
 
 1. **The code.** The plugin asks the server for one, with a signed request (C9) under the character's key. The code is `AF-` and 10 Crockford Base32 symbols (50 random bits), bound to that key, valid for one hour and usable once. A new request replaces the key's earlier code. The plugin says: **paste only a code your own AetherFrame shows you.**
-2. **Pasting it.** The player pastes the code into their character's Lodestone profile, "Character Profile", which is edited in the Lodestone's settings while signed in. Then they give the plugin the character's Lodestone page. The plugin reads the id from the address the player pastes, and fetches nothing from the Lodestone itself.
+2. **Pasting it.** The player pastes the code into their character's Lodestone profile, "Character Profile", which is edited in the Lodestone's settings while signed in. Then they give the plugin the character's Lodestone page. The plugin reads the id from the address the player pastes, and fetches nothing from the Lodestone itself. `[updated 2026-10-03: since "Checking a character through the player's own connection", it carries the server's encrypted read through the player's own connection, and still reads nothing of the page]`
 3. **The check.** The plugin sends a signed check request with the code and the Lodestone id. The server fetches that character's public page once, from `https://na.finalfantasyxiv.com/lodestone/character/<id>/`. That address serves every region's characters. Then:
    - **The id** is digits only, with no leading zero, and at most 10 digits.
    - **The code is looked for in one place only:** the text of the page's single `div.character__selfintroduction` element. Zero or several such elements fail the check. Nothing else on the page is searched: not the name, the title, the Free Company, or the "Recent Activity" sidebar, which shows other players' blog titles.
@@ -1092,7 +1092,7 @@ Batch C turns the owner's V1 to V5 into decisions that N2-7 to N2-10 can build. 
 
 **Fetching the Lodestone:**
 - The allowlist (C8) is checked before any fetch.
-- At most one fetch per check request, and at most 60 fetches an hour for the whole server. The queue holds at most 20; beyond that, the server answers "try again later".
+- At most one fetch per check request, and at most 60 fetches an hour for the whole server. `[updated 2026-10-03: a read through the player's own connection doesn't count against the 60 ("Checking a character through the player's own connection")]` The queue holds at most 20; beyond that, the server answers "try again later".
 - A fixed `User-Agent` naming AetherFrame and the server's hostname, a 10-second timeout, and at most 1 MiB read.
 - **No redirect is followed:** a redirect fails the check. Only `https://na.finalfantasyxiv.com` is ever fetched.
 - The page is parsed for its three fields, then discarded. It is never stored or logged.
@@ -1403,7 +1403,7 @@ It also made six smaller points, all applied as well:
 
 **Rationale.** It keeps C2's promise that the server reads the page itself, with nothing a player controls in between, at no cost, and it changes nothing for players. The price is the owner's PC: it must be on, with the relay running, whenever someone checks a character or a re-read is due. For the two-player test, that is when the owner plays. A host the Lodestone accepts, or another way to prove a character, can replace it later without changing the protocol.
 
-**Not settled:** a relay that runs unattended, such as a small always-on device at home, if sharing grows past the test.
+**Not settled:** a relay that runs unattended, such as a small always-on device at home, if sharing grows past the test. `[updated 2026-10-03: the owner chose each player's own connection instead ("Checking a character through the player's own connection")]`
 
 ### N2-10's viewer. APPROVED (Claude, under the owner's delegation of September 29, 2026), October 1, 2026
 
@@ -1599,6 +1599,64 @@ The backup now runs every hour. It writes one copy a day, as before, and deletes
   - the alert issue says its text is rewritten when the failing checks change.
 
 A recheck of `d0b2fa9` confirmed every fix. It found one more minor point, also applied: a restart during a copy's last hour could keep that copy a few seconds past 7 days, so copies now go an hour earlier.
+
+### Checking a character through the player's own connection. The owner's direction, October 3, 2026; its design APPROVED (Claude, under the owner's delegation of September 29, 2026), October 3, 2026
+
+**The owner's direction.** The Lodestone refuses the server's host (403), so its reads go through the relay on the owner's PC ("Reaching the Lodestone through a relay"), and a check fails while that PC is off. On October 3, 2026, in chat, the owner wrote: "Yeah I really want to stop relying on my PC to be a part of the process, how else could we do it?". Claude offered five ways:
+- a relay on an AWS host: AWS's managed list of hosting providers leaves out AWS's own addresses, and the Lodestone sits behind CloudFront, so it may be accepted;
+- each player's own connection carrying their own check;
+- an always-on device at home;
+- a residential proxy service;
+- dropping the check.
+
+The owner chose the second: "Let's try option 2, seems like the best route, no?".
+
+**What changes.**
+- **The same requests, over a WebSocket.** The check and the re-read (C2, C1) may also be sent as a WebSocket at their own paths, `/v1/lodestone/check` and `/v1/lodestone/reread`. The plugin's first message is exactly the signed body it would `POST` today, so nothing signed changes, and the protocol version doesn't either. Over a WebSocket, the server reads the page through the player's own connection, as below. A `POST` is answered as today, through the operator's relay when one is set, so plugins from before this change keep working.
+- **The pipe.** When the server needs the page, it asks the plugin to open one TCP connection to `na.finalfantasyxiv.com`, port 443. The plugin forwards that connection's bytes both ways through the WebSocket. The server runs TLS to the Lodestone over it, end to end, and checks the certificate as it does today. The plugin carries only encrypted bytes: like the relay, it can neither read nor change the page. A player who drops or delays them fails only their own check.
+- **The exchange:**
+  1. The plugin opens a WebSocket over TLS (`wss`) to the deployment's hostname (R2) at the action's path, and sends one binary message: the signed body.
+  2. The server checks it as it checks a `POST`: the challenge, the proof's kind, the limits (C6), and the code for a check or the binding for a re-read. An answer that needs no page is sent at once, as the final message.
+  3. Otherwise it sends the text message `open`. The plugin connects, and answers `opened`, or `failed` when it can't; the final answer is then "try again later".
+  4. Binary messages carry the connection's bytes, each way, until the server sends `close` or a limit is reached. The plugin then closes the connection.
+  5. The final message is text: the status and the JSON body a `POST` would have got. Then the server closes the WebSocket.
+- **The allowlist stays hidden.** A check reads the page before the allowlist (C8) and the second-character rule are applied. Otherwise whether `open` comes would tell whether an id is on the allowlist. Every failure after the code is still the same "check failed", no sooner than the floor (C2's answers).
+- **The Lodestone turning a player away.** A 403 or 429 from the Lodestone through a player's connection answers 503, with its own reason. The plugin can then say that the Lodestone refused their connection, and suggest trying without a VPN. It tells the player only about their own connection.
+
+**The plugin's limits** (amending R2 and R3):
+- A pipe opens only within a check or re-read the player started, which R2's "traffic only on a player's action" already covers.
+- Its one TCP connection goes only to `na.finalfantasyxiv.com`, port 443: constants in code, never an address from the server. There is one connection per pipe, opened only after `open`.
+- At most 64 KiB go toward the Lodestone and 2 MiB come from it, within 30 seconds for the whole exchange, in WebSocket messages of at most 64 KiB.
+- The WebSocket goes only to the deployment's hostname, over TLS validated normally, like every other request.
+- **R3 amended:** `ClientWebSocket` and its message types, and `Socket`, `NetworkStream`, `DnsEndPoint` and the socket enumerations they need, are allowed in exactly one type, `Services/Network/Transport/LodestonePipe`. The boundary tests confine them to it, in the compiled flavour and by source, and refuse them everywhere else, as today. `SslStream` stays refused: the plugin never runs TLS with the Lodestone.
+
+**The server's side** (C2 holds):
+- The fetch over a pipe is C2's fetch: the fixed address and `User-Agent`, no redirect, at most 1 MiB, HTTP/1.1, and the certificate checked. Only the transport differs: a handler made for that one pipe and disposed with it, so no connection is ever reused for another player.
+- Its deadline is 20 seconds over the whole fetch, against 10 today, since the bytes travel through the player.
+- **The budget.** A piped read comes from the player's own address, so it doesn't count against the hour's 60, which were meant for one shared address. It keeps C6's limits per key, per Lodestone id and per address, and at most 20 pipes are open at once across the server.
+
+**Re-reads** (amending C1):
+- A player's re-read goes through their own pipe. The plugin asks for one when a publish or the sharing window finds a new name or World.
+- The daily re-read runs only while an operator relay is set. Without one:
+  - a name updates when its player next acts, and a renamed character is found by its old name until then;
+  - a newer check of the same name and World still displaces the old binding (C1);
+  - removal after two "not found" re-reads a day apart applies to the re-reads that happen.
+
+  Bindings whose players never return are S3's question, already open for the beta.
+
+**Rationale.**
+- It takes the owner's PC out of the check. It needs no account, payment or host, so nothing can lapse, and there is no single address to block.
+- Each player's own connection reads their own page, as their browser would. The shared budget existed because every read came from one address; now none does.
+- The trust doesn't change: TLS runs from the server to the Lodestone, and whatever carries the bytes can't read or change them, as with the relay.
+- The plugin's new reach is one host and one port, only within the player's own check, bounded in time and bytes.
+- Dalamud's rules for its official repository restrict how a plugin interacts with the game's servers ([Plugin Restrictions](https://dalamud.dev/plugin-publishing/restrictions/)). The Lodestone is a website, and the pipe opens only on the player's action.
+
+**Not settled:**
+- Players whose connection the Lodestone refuses, through some VPNs and hosting addresses, can't check until they connect another way.
+- When the relay path goes. Once a release with the pipe is the minimum (`MinimumPlugin`), the operator can unset `LodestoneRelay`, and the daily re-read stops with it.
+- S3's expiry after long inactivity.
+
+**Independent concurrence.** Pending: a security-focused reviewer examines this design before any code is written.
 
 ## Gates
 
