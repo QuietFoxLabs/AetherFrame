@@ -132,11 +132,19 @@ internal sealed class PlateSwitcher
     /// <summary>
     /// New Plate's Use Template: asks first when the open Plate has unsaved changes (the question
     /// shows, and <see cref="PlateOpenDecision.Ask"/> is returned), before anything is written;
-    /// otherwise the new Plate is made now, and opens once it has been.
+    /// otherwise the new Plate is made now, and opens once it has been. A Template that can't be
+    /// used is refused before anything else (<see cref="PlateOpenDecision.Refused"/>, with why on the
+    /// error line), so the question's Discard can never drop unsaved changes for nothing.
     /// </summary>
     internal PlateOpenDecision New(Guid templateId)
     {
         actions.Runner.Error = null;
+        if (actions.TemplateProblem(templateId) is { } problem)
+        {
+            actions.Runner.Error = problem;
+            return PlateOpenDecision.Refused;
+        }
+
         var decision = Guard.RequestNew(templateId);
         GoAhead(decision, PlateOpenRequest.NewPlate(templateId));
         return decision;

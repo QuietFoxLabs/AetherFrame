@@ -119,6 +119,9 @@ internal sealed class TemplateChooser
 
     private bool IsBusy => actions.Runner.IsBusy;
 
+    /// <summary>Whether a new Plate can be made from the Template now (see <see cref="PlateActions.TemplateProblem"/>).</summary>
+    private bool CanUse(Guid templateId) => actions.TemplateProblem(templateId) is null;
+
     /// <summary>Opens the chooser on Adventure Plate Classic, the next time <see cref="Draw"/> runs.</summary>
     internal void Open() => pendingTemplateChooserPopup = true;
 
@@ -303,7 +306,7 @@ internal sealed class TemplateChooser
             }
         }
 
-        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && CanUse(templateId))
         {
             chosenTemplateId = templateId;
             Use?.Invoke(templateId);
@@ -388,7 +391,8 @@ internal sealed class TemplateChooser
     /// </summary>
     private void DrawUseTemplateMenuItem(Guid templateId)
     {
-        using (ImRaii.Disabled(IsBusy))
+        var problem = actions.TemplateProblem(templateId);
+        using (ImRaii.Disabled(IsBusy || problem is not null))
         {
             if (ImGui.MenuItem("Use Template"))
             {
@@ -396,6 +400,8 @@ internal sealed class TemplateChooser
                 chooserUseRequestedId = templateId;
             }
         }
+
+        EditorWidgets.Tooltip(problem);
     }
 
     private void DrawTemplateChooserRightPane()
@@ -487,10 +493,11 @@ internal sealed class TemplateChooser
         }
 
         ImGui.SameLine();
+        var problem = actions.TemplateProblem(chosenTemplateId);
         using (ImRaii.PushColor(ImGuiCol.Button, EditorWidgets.AccentColor))
         using (ImRaii.PushColor(ImGuiCol.ButtonHovered, EditorWidgets.AccentColor with { W = 0.85f }))
         using (ImRaii.PushColor(ImGuiCol.ButtonActive, EditorWidgets.AccentColor with { W = 0.7f }))
-        using (ImRaii.Disabled(IsBusy))
+        using (ImRaii.Disabled(IsBusy || problem is not null))
         {
             if (ImGui.Button("Use Template", buttonSize))
             {
@@ -498,6 +505,8 @@ internal sealed class TemplateChooser
                 ImGui.CloseCurrentPopup();
             }
         }
+
+        EditorWidgets.Tooltip(problem);
     }
 
     private readonly record struct ChooserSelection(string Name, string Description, string Destination, bool SupportsPreview);
@@ -518,7 +527,7 @@ internal sealed class TemplateChooser
 
         if (!summary.IsReady)
         {
-            return new ChooserSelection(summary.DisplayName, summary.Problem ?? "This Template can't be opened.", string.Empty, false);
+            return new ChooserSelection(summary.DisplayName, summary.Problem ?? PlateActions.CannotUseTemplateNote, string.Empty, false);
         }
 
         var document = templates.GetSavedDocument(chosenTemplateId);

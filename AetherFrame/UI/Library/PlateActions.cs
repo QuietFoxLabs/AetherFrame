@@ -40,6 +40,12 @@ internal sealed class PlateActions
     /// <summary>Save as New Plate's tooltip.</summary>
     internal const string SaveAsNewPlateTooltip = "Saves this Plate as it is now, unsaved changes included, as a new Plate, and opens it.\nThis one stays as it was last saved.";
 
+    /// <summary>What shows for a Template that can't be used and says nothing of its own.</summary>
+    internal const string CannotUseTemplateNote = "This Template can't be opened.";
+
+    /// <summary>What shows when the chosen Template is no longer there (deleted meanwhile, say).</summary>
+    internal const string TemplateGoneNote = "That Template is no longer in My Templates.";
+
     private readonly PlateLibraryService library;
     private readonly TemplateLibraryService templates;
     private readonly PlatePackageService packages;
@@ -175,6 +181,20 @@ internal sealed class PlateActions
 
     /// <summary>A Template's name as the chooser lists it, or null when there is no such Template.</summary>
     internal string? TemplateName(Guid templateId) => templates.FindTemplate(templateId)?.DisplayName;
+
+    /// <summary>
+    /// Why a new Plate can't be made from a Template now, or null when it can: a saved Template a
+    /// newer version of AetherFrame wrote, one whose file is damaged or couldn't be read, or one no
+    /// longer there. The built-in Templates can always be used. The editors' New Plate checks this
+    /// before it asks about unsaved changes, so the question's Discard never drops them for a Plate
+    /// that won't be made; the chooser greys out Use Template for such a Template too.
+    /// </summary>
+    internal string? TemplateProblem(Guid templateId) => templates.FindTemplate(templateId) switch
+    {
+        null => TemplateGoneNote,
+        { IsReady: false } template => template.Problem ?? CannotUseTemplateNote,
+        _ => null,
+    };
 
     /// <summary>
     /// Renames a saved Template, or returns why <paramref name="requestedName"/> can't be its name

@@ -61,6 +61,16 @@ internal sealed class PlateActionsHarness : IDisposable
     /// <summary>Another saved Plate, not open.</summary>
     internal async Task<Guid> AnotherPlateAsync() => (await Library.CreatePlateAsync(PlateStartingLayout.Blank, character: null, name: "Second Look")).PlateId;
 
+    /// <summary>A saved Template a newer version of AetherFrame wrote: listed in My Templates, but it can't be used.</summary>
+    internal async Task<Guid> TemplateFromTheFutureAsync()
+    {
+        var templateId = Guid.NewGuid();
+        Directory.CreateDirectory(Editor.Fixture.Paths.TemplatesDirectory);
+        File.WriteAllText(Editor.Fixture.Paths.GetTemplatePath(templateId), TemplateSamples.Envelope(templateId, "From the future", "{}", version: 999));
+        await Templates.InitializeAsync();
+        return templateId;
+    }
+
     /// <summary>Waits for the running action, then applies its outcome as the window's next frame would.</summary>
     internal async Task FinishAsync()
     {
@@ -607,6 +617,22 @@ public class PlateActionsTests
         Assert.Equal("Blank Canvas", harness.Actions.TemplateName(BuiltInTemplateCatalog.BlankCanvasId));
         Assert.Equal("Night Out", harness.Actions.TemplateName(saved));
         Assert.Null(harness.Actions.TemplateName(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task TemplateProblem_IsNothingForAUsableTemplate_AndWhyForOneThatCantBeUsed()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
+        var future = await harness.TemplateFromTheFutureAsync();
+
+        Assert.Null(harness.Actions.TemplateProblem(BuiltInTemplateCatalog.AdventurePlateClassicId));
+        Assert.Null(harness.Actions.TemplateProblem(BuiltInTemplateCatalog.BlankCanvasId));
+        Assert.Null(harness.Actions.TemplateProblem(saved));
+        Assert.Equal(TemplateStatus.NewerVersion, harness.Templates.FindTemplate(future)!.Status);
+        Assert.Equal(harness.Templates.FindTemplate(future)!.Problem, harness.Actions.TemplateProblem(future));
+        Assert.Contains("newer version", harness.Actions.TemplateProblem(future), StringComparison.Ordinal);
+        Assert.Equal(PlateActions.TemplateGoneNote, harness.Actions.TemplateProblem(Guid.NewGuid()));
     }
 
     [Fact]

@@ -16,6 +16,12 @@ internal enum PlateOpenDecision
 
     /// <summary>The open Plate has unsaved changes: ask Save, Discard or Cancel first.</summary>
     Ask,
+
+    /// <summary>
+    /// It can't go ahead at all (the editors' New Plate, from a Template that can't be used): why
+    /// shows on the error line, and nothing is asked, discarded or made.
+    /// </summary>
+    Refused,
 }
 
 /// <summary>
