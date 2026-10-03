@@ -31,6 +31,12 @@ internal sealed partial class BasicProfileEditorWindow
     /// <summary>The <see cref="ChooserMemories"/> key of a Component kind's style list, shared by both editors.</summary>
     internal static string ComponentStyleChooserKey(PlateComponentKind kind) => $"ComponentStyle.{(int)kind}";
 
+    /// <summary>The style list's layout in each editor (see <see cref="ChooserMemory.Open"/>): Basic's starts
+    /// with None and leaves out image styles, so a place kept in one editor isn't reused in the other,
+    /// which scrolls to the selected style instead.</summary>
+    internal const int BasicStyleListLayout = 1;
+    internal const int AdvancedStyleListLayout = 2;
+
     /// <summary>One slot: a label and a style combo. Choosing is one undo step.</summary>
     private void DrawComponentSlot(ProfileDocument profile, PlateComponentKind kind)
     {
@@ -51,7 +57,7 @@ internal sealed partial class BasicProfileEditorWindow
                 // Each kind's list keeps its own place (issue #114); the selection is the slot's style, "" for None.
                 var memory = ChooserMemories.For(ComponentStyleChooserKey(kind));
                 var selection = current?.DefinitionId ?? string.Empty;
-                var opening = ChooserScroll.Begin(memory, selection);
+                var opening = ChooserScroll.Begin(memory, selection, layout: BasicStyleListLayout);
                 if (ImGui.Selectable("None", current is null) && current is not null)
                 {
                     editorSession.SetComponentSlot(kind, null);
@@ -77,7 +83,7 @@ internal sealed partial class BasicProfileEditorWindow
                     ChooserScroll.ScrollHereIfOpening(opening, isCurrent);
                 }
 
-                ChooserScroll.End(memory, selection);
+                ChooserScroll.End(memory, selection, BasicStyleListLayout);
             }
         }
 

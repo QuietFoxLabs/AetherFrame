@@ -105,6 +105,20 @@ public class ChooserMemoryTests
     }
 
     [Fact]
+    public void AnotherLayout_ScrollsToTheSelectionInstead()
+    {
+        // Rows reordered (or the other editor's version of the list): the old pixel position would
+        // point at another row, so the selection is found again.
+        var memory = new ChooserMemory();
+        memory.Open("Garamond", layout: 1);
+        memory.Record(640f, "Garamond", layout: 1);
+
+        Assert.Equal(new ChooserOpening(null, true, false), memory.Open("Garamond", layout: 2));
+        memory.Record(96f, "Garamond", layout: 2);
+        Assert.Equal(new ChooserOpening(96f, false, false), memory.Open("Garamond", layout: 2));
+    }
+
+    [Fact]
     public void ABadScrollValue_IsRememberedAsTheTop()
     {
         var memory = new ChooserMemory();

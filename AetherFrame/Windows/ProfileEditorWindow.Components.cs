@@ -185,7 +185,7 @@ internal sealed partial class ProfileEditorWindow
                 // The same list memory as Basic's slot for this kind (issue #114).
                 var memory = ChooserMemories.For(BasicProfileEditorWindow.ComponentStyleChooserKey(component.Kind));
                 var selection = component.DefinitionId;
-                var opening = ChooserScroll.Begin(memory, selection);
+                var opening = ChooserScroll.Begin(memory, selection, layout: BasicProfileEditorWindow.AdvancedStyleListLayout);
                 foreach (var candidate in BuiltInComponentCatalog.OfKind(component.Kind))
                 {
                     var isCurrent = candidate.Id == component.DefinitionId;
@@ -200,7 +200,7 @@ internal sealed partial class ProfileEditorWindow
                     ChooserScroll.ScrollHereIfOpening(opening, isCurrent);
                 }
 
-                ChooserScroll.End(memory, selection);
+                ChooserScroll.End(memory, selection, BasicProfileEditorWindow.AdvancedStyleListLayout);
             }
         }
 

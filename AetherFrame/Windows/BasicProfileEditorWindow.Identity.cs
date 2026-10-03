@@ -333,23 +333,19 @@ internal sealed partial class BasicProfileEditorWindow
             RebuildTitlePickerRows(titleCatalog);
         }
 
-        if (ImGui.IsWindowAppearing())
-        {
-            ImGui.SetKeyboardFocusHere();
-        }
-
         var feminine = GameTitleCatalog.UseFeminineForms;
         var selectedId = profile.BasicIdentity is { TitleSource: IdentityTitleSource.GameTitle } settings ? settings.GameTitleId : 0u;
         var memory = TitleChooser;
         var selection = selectedId == 0u ? null : selectedId.ToString(CultureInfo.InvariantCulture);
-        if (ImGui.IsWindowAppearing() && selection is not null)
+
+        // Before the search box: a kept search that would hide the chosen title is cleared. The rows
+        // are reordered once unlocked titles are known, so that is part of the list's layout.
+        var appearing = ImGui.IsWindowAppearing();
+        var layout = (titlePickerUnlockKnown ? 1 : 0) | (titlePickerRows.Count << 1);
+        var opening = ChooserScroll.Open(memory, appearing, selection, (_, query) => titlePickerRows.Exists(row => row.Title.Id == selectedId && row.Title.Matches(query)), layout);
+        if (appearing)
         {
-            // A kept search that would hide the chosen title is cleared, so it shows in the list.
-            var shownByQuery = memory.Search.Trim();
-            if (shownByQuery.Length > 0 && !titlePickerRows.Exists(row => row.Title.Id == selectedId && row.Title.Matches(shownByQuery)))
-            {
-                memory.Search = string.Empty;
-            }
+            ImGui.SetKeyboardFocusHere();
         }
 
         var pickerWidth = TitlePickerWidth * ImGuiHelpers.GlobalScale;
@@ -378,7 +374,7 @@ internal sealed partial class BasicProfileEditorWindow
         {
             if (list.Success)
             {
-                var opening = ChooserScroll.Begin(memory, selection);
+                ChooserScroll.Restore(opening, appearing);
                 var shown = 0;
                 foreach (var (title, unlocked) in titlePickerRows)
                 {
@@ -427,7 +423,7 @@ internal sealed partial class BasicProfileEditorWindow
                     ImGui.TextDisabled(titleCatalog.Titles.Count == 0 ? "No title data available." : "No titles match.");
                 }
 
-                ChooserScroll.End(memory, selection);
+                ChooserScroll.End(memory, appearing, selection, layout);
             }
         }
     }

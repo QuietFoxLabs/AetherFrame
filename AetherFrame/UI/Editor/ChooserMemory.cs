@@ -13,10 +13,11 @@ namespace AetherFrame.UI.Editor;
 /// <list type="bullet">
 /// <item>a remembered search that would hide the current selection is cleared, so the selection
 /// can always be seen in the list;</item>
-/// <item>with the same selection and search as when it was last open, the list returns to exactly
-/// where it was;</item>
-/// <item>otherwise (the selection was changed somewhere else, the search changed, or it never
-/// opened before) the list scrolls to the selection, if there is one.</item>
+/// <item>with the same selection, search and list layout as when it was last open, the list returns
+/// to exactly where it was;</item>
+/// <item>otherwise (the selection was changed somewhere else, the search changed, the rows were
+/// reordered or are another editor's version of the list, or it never opened before) the list
+/// scrolls to the selection, if there is one.</item>
 /// </list>
 /// ImGui clamps a restored scroll to the list's current length, so a shorter list still opens at a
 /// valid position.
@@ -27,15 +28,18 @@ internal sealed class ChooserMemory
     private float scrollY;
     private string? recordedSelection;
     private string recordedSearch = string.Empty;
+    private int recordedLayout;
 
     /// <summary>The chooser's search text, kept between openings. Never null.</summary>
     public string Search { get; set; } = string.Empty;
 
     /// <summary>
     /// Called on the frame the chooser opens, with what is selected now (null for a chooser with no
-    /// selection, such as an "Add..." menu) and whether a selection is shown by a given search.
+    /// selection, such as an "Add..." menu), whether a selection is shown by a given search, and the
+    /// list's <paramref name="layout"/>: any number that changes when its rows are ordered differently
+    /// (a pixel position only means the same rows under the same layout).
     /// </summary>
-    public ChooserOpening Open(string? selection, Func<string, string, bool>? selectionMatches = null)
+    public ChooserOpening Open(string? selection, Func<string, string, bool>? selectionMatches = null, int layout = 0)
     {
         Search ??= string.Empty;
         var searchCleared = false;
@@ -46,7 +50,8 @@ internal sealed class ChooserMemory
             searchCleared = true;
         }
 
-        if (recorded && string.Equals(recordedSelection, selection, StringComparison.Ordinal) && string.Equals(recordedSearch, Search, StringComparison.Ordinal))
+        if (recorded && recordedLayout == layout
+            && string.Equals(recordedSelection, selection, StringComparison.Ordinal) && string.Equals(recordedSearch, Search, StringComparison.Ordinal))
         {
             return new ChooserOpening(scrollY, false, searchCleared);
         }
@@ -55,13 +60,15 @@ internal sealed class ChooserMemory
     }
 
     /// <summary>Called on every frame the chooser is open, after its list: where the list is
-    /// scrolled, and what is selected (the newly picked option on the frame one is picked).</summary>
-    public void Record(float scroll, string? selection)
+    /// scrolled, what is selected (the newly picked option on the frame one is picked), and the
+    /// list's layout (as given to <see cref="Open"/>).</summary>
+    public void Record(float scroll, string? selection, int layout = 0)
     {
         recorded = true;
         scrollY = float.IsFinite(scroll) && scroll > 0f ? scroll : 0f;
         recordedSelection = selection;
         recordedSearch = Search ?? string.Empty;
+        recordedLayout = layout;
     }
 
     /// <summary>Forgets everything (the search included).</summary>
@@ -71,6 +78,7 @@ internal sealed class ChooserMemory
         scrollY = 0f;
         recordedSelection = null;
         recordedSearch = string.Empty;
+        recordedLayout = 0;
         Search = string.Empty;
     }
 }
