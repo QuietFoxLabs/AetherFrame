@@ -193,15 +193,16 @@ internal sealed class BackgroundStylePanel
             themeBrowser.PlateId = profile.ProfileId;
             themeBrowser.Showing = PlateStyle.OpensOn(profile);
             themeBrowser.Family = null;
-            themeBrowser.ScrollToCurrent = true;
+            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
         }
 
         var shown = EditorWidgets.Segmented("StyleSystem", [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)], (int)themeBrowser.Showing);
         if (shown >= 0)
         {
+            // Each system opens unfiltered, on its own choice when it has one.
             themeBrowser.Showing = (StyleSystem)shown;
-            themeBrowser.Family = null;
-            themeBrowser.ScrollToCurrent = true;
+            themeBrowser.Clear();
+            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
         }
 
         var showing = themeBrowser.Showing;

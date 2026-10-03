@@ -588,7 +588,8 @@ internal sealed class BasicPlateEditor
     /// as a theme always has (an image background keeps its image). Except when coming back from
     /// an Art Style to the Simple Theme last chosen on this Plate: the background then stays exactly
     /// as it was left, pattern and colors included.</item>
-    /// <item>The choice is remembered for its own system; the other system's is kept.</item>
+    /// <item>The choice is remembered for its own system, and the style left stays its own system's
+    /// choice, so going back to either finds it.</item>
     /// </list>
     /// </summary>
     internal void ApplyTheme(ProfileThemePreset preset)
@@ -624,6 +625,19 @@ internal sealed class BasicPlateEditor
         }
 
         ApplyStylePieces(artStyleInUse, preset);
+
+        // The style being left stays its system's choice. A Plate saved before the two systems, and
+        // the starter theme, hold it only as the style in use; writing it also replaces a choice an
+        // earlier build left behind when it changed the style in use.
+        if (preset.IsArtStyle && PlateStyle.SimpleThemeInUse(Profile) is { } leavingTheme)
+        {
+            Settings.SimpleThemeId = leavingTheme.Id;
+        }
+        else if (!preset.IsArtStyle && artStyleInUse is not null)
+        {
+            Settings.ArtStyleId = artStyleInUse.Id;
+        }
+
         Settings.ThemeId = preset.Id;
         if (preset.IsArtStyle)
         {

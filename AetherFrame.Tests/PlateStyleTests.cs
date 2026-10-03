@@ -183,6 +183,70 @@ public class PlateStyleTests
     }
 
     [Fact]
+    public void ANewPlate_KeepsItsStarterTheme_AndItsBackground_ThroughAnArtStyle()
+    {
+        var document = BasicDocuments.Classic(FakeCharacter.Hero); // the starter theme, never chosen
+        var starter = ProfileThemePresets.All[0];
+        document.Background!.Texture = ProfileBackgroundTexture.Honeycomb;
+        document.Background.TextureIntensity = 0.4f;
+        document.Background.PrimaryColor = new Vector4(0.1f, 0.2f, 0.3f, 1f);
+        var background = BackgroundJson(document);
+        var editor = BasicDocuments.Editor(document);
+
+        editor.ApplyTheme(Art("allagan-tech"));
+        Assert.Equal(starter.Id, PlateStyle.ChosenSimpleTheme(document)!.Id); // marked in Simple Themes
+
+        editor.ApplyTheme(starter);
+        Assert.Equal(background, BackgroundJson(document));
+        Assert.Equal(starter.Id, document.BasicPlate!.ThemeId);
+        Assert.Equal(StyleSystem.SimpleTheme, PlateStyle.OpensOn(document)); // chosen now
+    }
+
+    [Fact]
+    public void AnEarlierSimpleThemePlate_KeepsItsThemeAndBackground_ThroughAnArtStyle()
+    {
+        var document = BasicDocuments.Classic(FakeCharacter.Hero);
+        document.BasicPlate!.ThemeId = "Dark"; // as an earlier build saved it: the style in use only
+        document.Background!.Texture = ProfileBackgroundTexture.Honeycomb;
+        document.Background.PrimaryColor = new Vector4(0.1f, 0.2f, 0.3f, 1f);
+        var background = BackgroundJson(document);
+        var editor = BasicDocuments.Editor(document);
+
+        editor.ApplyTheme(Art("allagan-tech"));
+        Assert.Equal("Dark", document.BasicPlate.SimpleThemeId);
+
+        editor.ApplyTheme(Simple("Dark"));
+        Assert.Equal(background, BackgroundJson(document));
+    }
+
+    [Fact]
+    public void AnEarlierArtStylePlate_KeepsItsArtStyle_ThroughASimpleTheme()
+    {
+        var document = BasicDocuments.Classic(FakeCharacter.Hero);
+        document.BasicPlate!.ThemeId = "af.style.celestial-sakura"; // as an earlier build saved it
+
+        BasicDocuments.Editor(document).ApplyTheme(Simple("Forest"));
+
+        Assert.Equal("af.style.celestial-sakura", document.BasicPlate.ArtStyleId);
+        Assert.Equal("af.style.celestial-sakura", PlateStyle.ChosenArtStyle(document)!.Id); // marked in Art Styles
+    }
+
+    [Fact]
+    public void AnEarlierBuildsThemeChange_ReplacesTheStaleChoice_WhenAnArtStyleIsChosen()
+    {
+        var document = CustomizedDark(); // this build: SimpleTheme "Dark"
+        document.BasicPlate!.ThemeId = "Ocean"; // an earlier build then changed the style in use
+        var background = BackgroundJson(document);
+        var editor = BasicDocuments.Editor(document);
+
+        editor.ApplyTheme(Art("allagan-tech"));
+        Assert.Equal("Ocean", document.BasicPlate.SimpleThemeId);
+
+        editor.ApplyTheme(Simple("Ocean"));
+        Assert.Equal(background, BackgroundJson(document));
+    }
+
+    [Fact]
     public void OneArtStyleForAnother_SwapsThePieces_AndKeepsTheSimpleTheme()
     {
         var document = CustomizedDark();
