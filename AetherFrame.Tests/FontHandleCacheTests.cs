@@ -45,6 +45,9 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         public bool Available { get; set; }
 
         public bool Disposed { get; set; }
+
+        /// <summary>Called once when the face is first built (<see cref="IFontAtlasBackend{TAtlas, THandle}.WhenAvailable"/>).</summary>
+        public List<Action> Waiters { get; } = [];
     }
 
     /// <summary>A font system like Dalamud's asynchronous atlases: a new or removed face makes its
@@ -80,6 +83,18 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         }
 
         public bool IsAvailable(FakeHandle handle) => handle.Available;
+
+        public void WhenAvailable(FakeHandle handle, Action available)
+        {
+            if (handle.Available)
+            {
+                available();
+            }
+            else
+            {
+                handle.Waiters.Add(available);
+            }
+        }
 
         public IDisposable SuppressRebuild(FakeAtlas atlas)
         {
@@ -121,6 +136,12 @@ public class FontHandleCacheTests(ITestOutputHelper output)
                 foreach (var handle in atlas.Handles)
                 {
                     handle.Available = true;
+                    foreach (var waiter in handle.Waiters)
+                    {
+                        waiter();
+                    }
+
+                    handle.Waiters.Clear();
                 }
             }
         }
@@ -400,7 +421,7 @@ public class FontHandleCacheTests(ITestOutputHelper output)
     // ---------------------------------------------------------------- measurements
 
     [Fact]
-    public void LoadTimes_AreRecordedOnce_WhenAFontFirstAppears()
+    public void LoadTimes_AreRecordedOnce_FromTheRequestToWhenTheFontIsBuilt()
     {
         var (cache, fonts, clock) = NewCache();
         cache.Get(Library[0], Tier(32f), false, false);
@@ -414,12 +435,43 @@ public class FontHandleCacheTests(ITestOutputHelper output)
 
         var stats = cache.Stats;
         Assert.Equal(1, stats.Loads);
-        Assert.Equal([150L], stats.RecentLoadMilliseconds);
-        Assert.Equal(150L, stats.LongestLoadMilliseconds);
+        Assert.Equal([120L], stats.RecentLoadMilliseconds);
+        Assert.Equal(120L, stats.LongestLoadMilliseconds);
         Assert.Equal(1, stats.Families);
         Assert.Equal(1, stats.Handles);
         Assert.Contains("1 loaded", stats.Describe(), StringComparison.Ordinal);
-        Assert.Contains("150 ms", stats.Describe(), StringComparison.Ordinal);
+        Assert.Contains("120 ms", stats.Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFontBuiltAheadOfUse_CountsOnlyItsBuild_HoweverLateItIsFirstDrawn()
+    {
+        var (cache, fonts, clock) = NewCache();
+        cache.GetOrCreate(Key(Library[0], 24f)); // warmed at start
+        clock.Advance(40);
+        fonts.CompleteBuilds();
+        clock.Advance(180_000);
+
+        // Minutes later: the 20 px tier isn't built, so the built 24 px one is drawn instead.
+        Assert.Equal(24f, cache.Get(Library[0], Tier(20f), false, false)!.Key.SizePx);
+
+        var stats = cache.Stats;
+        Assert.Equal(1, stats.Loads);
+        Assert.Equal([40L], stats.RecentLoadMilliseconds);
+        Assert.Equal(40L, stats.LongestLoadMilliseconds);
+    }
+
+    [Fact]
+    public void AFontLetGoBeforeItIsBuilt_IsNotCounted()
+    {
+        var (cache, fonts, clock) = NewCache(budget: 1);
+        cache.GetOrCreate(Key(Library[0], 32f));
+        clock.Advance(FontHandleCache<FakeAtlas, FakeHandle>.InUseMilliseconds + 1);
+        cache.GetOrCreate(Key(Library[1], 32f)); // over the budget: the idle first face goes, unbuilt
+        fonts.CompleteBuilds();
+
+        Assert.Equal(1, cache.HandleCount);
+        Assert.Equal(1, cache.Stats.Loads);
     }
 
     [Fact]

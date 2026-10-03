@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -10,7 +11,8 @@ internal readonly record struct FontCacheKey(string FamilyId, float SizePx, bool
 
 /// <summary>
 /// What <see cref="FontHandleCache{TAtlas, THandle}"/> needs from the font system: Dalamud's font
-/// atlases in the plugin, a fake in tests. Called on the framework thread only.
+/// atlases in the plugin, a fake in tests. Called on the framework thread only (the callback
+/// <see cref="WhenAvailable"/> takes may run on any thread).
 /// </summary>
 internal interface IFontAtlasBackend<TAtlas, THandle>
 {
@@ -22,6 +24,10 @@ internal interface IFontAtlasBackend<TAtlas, THandle>
 
     /// <summary>Whether the handle's face is built and can be drawn with.</summary>
     bool IsAvailable(THandle handle);
+
+    /// <summary>Calls <paramref name="available"/> once, from any thread, when the handle's face is
+    /// first built (at once if it already is); never for a handle disposed before then.</summary>
+    void WhenAvailable(THandle handle, Action available);
 
     /// <summary>Holds back <paramref name="atlas"/>'s rebuilds until disposed, then rebuilds once if needed.</summary>
     IDisposable SuppressRebuild(TAtlas atlas);
@@ -88,6 +94,9 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
     private readonly LinkedList<Entry> accessOrder = new();
     private readonly Queue<long> recentLoads = new();
 
+    // Faces built, with when: filled from the font system's threads, read on the framework thread.
+    private readonly ConcurrentQueue<(Entry Entry, long At)> appeared = new();
+
     private long surfacePixels;
     private int batchDepth;
     private int loads;
@@ -115,7 +124,7 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
     {
         var now = clock();
         var ideal = GetOrCreateEntry(new FontCacheKey(familyId, FontTierPolicy.SizeLadder[tierIndex], bold, italic), now);
-        if (IsAvailable(ideal, now))
+        if (backend.IsAvailable(ideal.Handle))
         {
             return ideal.Handle;
         }
@@ -126,7 +135,7 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
             if (entries.TryGetValue(new FontCacheKey(familyId, FontTierPolicy.SizeLadder[i], bold, italic), out var larger))
             {
                 Touch(larger, now);
-                if (IsAvailable(larger, now))
+                if (backend.IsAvailable(larger.Handle))
                 {
                     return larger.Handle;
                 }
@@ -146,7 +155,14 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         return new BatchScope(this);
     }
 
-    internal FontCacheStats Stats => new(families.Count, entries.Count, surfacePixels, loads, recentLoads.ToArray(), longestLoad);
+    internal FontCacheStats Stats
+    {
+        get
+        {
+            RecordLoads();
+            return new(families.Count, entries.Count, surfacePixels, loads, recentLoads.ToArray(), longestLoad);
+        }
+    }
 
     public void Dispose()
     {
@@ -156,20 +172,17 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         }
 
         disposed = true;
-        foreach (var family in families.Values)
-        {
-            family.Suppression?.Dispose();
-            family.Suppression = null;
-        }
-
         foreach (var entry in entries.Values)
         {
             backend.DisposeHandle(entry.Handle);
         }
 
+        // Each atlas before the rebuild a batch held for it, so releasing it starts no build.
         foreach (var family in families.Values)
         {
             backend.DisposeAtlas(family.Atlas);
+            family.Suppression?.Dispose();
+            family.Suppression = null;
         }
 
         entries.Clear();
@@ -181,6 +194,7 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
     private Entry GetOrCreateEntry(FontCacheKey key, long now)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+        RecordLoads();
         if (entries.TryGetValue(key, out var existing))
         {
             Touch(existing, now);
@@ -196,6 +210,7 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         var entry = new Entry(key, backend.CreateHandle(family.Atlas, key), family, FontTierPolicy.EstimatedSurfacePixels(key.FamilyId, key.SizePx), now);
         entries[key] = entry;
         entry.Node = accessOrder.AddLast(entry);
+        backend.WhenAvailable(entry.Handle, () => appeared.Enqueue((entry, clock())));
         family.Handles++;
         family.LastUsed = now;
         surfacePixels += entry.Surface;
@@ -228,18 +243,24 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         }
     }
 
-    /// <summary>Whether a face can be drawn with; records how long a new face took to load the first time it can.</summary>
-    private bool IsAvailable(Entry entry, long now)
+    /// <summary>
+    /// Records how long each face built since the last call took to appear: from when it was asked
+    /// for to when the font system finished it (<see cref="IFontAtlasBackend{TAtlas, THandle}.WhenAvailable"/>),
+    /// whether or not anything has drawn it since, so a face built ahead of use and first drawn much
+    /// later counts only its build. A face let go before it appeared isn't counted.
+    /// </summary>
+    private void RecordLoads()
     {
-        if (!backend.IsAvailable(entry.Handle))
+        while (appeared.TryDequeue(out var built))
         {
-            return false;
-        }
+            var (entry, at) = built;
+            if (entry.LoadRecorded || entry.Node is null)
+            {
+                continue;
+            }
 
-        if (!entry.LoadRecorded)
-        {
             entry.LoadRecorded = true;
-            var took = Math.Max(0L, now - entry.Created);
+            var took = Math.Max(0L, at - entry.Created);
             loads++;
             longestLoad = Math.Max(longestLoad, took);
             recentLoads.Enqueue(took);
@@ -248,8 +269,6 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
                 recentLoads.Dequeue();
             }
         }
-
-        return true;
     }
 
     private bool InUse(long lastUsed, long now) => now - lastUsed < InUseMilliseconds;
@@ -295,6 +314,10 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
             }
 
             DisposeFamilyIfEmpty(oldest);
+            if (families.TryGetValue(oldest.Id, out var still) && ReferenceEquals(still, oldest))
+            {
+                return; // never loop on a family that could not be let go
+            }
         }
     }
 
@@ -308,8 +331,8 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         }
 
         surfacePixels -= entry.Surface;
-        backend.DisposeHandle(entry.Handle);
         entry.Family.Handles--;
+        backend.DisposeHandle(entry.Handle);
         DisposeFamilyIfEmpty(entry.Family);
     }
 
@@ -322,9 +345,9 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
         }
 
         families.Remove(family.Id);
-        family.Suppression?.Dispose();
-        family.Suppression = null;
         backend.DisposeAtlas(family.Atlas);
+        family.Suppression?.Dispose(); // after the atlas, so releasing the held rebuild starts no build
+        family.Suppression = null;
     }
 
     private void EndBatch()

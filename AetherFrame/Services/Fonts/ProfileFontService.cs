@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
 using Dalamud.Interface.ManagedFontAtlas;
@@ -287,6 +289,19 @@ internal sealed class ProfileFontService : IDisposable
             owner.BuildHandle(atlas, ProfileFontCatalog.Resolve(key.FamilyId), key.SizePx, key.Bold, key.Italic);
 
         public bool IsAvailable(IFontHandle handle) => handle.Available;
+
+        public void WhenAvailable(IFontHandle handle, Action available) =>
+            _ = handle.WaitAsync().ContinueWith(
+                task =>
+                {
+                    if (task.IsCompletedSuccessfully)
+                    {
+                        available();
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
 
         public IDisposable SuppressRebuild(IFontAtlas atlas) => atlas.SuppressAutoRebuild();
 
