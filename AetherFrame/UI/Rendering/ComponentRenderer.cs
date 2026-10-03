@@ -64,6 +64,10 @@ internal static class ComponentRenderer
                         var (u0, v0, u1, v1) = art.Window2D(primitive.Piece);
                         drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), color);
                     }
+                    else if (definition.Art is { } missing && ArtSets.BackgroundStandIn(missing) is { } standIn)
+                    {
+                        drawList.AddQuadFilled(a, b, c, d, ImGui.GetColorU32(standIn with { W = primitive.Color.W }));
+                    }
 
                     break;
             }

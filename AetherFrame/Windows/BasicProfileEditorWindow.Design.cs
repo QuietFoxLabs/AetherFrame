@@ -11,7 +11,8 @@ using Dalamud.Interface.Utility.Raii;
 namespace AetherFrame.Windows;
 
 /// <summary>
-/// The Style category: choices about the Plate as a whole, in order — Theme and Pattern (both
+/// The Style category: choices about the Plate as a whole, in order — Look (the style browser: Art
+/// Styles first, then Simple Themes, each with its own choice; issue #118) and Pattern (both
 /// first-class visual browsers), Customize Background (detailed color/mode tuning, collapsed by
 /// default), Text (the shared section heading size), the Plate Frame and decoration Components,
 /// then Layout: the orientation together with the layout actions that apply to every Basic section.
@@ -24,16 +25,18 @@ internal sealed partial class BasicProfileEditorWindow
 
     private void DrawDesignCategory(ProfileDocument profile)
     {
-        // The look first: the two first-class visual pickers, Theme (background + every Basic text
-        // color at once), then Pattern (the background's procedural texture) — both discoverable
+        // The look first: the two first-class visual pickers, the style browser (an Art Style, or a
+        // Simple Theme), then Pattern (the background's procedural texture) — both discoverable
         // without first opening Customize Background.
-        Subheading("Theme");
+        Subheading("Look");
         using (ImRaii.PushId("Theme"))
         {
             backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme);
         }
 
-        Hint("A theme sets the background and every Basic text color at once. Each value stays editable.");
+        Hint(backgroundPanel.ShowingArtStyles
+            ? "An Art Style is a whole look: background, frames, corners, name plaque, divider and section headers, with text colors to match. Each piece stays yours to change under Frame & Decorations."
+            : "A Simple Theme sets the background and every Basic text color at once. Each value stays editable.");
 
         ImGui.Spacing();
         if (PlateComponentEditor.CoveringBackground(profile, BuiltInComponentCatalog.Instance) is not null)
