@@ -186,8 +186,9 @@ internal sealed class PlateActions
     /// Why a new Plate can't be made from a Template now, or null when it can: a saved Template a
     /// newer version of AetherFrame wrote, one whose file is damaged or couldn't be read, or one no
     /// longer there. The built-in Templates can always be used. The editors' New Plate checks this
-    /// before it asks about unsaved changes, so the question's Discard never drops them for a Plate
-    /// that won't be made; the chooser greys out Use Template for such a Template too.
+    /// before it asks about unsaved changes, and again at the question's Discard, so Discard doesn't
+    /// drop them for a Plate the Template can't make; the chooser greys out Use Template for such a
+    /// Template too.
     /// </summary>
     internal string? TemplateProblem(Guid templateId) => templates.FindTemplate(templateId) switch
     {

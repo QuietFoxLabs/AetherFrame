@@ -5,7 +5,10 @@ using AetherFrame.UI.Editor;
 
 namespace AetherFrame.UI.Library;
 
-/// <summary>What <see cref="PlateOpenGuard.Request"/> decided about opening a Plate.</summary>
+/// <summary>
+/// What was decided about opening a Plate: by <see cref="PlateOpenGuard.Request"/>, or by the
+/// editors' <see cref="PlateSwitcher"/>, which alone can refuse.
+/// </summary>
 internal enum PlateOpenDecision
 {
     /// <summary>It is the open Plate already: only show the editor.</summary>

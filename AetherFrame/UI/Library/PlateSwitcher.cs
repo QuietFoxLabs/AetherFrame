@@ -17,8 +17,10 @@ namespace AetherFrame.UI.Library;
 /// Plates, and opens one as a double-click on its card does: in the editor its content suits.
 /// New Plate makes its Plate only once nothing unsaved stands in the way. With unsaved changes the
 /// question comes first, so its Cancel leaves nothing behind; Save or Discard then make the Plate
-/// (<see cref="PlateActions.UseTemplate"/>) and open it. My Plates keeps its own order for now:
-/// its Use Template makes the Plate, then asks (interface task 10 moves it to this one).</para>
+/// (<see cref="PlateActions.UseTemplate"/>) and open it. A Template that can't be used is refused
+/// before the question, and again at its Discard (<see cref="Discard"/>). My Plates keeps its own
+/// order for now: its Use Template makes the Plate, then asks (interface task 10 moves it to this
+/// one).</para>
 ///
 /// <para>Every open happens at the start of an editor's frame (<see cref="Advance"/>), before the
 /// editor reads the open Plate, never while it is drawing the one it replaces.</para>
@@ -133,21 +135,41 @@ internal sealed class PlateSwitcher
     /// New Plate's Use Template: asks first when the open Plate has unsaved changes (the question
     /// shows, and <see cref="PlateOpenDecision.Ask"/> is returned), before anything is written;
     /// otherwise the new Plate is made now, and opens once it has been. A Template that can't be
-    /// used is refused before anything else (<see cref="PlateOpenDecision.Refused"/>, with why on the
-    /// error line), so the question's Discard can never drop unsaved changes for nothing.
+    /// used, or another action still running, is refused before anything else
+    /// (<see cref="PlateOpenDecision.Refused"/>, with why on the error line), and the question's
+    /// Discard checks again (<see cref="Discard"/>), so Discard doesn't drop unsaved changes for a
+    /// Plate the Template can't make.
     /// </summary>
     internal PlateOpenDecision New(Guid templateId)
     {
         actions.Runner.Error = null;
-        if (actions.TemplateProblem(templateId) is { } problem)
+        if (WhyNotNew(templateId) is { } why)
         {
-            actions.Runner.Error = problem;
+            actions.Runner.Error = why;
             return PlateOpenDecision.Refused;
         }
 
         var decision = Guard.RequestNew(templateId);
         GoAhead(decision, PlateOpenRequest.NewPlate(templateId));
         return decision;
+    }
+
+    /// <summary>
+    /// The question's Discard, in the editors. For a new Plate it checks again first: when the
+    /// Template can no longer be used, or another action is running, the question closes with why
+    /// on the error line, and the unsaved changes stay. Otherwise as <see cref="PlateOpenGuard.Discard"/>:
+    /// the open to perform, once the changes are really gone.
+    /// </summary>
+    internal PlateOpenRequest? Discard()
+    {
+        if (Guard.Pending is { TemplateId: { } templateId } && Guard.CanAnswer && WhyNotNew(templateId) is { } why)
+        {
+            Guard.Cancel();
+            actions.Runner.Error = why;
+            return null;
+        }
+
+        return Guard.Discard();
     }
 
     /// <summary>
@@ -195,6 +217,10 @@ internal sealed class PlateSwitcher
 
     /// <summary>The editor a saved Plate opens in: the one its content suits, as for a double-click on its card.</summary>
     private EditorSurfaceKind EditorFor(Guid plateId) => EditorSurfaceChooser.ForDocument(library.GetSavedDocument(plateId));
+
+    /// <summary>Why a new Plate can't be made from the Template now: another action is running, or the Template can't be used. Null when it can.</summary>
+    private string? WhyNotNew(Guid templateId) =>
+        actions.Runner.IsBusy ? PlateOperationRunner.BusyMessage : actions.TemplateProblem(templateId);
 
     private void GoAhead(PlateOpenDecision decision, PlateOpenRequest request)
     {

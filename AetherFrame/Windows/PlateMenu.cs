@@ -831,10 +831,13 @@ internal sealed class PlateMenu
         ImGui.SameLine();
         using (ImRaii.Disabled(!guard.CanAnswer))
         {
-            if (AetherControls.DangerButton("Discard", buttonSize) && guard.Discard() is { } discarded)
+            if (AetherControls.DangerButton("Discard", buttonSize)
+                && (switcher is { } editorPlates ? editorPlates.Discard() : guard.Discard()) is { } discarded)
             {
                 // Only once the edits are really gone: a refused revert (a save landed meanwhile)
-                // keeps the question open, with the editor's own message saying why.
+                // keeps the question open, with the editor's own message saying why. In the
+                // editors, a new Plate's Template is checked again first: when it can't be used,
+                // the question closes with the edits kept (PlateSwitcher.Discard).
                 ImGui.CloseCurrentPopup();
                 openNow?.Invoke(discarded);
             }

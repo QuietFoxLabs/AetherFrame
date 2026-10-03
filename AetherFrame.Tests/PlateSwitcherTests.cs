@@ -135,9 +135,11 @@ public class TemplateChooserSourceTests
         var editorMenu = File.ReadAllText(Path.Combine(root, "Windows", "EditorPlateMenu.cs"));
         var chooser = File.ReadAllText(Path.Combine(root, "Windows", "TemplateChooser.cs"));
 
-        // The editors' menu has a switcher, and its chooser's Use Template is the switcher's New Plate.
+        // The editors' menu has a switcher: its chooser's Use Template is the switcher's New Plate,
+        // and its question's Discard is the switcher's, which checks a new Plate's Template again.
         Assert.Contains("editorPlates.AttachSwitcher(new PlateSwitcher(", File.ReadAllText(Path.Combine(root, "Plugin.cs")), StringComparison.Ordinal);
         Assert.Contains("Chooser.Use = templateId => plates.New(templateId);", menu, StringComparison.Ordinal);
+        Assert.Contains("(switcher is { } editorPlates ? editorPlates.Discard() : guard.Discard())", menu, StringComparison.Ordinal);
 
         // Every frame advances it, whether an editor drew (DrawFrame) or not (EndFrame).
         var drawFrame = editorMenu.IndexOf("internal void DrawFrame()", StringComparison.Ordinal);
@@ -147,13 +149,15 @@ public class TemplateChooserSourceTests
         Assert.Contains("menu.AdvanceOpenGuard();", editorMenu[drawFrame..endFrame], StringComparison.Ordinal);
         Assert.Contains("menu.AdvanceOpenGuard();", editorMenu[endFrame..afterEndFrame], StringComparison.Ordinal);
 
-        // Use Template can't be chosen for a Template that can't be used: its button and a row's
-        // menu item are greyed out, with the reason as their tooltip, and a double-click does nothing.
+        // Use Template can't be chosen for a Template that can't be used, or while an action runs:
+        // its button and a row's menu item are greyed out, with the reason as their tooltip, and a
+        // double-click does nothing.
         Assert.Contains("var problem = actions.TemplateProblem(chosenTemplateId);", chooser, StringComparison.Ordinal);
         Assert.Contains("var problem = actions.TemplateProblem(templateId);", chooser, StringComparison.Ordinal);
         Assert.Equal(2, chooser.Split("ImRaii.Disabled(IsBusy || problem is not null)").Length - 1);
         Assert.Equal(2, chooser.Split("EditorWidgets.Tooltip(problem);").Length - 1);
-        Assert.Contains("IsMouseDoubleClicked(ImGuiMouseButton.Left) && CanUse(templateId)", chooser, StringComparison.Ordinal);
+        Assert.Contains("IsMouseDoubleClicked(ImGuiMouseButton.Left) && !IsBusy && CanUse(templateId)", chooser, StringComparison.Ordinal);
+        Assert.Contains("private bool CanUse(Guid templateId) => actions.TemplateProblem(templateId) is null;", chooser, StringComparison.Ordinal);
     }
 }
 
@@ -295,7 +299,7 @@ public class PlateSwitcherTests
         harness.Switcher.Open(other);
 
         // As the question's Discard does.
-        harness.Switcher.Proceed(harness.Guard.Discard()!.Value);
+        harness.Switcher.Proceed(harness.Switcher.Discard()!.Value);
         harness.Frame();
 
         Assert.Equal(other, harness.OpenId);
@@ -433,7 +437,7 @@ public class PlateSwitcherTests
         harness.Plates.Edit();
         harness.Switcher.New(Classic);
 
-        harness.Switcher.Proceed(harness.Guard.Discard()!.Value);
+        harness.Switcher.Proceed(harness.Switcher.Discard()!.Value);
         await harness.FramesUntilAsync(() => harness.Shown.Count > 0);
 
         Assert.NotEqual(harness.OriginalId, harness.OpenId);
@@ -538,6 +542,73 @@ public class PlateSwitcherTests
     }
 
     [Fact]
+    public async Task NewPlate_WhileAnotherActionRuns_IsRefused_AndAsksNothing()
+    {
+        var store = new HeldWriteStore();
+        using var harness = await SwitcherHarness.CreateAsync(store);
+        harness.Plates.Edit();
+        store.Hold();
+        harness.Plates.Actions.UseTemplate(BlankCanvas, null, new PlateStarterContent(null), _ => { });
+        await store.WriteStarted;
+
+        Assert.Equal(PlateOpenDecision.Refused, harness.Switcher.New(Classic));
+
+        Assert.Equal(0, harness.Asked);
+        Assert.Null(harness.Guard.Pending);
+        Assert.True(harness.IsDirty);
+        Assert.Equal(PlateOperationRunner.BusyMessage, harness.Plates.Runner.Error);
+        store.Release();
+        await harness.SettleAsync();
+        Assert.Equal(harness.OriginalId, harness.OpenId);
+        Assert.True(harness.IsDirty);
+        Assert.Empty(harness.Shown);
+    }
+
+    [Fact]
+    public async Task NewPlate_Discard_WhenTheTemplateWasDeletedMeanwhile_KeepsTheChanges_AndSaysWhy()
+    {
+        using var harness = await SwitcherHarness.CreateAsync();
+        var saved = await harness.Plates.Templates.SaveAsTemplateAsync(harness.OriginalId, "Night Out");
+        harness.Plates.Edit();
+        var plates = harness.Library.GetOrderedPlates().Count;
+        Assert.Equal(PlateOpenDecision.Ask, harness.Switcher.New(saved));
+
+        await harness.Plates.Templates.DeleteTemplateAsync(saved);
+        Assert.Null(harness.Switcher.Discard());
+        await harness.SettleAsync();
+
+        Assert.Null(harness.Guard.Pending);
+        Assert.True(harness.IsDirty);
+        Assert.Equal(PlateActions.TemplateGoneNote, harness.Plates.Runner.Error);
+        Assert.Equal(plates, harness.Library.GetOrderedPlates().Count);
+        Assert.Equal(harness.OriginalId, harness.OpenId);
+        Assert.Empty(harness.Shown);
+    }
+
+    [Fact]
+    public async Task NewPlate_Discard_WhileAnotherActionRuns_KeepsTheChanges_AndSaysWhy()
+    {
+        var store = new HeldWriteStore();
+        using var harness = await SwitcherHarness.CreateAsync(store);
+        harness.Plates.Edit();
+        Assert.Equal(PlateOpenDecision.Ask, harness.Switcher.New(Classic));
+        store.Hold();
+        harness.Plates.Actions.UseTemplate(BlankCanvas, null, new PlateStarterContent(null), _ => { });
+        await store.WriteStarted;
+
+        Assert.Null(harness.Switcher.Discard());
+
+        Assert.Null(harness.Guard.Pending);
+        Assert.True(harness.IsDirty);
+        Assert.Equal(PlateOperationRunner.BusyMessage, harness.Plates.Runner.Error);
+        store.Release();
+        await harness.SettleAsync();
+        Assert.Equal(harness.OriginalId, harness.OpenId);
+        Assert.True(harness.IsDirty);
+        Assert.Empty(harness.Shown);
+    }
+
+    [Fact]
     public async Task NewPlate_AnEditMadeWhileThePlateIsMade_IsAskedAbout_NeverDropped()
     {
         var store = new HeldWriteStore();
@@ -560,7 +631,7 @@ public class PlateSwitcherTests
         Assert.Empty(harness.Shown);
 
         // Answering it opens the new Plate.
-        harness.Switcher.Proceed(harness.Guard.Discard()!.Value);
+        harness.Switcher.Proceed(harness.Switcher.Discard()!.Value);
         harness.Frame();
         Assert.Equal(made, harness.OpenId);
     }

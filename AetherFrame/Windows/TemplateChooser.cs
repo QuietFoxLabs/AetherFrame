@@ -306,7 +306,7 @@ internal sealed class TemplateChooser
             }
         }
 
-        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && CanUse(templateId))
+        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && !IsBusy && CanUse(templateId))
         {
             chosenTemplateId = templateId;
             Use?.Invoke(templateId);
@@ -427,7 +427,8 @@ internal sealed class TemplateChooser
         {
             // Deliberately no rendered preview here: Blank Canvas has nothing to show; a fake
             // stand-in would just be noise. Its destination and description above are enough.
-            ImGui.TextDisabled(NoPreviewText);
+            // A Template that can't be used has none either, and its description says why.
+            ImGui.TextDisabled(chosenTemplateId == BuiltInTemplateCatalog.BlankCanvasId ? NoPreviewText : "No preview.");
             return;
         }
 

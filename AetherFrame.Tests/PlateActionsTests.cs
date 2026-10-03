@@ -62,11 +62,18 @@ internal sealed class PlateActionsHarness : IDisposable
     internal async Task<Guid> AnotherPlateAsync() => (await Library.CreatePlateAsync(PlateStartingLayout.Blank, character: null, name: "Second Look")).PlateId;
 
     /// <summary>A saved Template a newer version of AetherFrame wrote: listed in My Templates, but it can't be used.</summary>
-    internal async Task<Guid> TemplateFromTheFutureAsync()
+    internal Task<Guid> TemplateFromTheFutureAsync() =>
+        TemplateFileAsync(templateId => TemplateSamples.Envelope(templateId, "From the future", "{}", version: 999));
+
+    /// <summary>A saved Template whose file is damaged, with no copy to recover it from: listed, but it can't be used.</summary>
+    internal Task<Guid> DamagedTemplateAsync() => TemplateFileAsync(_ => "{ this is not valid json");
+
+    // A Template file written straight into the Library, then the Templates loaded again, as at the next start.
+    private async Task<Guid> TemplateFileAsync(Func<Guid, string> json)
     {
         var templateId = Guid.NewGuid();
         Directory.CreateDirectory(Editor.Fixture.Paths.TemplatesDirectory);
-        File.WriteAllText(Editor.Fixture.Paths.GetTemplatePath(templateId), TemplateSamples.Envelope(templateId, "From the future", "{}", version: 999));
+        File.WriteAllText(Editor.Fixture.Paths.GetTemplatePath(templateId), json(templateId));
         await Templates.InitializeAsync();
         return templateId;
     }
@@ -625,6 +632,7 @@ public class PlateActionsTests
         using var harness = await PlateActionsHarness.CreateAsync();
         var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
         var future = await harness.TemplateFromTheFutureAsync();
+        var damaged = await harness.DamagedTemplateAsync();
 
         Assert.Null(harness.Actions.TemplateProblem(BuiltInTemplateCatalog.AdventurePlateClassicId));
         Assert.Null(harness.Actions.TemplateProblem(BuiltInTemplateCatalog.BlankCanvasId));
@@ -632,6 +640,8 @@ public class PlateActionsTests
         Assert.Equal(TemplateStatus.NewerVersion, harness.Templates.FindTemplate(future)!.Status);
         Assert.Equal(harness.Templates.FindTemplate(future)!.Problem, harness.Actions.TemplateProblem(future));
         Assert.Contains("newer version", harness.Actions.TemplateProblem(future), StringComparison.Ordinal);
+        Assert.Equal(TemplateStatus.Unreadable, harness.Templates.FindTemplate(damaged)!.Status);
+        Assert.Equal(harness.Templates.FindTemplate(damaged)!.Problem ?? PlateActions.CannotUseTemplateNote, harness.Actions.TemplateProblem(damaged));
         Assert.Equal(PlateActions.TemplateGoneNote, harness.Actions.TemplateProblem(Guid.NewGuid()));
     }
 
