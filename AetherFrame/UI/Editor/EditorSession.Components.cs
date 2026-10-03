@@ -106,6 +106,30 @@ internal sealed partial class EditorSession
     internal void SetComponentCorner(Guid componentId, CornerMask corner, bool enabled) =>
         ApplyDocumentEdit(() => PlateComponentEditor.SetCorner(RequireProfileForComponents(), componentId, corner, enabled));
 
+    /// <summary>Basic: a Corner Ornament's size, keeping its distance from the edge. A slider drag is one undo step.</summary>
+    internal void SetCornerOrnamentScale(Guid componentId, float scale, bool continuous) =>
+        ApplyComponentEdit(() => PlateComponentEditor.SetCornerOrnamentScale(RequireProfileForComponents(), componentId, scale, BuiltInComponentCatalog.Instance), continuous);
+
+    /// <summary>Basic: a Corner Ornament's distance from the Plate's edge, in reference pixels. A slider drag is one undo step.</summary>
+    internal void SetCornerOrnamentEdgeDistance(Guid componentId, float distance, bool continuous) =>
+        ApplyComponentEdit(() => PlateComponentEditor.SetCornerOrnamentEdgeDistance(RequireProfileForComponents(), componentId, distance, BuiltInComponentCatalog.Instance), continuous);
+
+    /// <summary>Basic: a Corner Ornament back at the default size and distance. One undo step; nothing if already there.</summary>
+    internal void ResetCornerOrnamentPlacement(Guid componentId) =>
+        ApplyDocumentEdit(() => PlateComponentEditor.ResetCornerOrnamentPlacement(RequireProfileForComponents(), componentId, BuiltInComponentCatalog.Instance));
+
+    private void ApplyComponentEdit(Action change, bool continuous)
+    {
+        if (continuous)
+        {
+            BeginOrContinueDocumentEdit(change);
+        }
+        else
+        {
+            ApplyDocumentEdit(change);
+        }
+    }
+
     internal void MoveComponentInLayer(Guid componentId, int direction) =>
         ApplyDocumentEdit(() => PlateComponentEditor.MoveInLayer(RequireProfileForComponents(), componentId, direction));
 
