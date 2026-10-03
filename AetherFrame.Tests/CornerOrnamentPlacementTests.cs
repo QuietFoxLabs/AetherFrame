@@ -142,6 +142,26 @@ public class CornerOrnamentPlacementTests
         Assert.Equal(4f, CornerOrnamentPlacement.EdgeDistance(harness.Document, slot, BuiltInComponentCatalog.Find(Sakura)!), Precision);
     }
 
+    /// <summary>A new ornament switched to any other style, in either editor, is still at the defaults.</summary>
+    [Fact]
+    public void ANewOrnament_StaysAtTheDefaults_WhicheverStyleItChangesTo()
+    {
+        var ids = BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Where(d => !d.RequiresAsset).Select(d => d.Id).ToList();
+        foreach (var from in ids)
+        {
+            foreach (var to in ids.Where(id => id != from))
+            {
+                var (basic, ornament, _) = NewOrnament(from);
+                PlateComponentEditor.SetSlot(basic, PlateComponentKind.CornerOrnament, to, BuiltInComponentCatalog.Instance);
+                Assert.True(CornerOrnamentPlacement.IsDefault(basic, ornament, BuiltInComponentCatalog.Find(to)!), $"Basic, {from} to {to}");
+
+                var (advanced, added, _) = NewOrnament(from);
+                PlateComponentEditor.SetDefinition(advanced, added.Id, to, BuiltInComponentCatalog.Instance);
+                Assert.True(CornerOrnamentPlacement.IsDefault(advanced, added, BuiltInComponentCatalog.Find(to)!), $"Advanced, {from} to {to}");
+            }
+        }
+    }
+
     [Fact]
     public async Task ApplyingAnArtStyle_GivesANewOrnamentTheDefaults_ButKeepsAnExistingOnesSizeAndDistance()
     {
