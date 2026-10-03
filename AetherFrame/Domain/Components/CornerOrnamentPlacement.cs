@@ -91,9 +91,12 @@ public static class CornerOrnamentPlacement
     /// </summary>
     public static void ChangeDefinition(ProfileDocument profile, PlateComponent component, ComponentDefinition from, ComponentDefinition to)
     {
-        var distances = EdgeDistances(profile, component, from);
+        // Shifted by the difference in how far each style's box sits inside at this scale (zero at
+        // 100%), rather than converted to a distance and back, so an unresized offset stays exact.
+        var scale = PlateComponentLimits.ClampScale(component.Scale);
+        var shift = (Inside(from, scale) - Inside(to, scale)) * ComponentPaintPlan.Unit(profile);
         component.DefinitionId = to.Id;
-        component.Offset = OffsetFor(profile, to, PlateComponentLimits.ClampScale(component.Scale), distances);
+        component.Offset = PlateComponentLimits.ClampOffset(PlateComponentLimits.ClampOffset(component.Offset) + new Vector2(shift));
     }
 
     /// <summary>Puts the ornament at <see cref="DefaultScale"/> and <see cref="DefaultEdgeDistance"/>.

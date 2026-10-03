@@ -110,6 +110,11 @@ public class CornerOrnamentPlacementTests
         harness.Session.SetComponentSlot(PlateComponentKind.CornerOrnament, Sakura);
         Assert.Equal(1f, loaded.Scale);
         Assert.Equal(Vector2.Zero, loaded.Offset);
+
+        // At 100% a style change keeps any offset bit for bit, not just to within rounding.
+        loaded.Offset = new Vector2(-8.63f, -6.57f);
+        harness.Session.SetComponentSlot(PlateComponentKind.CornerOrnament, Bracket);
+        Assert.Equal(new Vector2(-8.63f, -6.57f), loaded.Offset);
         Assert.Equal(CornerMask.TopLeft | CornerMask.BottomRight, loaded.Corners);
     }
 
