@@ -97,12 +97,39 @@ internal sealed class SharingWindow : Window
     {
         TutorialAnchorMarks.MarkWindow(TutorialTarget.SharingWindow);
         consentShown = false;
+        SettleTheOpening(currentCharacter());
         DrawContent();
 
         // The tick means "I agree to what is on screen now": it never outlives the screen.
         if (!consentShown)
         {
             agreed = false;
+        }
+    }
+
+    /// <summary>
+    /// The opening counts for the character the window first shows, on whichever screen it first
+    /// draws: opened with no character (the title screen), or arriving at another character while
+    /// the window stays open (or hidden with the interface), is not the player opening it for one.
+    /// </summary>
+    private void SettleTheOpening(CharacterContext? character)
+    {
+        if (!opened)
+        {
+            return;
+        }
+
+        if (character is not { } first)
+        {
+            opened = false;
+        }
+        else if (openedFor == 0)
+        {
+            openedFor = first.ContentId;
+        }
+        else if (openedFor != first.ContentId)
+        {
+            opened = false;
         }
     }
 
@@ -155,21 +182,6 @@ internal sealed class SharingWindow : Window
         }
 
         var character = currentCharacter();
-
-        // The opening counts for the character it first shows: arriving at another while the window
-        // stays open (or hidden with the interface) is not the player opening it.
-        if (opened && character is { } first)
-        {
-            if (openedFor == 0)
-            {
-                openedFor = first.ContentId;
-            }
-            else if (openedFor != first.ContentId)
-            {
-                opened = false;
-            }
-        }
-
         if ((character?.ContentId ?? 0) != shownCharacter)
         {
             shownCharacter = character?.ContentId ?? 0;
@@ -198,7 +210,6 @@ internal sealed class SharingWindow : Window
 
         if (character is not { } current)
         {
-            opened = false;
             AetherControls.Muted(SharingText.NoCharacter);
         }
         else

@@ -40,7 +40,7 @@ public partial class PluginAssemblyBoundaryTests
     /// <summary>
     /// What would reach a member the rules above never see: reflection, an
     /// <c>[UnsafeAccessor]</c>, <c>Unsafe</c> and the interop marshallers, a delegate made by name,
-    /// expression trees and <c>dynamic</c>. The pipe names none of them, but for the marker the
+    /// expression trees, <c>dynamic</c> and the component model's type descriptors. The pipe names none of them, but for the marker the
     /// compiler puts on an <c>in</c> parameter. <c>System.Type</c> is named by the compiler's own
     /// attributes on async methods, so its members are held in the IL instead.
     /// </summary>
@@ -58,6 +58,7 @@ public partial class PluginAssemblyBoundaryTests
         "System.Delegate",
         "System.AppDomain",
         "System.Runtime.Loader.",
+        "System.ComponentModel.TypeDescriptor",
     ];
 
     /// <summary>The WebSocket's members the pipe may use, on <c>WebSocket</c> or <c>ClientWebSocket</c>: the exchange's own, never one that makes a WebSocket over a stream.</summary>
@@ -207,7 +208,8 @@ public partial class PluginAssemblyBoundaryTests
                             // runs, nothing is stored or dropped, and only the token is loaded.
                             connected++;
                             var endpoint = LastCallBefore(steps, index);
-                            if (endpoint < 0 || steps[endpoint] is not { OpCode: ILOpCode.Newobj, Parent: "System.Net.DnsEndPoint", Name: ".ctor" }
+                            if (step.OpCode is not (ILOpCode.Call or ILOpCode.Callvirt)
+                                || endpoint < 0 || steps[endpoint] is not { OpCode: ILOpCode.Newobj, Parent: "System.Net.DnsEndPoint", Name: ".ctor" }
                                 || index - endpoint - 1 > 2 || steps.GetRange(endpoint + 1, index - endpoint - 1).Any(between => !LoadsTheToken(between)))
                             {
                                 offending.Add(where + " (not to the one DnsEndPoint made just before)");
@@ -301,7 +303,8 @@ public partial class PluginAssemblyBoundaryTests
                         // after the address, nothing runs but reading the deadline's token.
                         connects++;
                         var since = StepsSince(steps, index, candidate => candidate is { OpCode: ILOpCode.Newobj, Parent: "System.Uri", Name: ".ctor" });
-                        if (!step.Parameters.SequenceEqual(["System.Uri", "System.Net.Http.HttpMessageInvoker", "System.Threading.CancellationToken"])
+                        if (step.OpCode is not (ILOpCode.Call or ILOpCode.Callvirt)
+                            || !step.Parameters.SequenceEqual(["System.Uri", "System.Net.Http.HttpMessageInvoker", "System.Threading.CancellationToken"])
                             || since is null || since.Any(candidate => candidate.OpCode == ILOpCode.Ldnull || (candidate.Calls && candidate is not { Parent: "System.Threading.CancellationTokenSource", Name: "get_Token" }))
                             || !since.Any(candidate => candidate is { OpCode: ILOpCode.Ldfld, Parent: Pipe, Name: "invoker" }))
                         {
