@@ -44,6 +44,7 @@ internal enum SharingNoticeKind
     PublishUnrecorded,
     PublishStopped,
     PublishWithdrawn,
+    LodestoneRefused,
 }
 
 /// <summary>
@@ -86,8 +87,9 @@ internal sealed class CharacterSharingView
 {
     internal static readonly CharacterSharingView Initial = new(false, false, false, Array.Empty<SharingCharacter>(), null, null, null);
 
-    internal CharacterSharingView(bool loaded, bool unreadable, bool busy, IReadOnlyList<SharingCharacter> characters, IssuedCode? code, SharingNotice? notice, PublishStatus? publish)
+    internal CharacterSharingView(bool loaded, bool unreadable, bool busy, IReadOnlyList<SharingCharacter> characters, IssuedCode? code, SharingNotice? notice, PublishStatus? publish, bool connectionNotice = false)
     {
+        ConnectionNotice = connectionNotice;
         Loaded = loaded;
         Unreadable = unreadable;
         Busy = busy;
@@ -116,6 +118,13 @@ internal sealed class CharacterSharingView
     /// <summary>The latest publish of an Active Plate, under way or ended; none before the first.</summary>
     internal PublishStatus? Publish { get; }
 
+    /// <summary>
+    /// Whether the one-time notice about checking through the player's own connection is due: a
+    /// character was already shared from this PC when this build first read the sharing file, and
+    /// the player hasn't dismissed it.
+    /// </summary>
+    internal bool ConnectionNotice { get; }
+
     /// <summary>The character with <paramref name="contentId"/>, if the file names it.</summary>
     internal SharingCharacter? Find(ulong contentId)
     {
@@ -130,8 +139,8 @@ internal sealed class CharacterSharingView
         return null;
     }
 
-    internal CharacterSharingView With(bool? busy = null, IReadOnlyList<SharingCharacter>? characters = null, IssuedCode? code = null, bool clearCode = false, SharingNotice? notice = null, bool clearNotice = false, bool? loaded = null, bool? unreadable = null, PublishStatus? publish = null) =>
-        new(loaded ?? Loaded, unreadable ?? Unreadable, busy ?? Busy, characters ?? Characters, clearCode ? null : code ?? Code, clearNotice ? null : notice ?? Notice, publish ?? Publish);
+    internal CharacterSharingView With(bool? busy = null, IReadOnlyList<SharingCharacter>? characters = null, IssuedCode? code = null, bool clearCode = false, SharingNotice? notice = null, bool clearNotice = false, bool? loaded = null, bool? unreadable = null, PublishStatus? publish = null, bool? connectionNotice = null) =>
+        new(loaded ?? Loaded, unreadable ?? Unreadable, busy ?? Busy, characters ?? Characters, clearCode ? null : code ?? Code, clearNotice ? null : notice ?? Notice, publish ?? Publish, connectionNotice ?? ConnectionNotice);
 }
 
 /// <summary>
@@ -156,8 +165,21 @@ internal sealed class CharacterSharing
     /// <summary>The label every character's key gets in the persona registry: nothing about the character (C1).</summary>
     internal const string KeyLabel = "Character key";
 
+    /// <summary>
+    /// How many days after the binding's last read a player's action re-reads the character's page
+    /// ("Checking a character through the player's own connection" in the decision register): half
+    /// the 30 after which the server stops showing a binding not read since.
+    /// </summary>
+    internal const int RereadAfterDays = 15;
+
+    /// <summary>The marker, in the persona folder, that the one-time notice about the player's own connection was seen or isn't needed.</summary>
+    internal const string ConnectionNoticeFileName = "lodestone-connection-notice.afsh";
+
     /// <summary>The server API version this build speaks (ServerApi-v1.md).</summary>
     private const int Api = 1;
+
+    /// <summary>How long after a re-read that got no answer a player's action asks for another.</summary>
+    private static readonly TimeSpan RereadRetry = TimeSpan.FromHours(1);
 
     private readonly Func<string, Action<PersonaManager>, bool> tryRun;
     private readonly SharingStateFile file;
@@ -181,6 +203,12 @@ internal sealed class CharacterSharing
     private readonly Dictionary<ulong, long> builds = new();
     private long shares;
     private bool statusChecked;
+
+    // Each character's day of last read, as the server's answers through the pipe gave it this
+    // session (UTC days since the Unix epoch), and when a re-read last started for it. Kept in
+    // memory only: one not known yet is due at the player's next action. Guarded by gate.
+    private readonly Dictionary<ulong, long> readDays = new();
+    private readonly Dictionary<ulong, DateTimeOffset> rereadsStarted = new();
 
     internal CharacterSharing(
         Func<string, Action<PersonaManager>, bool> tryRun,
@@ -214,7 +242,14 @@ internal sealed class CharacterSharing
     internal bool TryLoad() => Run("sharing load", manager =>
     {
         var characters = file.Read();
-        Update(v => v.With(characters: characters, loaded: true, unreadable: false));
+        var noticeDue = false;
+        foreach (var character in characters)
+        {
+            noticeDue |= character.IsBound;
+        }
+
+        noticeDue &= !File.Exists(ConnectionNoticePath);
+        Update(v => v.With(characters: characters, loaded: true, unreadable: false, connectionNotice: noticeDue));
 
         var keys = new HashSet<PersonaSlotId>();
         foreach (var character in characters)
@@ -332,7 +367,7 @@ internal sealed class CharacterSharing
             return;
         }
 
-        var response = Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.LodestoneCheck, SharingWire.Check(lodestoneId, issued.Code, name, world));
+        var response = Send(manager, entry, entry.CheckingSlot, entry.CheckingKey, RequestProofKind.LodestoneCheck, SharingWire.Check(lodestoneId, issued.Code, name, world), piped: true);
         if (response is null)
         {
             return;
@@ -340,7 +375,7 @@ internal sealed class CharacterSharing
 
         if (response.Status != HttpStatusCode.OK)
         {
-            Notify(contentId, response.Status == HttpStatusCode.UnprocessableEntity ? SharingNoticeKind.CheckFailed : Failure(response.Status));
+            Notify(contentId, response.Status == HttpStatusCode.UnprocessableEntity ? SharingNoticeKind.CheckFailed : Failure(response));
             return;
         }
 
@@ -374,9 +409,16 @@ internal sealed class CharacterSharing
 
         if (Save(Replaced(bound), contentId))
         {
+            Read(contentId, response);
+
+            // The consent the player just gave says what the one-time notice says.
+            DismissConnectionNotice();
             Update(v => v.With(clearCode: true, notice: new SharingNotice(contentId, SharingNoticeKind.CheckPassed)));
         }
     });
+
+    /// <summary>The player dismissed the one-time notice about checking through their own connection: it isn't shown again on this PC.</summary>
+    internal bool TryDismissConnectionNotice() => Run("sharing notice", _ => DismissConnectionNotice(), keepNotice: true);
 
     /// <summary>
     /// Stops a check under way: a new key that was replacing one that can't be opened is dropped
@@ -654,18 +696,53 @@ internal sealed class CharacterSharing
     });
 
     /// <summary>
-    /// Asks the server to read the character's Lodestone page again, when the game's name or World
-    /// differs from the binding's (C1). Nothing is sent otherwise. When the server no longer finds
-    /// the character bound to this key, the key opts out too, so nothing it held stays behind.
+    /// Whether a player's action should ask for the character's re-read now ("Checking a character
+    /// through the player's own connection" in the decision register): it is bound, and the game
+    /// shows it under another name or World than its binding's (C1), or its last read is
+    /// <see cref="RereadAfterDays"/> days old or more, or not known this session. A re-read that got
+    /// no answer isn't asked for again within the hour. Nothing is sent: a caller that finds it due
+    /// calls <see cref="TryReread"/> during the player's action, never at login.
+    /// </summary>
+    internal bool RereadDue(ulong contentId, string name, string world)
+    {
+        if (view.Find(contentId) is not { IsBound: true } entry)
+        {
+            return false;
+        }
+
+        var now = utcNow();
+        lock (gate)
+        {
+            if (rereadsStarted.TryGetValue(contentId, out var started) && now - started < RereadRetry)
+            {
+                return false;
+            }
+
+            return !SameCharacter(entry, name, world) || !readDays.TryGetValue(contentId, out var day) || DayOf(now) - day >= RereadAfterDays;
+        }
+    }
+
+    /// <summary>
+    /// Asks the server to read the character's Lodestone page again, through the player's own
+    /// connection, when <see cref="RereadDue"/> says so; nothing is sent otherwise. Only during a
+    /// player's action: a save that publishes, opening the Sharing window, or looking up another
+    /// player's Plate. A rename or a World transfer the page shows is recorded (C1). When the
+    /// server no longer finds the character bound to this key, the key opts out too, so nothing it
+    /// held stays behind.
     /// </summary>
     internal bool TryReread(ulong contentId, string name, string world) => Run("sharing reread", manager =>
     {
-        if (view.Find(contentId) is not { IsBound: true } entry || SameCharacter(entry, name, world))
+        if (view.Find(contentId) is not { IsBound: true } entry || !RereadDue(contentId, name, world))
         {
             return;
         }
 
-        var response = Send(manager, entry, entry.Slot, entry.Key, RequestProofKind.LodestoneReread, SharingWire.Empty());
+        lock (gate)
+        {
+            rereadsStarted[contentId] = utcNow();
+        }
+
+        var response = Send(manager, entry, entry.Slot, entry.Key, RequestProofKind.LodestoneReread, SharingWire.Empty(), piped: true);
         if (response is null)
         {
             return;
@@ -677,6 +754,13 @@ internal sealed class CharacterSharing
                 try
                 {
                     var (readName, readWorld) = SharingWire.ReadReread(response.Body);
+                    Read(contentId, response);
+                    if (entry.Name == readName && entry.World == readWorld)
+                    {
+                        // Read again, and found as it was: nothing changes here.
+                        break;
+                    }
+
                     if (Save(Replaced(entry with { Name = readName, World = readWorld }), contentId))
                     {
                         Notify(contentId, SharingNoticeKind.Renamed);
@@ -702,12 +786,12 @@ internal sealed class CharacterSharing
                 }
                 else if (optOut is { } answered && answered.Status != HttpStatusCode.NoContent)
                 {
-                    Notify(contentId, Failure(answered.Status));
+                    Notify(contentId, Failure(answered));
                 }
 
                 break;
             default:
-                Notify(contentId, Failure(response.Status));
+                Notify(contentId, Failure(response));
                 break;
         }
     }, keepNotice: true);
@@ -722,6 +806,10 @@ internal sealed class CharacterSharing
         var parts = (name ?? "").Normalize(System.Text.NormalizationForm.FormC).ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return string.Join(' ', parts);
     }
+
+    /// <summary>What a failed answer means: the Lodestone turning the player's own connection away, or what its status says.</summary>
+    private static SharingNoticeKind Failure(SharingResponse response) =>
+        response.LodestoneRefused ? SharingNoticeKind.LodestoneRefused : Failure(response.Status);
 
     private static SharingNoticeKind Failure(HttpStatusCode status) => status switch
     {
@@ -974,7 +1062,7 @@ internal sealed class CharacterSharing
     /// server's version is checked once a session. Null, with a notice, when it got no answer it
     /// can use; a <c>410</c> records the takeover (C1) before it is returned as null.
     /// </summary>
-    private SharingResponse? Send(PersonaManager manager, SharingCharacter entry, PersonaSlotId slot, PersonaId keyId, RequestProofKind kind, byte[] body)
+    private SharingResponse? Send(PersonaManager manager, SharingCharacter entry, PersonaSlotId slot, PersonaId keyId, RequestProofKind kind, byte[] body, bool piped = false)
     {
         if (!manager.TryGet(slot, out var persona) || !persona!.PublicKey.Id.Equals(keyId) || !KeyOpens(manager, slot, persona.PublicKey))
         {
@@ -991,8 +1079,10 @@ internal sealed class CharacterSharing
         try
         {
             var signer = new LeasedSigner(manager, slot, persona.PublicKey);
-            var response = client.ActionAsync(kind, body, signer, stopping).GetAwaiter().GetResult();
-            log($"Sharing: {SharingClient.PathOf(kind)} answered {(int)response.Status}.");
+            var response = piped
+                ? client.PipedActionAsync(kind, body, signer, stopping).GetAwaiter().GetResult()
+                : client.ActionAsync(kind, body, signer, stopping).GetAwaiter().GetResult();
+            log($"Sharing: {SharingClient.PathOf(kind)}{(piped ? " (piped)" : "")} answered {(int)response.Status}{(response.LodestoneRefused ? " (the Lodestone refused the connection)" : "")}.");
             if (response.Status == HttpStatusCode.Gone)
             {
                 TakenOver(entry);
@@ -1096,6 +1186,38 @@ internal sealed class CharacterSharing
 
         Update(v => v.With(characters: characters));
         return true;
+    }
+
+    private string ConnectionNoticePath => Path.Combine(file.Folder, ConnectionNoticeFileName);
+
+    /// <summary>The UTC day of <paramref name="time"/>, in days since the Unix epoch, as the server counts a binding's last read.</summary>
+    internal static long DayOf(DateTimeOffset time) => (long)Math.Floor(time.ToUnixTimeSeconds() / 86400.0);
+
+    /// <summary>Records a successful read's day for the character: the server's, or today's when its answer carries none.</summary>
+    private void Read(ulong contentId, SharingResponse response)
+    {
+        var day = response.ReadDay ?? DayOf(utcNow());
+        lock (gate)
+        {
+            readDays[contentId] = day;
+            rereadsStarted.Remove(contentId);
+        }
+    }
+
+    /// <summary>Marks the one-time notice as seen. A marker that can't be written only means it shows again next time.</summary>
+    private void DismissConnectionNotice()
+    {
+        try
+        {
+            Directory.CreateDirectory(file.Folder);
+            File.WriteAllBytes(ConnectionNoticePath, []);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            log($"Sharing: the notice's marker couldn't be written ({exception.GetType().Name}).");
+        }
+
+        Update(v => v.With(connectionNotice: false));
     }
 
     private void Notify(ulong contentId, SharingNoticeKind kind, string? detail = null, Guid plate = default) => Update(v => v.With(notice: new SharingNotice(contentId, kind, detail, plate)));

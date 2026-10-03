@@ -39,8 +39,8 @@ internal sealed class SharingWindow : Window
     private readonly string applicationData;
     private readonly string userProfile;
     private readonly AetherWindowChrome chrome = new();
-    private readonly HashSet<ulong> rereadAsked = new();
     private bool agreed;
+    private bool opened;
     private bool consentShown;
     private ulong shownCharacter;
     private string address = "";
@@ -77,6 +77,9 @@ internal sealed class SharingWindow : Window
     }
 
     public override void PostDraw() => chrome.PopStyle();
+
+    /// <summary>Opening the window is a player's action: a re-read that is due may go then, once.</summary>
+    public override void OnOpen() => opened = true;
 
     public override void OnClose()
     {
@@ -166,10 +169,16 @@ internal sealed class SharingWindow : Window
             AetherControls.StatusLine(AetherTone.Info, SharingText.Busy);
         }
 
+        if (view.ConnectionNotice)
+        {
+            DrawConnectionNotice(view);
+        }
+
         DrawOtherSending(view, character);
 
         if (character is not { } current)
         {
+            opened = false;
             AetherControls.Muted(SharingText.NoCharacter);
         }
         else
@@ -394,15 +403,35 @@ internal sealed class SharingWindow : Window
         }
     }
 
+    /// <summary>The one-time notice for players who shared before checks went through their own connection.</summary>
+    private void DrawConnectionNotice(CharacterSharingView view)
+    {
+        using (ImRaii.Group())
+        {
+            AetherControls.SectionHeader(SharingText.ConnectionNoticeTitle);
+            foreach (var line in SharingText.ConnectionNotice)
+            {
+                Wrapped(line);
+            }
+
+            if (!view.Busy && AetherControls.SecondaryButton("Got it##AetherFrameSharingConnectionNotice"))
+            {
+                sharing.TryDismissConnectionNotice();
+            }
+        }
+
+        AetherControls.Divider();
+    }
+
     private void DrawShared(CharacterSharingView view, SharingCharacter entry, CharacterContext character)
     {
         // C1: the binding follows a rename or a World transfer once the server reads the page
-        // again, which it is asked to do at most once a session for each character, when the game
-        // shows another name or World.
-        if (!view.Busy && character.Name is { } name && character.HomeWorld is { } world && !CharacterSharing.SameCharacter(entry, name, world)
-            && rereadAsked.Add(entry.ContentId) && !sharing.TryReread(entry.ContentId, name, world))
+        // again, through the player's own connection. Opening this window is one of the player's
+        // actions that asks for it, when the game shows another name or World, or the last read
+        // is old: once for each opening, and never while the service is busy with something else.
+        if (opened && !view.Busy && character.Name is { } name && character.HomeWorld is { } world)
         {
-            rereadAsked.Remove(entry.ContentId);
+            opened = sharing.RereadDue(entry.ContentId, name, world) && !sharing.TryReread(entry.ContentId, name, world);
         }
 
         var paused = entry.Stage == SharingStage.Paused;
@@ -416,6 +445,7 @@ internal sealed class SharingWindow : Window
             ImGui.Unindent();
             ImGui.Spacing();
             Wrapped(paused ? SharingText.PausedLine : SharingText.SavingShares, AetherPalette.TextMuted);
+            Wrapped(SharingText.ReadAgainLine, AetherPalette.TextMuted);
         }
 
         TutorialAnchorMarks.Mark(TutorialTarget.SharingStatus);

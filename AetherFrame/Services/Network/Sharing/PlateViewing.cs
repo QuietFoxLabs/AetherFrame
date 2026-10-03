@@ -141,6 +141,13 @@ internal sealed class PlateViewing
 
     internal HiddenPlates Hidden => hidden;
 
+    /// <summary>
+    /// Runs on the framework thread when a lookup is asked for, before it is handed to the sharing
+    /// service: looking up another player's Plate is a player's action, at which the plugin asks for
+    /// its own character's re-read when one is due, so it goes first.
+    /// </summary>
+    internal Action? Looking { get; init; }
+
     /// <summary>Whether one of the player's characters shares: only then can anything be looked up, and only then do the menu item and the search show (V1).</summary>
     internal bool CanView
     {
@@ -196,6 +203,7 @@ internal sealed class PlateViewing
             pending = manager => Guarded(manager, generation, reporting: false, () => Look(manager, target, generation, current));
         }
 
+        Looking?.Invoke();
         return true;
     }
 

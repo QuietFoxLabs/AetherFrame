@@ -11,6 +11,7 @@ All notable changes to AetherFrame are listed here. Versions follow the [version
 
 ### Changed
 
+- **Checking a character goes through your own internet connection** ("Checking a character through the player's own connection" in [docs/networking/DecisionRegister.md](docs/networking/DecisionRegister.md)). When you check a character, AetherFrame opens one connection from your PC to the Lodestone, and AetherFrame's server reads the character's page through it. The page stays encrypted from the Lodestone to the server, so AetherFrame can't read or change it on the way, and the Lodestone sees your network address, as when you visit it. The page is read again the same way only while you use sharing: when you save a shared Plate, open **Sharing**, or view another player's Plate, the first time after AetherFrame starts and whenever the character's name or World changes. If the Lodestone turns your connection away, which some VPNs, proxies and hosting services cause, AetherFrame says so, and you can try again from another connection. Characters already sharing see a one-time notice in **Sharing**. The consent, **Sharing** and the Shared marker's hover text in My Plates say that a character whose page isn't read for 30 days stops showing its Plate to other players until you next use sharing with it.
 - The Basic editor's **Reset Basic Layout** prompt lists the sections it resets as they are: **Favorite Jobs** by that name, and no retired Level line.
 
 ### Fixed

@@ -33,9 +33,11 @@ internal sealed record LiveView(ulong ContentId, bool Building, IReadOnlyList<Pl
 /// another character, sharing stopping) before its send begins is never sent (see
 /// <see cref="CharacterSharing.TryPublish"/>), and a send of an older revision for the character
 /// gives way once a newer candidate is ready and waits for the service
-/// (<see cref="CharacterSharing.StopOlderSend"/>). At login it asks for C1's re-read when the
-/// game shows another name or World than the binding's. It runs on the framework thread, a frame at
-/// a time; saves may be reported from any thread. Compiled only in the networking preview flavour.
+/// (<see cref="CharacterSharing.StopOlderSend"/>). A change that publishes is a player's action, so
+/// it first asks for C1's re-read when one is due (<see cref="CharacterSharing.RereadDue"/>), through
+/// the player's own connection; arriving at a character never does. It runs on the framework thread,
+/// a frame at a time; saves may be reported from any thread. Compiled only in the networking preview
+/// flavour.
 /// </summary>
 internal sealed class LivePublisher : IDisposable
 {
@@ -50,7 +52,6 @@ internal sealed class LivePublisher : IDisposable
     private bool watchedShared;
     private PersonaId? watchedKey;
     private ProfileId? watchedBinding;
-    private bool rereadDue;
     private (ulong ContentId, Guid PlateId, long Generation)? building;
     private SnapshotCandidate? ready;
     private volatile LiveView view = LiveView.Idle;
@@ -138,13 +139,7 @@ internal sealed class LivePublisher : IDisposable
             watchedShared = shared;
             watchedKey = entry?.Key;
             watchedBinding = entry?.ProfileId;
-            rereadDue = entry is { IsBound: true };
             return;
-        }
-
-        if (rereadDue && character.Name is { } name && character.HomeWorld is { } world)
-        {
-            rereadDue = entry is { IsBound: true } && !CharacterSharing.SameCharacter(entry, name, world) && !sharing.TryReread(character.ContentId, name, world);
         }
 
         // Sharing starting, resuming, or moving to a new key or binding is a change; so is a new
@@ -178,6 +173,13 @@ internal sealed class LivePublisher : IDisposable
 
         if (changed)
         {
+            // A save that publishes is a player's action: a re-read that is due goes first, and the
+            // candidate waits for the service while it runs.
+            if (character.Name is { } name && character.HomeWorld is { } world && sharing.RereadDue(character.ContentId, name, world))
+            {
+                sharing.TryReread(character.ContentId, name, world);
+            }
+
             // A candidate built or handed over before this one is out of date, and never sent.
             sharing.Supersede(character.ContentId);
             building = (character.ContentId, active.Value, sharing.BuildGeneration(character.ContentId));

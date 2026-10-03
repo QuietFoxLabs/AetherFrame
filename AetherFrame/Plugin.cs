@@ -455,7 +455,19 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 new HiddenPlates(configDirectory, log.Information),
                 characterSharing.ViewingTakenOver,
                 ownedOperations.Stopping,
-                log.Information);
+                log.Information)
+            {
+                // Looking up another player's Plate is a player's action: a re-read of the logged-in
+                // character that is due goes first, through the player's own connection.
+                Looking = () =>
+                {
+                    if (characterIdentityService.CurrentCharacter is { Name: { } name, HomeWorld: { } world } shown
+                        && characterSharing.RereadDue(shown.ContentId, name, world))
+                    {
+                        characterSharing.TryReread(shown.ContentId, name, world);
+                    }
+                },
+            };
             var worldNames = new Lazy<System.Collections.Generic.IReadOnlyList<string>>(() => ViewPlateMenu.PublicWorlds(DataManager));
             // Another player's Plate opens in the Plate Viewer, presented as any Plate is.
             servedPlate = new ServedPlatePresentation(plateViewing, TextureProvider, renderResources);

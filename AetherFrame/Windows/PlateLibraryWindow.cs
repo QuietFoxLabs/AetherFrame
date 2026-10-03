@@ -472,7 +472,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
         // A Ready Plate can carry both a note (text that isn't valid) and elements this build can't
         // show; the marker on its thumbnail is explained only here, so neither hides the other.
-        if (hovered && CardTooltip(plate.Problem, plate.HasUnsupportedElements) is { } tooltip)
+        if (hovered && CardTooltip(plate.Problem, plate.HasUnsupportedElements, IsShared?.Invoke(plate.PlateId) == true) is { } tooltip)
         {
             ImGui.SetTooltip(tooltip);
         }
@@ -635,11 +635,18 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         }
     }
 
-    /// <summary>A card's hover text: its note, the unsupported-elements warning, or both.</summary>
-    private static string? CardTooltip(string? problem, bool hasUnsupportedElements) =>
-        !hasUnsupportedElements ? problem
-        : problem is null ? EditorWidgets.UnsupportedElementsWarning
-        : problem + "\n\n" + EditorWidgets.UnsupportedElementsWarning;
+    /// <summary>What the Shared marker means, on its card's hover text.</summary>
+    internal const string SharedTooltip =
+        "Shared: players who share can view this Plate.\nIf this character's Lodestone page isn't read for 30 days, it stops showing\nuntil you next use sharing with this character.";
+
+    /// <summary>A card's hover text: its note, the unsupported-elements warning, and what the Shared marker means, each when it applies.</summary>
+    private static string? CardTooltip(string? problem, bool hasUnsupportedElements, bool shared = false)
+    {
+        var text = !hasUnsupportedElements ? problem
+            : problem is null ? EditorWidgets.UnsupportedElementsWarning
+            : problem + "\n\n" + EditorWidgets.UnsupportedElementsWarning;
+        return !shared ? text : text is null ? SharedTooltip : text + "\n\n" + SharedTooltip;
+    }
 
     /// <summary>A small warning glyph in the thumbnail's lower-left corner (the card's tooltip explains it).</summary>
     private static void DrawCompatibilityMarker(ImDrawListPtr drawList, Vector2 thumbnailMin, Vector2 thumbnailMax)
