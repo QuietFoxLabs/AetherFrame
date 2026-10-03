@@ -618,4 +618,142 @@ public class CanvasSelectionTests
         Assert.False(CanvasHitTest.YieldsToText(PlateComponentKind.CornerOrnament));
         Assert.Same(ornament, CanvasHitTest.Find(plan, new Vector2(50f), 1f).Component);
     }
+
+    // ---------------------------------------------------------------- artwork hit where it is drawn
+
+    /// <summary>The logical canvas point drawn at (<paramref name="u"/>, <paramref name="v"/>) of a
+    /// placement's image (0 to 1 from the image's top left as stored), mirrored and turned as the box is.</summary>
+    private static Vector2 ImagePoint(in PaintStep step, float u, float v)
+    {
+        var rect = step.Placement.Rect;
+        var local = new Vector2(step.Placement.MirrorX ? 1f - u : u, step.Placement.MirrorY ? 1f - v : v) * rect.Size;
+        var point = rect.Position + local;
+        var center = rect.Position + (rect.Size / 2f);
+        return step.Placement.RotationDegrees == 0f ? point : RotationGeometry.RotatePoint(point, center, step.Placement.RotationDegrees);
+    }
+
+    [Fact]
+    public void EveryCornerOrnamentArtwork_HasItsCoverageMeasured()
+    {
+        var artworks = BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Where(d => d.Art is not null).ToList();
+
+        Assert.NotEmpty(artworks);
+        Assert.All(artworks, definition =>
+        {
+            var coverage = ArtCoverage.For(definition.Art!);
+            Assert.True(coverage is not null, $"{definition.Id} has no coverage: run tools/art/measure_coverage.py");
+            Assert.Equal(ArtCoverage.GridSize, coverage!.Rows.Length);
+            Assert.Contains(coverage.Rows, row => row != 0u); // something is drawn
+            Assert.Contains(coverage.Rows, row => row != uint.MaxValue); // and not all of the box
+        });
+    }
+
+    [Fact]
+    public void ArtCoverage_ReadsItsGrid_AndNothingOutsideTheImage()
+    {
+        var rows = new uint[ArtCoverage.GridSize];
+        rows[0] = 1u; // only the top-left cell
+        var coverage = new ArtCoverage(rows);
+
+        Assert.True(coverage.Covers(0f, 0f));
+        Assert.True(coverage.Covers(0.02f, 0.02f));
+        Assert.False(coverage.Covers(0.05f, 0.02f));
+        Assert.False(coverage.Covers(0.02f, 0.05f));
+        Assert.False(coverage.Covers(1f, 1f));
+        Assert.False(coverage.Covers(-0.01f, 0f));
+        Assert.False(coverage.Covers(0f, 1.01f));
+        Assert.False(coverage.Covers(float.NaN, 0f));
+        Assert.False(new ArtCoverage(new uint[3]).Covers(0f, 0f)); // a malformed grid covers nothing
+    }
+
+    [Fact]
+    public void ACornerOrnamentsArtwork_IsHitWhereItIsDrawn_AndClicksOnItsClearPartReachWhatIsUnderIt()
+    {
+        var ornament = ComponentDocuments.Of(BuiltInComponentCatalog.CornerOrnamentCelestialSakura);
+        var definition = BuiltInComponentCatalog.Find(ornament.DefinitionId)!;
+        var text = new TextProfileElement { Text = "Corner", Position = new Vector2(0f), Size = new Vector2(100f) };
+        var box = new ElementRect(new Vector2(0f), new Vector2(100f));
+        var plan = new List<PaintStep>
+        {
+            new(PlateLayer.Identity, text, null, null, default),
+            new(PlateLayer.Decorations, null, ornament, definition, new ComponentPlacement(box, 0f, false, false)),
+        };
+
+        // Its blossoms run along the top; its inner quarter (toward the Plate) is clear.
+        Assert.Same(ornament, CanvasHitTest.Find(plan, new Vector2(50f, 17f), 1f).Component);
+        Assert.Same(text, CanvasHitTest.Find(plan, new Vector2(85f, 85f), 1f).Element);
+        Assert.False(CanvasHitTest.Hits(plan[1], new Vector2(85f, 85f), 1f));
+
+        // Its stem runs down the left: mirrored, the stem is on the right.
+        Assert.Same(ornament, CanvasHitTest.Find(plan, new Vector2(10f, 64f), 1f).Component);
+        Assert.Same(text, CanvasHitTest.Find(plan, new Vector2(90f, 64f), 1f).Element);
+        plan[1] = new(PlateLayer.Decorations, null, ornament, definition, new ComponentPlacement(box, 0f, true, false));
+        Assert.Same(text, CanvasHitTest.Find(plan, new Vector2(10f, 64f), 1f).Element);
+        Assert.Same(ornament, CanvasHitTest.Find(plan, new Vector2(90f, 64f), 1f).Component);
+
+        // A procedural ornament has no artwork to measure: its whole box takes the click, as before.
+        var bracket = ComponentDocuments.Of(BuiltInComponentCatalog.CornerOrnamentBracket);
+        plan[1] = new(PlateLayer.Decorations, null, bracket, BuiltInComponentCatalog.Find(bracket.DefinitionId), new ComponentPlacement(box, 0f, false, false));
+        Assert.Same(bracket, CanvasHitTest.Find(plan, new Vector2(85f, 85f), 1f).Component);
+    }
+
+    [Fact]
+    public void BasicPreview_ArtCornerOrnaments_TakeClicksOnlyWhereTheyAreDrawn_InEveryCorner()
+    {
+        var document = BasicDocuments.Classic(FakeCharacter.Hero);
+        BasicDocuments.Editor(document).CreatePortrait(Guid.NewGuid());
+        var plain = Plan(document);
+
+        foreach (var definition in BuiltInComponentCatalog.OfKind(PlateComponentKind.CornerOrnament).Where(d => d.Art is not null))
+        {
+            var ornament = ComponentDocuments.Of(definition.Id);
+            document.Components = [ornament];
+            var plan = Plan(document);
+            var coverage = ArtCoverage.For(definition.Art!)!;
+            var corners = StepsOf(plan, ornament);
+            Assert.Equal(4, corners.Count);
+
+            foreach (var corner in corners)
+            {
+                // Each cell's center: the ornament where its artwork is drawn, else whatever the Plate has there without it.
+                for (var y = 0; y < ArtCoverage.GridSize; y++)
+                {
+                    for (var x = 0; x < ArtCoverage.GridSize; x++)
+                    {
+                        var u = (x + 0.5f) / ArtCoverage.GridSize;
+                        var v = (y + 0.5f) / ArtCoverage.GridSize;
+                        var point = ImagePoint(corner, u, v);
+                        var target = BasicEditorView.TargetAt(document, plan, point);
+                        if (coverage.Covers(u, v))
+                        {
+                            AssertTarget(BasicEditorCategory.Style, ornament, target);
+                        }
+                        else
+                        {
+                            Assert.Equal(BasicEditorView.TargetAt(document, plain, point), target);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void BasicPreview_AClickOnTheClearInsideOfAnArtOrnament_OpensThePortraitUnderIt()
+    {
+        var document = BasicDocuments.Classic(FakeCharacter.Hero);
+        BasicDocuments.Editor(document).CreatePortrait(Guid.NewGuid());
+        var portrait = BasicSections.Find(document, ProfileElementRole.BasicPortrait)!;
+        var ornament = ComponentDocuments.Of(BuiltInComponentCatalog.CornerOrnamentCelestialSakura);
+        document.Components = [ornament];
+        var plan = Plan(document);
+
+        // A corner of the ornament whose clear inner quarter lies over the portrait.
+        var overPortrait = StepsOf(plan, ornament)
+            .Select(corner => ImagePoint(corner, 0.85f, 0.85f))
+            .Where(point => ProfilePaintOrder.Contains(portrait, point))
+            .ToList();
+        Assert.NotEmpty(overPortrait);
+        Assert.All(overPortrait, point => AssertTarget(BasicEditorCategory.Portrait, null, BasicEditorView.TargetAt(document, plan, point)));
+    }
 }

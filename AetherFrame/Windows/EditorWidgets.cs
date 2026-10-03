@@ -74,7 +74,8 @@ internal static class EditorWidgets
     internal static bool SelectablePropertyLabel(string label, bool selected, float width = -1f)
     {
         ImGui.AlignTextToFramePadding();
-        var labelWidth = Math.Max(ImGui.CalcTextSize(label).X, LabelColumnWidth - ImGui.GetStyle().ItemSpacing.X);
+        // A fixed width: the label column, less the gap before the control, whatever the text (and its ## id) measures.
+        var labelWidth = Math.Max(1f, LabelColumnWidth - ImGui.GetStyle().ItemSpacing.X);
         bool clicked;
         using (ImRaii.PushColor(ImGuiCol.Text, DimTextColor, !selected))
         {

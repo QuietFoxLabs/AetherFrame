@@ -347,13 +347,20 @@ internal static class BasicEditorView
         new(Math.Max(0f, (available.X - size.X) / 2f), Math.Max(0f, (available.Y - size.Y) / 2f));
 
     /// <summary>
-    /// The category of the Basic section drawn topmost at a point on the Plate (logical canvas
-    /// coordinates), or null. Uses the same paint order and hit test as the Advanced canvas, over
-    /// what the finished Plate actually shows: hidden elements and suppressed empty headings don't
-    /// count, and elements that aren't Basic sections are looked through.
+    /// The category a click at a point on the Plate (logical canvas coordinates) opens, or null: what
+    /// <see cref="TargetAt"/> finds over the finished Plate's paint sequence, built here without the
+    /// renderer's text measuring (so text backings are hit by their whole box). Hidden elements and
+    /// suppressed empty headings don't count, and elements that aren't Basic sections are looked through.
     /// </summary>
-    internal static BasicEditorCategory? CategoryAt(ProfileDocument profile, Vector2 logicalPoint, List<ProfileElement> paintOrderBuffer) =>
-        CategoryAtElements(profile, logicalPoint, paintOrderBuffer);
+    internal static BasicEditorCategory? CategoryAt(ProfileDocument profile, Vector2 logicalPoint, List<ProfileElement> paintOrderBuffer)
+    {
+        var drawn = new List<ProfileElement>();
+        var plan = new List<PaintStep>();
+        ProfileVisualBounds.FillDrawnElements(profile, ProfileRenderOptions.Finished, paintOrderBuffer, drawn);
+        ComponentPaintPlan.Build(profile, drawn, BuiltInComponentCatalog.Instance, plan);
+        paintOrderBuffer.Clear();
+        return TargetAt(profile, plan, logicalPoint).Category;
+    }
 
     /// <summary>
     /// What a click on the live view at <paramref name="logicalPoint"/> opens (issue #115): the
@@ -386,16 +393,4 @@ internal static class BasicEditorView
         PlateComponentKind.NameBacking => BasicEditorCategory.Identity,
         _ => BasicEditorCategory.Style,
     };
-
-    private static BasicEditorCategory? CategoryAtElements(ProfileDocument profile, Vector2 logicalPoint, List<ProfileElement> paintOrderBuffer)
-    {
-        ProfilePaintOrder.Fill(profile, paintOrderBuffer, includeHidden: false);
-        var hit = ProfilePaintOrder.HitTest(
-            paintOrderBuffer,
-            logicalPoint,
-            element => BasicSections.SectionOf(element.Role) is null || !BasicSections.IsDrawnInFinishedRendering(profile, element));
-        paintOrderBuffer.Clear();
-
-        return hit is not null && BasicSections.SectionOf(hit.Role) is { } section ? CategoryOf(section) : null;
-    }
 }

@@ -26,6 +26,8 @@ internal readonly record struct CanvasHit(ProfileElement? Element, PlateComponen
 /// stay selectable from the editors' lists;</item>
 /// <item>frames (Plate Frame, Portrait Frame) are hit only along their edges
 /// (<see cref="FrameBand"/>), so the portrait or the text inside a frame is still clicked through it;</item>
+/// <item>a Corner Ornament's artwork is hit only where it is drawn (<see cref="ArtCoverage"/>), so
+/// a click on the clear part of its large box reaches the portrait or text under it;</item>
 /// <item>everything else is hit inside its drawn box;</item>
 /// <item>a decoration drawn over text (<see cref="YieldsToText"/>: a Section Header over its heading,
 /// a Divider by the name) lets the text it covers take the click, so the heading or name is still
@@ -110,7 +112,21 @@ internal static class CanvasHitTest
 
         if (component.Kind is not (PlateComponentKind.PlateFrame or PlateComponentKind.PortraitFrame))
         {
-            return Inside(local, min, max);
+            if (!Inside(local, min, max))
+            {
+                return false;
+            }
+
+            // Whole-image artwork that was measured (Corner Ornaments) is hit where it is drawn: the
+            // image fills the box, flipped with it when the placement mirrors it.
+            if (step.Definition?.Art is { Slices: null, Frame: null } art && ArtCoverage.For(art) is { } coverage)
+            {
+                var u = (local.X - min.X) / rect.Size.X;
+                var v = (local.Y - min.Y) / rect.Size.Y;
+                return coverage.Covers(step.Placement.MirrorX ? 1f - u : u, step.Placement.MirrorY ? 1f - v : v);
+            }
+
+            return true;
         }
 
         var band = FrameBand * (float.IsFinite(unit) && unit > 0f ? unit : 1f);

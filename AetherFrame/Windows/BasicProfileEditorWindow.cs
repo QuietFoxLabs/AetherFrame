@@ -579,6 +579,14 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 break;
         }
 
+        // The page that holds the clicked Component's slot has been drawn once: if the slot wasn't on
+        // it (its group is hidden, or the page returned early), the request lapses rather than
+        // scrolling the page later, when the slot comes back for some other reason.
+        if (revealComponentSlot is { } reveal && BasicEditorView.CategoryOf(reveal) == category)
+        {
+            revealComponentSlot = null;
+        }
+
         ImGui.Spacing();
     }
 
