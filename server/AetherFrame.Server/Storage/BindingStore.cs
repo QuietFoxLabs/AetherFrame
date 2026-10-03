@@ -102,17 +102,12 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
 
     /// <summary>
     /// The binding a lookup of a canonical name and World finds, if any: shown (no newer read holds
-    /// the name and World) and read within <see cref="ReadWithinDays"/>. Everything that finds a
-    /// binding for a viewer comes here; a binding's own key finds it by <see cref="FindByPersonaAsync"/>.
-    /// </summary>
-    public Task<Binding?> FindShownAsync(string nameKey, string world, CancellationToken cancellation) =>
-        FindShownAsync(nameKey, world, hideUnread: true, cancellation);
-
-    /// <summary>
-    /// As <see cref="FindShownAsync(string, string, CancellationToken)"/>, with the read rule applied
-    /// only when <paramref name="hideUnread"/> is set: lookups set it while no operator relay is set
-    /// (<see cref="Endpoints.Viewing"/>), since the daily re-read keeps the day of the last read only
-    /// while a relay is open, and an operator's relay is open only some of the time.
+    /// the name and World), and, when <paramref name="hideUnread"/> is set, read within
+    /// <see cref="ReadWithinDays"/>. Everything that finds a binding for a viewer comes here, and
+    /// says which: <see cref="Endpoints.Viewing"/> sets <paramref name="hideUnread"/> only while no
+    /// operator relay is set, since the daily re-read keeps the day of the last read only while a
+    /// relay is open, and an operator's relay is open only some of the time. A binding's own key
+    /// finds it by <see cref="FindByPersonaAsync"/>.
     /// </summary>
     public async Task<Binding?> FindShownAsync(string nameKey, string world, bool hideUnread, CancellationToken cancellation)
     {

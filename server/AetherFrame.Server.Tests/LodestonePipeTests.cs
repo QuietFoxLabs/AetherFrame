@@ -888,7 +888,7 @@ public sealed class LodestonePipeTests
         Assert.Equal(HttpStatusCode.OK, await LookUpAriaAsync());
         server.Time.Advance(TimeSpan.FromDays(1));
         Assert.Equal(HttpStatusCode.NotFound, await LookUpAriaAsync());
-        Assert.Null(await server.Services.GetRequiredService<BindingStore>().FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.Null(await server.Services.GetRequiredService<BindingStore>().FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
 
         // Its key still finds it: it publishes, and its own re-read brings it back.
         using (var publishedAgain = await aria.PublishDocumentAsync(SignedDocumentCodec.Sign(Plates.Snapshot(profile, "Plate again"), aria.Key)))
@@ -921,14 +921,14 @@ public sealed class LodestonePipeTests
         Assert.Equal(Today(server), await server.CountAsync("SELECT read_day FROM bindings;"));
 
         server.Time.Advance(TimeSpan.FromDays(31));
-        Assert.Null(await server.Services.GetRequiredService<BindingStore>().FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.Null(await server.Services.GetRequiredService<BindingStore>().FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
         using (var reread = await player.SendAsync(RereadPath, RequestProofKind.LodestoneReread, "{}"))
         {
             Assert.Equal(HttpStatusCode.OK, reread.StatusCode);
         }
 
         Assert.Equal(Today(server), await server.CountAsync("SELECT read_day FROM bindings;"));
-        Assert.NotNull(await server.Services.GetRequiredService<BindingStore>().FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.NotNull(await server.Services.GetRequiredService<BindingStore>().FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
 
         // A "not found" is no read: the day stays.
         server.Time.Advance(TimeSpan.FromDays(3));
@@ -972,7 +972,7 @@ public sealed class LodestonePipeTests
         var store = server.Services.GetRequiredService<BindingStore>();
         var day = Today(server);
         Assert.Equal(day, await server.CountAsync("SELECT read_day FROM bindings;"));
-        Assert.NotNull(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.NotNull(await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
         Assert.NotNull(await store.FindByPersonaAsync(key.PublicKey.Id, default));
 
         // Starting again changes nothing.
@@ -982,7 +982,7 @@ public sealed class LodestonePipeTests
 
         // Thirty days after the change, it stops answering lookups until it is read.
         server.Time.Advance(TimeSpan.FromDays(27));
-        Assert.Null(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.Null(await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
         Assert.NotNull(await store.FindByPersonaAsync(key.PublicKey.Id, default));
     }
 
@@ -1017,9 +1017,9 @@ public sealed class LodestonePipeTests
         // Its re-read, like a player's, records the read: a binding 30 days unread answers again.
         server.Time.Advance(TimeSpan.FromDays(30));
         var store = server.Services.GetRequiredService<BindingStore>();
-        Assert.Null(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.Null(await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
         await server.Services.GetRequiredService<Rereads>().RereadAsync(player.Key.PublicKey.Id, default);
-        Assert.NotNull(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.NotNull(await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
     }
 
     [Fact]
@@ -1161,7 +1161,7 @@ public sealed class LodestonePipeTests
 
         // Another character now shows the same name and World: its check displaces the stale binding.
         await newcomer.BindAsync(Bram, "Aria Starfall", "Gilgamesh");
-        Assert.Equal(Bram, (await store.FindShownAsync("aria starfall", "Gilgamesh", default))?.LodestoneId);
+        Assert.Equal(Bram, (await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default))?.LodestoneId);
 
         // A new key checks the stale character: the binding moves to it, read today, and the old key learns so.
         await newKey.BindAsync(Aria);
@@ -1218,13 +1218,13 @@ public sealed class LodestonePipeTests
             server.DatabasePath,
             "INSERT INTO bindings (persona, lodestone_id, name, name_key, world, profile_id, hidden, not_found_day) VALUES ('" + key.PublicKey.Id + "', " + Aria + ", 'Aria Starfall', 'aria starfall', 'Gilgamesh', '" + ProfileId.NewId() + "', 0, NULL);");
         Assert.Equal(0L, await server.CountAsync("SELECT read_day FROM bindings;"));
-        Assert.Null(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.Null(await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
 
         server.Time.Advance(TimeSpan.FromDays(2));
         await server.Services.GetRequiredService<ServerDatabase>().InitializeAsync(default);
 
         Assert.Equal(Today(server), await server.CountAsync("SELECT read_day FROM bindings;"));
-        Assert.NotNull(await store.FindShownAsync("aria starfall", "Gilgamesh", default));
+        Assert.NotNull(await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default));
     }
 
     [Fact]

@@ -285,7 +285,7 @@ public class CharacterEndpointTests
         await second.BindAsync(Bram, "Aria Starfall", "gilgamesh");
 
         var store = server.Services.GetRequiredService<BindingStore>();
-        var shown = await store.FindShownAsync("aria starfall", "Gilgamesh", default);
+        var shown = await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default);
         Assert.Equal(Bram, shown?.LodestoneId);
         Assert.True((await store.FindByPersonaAsync(first.Key.PublicKey.Id, default))!.Hidden);
 
@@ -293,8 +293,8 @@ public class CharacterEndpointTests
         server.Lodestone.Pages[Aria] = LodestoneHtml.Character("Aria Dawnfall", "Gilgamesh", "");
         using var reread = await first.SendAsync("/v1/lodestone/reread", RequestProofKind.LodestoneReread, "{}");
         Assert.Equal(HttpStatusCode.OK, reread.StatusCode);
-        Assert.Equal(Aria, (await store.FindShownAsync("aria dawnfall", "Gilgamesh", default))?.LodestoneId);
-        Assert.Equal(Bram, (await store.FindShownAsync("aria starfall", "Gilgamesh", default))?.LodestoneId);
+        Assert.Equal(Aria, (await store.FindShownAsync("aria dawnfall", "Gilgamesh", hideUnread: true, default))?.LodestoneId);
+        Assert.Equal(Bram, (await store.FindShownAsync("aria starfall", "Gilgamesh", hideUnread: true, default))?.LodestoneId);
     }
 
     [Fact]

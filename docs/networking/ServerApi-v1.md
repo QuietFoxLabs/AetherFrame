@@ -90,7 +90,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 5. When the read is done, or has failed, the server sends `close`, whatever happened after `open`. The plugin then closes its connection. Bytes, an `eof`, or a late `opened` or `failed` already on their way are dropped, within the same totals.
 6. The final message is text (below). Then the server closes the WebSocket, and the plugin closes in answer.
 
-**Deadlines.** The first message comes within 10 seconds of the upgrade, and `opened` within 10 seconds of `open`. The fetch ends within 20 seconds of `open`, the wait for `opened` included. The whole session ends within 40 seconds of the upgrade. Caddy closes an upgraded connection on these two paths after 60 seconds, as an outer bound; Kestrel holds at most 32 upgraded connections.
+**Deadlines.** The first message comes within 10 seconds of the upgrade, and `opened` within 10 seconds of `open`. The fetch ends within 20 seconds of `open`, the wait for `opened` included. The whole session ends within 40 seconds of the upgrade. Caddy closes any upgraded connection after 60 seconds, as an outer bound; Kestrel holds at most 32 upgraded connections.
 
 **Anything else ends the session at once,** with no final message: the server drops the WebSocket. That covers a first message that is late, text or over its bound; any message before `open`; anything but `opened` or `failed` after it; bytes before `opened` or after `eof`; a message over 64 KiB; more than 2 MiB from the Lodestone; a second answer to `open`; an unknown text; the plugin closing the WebSocket before the final message; and the session's deadline.
 

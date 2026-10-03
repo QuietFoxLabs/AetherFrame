@@ -10,12 +10,9 @@
 		max_size 43MB
 	}
 
-	@lodestone path /v1/lodestone/check /v1/lodestone/reread
-	reverse_proxy @lodestone server:8080 {
+	reverse_proxy server:8080 {
 		stream_timeout 60s
 	}
-
-	reverse_proxy server:8080
 
 	header {
 		-Server

@@ -233,15 +233,20 @@ jobs:
 
     # Caddy in front of the server ("Checking a character through the player's own connection" in
     # the decision register): the two Lodestone paths take a WebSocket upgrade through it, and a plain
-    # GET of them still reaches the server, which refuses it. curl stops waiting after the 101.
+    # GET of them still reaches the server, which refuses it. The upgrade is sent by hand and only its
+    # status line read, since curl's handling of a 101 it didn't ask for varies between versions.
     - name: Check Caddy upgrades the Lodestone paths
       run: |
         for path in check reread; do
-          code=$(curl -sS --http1.1 --max-time 5 -o /dev/null -w '%{http_code}' \
-            -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
-            -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
-            "http://localhost:8088/v1/lodestone/$path" || true)
-          if [ "$code" != 101 ]; then echo "Caddy didn't upgrade /v1/lodestone/$path: $code"; exit 1; fi
+          exec 3<>/dev/tcp/127.0.0.1/8088
+          printf 'GET /v1/lodestone/%s HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n' "$path" >&3
+          status=""
+          read -r -t 10 status <&3 || true
+          exec 3<&-
+          case "$status" in
+            "HTTP/1.1 101 "*) ;;
+            *) echo "Caddy didn't upgrade /v1/lodestone/$path: $status"; exit 1 ;;
+          esac
           code=$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "http://localhost:8088/v1/lodestone/$path")
           if [ "$code" != 400 ]; then echo "A plain GET of /v1/lodestone/$path answered $code"; exit 1; fi
         done

@@ -1722,7 +1722,7 @@ Its recheck of `31176d8` (October 3, 2026) **concurred**: all three blocking iss
 - **The final message** is one JSON object: the `status`, and the `body` a `POST` would get, a `409`'s fresh `challenge` in base64, or the `reason` `lodestone:refused`.
 - **The delay after the read** is 2 seconds (`CheckFailureAfterRead`), besides the 3-second floor from the start. It is longer than parsing a page and the steps after the allowlist take.
 - **Before the upgrade:** a `GET` that isn't a WebSocket gets `400`; then the address limit, the `Origin` header and the places, in that order, each refused with its status and no body.
-- **The places per address group** take each group's multiple, as every address limit does: 1, 4 and 16 for an IPv6 /64, /56 and /48. Kestrel's outer bound is 32 upgraded connections, and Caddy's 60 seconds on the two paths.
+- **The places per address group** take each group's multiple, as every address limit does: 1, 4 and 16 for an IPv6 /64, /56 and /48. Kestrel's outer bound is 32 upgraded connections, and Caddy's 60 seconds on every upgraded connection: set on its one proxy, since a path matcher would miss a spelling the server still routes, such as a trailing slash.
 - **A piped re-read** applies the allowlist with the binding's lookup, before `open`, as a `POST` does: the key learns only what a `POST` tells it.
 - **"Try again later"** covers every pipe failure: `failed`, no `opened` in time, the fetch's deadline, a broken or cut-off connection, a failed handshake and a body ended only by the close; and all 20 places taken.
 - **After `close`,** bytes, `eof` or a late answer to `open` already in flight are dropped, within the byte totals. Anything else the exchange doesn't expect ends the session with no final message.
@@ -1732,7 +1732,7 @@ Its recheck of `31176d8` (October 3, 2026) **concurred**: all three blocking iss
 - **A piped re-read overtaken by a takeover** answers `410` "taken over", as one that finds the takeover first does, never `404`: a plugin follows a `404` with an opt-out, which would forget the takeover. A `POST` keeps today's answer.
 
 **Independent review** of `081ef59`, October 3, 2026, by two reviewers with no shared context:
-- **Security:** no blocking issue. It accepted the choices above, and confirmed from Caddy's documentation and source that the two paths take the upgrade and that `stream_timeout` applies to upgraded connections alone.
+- **Security:** no blocking issue. It accepted the choices above, and confirmed from Caddy's documentation and source that the two paths take the upgrade and that `stream_timeout` applies to upgraded connections alone. Its recheck of the fixes found no new issue. It noted that Caddy's path matcher missed a trailing slash the server still routes, so the timeout moved to Caddy's one proxy.
 - **Correctness, persistence and tests:** two blocking issues, both fixed above. The 30 days weren't marked provisional, or given their purpose. And the hiding would have hidden every released plugin's binding about 30 days after the change, since the relay is open only some of the time. Its smaller points are applied too: one column definition, the start's repair for 0, the takeover answer, sturdier test timings and the missing tests.
 
 ## Gates
