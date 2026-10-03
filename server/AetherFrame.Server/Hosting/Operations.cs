@@ -159,7 +159,9 @@ internal static class AdminCommands
 {
     public const string Usage = """
         Usage: dotnet AetherFrame.Server.dll admin <command>
-          characters                  every bound character: Lodestone id, name, World, and whether it is shown
+          characters                  every bound character: Lodestone id, name, World, whether a newer check hid it,
+                                      and the day (UTC) of its last Lodestone read: while no relay is set, lookups stop
+                                      finding it 30 days on (a provisional value, awaiting product review)
           reports                     every report: number, day, reported Lodestone id, reason
           resolve-report <number>     deletes a report the operator has dealt with
           remove-character <id>       deletes a character's binding and everything published for it (S3, C4)
@@ -195,7 +197,7 @@ internal static class AdminCommands
         switch (args)
         {
             case ["characters"]:
-                await ListAsync(database, "SELECT lodestone_id, name, world, CASE hidden WHEN 0 THEN 'shown' ELSE 'hidden' END FROM bindings ORDER BY lodestone_id;", output);
+                await ListAsync(database, "SELECT lodestone_id, name, world, CASE hidden WHEN 0 THEN 'shown' ELSE 'hidden' END, date(read_day * 86400, 'unixepoch') FROM bindings ORDER BY lodestone_id;", output);
                 return 0;
             case ["reports"]:
                 await ListAsync(database, "SELECT id, date(day * 86400, 'unixepoch'), lodestone_id, reason FROM reports ORDER BY id;", output);

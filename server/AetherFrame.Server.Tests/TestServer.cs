@@ -81,6 +81,15 @@ internal sealed class TestServer : WebApplicationFactory<Program>
     /// <summary>The failed check's floor: none, unless a test sets one before the server starts.</summary>
     public TimeSpan CheckFailureFloor { get; set; } = TimeSpan.Zero;
 
+    /// <summary>A failed piped check's delay after its read: none, unless a test sets one before the server starts.</summary>
+    public TimeSpan CheckFailureAfterRead { get; set; } = TimeSpan.Zero;
+
+    /// <summary>
+    /// The operator's Lodestone relay setting: none, unless a test sets one before the server starts.
+    /// The fake Lodestone still answers every read, so nothing is ever sent to it.
+    /// </summary>
+    public string LodestoneRelay { get; set; } = "";
+
     public string DatabasePath => Path.Combine(folder, "server.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -91,6 +100,11 @@ internal sealed class TestServer : WebApplicationFactory<Program>
         builder.UseSetting("AetherFrame:AllowTestDeploymentName", "true");
         builder.UseSetting("AetherFrame:DatabasePath", DatabasePath);
         builder.UseSetting("AetherFrame:RereadsEnabled", "false");
+        if (LodestoneRelay.Length > 0)
+        {
+            builder.UseSetting("AetherFrame:LodestoneRelay", LodestoneRelay);
+        }
+
         if (UseImageWorker)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ImageWorkerSocket)!);
@@ -115,7 +129,11 @@ internal sealed class TestServer : WebApplicationFactory<Program>
 
             // The real Lodestone client, logging and all, with only its connection replaced.
             services.AddHttpClient(LodestoneHttpPages.ClientName).ConfigurePrimaryHttpMessageHandler(() => new FakeLodestoneHandler(Lodestone));
-            services.PostConfigure<ServerOptions>(options => options.CheckFailureFloor = CheckFailureFloor);
+            services.PostConfigure<ServerOptions>(options =>
+            {
+                options.CheckFailureFloor = CheckFailureFloor;
+                options.CheckFailureAfterRead = CheckFailureAfterRead;
+            });
             if (!UseImageWorker && !UseImageWorkerRuns)
             {
                 services.RemoveAll<AetherFrame.Server.Images.IImageProcessor>();
@@ -295,6 +313,9 @@ internal sealed class FakeLodestone
     public ConcurrentQueue<long> Fetched { get; } = new();
 
     public ConcurrentQueue<Uri> Addresses { get; } = new();
+
+    /// <summary>Runs while a fetch is under way, before its page comes back: what happens meanwhile. None unless a test sets it.</summary>
+    public Action<long>? OnFetch { get; set; }
 }
 
 /// <summary>The fake Lodestone's connection, which the real client sends its requests through.</summary>
@@ -306,6 +327,7 @@ internal sealed class FakeLodestoneHandler(FakeLodestone lodestone) : HttpMessag
         lodestone.Addresses.Enqueue(address);
         var id = long.Parse(address.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries)[^1], System.Globalization.CultureInfo.InvariantCulture);
         lodestone.Fetched.Enqueue(id);
+        lodestone.OnFetch?.Invoke(id);
         var page = lodestone.Pages.TryGetValue(id, out var found) ? found : new LodestoneResponse(404, LodestoneHtml.NotFoundPage);
         if (page.Status == 0)
         {

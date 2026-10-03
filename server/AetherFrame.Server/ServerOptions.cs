@@ -100,6 +100,14 @@ public sealed class ServerOptions
     /// </summary>
     internal TimeSpan CheckFailureFloor { get; set; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>
+    /// The least time a failed check answers after its read through the player's own connection
+    /// ended, besides <see cref="CheckFailureFloor"/> from its start: longer than parsing a page and
+    /// the steps after the allowlist take, so an allowlist refusal and a later failure leave at the
+    /// same time (ServerApi-v1.md, section 2.3). Not configurable; the tests shorten it.
+    /// </summary>
+    internal TimeSpan CheckFailureAfterRead { get; set; } = TimeSpan.FromSeconds(2);
+
     /// <summary>The checked deployment name.</summary>
     internal DeploymentName Deployment { get; private set; } = null!;
 

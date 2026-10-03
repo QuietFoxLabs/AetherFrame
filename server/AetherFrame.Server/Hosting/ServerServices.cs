@@ -118,8 +118,11 @@ internal sealed class DatabaseStartup(ServerDatabase database) : IHostedService
 /// <summary>
 /// The daily re-read (decision C1): each binding's Lodestone page is read about once a day, paced
 /// evenly over the day, within the half of the fetch budget re-reads may use. A page that was read
-/// updates the name and World; the Lodestone's own "not found" page, twice a day apart, removes the
-/// binding; anything else leaves it alone. Nothing records when a binding was last read.
+/// updates the name and World, and the day of the binding's last successful read; the Lodestone's own
+/// "not found" page, twice a day apart, removes the binding; anything else leaves it alone. It runs
+/// only while the operator's Lodestone relay is set ("Checking a character through the player's own
+/// connection"): without one, players' own re-reads keep names current, and a binding not read within
+/// 30 days stops answering lookups.
 /// </summary>
 internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, Allowlist allowlist, IOptions<ServerOptions> options, TimeProvider time, ILogger<Rereads> logger) : BackgroundService
 {
@@ -128,7 +131,7 @@ internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, 
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!options.Value.RereadsEnabled)
+        if (!options.Value.RereadsEnabled || options.Value.Relay is null)
         {
             return;
         }

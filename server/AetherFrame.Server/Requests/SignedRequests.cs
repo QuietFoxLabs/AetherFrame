@@ -30,7 +30,9 @@ internal sealed record ActionCall(HttpContext Http, VerifiedAction Action)
 /// sections 13 and 14): the address limit, the body read within its bound, the envelope, the proof
 /// checked for the kind this endpoint expects (never a kind the request names), then the challenge
 /// consumed, and only then the handler. A failure is a status with no body, and its kind is recorded
-/// for the request log, never the bytes.
+/// for the request log, never the bytes. A Lodestone check or re-read sent as a WebSocket (section
+/// 2.3) takes its address limit before the upgrade and passes its first message through
+/// <see cref="VerifyAsync"/>, the same checks in the same order.
 /// </summary>
 internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeStore challenges, RateLimiter limiter)
 {
@@ -53,9 +55,26 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
             return Fail(http, bodyFailure, "body:unread");
         }
 
+        var (action, refusal) = await VerifyAsync(body, kind, http.Connection.RemoteIpAddress, http.RequestAborted);
+        if (action is null)
+        {
+            return refusal!.ToResult(http);
+        }
+
+        return await handler(new ActionCall(http, action));
+    }
+
+    /// <summary>
+    /// Checks a signed action's body, read whole: the envelope, then the proof for
+    /// <paramref name="kind"/>, then its challenge consumed. The action, or the answer that refuses
+    /// it: <c>400</c> for the envelope, <c>413</c> or <c>403</c> for the proof, and <c>409</c> with a
+    /// fresh challenge (or <c>429</c>) for the challenge.
+    /// </summary>
+    public async Task<(VerifiedAction? Action, ActionAnswer? Refusal)> VerifyAsync(byte[] body, RequestProofKind kind, IPAddress? address, CancellationToken cancellation)
+    {
         if (!TrySplit(body, out var proof, out var payload))
         {
-            return Fail(http, StatusCodes.Status400BadRequest, "body:envelope");
+            return (null, ActionAnswer.Fail(StatusCodes.Status400BadRequest, "body:envelope"));
         }
 
         VerifiedAction action;
@@ -65,15 +84,15 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
         }
         catch (ProtocolException e)
         {
-            return Fail(http, e.Error == ProtocolError.LimitExceeded ? StatusCodes.Status413PayloadTooLarge : StatusCodes.Status403Forbidden, "proof:" + e.Error);
+            return (null, ActionAnswer.Fail(e.Error == ProtocolError.LimitExceeded ? StatusCodes.Status413PayloadTooLarge : StatusCodes.Status403Forbidden, "proof:" + e.Error));
         }
 
-        if (!await challenges.TryConsumeAsync(action.Challenge, http.RequestAborted))
+        if (!await challenges.TryConsumeAsync(action.Challenge, cancellation))
         {
-            return await RefuseChallengeAsync(http);
+            return (null, await RefuseChallengeAsync(address, cancellation));
         }
 
-        return await handler(new ActionCall(http, action));
+        return (action, null);
     }
 
     /// <summary>
@@ -144,34 +163,25 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
     /// counts against the address's challenge limit like any other, so refusals can't mint them
     /// without limit; over it, the answer is 429 with none.
     /// </summary>
-    public async Task<IResult> RefuseChallengeAsync(HttpContext http)
-    {
-        if (!limiter.TryTakeAddress(ServerLimits.ChallengesPerAddress, http.Connection.RemoteIpAddress))
-        {
-            return Fail(http, StatusCodes.Status429TooManyRequests, "limit:challenge");
-        }
-
-        http.Items[ErrorKindItem] = "challenge";
-        var fresh = await challenges.IssueAsync(http.RequestAborted);
-        return new BytesWithStatus(StatusCodes.Status409Conflict, fresh.ToArray());
-    }
-
-    /// <summary>A binary body with a status other than 200.</summary>
-    private sealed class BytesWithStatus(int status, byte[] bytes) : IResult
-    {
-        public Task ExecuteAsync(HttpContext httpContext)
-        {
-            httpContext.Response.StatusCode = status;
-            httpContext.Response.ContentType = "application/octet-stream";
-            httpContext.Response.ContentLength = bytes.Length;
-            return httpContext.Response.Body.WriteAsync(bytes).AsTask();
-        }
-    }
+    public async Task<IResult> RefuseChallengeAsync(HttpContext http) =>
+        (await RefuseChallengeAsync(http.Connection.RemoteIpAddress, http.RequestAborted)).ToResult(http);
 
     /// <summary>A status with no body, its kind left for the request log.</summary>
     public static IResult Fail(HttpContext http, int status, string kind)
     {
         http.Items[ErrorKindItem] = kind;
         return Results.StatusCode(status);
+    }
+
+    /// <summary>The refusal of a challenge, as an answer: 409 with a fresh challenge, or 429 past the address's challenge limit.</summary>
+    private async Task<ActionAnswer> RefuseChallengeAsync(IPAddress? address, CancellationToken cancellation)
+    {
+        if (!limiter.TryTakeAddress(ServerLimits.ChallengesPerAddress, address))
+        {
+            return ActionAnswer.Fail(StatusCodes.Status429TooManyRequests, "limit:challenge");
+        }
+
+        var fresh = await challenges.IssueAsync(cancellation);
+        return new ActionAnswer(StatusCodes.Status409Conflict, "challenge", Challenge: fresh.ToArray());
     }
 }

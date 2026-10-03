@@ -524,9 +524,10 @@ internal sealed class PublishSlots
 /// allowlist, and the character looked up must be shown under that exact name and World, bound and on
 /// the allowlist too. Every other case is the same "not found". The requester's own limits are taken
 /// after the requester passes and before the target is looked for, so a key with no character costs
-/// the server nothing, and a "not found" counts as a find does (C6).
+/// the server nothing, and a "not found" counts as a find does (C6). While no operator relay is set,
+/// a target not read within <see cref="BindingStore.ReadWithinDays"/> is "not found" too.
 /// </summary>
-internal sealed class Viewing(BindingStore bindings, Allowlist allowlist, Worlds worlds)
+internal sealed class Viewing(BindingStore bindings, Allowlist allowlist, Worlds worlds, IOptions<ServerOptions> options)
 {
     public async Task<(IResult? Refusal, Binding? Target)> FindAsync(HttpContext http, PersonaId requester, string name, string world, Func<bool> takeLimits)
     {
@@ -553,7 +554,7 @@ internal sealed class Viewing(BindingStore bindings, Allowlist allowlist, Worlds
             return (SignedRequests.Fail(http, StatusCodes.Status404NotFound, "view:no-character"), null);
         }
 
-        var target = await bindings.FindShownAsync(nameKey, canonicalWorld, http.RequestAborted);
+        var target = await bindings.FindShownAsync(nameKey, canonicalWorld, hideUnread: options.Value.Relay is null, http.RequestAborted);
         if (target is null || !allowlist.Allows(target.LodestoneId))
         {
             return (SignedRequests.Fail(http, StatusCodes.Status404NotFound, "view:no-character"), null);

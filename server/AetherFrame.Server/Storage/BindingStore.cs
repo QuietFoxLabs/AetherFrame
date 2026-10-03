@@ -11,8 +11,18 @@ namespace AetherFrame.Server.Storage;
 /// <summary>A key's binding to a character (decisions C1 and C4).</summary>
 internal sealed record Binding(PersonaId Persona, long LodestoneId, string Name, string World, ProfileId ProfileId, bool Hidden);
 
-/// <summary>What a successful check did: the binding's profile id.</summary>
-internal sealed record BindResult(ProfileId ProfileId);
+/// <summary>
+/// What a successful check did: the binding's profile id, and the day of its last successful
+/// Lodestone read (UTC days since the Unix epoch) as the same transaction stored it.
+/// </summary>
+internal sealed record BindResult(ProfileId ProfileId, long ReadDay);
+
+/// <summary>
+/// What a re-read did and, while the binding stays (<see cref="RereadResult.Updated"/> or
+/// <see cref="RereadResult.NotFoundOnce"/>), its name, World and day of last successful read as the
+/// same transaction left them: an answer built from them can't pair them with another binding's.
+/// </summary>
+internal sealed record RereadApplied(RereadResult Result, string? Name = null, string? World = null, long? ReadDay = null);
 
 /// <summary>What a re-read did to a binding.</summary>
 internal enum RereadResult
@@ -33,12 +43,25 @@ internal enum RereadResult
 /// <summary>
 /// Lodestone codes and bindings (decisions C1, C2 and C4). A key binds one character; a Lodestone id
 /// is bound to one key; a canonical (name, World) is shown for one binding at a time. The only time
-/// kept is a code's expiry and, while a page shows "not found", the day it first did.
+/// kept is a code's expiry, the day number (UTC) of each binding's last successful Lodestone read,
+/// and, while a page shows "not found", the day it first did.
 /// </summary>
 internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
 {
     /// <summary>How long a code is valid (decision C2).</summary>
     public static readonly TimeSpan CodeLifetime = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// How many day numbers a binding answers lookups for after its last successful read ("Checking a
+    /// character through the player's own connection"), once no operator relay is set: read on day D,
+    /// it answers through day D + 29, so for 30 days at most and 29 at least, then is hidden from
+    /// lookups until its next successful read. Its key still finds it, to re-read it, publish and opt
+    /// out. Its purpose is to bound how long a renamed, transferred or deleted character's Plate keeps
+    /// answering under its old name and World, once the daily re-read no longer runs. The 30 is
+    /// provisional: Claude chose it under the September 29, 2026 delegation, the owner was told on
+    /// October 3, 2026 and hasn't approved it, and it awaits GPT's product review.
+    /// </summary>
+    public const int ReadWithinDays = 30;
 
     private long Now => time.GetUtcNow().ToUnixTimeSeconds();
 
@@ -87,14 +110,25 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
         return await FindAsync(connection, null, "persona = $value", persona.ToString(), cancellation);
     }
 
-    /// <summary>The shown binding of a canonical name and World, if any.</summary>
-    public async Task<Binding?> FindShownAsync(string nameKey, string world, CancellationToken cancellation)
+    /// <summary>
+    /// The binding a lookup of a canonical name and World finds, if any: shown (no newer read holds
+    /// the name and World), and, when <paramref name="hideUnread"/> is set, read within
+    /// <see cref="ReadWithinDays"/>. Everything that finds a binding for a viewer comes here, and
+    /// says which: <see cref="Endpoints.Viewing"/> sets <paramref name="hideUnread"/> only while no
+    /// operator relay is set, since the daily re-read keeps the day of the last read only while a
+    /// relay is open, and an operator's relay is open only some of the time. A binding's own key
+    /// finds it by <see cref="FindByPersonaAsync"/>.
+    /// </summary>
+    public async Task<Binding?> FindShownAsync(string nameKey, string world, bool hideUnread, CancellationToken cancellation)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT persona, lodestone_id, name, world, profile_id, hidden FROM bindings WHERE name_key = $name AND world = $world AND hidden = 0;";
+        command.CommandText = hideUnread
+            ? "SELECT persona, lodestone_id, name, world, profile_id, hidden FROM bindings WHERE name_key = $name AND world = $world AND hidden = 0 AND read_day > $stale;"
+            : "SELECT persona, lodestone_id, name, world, profile_id, hidden FROM bindings WHERE name_key = $name AND world = $world AND hidden = 0;";
         command.Parameters.AddWithValue("$name", nameKey);
         command.Parameters.AddWithValue("$world", world);
+        command.Parameters.AddWithValue("$stale", Today - ReadWithinDays);
         await using var reader = await command.ExecuteReaderAsync(cancellation);
         return await reader.ReadAsync(cancellation) ? Read(reader) : null;
     }
@@ -123,6 +157,7 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
     /// <item>a check by the key already bound refreshes the name and World and keeps the profile id;</item>
     /// <item>a character bound to another key moves to this one, and everything the old key published for it is deleted;</item>
     /// <item>another binding shown under the same name and World is hidden, not deleted;</item>
+    /// <item>the day of the last successful read is today;</item>
     /// <item>the code is used up.</item>
     /// </list>
     /// </summary>
@@ -157,9 +192,9 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
         {
             command.Transaction = transaction;
             command.CommandText = """
-                INSERT INTO bindings (persona, lodestone_id, name, name_key, world, profile_id, hidden, not_found_day)
-                VALUES ($persona, $id, $name, $key, $world, $profile, 0, NULL)
-                ON CONFLICT (persona) DO UPDATE SET name = excluded.name, name_key = excluded.name_key, world = excluded.world, hidden = 0, not_found_day = NULL;
+                INSERT INTO bindings (persona, lodestone_id, name, name_key, world, profile_id, hidden, not_found_day, read_day)
+                VALUES ($persona, $id, $name, $key, $world, $profile, 0, NULL, $today)
+                ON CONFLICT (persona) DO UPDATE SET name = excluded.name, name_key = excluded.name_key, world = excluded.world, hidden = 0, not_found_day = NULL, read_day = excluded.read_day;
                 DELETE FROM codes WHERE persona = $persona;
                 DELETE FROM taken_over WHERE persona = $persona;
                 """;
@@ -169,35 +204,47 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
             command.Parameters.AddWithValue("$key", nameKey);
             command.Parameters.AddWithValue("$world", character.World);
             command.Parameters.AddWithValue("$profile", profileId.ToString());
+            command.Parameters.AddWithValue("$today", Today);
             await command.ExecuteNonQueryAsync(cancellation);
         }
 
+        // The day as stored, read back inside the transaction that wrote it.
+        var (_, _, readDay) = (await ReadStateAsync(connection, transaction, persona, lodestoneId, cancellation))!.Value;
         await transaction.CommitAsync(cancellation);
         if (deleted)
         {
             await database.CheckpointAsync(CancellationToken.None);
         }
 
-        return new BindResult(profileId);
+        return new BindResult(profileId, readDay);
     }
 
     /// <summary>
     /// Applies a re-read of <paramref name="lodestoneId"/>'s page (decision C1). A page that was read
     /// updates the name and World, shows the binding (hiding any other shown under the same name and
-    /// World: the newest read wins), and forgets any "not found". The Lodestone's own "not found" page
-    /// removes the binding, as opting out does, only on a read two or more calendar days after the
-    /// first: at least 24 hours later, and at most 48, with only a day number kept. Any other failure
-    /// changes nothing, and isn't passed here. A read of another character than the one the key's
-    /// binding holds now (the key opted out and bound again during the fetch) changes nothing.
+    /// World: the newest read wins), makes today the day of its last successful read, and forgets any
+    /// "not found". The Lodestone's own "not found" page removes the binding, as opting out does, only
+    /// on a read two or more calendar days after the first: at least 24 hours later, and at most 48,
+    /// with only a day number kept. Any other failure changes nothing, and isn't passed here. A read
+    /// of another character than the one the key's binding holds now (the key opted out and bound
+    /// again during the fetch) changes nothing.
     /// </summary>
-    public async Task<RereadResult> ApplyRereadAsync(PersonaId persona, long lodestoneId, LodestoneCharacter? character, CancellationToken cancellation)
+    public async Task<RereadResult> ApplyRereadAsync(PersonaId persona, long lodestoneId, LodestoneCharacter? character, CancellationToken cancellation) =>
+        (await ApplyRereadAndReadAsync(persona, lodestoneId, character, cancellation)).Result;
+
+    /// <summary>
+    /// As <see cref="ApplyRereadAsync"/>, also returning, while the binding stays, its name, World
+    /// and day of last successful read as the same transaction left them: a page that was read makes
+    /// that day today, and a first "not found" keeps the day it had.
+    /// </summary>
+    public async Task<RereadApplied> ApplyRereadAndReadAsync(PersonaId persona, long lodestoneId, LodestoneCharacter? character, CancellationToken cancellation)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellation);
         var binding = await FindAsync(connection, transaction, "persona = $value", persona.ToString(), cancellation);
         if (binding is null || binding.LodestoneId != lodestoneId)
         {
-            return RereadResult.NotBound;
+            return new RereadApplied(RereadResult.NotBound);
         }
 
         if (character is not null)
@@ -206,14 +253,16 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
             await HideOthersAsync(connection, transaction, nameKey, character.World, binding.LodestoneId, cancellation);
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = "UPDATE bindings SET name = $name, name_key = $key, world = $world, hidden = 0, not_found_day = NULL WHERE persona = $persona;";
+            command.CommandText = "UPDATE bindings SET name = $name, name_key = $key, world = $world, hidden = 0, not_found_day = NULL, read_day = $today WHERE persona = $persona;";
             command.Parameters.AddWithValue("$name", character.Name);
             command.Parameters.AddWithValue("$key", nameKey);
             command.Parameters.AddWithValue("$world", character.World);
+            command.Parameters.AddWithValue("$today", Today);
             command.Parameters.AddWithValue("$persona", persona.ToString());
             await command.ExecuteNonQueryAsync(cancellation);
+            var (name, world, readDay) = (await ReadStateAsync(connection, transaction, persona, lodestoneId, cancellation))!.Value;
             await transaction.CommitAsync(cancellation);
-            return RereadResult.Updated;
+            return new RereadApplied(RereadResult.Updated, name, world, readDay);
         }
 
         long? firstDay;
@@ -230,7 +279,7 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
             await DeleteAsync(connection, transaction, persona, cancellation);
             await transaction.CommitAsync(cancellation);
             await database.CheckpointAsync(CancellationToken.None);
-            return RereadResult.Removed;
+            return new RereadApplied(RereadResult.Removed);
         }
 
         if (firstDay is null)
@@ -243,8 +292,26 @@ internal sealed class BindingStore(ServerDatabase database, TimeProvider time)
             await mark.ExecuteNonQueryAsync(cancellation);
         }
 
+        // A "not found" is no read: the day of the last read stays as it was.
+        var (keptName, keptWorld, keptDay) = (await ReadStateAsync(connection, transaction, persona, lodestoneId, cancellation))!.Value;
         await transaction.CommitAsync(cancellation);
-        return RereadResult.NotFoundOnce;
+        return new RereadApplied(RereadResult.NotFoundOnce, keptName, keptWorld, keptDay);
+    }
+
+    /// <summary>
+    /// The name, World and day of last successful read of <paramref name="persona"/>'s binding of
+    /// <paramref name="lodestoneId"/>, inside <paramref name="transaction"/>; null when the key holds
+    /// no binding of that character.
+    /// </summary>
+    private static async Task<(string Name, string World, long ReadDay)?> ReadStateAsync(SqliteConnection connection, SqliteTransaction transaction, PersonaId persona, long lodestoneId, CancellationToken cancellation)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT name, world, read_day FROM bindings WHERE persona = $persona AND lodestone_id = $id;";
+        command.Parameters.AddWithValue("$persona", persona.ToString());
+        command.Parameters.AddWithValue("$id", lodestoneId);
+        await using var reader = await command.ExecuteReaderAsync(cancellation);
+        return await reader.ReadAsync(cancellation) ? (reader.GetString(0), reader.GetString(1), reader.GetInt64(2)) : null;
     }
 
     /// <summary>

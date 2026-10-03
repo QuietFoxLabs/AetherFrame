@@ -79,6 +79,15 @@ public class SharingWireTests
     }
 
     [Fact]
+    public void ACheckOrRereadAnswer_WithTheWebSocketsDayAdded_IsRefused()
+    {
+        // The server's WebSocket answers carry readDay beside the body; its POST bodies never do,
+        // since these readers, unchanged since 0.1.9, refuse any field they don't know.
+        Assert.Throws<InvalidDataException>(() => SharingWire.ReadCheck(Utf8($"{{\"profileId\":\"{Profile}\",\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\",\"readDay\":20729}}")));
+        Assert.Throws<InvalidDataException>(() => SharingWire.ReadReread(Utf8("{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\",\"readDay\":20729}")));
+    }
+
+    [Fact]
     public void Answers_AreReadStrictly()
     {
         Assert.Equal(("AF-0123456789", 3600), SharingWire.ReadCode(Utf8("{\"code\":\"AF-0123456789\",\"expiresInSeconds\":3600}")));

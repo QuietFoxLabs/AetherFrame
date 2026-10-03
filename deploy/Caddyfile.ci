@@ -10,7 +10,9 @@
 		max_size 43MB
 	}
 
-	reverse_proxy server:8080
+	reverse_proxy server:8080 {
+		stream_timeout 60s
+	}
 
 	header {
 		-Server
