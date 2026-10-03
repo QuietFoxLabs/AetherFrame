@@ -12,6 +12,19 @@ namespace AetherFrame.Tests;
 internal sealed record IlMemberUse(string Type, ILOpCode OpCode, string Parent, string Name, int Parameters, ILOpCode Previous);
 
 /// <summary>
+/// One instruction of a method body, as <see cref="NetworkTypeUse.MethodBodies"/> reads it: the
+/// member its token names (parent type, name, parameter types; a field's one type), the string an
+/// <c>ldstr</c> loads, or the integer an <c>ldc.i4</c> form loads.
+/// </summary>
+internal sealed record IlStep(ILOpCode OpCode, string? Parent, string? Name, string[] Parameters, string? Text, int? Constant)
+{
+    /// <summary>Whether this is a call or an object's construction: anything that runs code the scan doesn't follow.</summary>
+    internal bool Calls => OpCode is ILOpCode.Call or ILOpCode.Callvirt or ILOpCode.Newobj or ILOpCode.Calli;
+
+    public override string ToString() => OpCode + " " + (Text is { } text ? "\"" + text + "\"" : Constant?.ToString() ?? (Parent + "::" + Name + "(" + string.Join(",", Parameters) + ")"));
+}
+
+/// <summary>
 /// Which types each of an assembly's own types names, read from its compiled metadata (decision
 /// R3's "only under Services/Network", checked on the DLL rather than on the sources): its base
 /// type, interfaces and generic constraints; its fields', methods', properties' and events'
@@ -149,6 +162,142 @@ internal static class NetworkTypeUse
         return uses;
     }
 
+    /// <summary>
+    /// Every method body of the types whose outermost type is <paramref name="outermost"/> (its
+    /// nested types, closures and state machines included), each as its instructions in order:
+    /// the member a token names (a member reference, a method specification's method, or one of
+    /// the assembly's own methods and fields) with its parameter types (a field's one type), the
+    /// string an <c>ldstr</c> loads, and the integer an <c>ldc.i4</c> form loads.
+    /// </summary>
+    internal static List<(string Method, List<IlStep> Steps)> MethodBodies(PEReader pe, string outermost)
+    {
+        var reader = pe.GetMetadataReader();
+        var names = new TypeNames(reader);
+        var bodies = new List<(string, List<IlStep>)>();
+        foreach (var handle in reader.TypeDefinitions)
+        {
+            if (names.NameOf(Outermost(reader, handle)) != outermost)
+            {
+                continue;
+            }
+
+            foreach (var methodHandle in reader.GetTypeDefinition(handle).GetMethods())
+            {
+                var method = reader.GetMethodDefinition(methodHandle);
+                if (method.RelativeVirtualAddress == 0)
+                {
+                    continue;
+                }
+
+                var steps = new List<IlStep>();
+                foreach (var (opCode, token, constant) in IlScan.InstructionsWithConstants(pe.GetMethodBody(method.RelativeVirtualAddress).GetILReader()))
+                {
+                    if (opCode == ILOpCode.Ldstr)
+                    {
+                        steps.Add(new IlStep(opCode, null, null, [], reader.GetUserString(MetadataTokens.UserStringHandle(token & 0xFFFFFF)), null));
+                        continue;
+                    }
+
+                    var (parent, name, parameters) = token == 0 ? (null, null, []) : Named(reader, names, MetadataTokens.EntityHandle(token));
+                    steps.Add(new IlStep(opCode, parent, name, parameters, null, constant));
+                }
+
+                bodies.Add((names.NameOf(handle) + "." + reader.GetString(method.Name), steps));
+            }
+        }
+
+        return bodies;
+    }
+
+    /// <summary>
+    /// The surface that code outside <paramref name="outermost"/> can reach: each of its types not
+    /// hidden by a private nesting (itself, or a type it is nested in), with every member that isn't
+    /// private, and the types each one names. A type's own entry (its name alone) holds its base
+    /// type and interfaces; a method's, its return and parameter types; a field's, its type. A
+    /// property's or event's accessors are methods, so their types are listed through them.
+    /// </summary>
+    internal static List<(string Member, HashSet<string> Names)> NonPrivateSurface(PEReader pe, string outermost)
+    {
+        var reader = pe.GetMetadataReader();
+        var typeNames = new TypeNames(reader);
+        var surface = new List<(string, HashSet<string>)>();
+        foreach (var handle in reader.TypeDefinitions)
+        {
+            if (typeNames.NameOf(Outermost(reader, handle)) != outermost || HiddenByNesting(reader, handle))
+            {
+                continue;
+            }
+
+            var type = reader.GetTypeDefinition(handle);
+            var name = typeNames.NameOf(handle);
+            var names = new TypeNames(reader);
+            names.Entity(type.BaseType);
+            foreach (var implementation in type.GetInterfaceImplementations())
+            {
+                names.Entity(reader.GetInterfaceImplementation(implementation).Interface);
+            }
+
+            surface.Add((name, names.Referenced));
+            foreach (var fieldHandle in type.GetFields())
+            {
+                var field = reader.GetFieldDefinition(fieldHandle);
+                if ((field.Attributes & System.Reflection.FieldAttributes.FieldAccessMask) is System.Reflection.FieldAttributes.Private or System.Reflection.FieldAttributes.PrivateScope)
+                {
+                    continue;
+                }
+
+                names = new TypeNames(reader);
+                field.DecodeSignature(names, null);
+                surface.Add((name + "." + reader.GetString(field.Name), names.Referenced));
+            }
+
+            foreach (var methodHandle in type.GetMethods())
+            {
+                var method = reader.GetMethodDefinition(methodHandle);
+                if ((method.Attributes & System.Reflection.MethodAttributes.MemberAccessMask) is System.Reflection.MethodAttributes.Private or System.Reflection.MethodAttributes.PrivateScope)
+                {
+                    continue;
+                }
+
+                names = new TypeNames(reader);
+                var signature = method.DecodeSignature(names, null);
+                surface.Add((name + "." + reader.GetString(method.Name) + "(" + string.Join(",", signature.ParameterTypes) + ")", names.Referenced));
+            }
+        }
+
+        return surface;
+    }
+
+    /// <summary>
+    /// The methods of the types whose outermost type is <paramref name="outermost"/> that have no
+    /// body in IL and aren't abstract: an <c>extern</c> (a P/Invoke, an internal call, or an
+    /// <c>[UnsafeAccessor]</c>, which reaches a member the IL never names) or a runtime-provided one.
+    /// </summary>
+    internal static List<string> BodilessMethods(PEReader pe, string outermost)
+    {
+        var reader = pe.GetMetadataReader();
+        var names = new TypeNames(reader);
+        var found = new List<string>();
+        foreach (var handle in reader.TypeDefinitions)
+        {
+            if (names.NameOf(Outermost(reader, handle)) != outermost)
+            {
+                continue;
+            }
+
+            foreach (var methodHandle in reader.GetTypeDefinition(handle).GetMethods())
+            {
+                var method = reader.GetMethodDefinition(methodHandle);
+                if (method.RelativeVirtualAddress == 0 && (method.Attributes & System.Reflection.MethodAttributes.Abstract) == 0)
+                {
+                    found.Add(names.NameOf(handle) + "." + reader.GetString(method.Name));
+                }
+            }
+        }
+
+        return found;
+    }
+
     /// <summary>Every member reference in the assembly: its parent type's full name and its own name.</summary>
     internal static List<(string Parent, string Name)> MemberReferences(MetadataReader reader)
     {
@@ -168,6 +317,50 @@ internal static class NetworkTypeUse
         }
 
         return list;
+    }
+
+    /// <summary>The parent type, name and parameter types (a field's one type) of the member a token names; nulls for any other token.</summary>
+    private static (string? Parent, string? Name, string[] Parameters) Named(MetadataReader reader, TypeNames names, EntityHandle handle)
+    {
+        switch (handle.Kind)
+        {
+            case HandleKind.MemberReference:
+                var member = reader.GetMemberReference((MemberReferenceHandle)handle);
+                var parent = member.Parent.Kind switch
+                {
+                    HandleKind.TypeReference => names.NameOf((TypeReferenceHandle)member.Parent),
+                    HandleKind.TypeSpecification => reader.GetTypeSpecification((TypeSpecificationHandle)member.Parent).DecodeSignature(names, null),
+                    HandleKind.TypeDefinition => names.NameOf((TypeDefinitionHandle)member.Parent),
+                    _ => "",
+                };
+                string[] parameters = member.GetKind() == MemberReferenceKind.Method
+                    ? [.. member.DecodeMethodSignature(names, null).ParameterTypes]
+                    : [member.DecodeFieldSignature(names, null)];
+                return (parent, reader.GetString(member.Name), parameters);
+            case HandleKind.MethodSpecification:
+                return Named(reader, names, reader.GetMethodSpecification((MethodSpecificationHandle)handle).Method);
+            case HandleKind.MethodDefinition:
+                var method = reader.GetMethodDefinition((MethodDefinitionHandle)handle);
+                return (names.NameOf(method.GetDeclaringType()), reader.GetString(method.Name), [.. method.DecodeSignature(names, null).ParameterTypes]);
+            case HandleKind.FieldDefinition:
+                var field = reader.GetFieldDefinition((FieldDefinitionHandle)handle);
+                return (names.NameOf(field.GetDeclaringType()), reader.GetString(field.Name), [field.DecodeSignature(names, null)]);
+            default:
+                return (null, null, []);
+        }
+    }
+
+    private static bool HiddenByNesting(MetadataReader reader, TypeDefinitionHandle handle)
+    {
+        for (var type = reader.GetTypeDefinition(handle); !type.GetDeclaringType().IsNil; type = reader.GetTypeDefinition(type.GetDeclaringType()))
+        {
+            if ((type.Attributes & System.Reflection.TypeAttributes.VisibilityMask) == System.Reflection.TypeAttributes.NestedPrivate)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static TypeDefinitionHandle Outermost(MetadataReader reader, TypeDefinitionHandle handle)

@@ -24,11 +24,34 @@ internal static class SharingText
         "Turning sharing off deletes this character's Plate, its images and its check from the server at once. The server's backups keep copies for up to 7 days before they are deleted too.",
         "Other players can report a Plate. The server keeps a report (the character, the reason, and the reporting player's key) for up to 30 days, or until it is dealt with, even if sharing is turned off.",
         "Anyone who has turned sharing on can find out, from this character's name, that its player uses AetherFrame, and so Dalamud.",
-        "The server keeps this character's Lodestone id, name and World, a key that proves the character is yours, and your latest shared Plate. It sees the network address of anyone who shares or views, and doesn't store it. It keeps no record of who viewed whom.",
+        "The server keeps this character's Lodestone id, name and World, the day its Lodestone page was last read, a key that proves the character is yours, and your latest shared Plate. It sees the network address of anyone who shares or views, and doesn't store it. It keeps no record of who viewed whom.",
         "The key stays on this PC. If you share this character from another PC, or after reinstalling Windows, checking it again there moves sharing to it, and what this PC shared is deleted.",
         "Windows protects the key for your account. A copy of your Windows profile opens it wherever your Windows password is known, and at once if your account has no password. Any program running as you, other Dalamud plugins included, can use it. On a work or school PC, your organisation may be able to recover it.",
         "To prove the character is yours, you'll paste a short code into its Lodestone profile. While the code is there, anyone reading the profile can see that you use AetherFrame, so delete it once the check passes.",
+        ReadsThroughYourConnection,
+        ThirtyDays,
     ];
+
+    /// <summary>What reading the Lodestone page through the player's own connection means: in the consent, and in the one-time notice.</summary>
+    internal const string ReadsThroughYourConnection =
+        "The sharing server reads this character's Lodestone page through your own internet connection: when you check it, and later when you save your Active Plate, open this window or view a Plate, if the page is due to be read again. The Lodestone sees your network address, and a request that names AetherFrame and its server. AetherFrame only passes encrypted data along, and can't read or change the page.";
+
+    /// <summary>The 30 days after which a character not read again stops showing its Plate.</summary>
+    internal const string ThirtyDays =
+        "If this character's Lodestone page isn't read for 30 days, other players stop seeing its Plate until you next use sharing with it. Nothing is deleted.";
+
+    internal const string ConnectionNoticeTitle = "Checks now use your own connection";
+
+    /// <summary>The one-time notice for players who shared before checks went through their own connection.</summary>
+    internal static readonly string[] ConnectionNotice =
+    [
+        ReadsThroughYourConnection,
+        ThirtyDays,
+        "Some VPNs, proxies and hosting services are turned away by the Lodestone. If that happens, AetherFrame tells you, and you can try again from another connection.",
+    ];
+
+    internal const string ReadAgainLine =
+        "Its Lodestone page is read again through your connection the first time you use sharing after AetherFrame starts, and when its name or World changes. If it isn't read for 30 days, other players stop seeing its Plate until you next use sharing with it.";
 
     internal const string Agree = "I understand, and I want to share this character's Active Plate.";
 
@@ -179,6 +202,7 @@ internal static class SharingText
         SharingNoticeKind.Resumed => "Sharing is on again. Your Active Plate is being shared.",
         SharingNoticeKind.PublishUnrecorded => "Your Active Plate is shared, but this PC couldn't record it. It may be sent once more, which changes nothing.",
         SharingNoticeKind.PublishStopped => "Sending was stopped. If the server had already received your Plate it may be shared; otherwise it waits on this PC, and is sent when you try again or save it again.",
+        SharingNoticeKind.LodestoneRefused => "The Lodestone turned your internet connection away, so your character's page couldn't be read. This can happen through some VPNs, proxies and hosting services. Try again from another connection.",
         SharingNoticeKind.PublishWithdrawn => "Sending stopped, since that Plate is no longer your Active Plate. The version shared before stays up, unless the server had already received this one.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };

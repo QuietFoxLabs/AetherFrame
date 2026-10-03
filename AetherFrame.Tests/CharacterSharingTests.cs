@@ -1,5 +1,6 @@
 using System;
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -595,7 +596,13 @@ public partial class CharacterSharingTests
             File = new SharingStateFile(Root);
             Publications = new PublicationFiles(Root);
             Server = new FakeSharingServer();
-            Client = new SharingClient(FakeSharingServer.Deployment, Server, disposeHandler: false, new Version(0, 1, 7));
+            // The pipe's connection to the Lodestone is a stand-in: nothing a test runs reaches it.
+            Client = new SharingClient(FakeSharingServer.Deployment, Server, disposeHandler: false, new Version(0, 1, 7), () =>
+            {
+                var link = NextLink();
+                Links.Add(link);
+                return link;
+            });
             Sharing = new CharacterSharing(RunWork, File, Publications, Client, new Version(0, 1, 7), () =>
             {
                 ClockHook?.Invoke();
@@ -627,6 +634,12 @@ public partial class CharacterSharingTests
         internal FakeSharingServer Server { get; }
 
         internal SharingClient Client { get; }
+
+        /// <summary>Makes each pipe's stand-in connection: one that reports a global address unless a test says otherwise.</summary>
+        internal Func<FakeLodestoneLink> NextLink { get; set; } = () => new FakeLodestoneLink(IPAddress.Parse("104.18.32.1"));
+
+        /// <summary>Every stand-in connection a pipe made, in order.</summary>
+        internal List<FakeLodestoneLink> Links { get; } = new();
 
         internal CharacterSharing Sharing { get; private set; }
 
@@ -718,6 +731,9 @@ public partial class CharacterSharingTests
     /// <summary>One signed action the server accepted: its path, its signer and its body.</summary>
     private sealed record SeenAction(string Path, PersonaId Signer, string Body);
 
+    /// <summary>One WebSocket upgrade the plugin asked for: its path, its <c>User-Agent</c>, and whether it sent an <c>Origin</c>.</summary>
+    private sealed record SeenUpgrade(string Path, string UserAgent, bool Origin);
+
     /// <summary>One publish whose proof and document verified: its signer, its snapshot and its image count.</summary>
     private sealed record SeenPublish(PersonaId Signer, ProfileLayoutSnapshot Snapshot, int Images);
 
@@ -776,6 +792,29 @@ public partial class CharacterSharingTests
 
         internal int Challenges { get; private set; }
 
+        /// <summary>A fresh challenge this server issued, in base64, as a <c>409</c>'s final message carries one.</summary>
+        internal string FreshChallenge()
+        {
+            var challenge = RandomNumberGenerator.GetBytes(32);
+            issued.Add(Convert.ToHexString(challenge));
+            return Convert.ToBase64String(challenge);
+        }
+
+        /// <summary>The check's and the re-read's WebSockets (ServerApi-v1.md, section 2.3), in order.</summary>
+        internal List<SeenUpgrade> Upgrades { get; } = new();
+
+        /// <summary>Whatever went wrong serving a WebSocket: a test that expects none checks it is empty.</summary>
+        internal ConcurrentQueue<Exception> Faults { get; } = new();
+
+        /// <summary>The day of last read a successful check or re-read through the pipe carries; none unless a test sets it.</summary>
+        internal long? ReadDay { get; set; }
+
+        /// <summary>Final messages written whole, by path, in place of the answer: a test's way to send what <see cref="Answers"/> can't.</summary>
+        internal Dictionary<string, Func<string, string>> Finals { get; } = new();
+
+        /// <summary>Runs on a WebSocket once its signed body is checked, before the final message: a test's way to open the pipe.</summary>
+        internal Func<System.Net.WebSockets.WebSocket, Task>? Pipe { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (Unreachable)
@@ -783,7 +822,8 @@ public partial class CharacterSharingTests
                 throw new HttpRequestException(HttpRequestError.ConnectionError, "refused");
             }
 
-            Assert.Equal("https", request.RequestUri!.Scheme);
+            // A WebSocket's request keeps its wss scheme: .NET's handler connects it as https.
+            Assert.Equal(WebSocketStandIn.IsUpgrade(request) ? "wss" : "https", request.RequestUri!.Scheme);
             Assert.Equal(Deployment.Value, request.RequestUri.Host);
             var path = request.RequestUri.AbsolutePath;
             if (path == "/v1/status")
@@ -799,6 +839,13 @@ public partial class CharacterSharingTests
                 var challenge = RandomNumberGenerator.GetBytes(32);
                 issued.Add(Convert.ToHexString(challenge));
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(challenge) };
+            }
+
+            if (WebSocketStandIn.IsUpgrade(request))
+            {
+                Assert.True(path is "/v1/lodestone/check" or "/v1/lodestone/reread", "Only the check and the re-read come as WebSockets.");
+                Upgrades.Add(new SeenUpgrade(path, request.Headers.UserAgent.ToString(), request.Headers.Contains("Origin")));
+                return await WebSocketStandIn.AcceptAsync(request, socket => ServePipeAsync(path, socket), Faults);
             }
 
             var envelope = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
@@ -827,11 +874,7 @@ public partial class CharacterSharingTests
                 return Answer(published, reason);
             }
 
-            var verified = RequestProofCodec.VerifyAction(proof, body, Deployment, Kinds[path]);
-            Assert.True(issued.Remove(Convert.ToHexString(verified.Challenge.ToArray())), "The proof names a challenge this server didn't issue, or one already used.");
-
-            var text = Encoding.UTF8.GetString(body);
-            Actions.Add(new SeenAction(path, verified.PublicKey.Id, text));
+            var text = Verify(path, proof, body);
             if (Bytes.TryGetValue(path, out var bytes))
             {
                 var (byteStatus, byteAnswer) = bytes(text);
@@ -840,6 +883,48 @@ public partial class CharacterSharingTests
 
             var (status, answer) = Answers.TryGetValue(path, out var scripted) ? scripted(text) : Default(path, text);
             return Answer(status, answer);
+        }
+
+        /// <summary>Checks an action's proof as section 14.5 says for the path's kind, under a challenge this server issued and hasn't seen used, and records it.</summary>
+        private string Verify(string path, byte[] proof, byte[] body)
+        {
+            var verified = RequestProofCodec.VerifyAction(proof, body, Deployment, Kinds[path]);
+            Assert.True(issued.Remove(Convert.ToHexString(verified.Challenge.ToArray())), "The proof names a challenge this server didn't issue, or one already used.");
+            var text = Encoding.UTF8.GetString(body);
+            Actions.Add(new SeenAction(path, verified.PublicKey.Id, text));
+            return text;
+        }
+
+        /// <summary>
+        /// The check or the re-read as a WebSocket: the signed body as its first message, checked as
+        /// a POST's is, then <see cref="Pipe"/> when a test set one, then the final message.
+        /// </summary>
+        private async Task ServePipeAsync(string path, System.Net.WebSockets.WebSocket socket)
+        {
+            var (type, envelope) = await WebSocketStandIn.ReceiveAsync(socket);
+            Assert.Equal(System.Net.WebSockets.WebSocketMessageType.Binary, type);
+            var length = BinaryPrimitives.ReadUInt16BigEndian(envelope);
+            var text = Verify(path, envelope.AsSpan(2, length).ToArray(), envelope.AsSpan(2 + length).ToArray());
+            string final;
+            if (Finals.TryGetValue(path, out var written))
+            {
+                final = written(text);
+            }
+            else
+            {
+                if (Pipe is { } pipe)
+                {
+                    await pipe(socket);
+                }
+
+                var (status, answer) = Answers.TryGetValue(path, out var scripted) ? scripted(text) : Default(path, text);
+                final = "{\"status\":" + ((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + (answer is null ? "" : ",\"body\":" + answer)
+                    + (status == HttpStatusCode.OK && answer is not null && ReadDay is { } day ? ",\"readDay\":" + day.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")
+                    + "}";
+            }
+
+            await WebSocketStandIn.FinishAsync(socket, final);
         }
 
         private (HttpStatusCode, string?) Default(string path, string body) => path switch

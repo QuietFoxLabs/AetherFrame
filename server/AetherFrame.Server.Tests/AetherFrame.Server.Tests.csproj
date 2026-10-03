@@ -30,6 +30,9 @@
        its tests run it against the real server in memory. It is Dalamud-free by design. -->
   <ItemGroup>
     <Compile Include="..\..\AetherFrame\Services\Network\Transport\SharingClient.cs" Link="Linked\Plugin\SharingClient.cs" />
+    <!-- And its Lodestone pipe, which the client sends the check and the re-read through, run here
+         against the server on Kestrel (PluginPipeTests). -->
+    <Compile Include="..\..\AetherFrame\Services\Network\Transport\LodestonePipe.cs" Link="Linked\Plugin\LodestonePipe.cs" />
   </ItemGroup>
 
   <!-- The same test packages, at the same versions, as the other test projects. -->

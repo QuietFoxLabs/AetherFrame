@@ -76,6 +76,10 @@
     <Compile Include="..\AetherFrame\Services\Network\Sharing\**\*.cs" Link="Linked\Services\Network\Sharing\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\AetherFrame\Services\Network\Transport\SharingClient.cs" Link="Linked\Services\Network\Transport\SharingClient.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Transport\SharingDeployment.cs" Link="Linked\Services\Network\Transport\SharingDeployment.cs" />
+    <!-- The Lodestone pipe (checking a character through the player's own connection), driven
+         against a WebSocket answered in memory and a stand-in for its connection to the Lodestone,
+         so nothing the tests run reaches the Lodestone. -->
+    <Compile Include="..\AetherFrame\Services\Network\Transport\LodestonePipe.cs" Link="Linked\Services\Network\Transport\LodestonePipe.cs" />
     <!-- Art on demand's download client and its host rules, tested against an answering handler. -->
     <Compile Include="..\AetherFrame\Services\Network\Transport\ArtHosting.cs" Link="Linked\Services\Network\Transport\ArtHosting.cs" />
     <Compile Include="..\AetherFrame\Services\Network\Transport\ArtDownloadClient.cs" Link="Linked\Services\Network\Transport\ArtDownloadClient.cs" />

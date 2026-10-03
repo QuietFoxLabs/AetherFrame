@@ -356,16 +356,57 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
-    public void AtLogin_ARenamedCharacterAsksForARereadOnce()
+    public async Task ARenamedCharacter_IsntRereadAtLogin_ButAtTheNextSaveThatPublishes_ThroughThePipe()
     {
+        // "Checking a character through the player's own connection": at login a re-read is only
+        // noted as due; it goes during the player's next action, once that action's publish has gone.
         using var harness = new SharingHarness();
         harness.Bound();
         using var live = new LiveHarness(harness) { Name = "Aria Moonfall" };
         harness.Server.Answers["/v1/lodestone/reread"] = _ => (System.Net.HttpStatusCode.OK, "{\"name\":\"Aria Moonfall\",\"world\":\"Gilgamesh\"}");
+        var plate = live.Save();
+        live.Active = plate.ProfileId;
 
         live.Frames(5);
-        Assert.Single(harness.Server.Actions, action => action.Path == "/v1/lodestone/reread");
+        harness.WaitIdle();
+        Assert.DoesNotContain(harness.Server.Actions, action => action.Path == "/v1/lodestone/reread");
+
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Server.Publishes.Count == 1 && harness.Server.Actions.Any(action => action.Path == "/v1/lodestone/reread"));
+        harness.WaitIdle();
+        Assert.Equal(["/v1/lodestone/reread"], harness.Server.Actions.Where(action => action.Path == "/v1/lodestone/reread").Select(action => action.Path));
+        Assert.Equal("/v1/lodestone/reread", harness.Server.Upgrades.Last().Path);
         Assert.Equal("Aria Moonfall", harness.Sharing.View.Find(Aria)!.Name);
+
+        // Read now, under the name the game shows: the next save sends no re-read.
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Server.Publishes.Count == 2);
+        Assert.Single(harness.Server.Actions, action => action.Path == "/v1/lodestone/reread");
+        Assert.Empty(harness.Server.Faults);
+    }
+
+    [Fact]
+    public async Task ASavesReread_GoesAfterItsPublish_SoTheLodestonesRefusalIsWhatSharingSays()
+    {
+        using var harness = new SharingHarness();
+        harness.Bound();
+        harness.Restart();
+        using var live = new LiveHarness(harness);
+        harness.Server.Finals["/v1/lodestone/reread"] = _ => "{\"status\":503,\"reason\":\"lodestone:refused\"}";
+        var plate = live.Save();
+        live.Active = plate.ProfileId;
+        live.Frames(5);
+        harness.WaitIdle();
+
+        live.Publisher.PlateSaved(plate.ProfileId);
+        await live.Until(() => harness.Server.Publishes.Count == 1 && harness.Server.Upgrades.Any(upgrade => upgrade.Path == "/v1/lodestone/reread"));
+        harness.WaitIdle();
+        live.Frames(5);
+        harness.WaitIdle();
+
+        Assert.Equal(new SharingNotice(Aria, SharingNoticeKind.LodestoneRefused), harness.Sharing.View.Notice);
+        Assert.Single(harness.Server.Upgrades, upgrade => upgrade.Path == "/v1/lodestone/reread");
+        Assert.Empty(harness.Server.Faults);
     }
 
     /// <summary>A live publisher over the harness's service, with a share check whose images are prepared in memory, and a character logged in as Aria.</summary>

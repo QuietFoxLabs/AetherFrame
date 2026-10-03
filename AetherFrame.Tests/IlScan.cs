@@ -98,6 +98,62 @@ internal static class IlScan
         return found;
     }
 
+    /// <summary>
+    /// Every instruction in order, with its token operand (0 for one without), and the integer
+    /// constant it loads when it is one of the <c>ldc.i4</c> forms (null otherwise).
+    /// </summary>
+    internal static List<(ILOpCode OpCode, int Token, int? Constant)> InstructionsWithConstants(BlobReader reader)
+    {
+        var found = new List<(ILOpCode OpCode, int Token, int? Constant)>();
+        while (reader.RemainingBytes > 0)
+        {
+            var first = reader.ReadByte();
+            var opCode = first == 0xFE ? (ILOpCode)(0xFE00 | reader.ReadByte()) : (ILOpCode)first;
+            var token = 0;
+            int? constant = opCode switch
+            {
+                >= ILOpCode.Ldc_i4_m1 and <= ILOpCode.Ldc_i4_8 => (int)opCode - (int)ILOpCode.Ldc_i4_0,
+                _ => null,
+            };
+            switch (OperandOf(opCode))
+            {
+                case Operand.One:
+                    var small = reader.ReadSByte();
+                    if (opCode == ILOpCode.Ldc_i4_s)
+                    {
+                        constant = small;
+                    }
+
+                    break;
+                case Operand.Two:
+                    reader.Offset += 2;
+                    break;
+                case Operand.Four:
+                    var four = reader.ReadInt32();
+                    if (opCode == ILOpCode.Ldc_i4)
+                    {
+                        constant = four;
+                    }
+
+                    break;
+                case Operand.Eight:
+                    reader.Offset += 8;
+                    break;
+                case Operand.Token:
+                    token = reader.ReadInt32();
+                    break;
+                case Operand.Switch:
+                    var targets = reader.ReadInt32();
+                    reader.Offset += 4 * targets;
+                    break;
+            }
+
+            found.Add((opCode, token, constant));
+        }
+
+        return found;
+    }
+
     private static Operand OperandOf(ILOpCode opCode)
     {
         switch (opCode)

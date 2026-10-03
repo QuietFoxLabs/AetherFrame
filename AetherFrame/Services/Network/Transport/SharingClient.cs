@@ -18,6 +18,15 @@ internal sealed record SharingResponse(HttpStatusCode Status, byte[] Body, strin
 {
     /// <summary>Whether the server answered with success.</summary>
     public bool Succeeded => (int)Status is >= 200 and < 300;
+
+    /// <summary>Through the pipe only: <c>lodestone:refused</c> with a <c>503</c>, when the Lodestone turned the player's connection away (ServerApi-v1.md, section 2.3).</summary>
+    public string? Reason { get; init; }
+
+    /// <summary>Through the pipe only: with a successful check or re-read, the binding's day of last successful read, in UTC days since the Unix epoch.</summary>
+    public long? ReadDay { get; init; }
+
+    /// <summary>Whether the Lodestone turned the player's own connection away.</summary>
+    public bool LodestoneRefused => Status == HttpStatusCode.ServiceUnavailable && Reason == "lodestone:refused";
 }
 
 /// <summary>
@@ -48,6 +57,7 @@ internal sealed class SharingClient : IDisposable
 
     private readonly HttpClient client;
     private readonly DeploymentName deployment;
+    private readonly LodestonePipe pipe;
 
     /// <summary>
     /// A client for <paramref name="deployment"/>, over <paramref name="handler"/>, naming
@@ -55,6 +65,16 @@ internal sealed class SharingClient : IDisposable
     /// through Dalamud's callback and follows no redirect (<c>SharingHandler</c>); tests pass their own.
     /// </summary>
     public SharingClient(DeploymentName deployment, HttpMessageHandler handler, bool disposeHandler, Version pluginVersion)
+        : this(deployment, handler, disposeHandler, pluginVersion, null)
+    {
+    }
+
+    /// <summary>
+    /// A client whose Lodestone pipe connects through <paramref name="lodestoneLinks"/>, when it is
+    /// given: for tests, which never reach the Lodestone. The plugin's connects as
+    /// <see cref="LodestonePipe"/> says.
+    /// </summary>
+    internal SharingClient(DeploymentName deployment, HttpMessageHandler handler, bool disposeHandler, Version pluginVersion, Func<LodestonePipe.Link>? lodestoneLinks)
     {
         this.deployment = deployment ?? throw new ArgumentNullException(nameof(deployment));
         ArgumentNullException.ThrowIfNull(handler);
@@ -65,6 +85,7 @@ internal sealed class SharingClient : IDisposable
             Timeout = Timeout.InfiniteTimeSpan,
         };
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("AetherFrame", pluginVersion.ToString(3)));
+        pipe = lodestoneLinks is null ? new LodestonePipe(deployment, handler, pluginVersion) : new LodestonePipe(deployment, handler, pluginVersion, lodestoneLinks);
     }
 
     /// <summary>The deployment this client talks to.</summary>
@@ -164,6 +185,40 @@ internal sealed class SharingClient : IDisposable
     }
 
     /// <summary>
+    /// Sends the Lodestone check or re-read as <see cref="ActionAsync"/> does, but as a WebSocket
+    /// whose page the server reads through the player's own connection (<see cref="LodestonePipe"/>;
+    /// ServerApi-v1.md, section 2.3). A refused challenge is signed again under the fresh one the
+    /// final answer carries, on a new WebSocket, once.
+    /// </summary>
+    public async Task<SharingResponse> PipedActionAsync(RequestProofKind kind, byte[] body, IPersonaSigner signer, CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(signer);
+        if (kind is not (RequestProofKind.LodestoneCheck or RequestProofKind.LodestoneReread))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind), "Only the check and the re-read go through the pipe.");
+        }
+
+        if (body.Length > ProtocolLimits.MaxActionBodyBytes)
+        {
+            throw new ArgumentException("An action's body is at most 4,096 bytes.", nameof(body));
+        }
+
+        var challenge = await ChallengeAsync(cancellation).ConfigureAwait(false);
+        for (var attempt = 0; ; attempt++)
+        {
+            var proof = RequestProofCodec.SignAction(kind, body, deployment, challenge, signer);
+            var response = await pipe.RunAsync(kind, Envelope(proof, body), cancellation).ConfigureAwait(false);
+            if (response.Status != HttpStatusCode.Conflict || attempt > 0 || ChallengeFrom(response, HttpStatusCode.Conflict) is not { } fresh)
+            {
+                return response;
+            }
+
+            challenge = fresh;
+        }
+    }
+
+    /// <summary>
     /// Publishes a signed snapshot with its prepared images, in the snapshot's image order
     /// (ServerApi-v1.md, section 2.2), proved by <paramref name="signer"/>, which signed the
     /// document. Its size and image count are checked before a challenge is asked for. The body is
@@ -190,7 +245,11 @@ internal sealed class SharingClient : IDisposable
         }
     }
 
-    public void Dispose() => client.Dispose();
+    public void Dispose()
+    {
+        pipe.Dispose();
+        client.Dispose();
+    }
 
     /// <summary>A signed request's body: a <c>u16</c> proof length, the proof, then the payload.</summary>
     internal static byte[] Envelope(byte[] proof, byte[] payload)

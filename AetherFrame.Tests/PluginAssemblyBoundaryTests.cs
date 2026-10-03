@@ -24,7 +24,7 @@ namespace AetherFrame.Tests;
 /// own sources are held to the same lines: local folders never name the networking code, nothing
 /// uses a networking API, and the configuration has no persona members.
 /// </summary>
-public class PluginAssemblyBoundaryTests
+public partial class PluginAssemblyBoundaryTests
 {
     private static readonly string[] ForbiddenAssemblyPrefixes =
     [
@@ -61,7 +61,7 @@ public class PluginAssemblyBoundaryTests
     /// starting a process (a link opened in a browser leaves as surely as a request), and a
     /// networking type named in a string, which reflection could load past the type check.
     /// </summary>
-    private static readonly string[] RefusedEverywhere = ["WebRequest", "WebClient", "OpenLink", "Dns.", "SslStream", "WebSocket", "System.Net.Quic", "QuicConnection", "QuicListener", "HttpListener", "System.Net.Mail", "System.Net.Security", "TcpClient", "UdpClient", "NetworkStream", "SocketException", "SocketError", "HappyHttpClient", "ServerCertificateCustomValidationCallback", "DangerousAcceptAnyServerCertificateValidator", "RemoteCertificateValidationCallback", "SslOptions", "Process.Start", "ProcessStartInfo", "ShellExecute", "\"System.Net", "\"Dalamud.Networking"];
+    private static readonly string[] RefusedEverywhere = ["WebRequest", "WebClient", "OpenLink", "Dns.", "SslStream", "WebSocket", "System.Net.Quic", "QuicConnection", "QuicListener", "HttpListener", "System.Net.Mail", "System.Net.Security", "TcpClient", "TcpListener", "UdpClient", "NetworkStream", "SocketException", "SocketError", "HappyHttpClient", "ServerCertificateCustomValidationCallback", "DangerousAcceptAnyServerCertificateValidator", "RemoteCertificateValidationCallback", "SslOptions", "Process.Start", "ProcessStartInfo", "ShellExecute", "\"System.Net", "\"Dalamud.Networking"];
 
     /// <summary>
     /// What the handler must never be told (decision R2): to send Windows or proxy credentials or a
@@ -87,6 +87,43 @@ public class PluginAssemblyBoundaryTests
     /// <c>AddressFamily</c>. The player build references none.
     /// </summary>
     private static readonly string[] PreviewNetworkAssemblies = ["System.Net.Http", "System.Net.Primitives"];
+
+    /// <summary>
+    /// The assemblies the Lodestone pipe adds, and only it ("Checking a character through the
+    /// player's own connection" in the decision register, amending R3), recorded from the compiled
+    /// pipe: <see cref="ThePipesNetworkTypes_AreExactlyTheRecordedOnes_AndNamedOnlyByThePipe"/>
+    /// holds that no other type names their types.
+    /// </summary>
+    private static readonly string[] PipeNetworkAssemblies = ["System.Net.Sockets", "System.Net.WebSockets", "System.Net.WebSockets.Client"];
+
+    /// <summary>The exact networking types the Lodestone pipe names, recorded from the compiled pipe as R3 itself was derived; nothing else may name them.</summary>
+    private static readonly string[] PipeNetworkTypes =
+    [
+        "System.Net.DnsEndPoint",
+        "System.Net.EndPoint",
+        "System.Net.IPAddress",
+        "System.Net.IPEndPoint",
+        "System.Net.Sockets.ProtocolType",
+        "System.Net.Sockets.Socket",
+        "System.Net.Sockets.SocketException",
+        "System.Net.Sockets.SocketFlags",
+        "System.Net.Sockets.SocketShutdown",
+        "System.Net.Sockets.SocketType",
+        "System.Net.WebSockets.ClientWebSocket",
+        "System.Net.WebSockets.ClientWebSocketOptions",
+        "System.Net.WebSockets.ValueWebSocketReceiveResult",
+        "System.Net.WebSockets.WebSocket",
+        "System.Net.WebSockets.WebSocketCloseStatus",
+        "System.Net.WebSockets.WebSocketException",
+        "System.Net.WebSockets.WebSocketMessageType",
+        "System.Net.WebSockets.WebSocketState",
+    ];
+
+    /// <summary>The one plugin source whose source scan lifts the WebSocket and socket names (the pipe), by its path in the plugin project.</summary>
+    private static readonly string PipeSource = Path.Combine("Services", "Network", "Transport", "LodestonePipe.cs");
+
+    /// <summary>What the source scan lifts for <see cref="PipeSource"/> alone; <c>SslStream</c>, <c>Dns.</c>, <c>TcpClient</c>, <c>TcpListener</c>, <c>UdpClient</c> and <c>HttpListener</c> stay refused there.</summary>
+    private static readonly string[] LiftedForThePipe = ["WebSocket", "NetworkStream", "SocketException", "SocketError"];
 
     /// <summary>What no string in the plugin may hold, in any case (decision R2): the server's health check is the operator's monitor's alone.</summary>
     private static readonly string[] HealthCheckPaths = ["v1/health", "/health"];
@@ -127,7 +164,7 @@ public class PluginAssemblyBoundaryTests
         // Decision R3: the preview flavour may reference HTTP and the network primitives, nothing else.
         if (PreviewFlavour)
         {
-            forbidden.RemoveAll(name => PreviewNetworkAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase));
+            forbidden.RemoveAll(name => PreviewNetworkAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase) || PipeNetworkAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase));
         }
         else
         {
@@ -161,7 +198,8 @@ public class PluginAssemblyBoundaryTests
         {
             // Decision R3's exact allowlist: every type in System.Net.Http and its Headers, the two
             // named types, and Dalamud's HappyEyeballsCallback.
-            networking.RemoveAll(name => IsInNamespace(name, "System.Net.Http") || IsInNamespace(name, "System.Net.Http.Headers") || PreviewNetworkTypes.Contains(name, StringComparer.Ordinal));
+            networking.RemoveAll(name => IsInNamespace(name, "System.Net.Http") || IsInNamespace(name, "System.Net.Http.Headers") || PreviewNetworkTypes.Contains(name, StringComparer.Ordinal)
+                || PipeNetworkTypes.Contains(name, StringComparer.Ordinal));
             dalamudNetworking.RemoveAll(name => name == "Dalamud.Networking.Http.HappyEyeballsCallback");
         }
 
@@ -720,7 +758,9 @@ public class PluginAssemblyBoundaryTests
     public void PluginSources_UseNoNetworkingApi()
     {
         // Decision R3: networking only under Services/Network, the preview flavour's; and even there
-        // nothing but HTTP through Dalamud's connect callback.
+        // nothing but HTTP through Dalamud's connect callback, except the Lodestone pipe's one file,
+        // where WebSockets and its one socket may be named (R3 as "Checking a character through the
+        // player's own connection" amends it).
         var networkFolder = Path.Combine("Services", "Network") + Path.DirectorySeparatorChar;
         var offending = new List<string>();
         var scanned = 0;
@@ -728,6 +768,8 @@ public class PluginAssemblyBoundaryTests
         {
             scanned++;
             var inNetworkFolder = relative.StartsWith(networkFolder, StringComparison.OrdinalIgnoreCase);
+            var pipe = string.Equals(relative, PipeSource, StringComparison.Ordinal);
+            var refusedHere = pipe ? RefusedEverywhere.Except(LiftedForThePipe).ToArray() : RefusedEverywhere;
             var lineNumber = 0;
             foreach (var line in File.ReadLines(file))
             {
@@ -740,7 +782,7 @@ public class PluginAssemblyBoundaryTests
                 // A global using would carry a networking namespace into every file unseen.
                 var globalUsing = line.Contains("global using", StringComparison.Ordinal)
                     && (line.Contains("System.Net", StringComparison.Ordinal) || line.Contains("Dalamud.Networking", StringComparison.Ordinal));
-                var refused = RefusedEverywhere.Any(api => line.Contains(api, StringComparison.Ordinal)) || NamesSockets(line) || globalUsing;
+                var refused = refusedHere.Any(api => line.Contains(api, StringComparison.Ordinal)) || (!pipe && NamesSockets(line)) || globalUsing;
                 var outsideTheFolder = !inNetworkFolder && NetworkingApis.Any(api => line.Contains(api, StringComparison.Ordinal));
                 if (refused || outsideTheFolder)
                 {

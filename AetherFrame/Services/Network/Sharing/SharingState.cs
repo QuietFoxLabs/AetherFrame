@@ -405,6 +405,9 @@ internal sealed class SharingStateFile
         directory = Path.GetFullPath(personasDirectory);
     }
 
+    /// <summary>The persona folder the file is in.</summary>
+    internal string Folder => directory;
+
     private string Target => Path.Combine(directory, FileName);
 
     /// <summary>The characters the file holds; none when there is no file.</summary>
