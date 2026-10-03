@@ -2,12 +2,12 @@
 
 What `server/AetherFrame.Server` answers, and how the plugin (N2-9 and N2-10) talks to it. It carries the protocol of [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) over HTTPS and applies decision batches B and C ([DecisionRegister.md](DecisionRegister.md)). It is a draft, like the protocol, until the owner's two-player test (NETWORK2.md, section 2) has passed. `[updated 2026-10-02: the test passed on October 1, 2026 (TwoPlayerTest.md). The interface is still marked DRAFT with the protocol, whose version 1 only the owner's freeze finalises.]`
 
-**Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed. `[updated 2026-10-02: and the health check, GET /v1/health (section 3; known bug 14).]`
+**Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed. `[updated 2026-10-02: and the health check, GET /v1/health (section 3; known bug 14).]` `[updated 2026-10-03: and the check and the re-read as WebSockets, read through the player's own connection (section 2.3), with each binding's day of last read (sections 6 and 7).]`
 
 ## 1. Transport
 
 - **HTTPS only**, to the one deployment name the plugin is configured with (section 14.1 of the specification; decision R2). Caddy terminates TLS in front of the server (N2-8), and the server trusts forwarded headers from Caddy's address alone.
-- **Every request is a `POST`**, except `GET /v1/status` and `GET /v1/health`. Paths carry no identifier, name, code or marker: those travel only in bodies (decisions R4, S5 and C7), since paths reach logs.
+- **Every request is a `POST`**, except `GET /v1/status` and `GET /v1/health`. Paths carry no identifier, name, code or marker: those travel only in bodies (decisions R4, S5 and C7), since paths reach logs. `[updated 2026-10-03: the check and the re-read may also be a GET that upgrades to a WebSocket (section 2.3).]`
 - **Request bodies** are `application/octet-stream`, bounded before they are read (section 5).
 - **Responses** are `application/octet-stream`, `application/json` (a closed set of small objects, section 4), `image/png` or `image/jpeg`, each with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. A failure is a status with no body, except where section 3 says otherwise.
 
@@ -44,7 +44,8 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 - **A Lodestone id** is its decimal digits, as a string: 1 to 10 digits with no leading zero (C2).
 - **A name** is the character's full name, and **a World** its Home World's name, compared as C1 says: the name in NFC, lower case, with runs of spaces folded, and the World without regard to case.
 - **A reason** is one of `offensive`, `impersonation`, `spam` or `other`.
-- **Lookups, images and reports** need the signer to be bound to a character that is on the allowlist (C5, C8): otherwise `404`, as if nothing were found, or `410` when another key's check took the signer's character over.
+- **The check and the re-read** may also come as WebSockets, which read the page through the player's own connection (section 2.3). As a `POST` they are answered as above, through the operator's relay when one is set.
+- **Lookups, images and reports** need the signer to be bound to a character that is on the allowlist (C5, C8): otherwise `404`, as if nothing were found, or `410` when another key's check took the signer's character over. `[updated 2026-10-03: a character whose last successful Lodestone read is 30 days old is not found either, until it is read again (section 7).]`
 - **Opting out** deletes the binding and everything published for it (C4). **Pausing** (C3) deletes the published Plate and its images at once and keeps the binding and its revision records: the next publish shares again, with no new check.
 
 ### 2.2 Publishing
@@ -68,6 +69,51 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 | `422` with a reason | refused; the reason is one of the `publish` codes of section 4 |
 | `503` | every publish slot is taken, or the publishing character or its address range already holds one, or the image worker's queue is full: try again later |
 
+### 2.3 The check and the re-read as WebSockets
+
+`[added 2026-10-03: "Checking a character through the player's own connection" in the decision register]` The check and the re-read may also come as a WebSocket at their own paths: a `GET` of `/v1/lodestone/check` or `/v1/lodestone/reread` that upgrades. The server then reads the character's page through the player's own connection. The plugin opens one TCP connection to `na.finalfantasyxiv.com`, port 443, and carries its bytes. The server runs TLS to the Lodestone over it, so the plugin carries only encrypted bytes. A `POST` to either path is answered as section 2.1 says, through the operator's relay when one is set.
+
+**Before the upgrade,** in this order, each refusal a status with no body:
+
+| Status | When |
+|---|---|
+| `400` | the `GET` is not a WebSocket request |
+| `429` | the address's Lodestone limit (C6, 10 an hour), taken here once for the whole WebSocket: the signed body doesn't take it again |
+| `403` | the request has an `Origin` header; plugins send none |
+| `503` | 2 WebSockets are already open for one of the address's groups (at the group's multiple, section 7), or 20 in all |
+
+**The exchange:**
+1. The plugin's first message is binary: exactly the signed body a `POST` carries (section 2), at most 4,552 bytes, within 10 seconds of the upgrade.
+2. The server checks it as it checks a `POST`: the envelope, the proof's kind, the challenge, the body, the limits per key and per Lodestone id, then the code (a check) or the binding (a re-read). An answer that needs no page is the final message at once.
+3. Otherwise the server sends the text message `open`, once. The plugin connects, then answers `opened`, within 10 seconds of `open`, or `failed`.
+4. Binary messages carry that connection's bytes both ways, each at most 64 KiB: at most 16 KiB toward the Lodestone, and 2 MiB from it. When the Lodestone closes its side, the plugin sends the text message `eof`.
+5. When the read is done, or has failed, the server sends `close`, whatever happened after `open`. The plugin then closes its connection. Bytes, an `eof`, or a late `opened` or `failed` already on their way are dropped, within the same totals.
+6. The final message is text (below). Then the server closes the WebSocket, and the plugin closes in answer.
+
+**Deadlines.** The first message comes within 10 seconds of the upgrade, and `opened` within 10 seconds of `open`. The fetch ends within 20 seconds of `open`, the wait for `opened` included. The whole session ends within 40 seconds of the upgrade. Caddy closes an upgraded connection on these two paths after 60 seconds, as an outer bound; Kestrel holds at most 32 upgraded connections.
+
+**Anything else ends the session at once,** with no final message: the server drops the WebSocket. That covers a first message that is late, text or over its bound; any message before `open`; anything but `opened` or `failed` after it; bytes before `opened` or after `eof`; a message over 64 KiB; more than 2 MiB from the Lodestone; a second answer to `open`; an unknown text; the plugin closing the WebSocket before the final message; and the session's deadline.
+
+**The final message** is one JSON object:
+
+| Property | Value |
+|---|---|
+| `status` | the status a `POST` would have got |
+| `body` | when that `POST`'s answer is JSON, the same object (section 2.1) |
+| `challenge` | with `409`, the fresh challenge's 32 bytes in base64: the plugin signs again under it, on a new WebSocket |
+| `reason` | with `503`, `lodestone:refused` when the Lodestone answered the player's connection with `403` or `429` |
+
+For example `{"status":200,"body":{"profileId":"prf_…","name":"…","world":"…"}}`, or `{"status":422}`.
+
+**The read** is C2's: `GET` of the one fixed address with the server's `User-Agent`, over HTTP/1.1, following no redirect, at most 1 MiB, with no compression. It runs over a client made for that one pipe and disposed with it. Its TLS is version 1.3 only, and the Lodestone's certificate is checked as .NET checks any, so a pipe that answers with its own certificate, or one for another name, gets no request. A response whose body would end only when the connection closes, with neither a length nor chunks, is refused. The Lodestone's response headers are never logged.
+
+**What the pipe changes in the answers:**
+- `503` with `lodestone:refused`: the Lodestone answered `403` or `429`. The plugin tells the player it turned their connection away.
+- `503` with no reason, "try again later": the plugin answered `failed`, or no `opened` came in time; the fetch passed its deadline; the connection broke or was cut off; TLS failed; or the body wasn't framed. Also when the 20 places for piped reads are all taken.
+- **A check** reads the page before it applies the allowlist (C8) and the second-character rule, so whether `open` comes tells nothing about an id. Every failure after the code is the same `422`, sent no sooner than 3 seconds after the check started, and no sooner than 2 seconds after the read ended.
+- **A re-read** counts only the Lodestone's own "not found" page, with a `404`, as "not found" (section 7). A dropped pipe, a failed handshake or a cut-off page never does.
+- **Piped reads** have their own 20 places, taken only once the code is valid (a check) or the binding found (a re-read). They never wait for the relay's reads, and spend none of the fetch budget's hour (C2's 60). C6's limits per key, per Lodestone id and per address apply as for a `POST`.
+
 ## 3. Unsigned requests
 
 | Request | Answer |
@@ -87,6 +133,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 
 - **A `422` from `publish`** carries one of these reason codes as `text/plain`: `not-bound`, `wrong-profile`, `not-a-layout`, `clock-ahead`, `revision-conflict`, `image-refused`, `document-refused`.
 - **Every other failure** is its status alone: `400` for a malformed body, `403` for a proof that fails, `404`, `413` for a body over its bound, `422` for a failed check, `429` for a rate limit.
+- **A WebSocket's final message** (section 2.3) carries one `reason` only: `lodestone:refused`, with `503`.
 
 ## 5. Bounds
 
@@ -98,9 +145,11 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 
 A body over its bound is refused with `413` before it is buffered: Kestrel's own limit is set per endpoint, and the server reads no more than the bound however the request is framed.
 
+A WebSocket (section 2.3) has its own bounds: a first message of at most 4,552 bytes, read into a buffer of that size; later messages of at most 64 KiB; and, through one pipe, at most 16 KiB toward the Lodestone and 2 MiB from it.
+
 ## 6. What the server keeps
 
-Decision batch C, C7, says it: for each binding, the Lodestone id, the name and World, the key's identity and the profile id, the latest revision's document, served profile and images, and N2's revision records; and reports, for 30 days or until the operator acts. It keeps no lookup log, no address, and no copy of a Lodestone page. The health check keeps nothing either: its three signals live in memory only, the canary's image is discarded, and a request to it writes nothing. A day number is kept only while a binding's Lodestone page shows "not found", for C1's two re-reads a day apart.
+Decision batch C, C7, says it: for each binding, the Lodestone id, the name and World, the key's identity and the profile id, the latest revision's document, served profile and images, and N2's revision records; and reports, for 30 days or until the operator acts. It keeps no lookup log, no address, and no copy of a Lodestone page. The health check keeps nothing either: its three signals live in memory only, the canary's image is discarded, and a request to it writes nothing. A day number is kept only while a binding's Lodestone page shows "not found", for C1's two re-reads a day apart. `[updated 2026-10-03: and, for each binding, the day number (UTC) of its last successful Lodestone read, for the 30 days of section 7.]`
 
 ## 7. Choices batch C left to N2-7
 
@@ -109,9 +158,10 @@ Recorded in DecisionRegister.md as "N2-7b's server details":
 - **A failed check doesn't use up the code.** Only a successful binding does, so a player who pastes the code after asking for a check can simply check again. A code is still bound to one key and lives an hour (C2).
 - **A check by the key already bound** refreshes the name and World and keeps the profile id. A check by another key takes the character over with a fresh one (C1, C4).
 - **A re-read that reads a name and World another binding shows** hides that other binding: the newest read wins, as C1 says for checks. Two characters can't hold one name on one World.
-- **Re-reads** are paced evenly over the day, at least 2 minutes apart, within half of the fetch budget (C2), so they never crowd out a check. A re-read the player asks for counts as a check against the player's limits and uses the whole budget.
+- **Re-reads** are paced evenly over the day, at least 2 minutes apart, within half of the fetch budget (C2), so they never crowd out a check. A re-read the player asks for counts as a check against the player's limits and uses the whole budget. `[updated 2026-10-03: the daily re-read runs only while the operator's relay (LodestoneRelay) is set; a re-read through the player's own connection uses none of the budget (section 2.3).]`
+- **A binding's last read** `[added 2026-10-03]`. Each successful read of its page records the day number (UTC): a check, a player's re-read (as a `POST` or through a pipe), and the daily re-read. A "not found" is no read. Lookups, images and reports find a binding only while that day is within the last 30: read on day D, it answers through day D + 29, so for at most 30 days and at least 29. It is hidden, not deleted, and its key still finds it, to re-read it, publish and opt out; its next successful read shows it again. Bindings from before this change were given the day the server first started with it, so none hid at once.
 - **"Not found"** is the Lodestone's own page: status 404, its title, and one `error__body` with no character on it. Anything else is an outage and changes nothing (C1). While a binding's page shows "not found", the server keeps the day number (UTC) it first did, and nothing else. It removes the binding on a "not found" two or more days later by that number: at least 24 hours after the first, and at most 48. A re-read applies only to the character it read, so a re-read in flight while the key opts out and binds another character changes nothing.
-- **A failed check** answers no sooner than 3 seconds after it started, wherever it failed, so its timing doesn't tell an id on the allowlist from one off it. "Try again later" (`503`, a full fetch budget) is answered before the code, the allowlist or the key's binding are looked at. What remains is a fetch longer than 3 seconds, which only an allowlisted id can cause: in stage 1 that tells someone holding a key and a live code that one of two ids is a tester's.
+- **A failed check** answers no sooner than 3 seconds after it started, wherever it failed, so its timing doesn't tell an id on the allowlist from one off it. "Try again later" (`503`, a full fetch budget) is answered before the code, the allowlist or the key's binding are looked at. What remains is a fetch longer than 3 seconds, which only an allowlisted id can cause: in stage 1 that tells someone holding a key and a live code that one of two ids is a tester's. `[updated 2026-10-03: through a pipe (section 2.3) every id's page is read, and a failure answers no sooner than 2 seconds after the read ended as well (ServerOptions.CheckFailureAfterRead): longer than parsing a page and the steps after the allowlist take, so an allowlist refusal and a later failure leave at the same time.]`
 - **Limits C6 doesn't state:**
   - challenges: 600 an hour per address, counting those a `409` carries;
   - opting out: 10 an hour per key and 30 per address;

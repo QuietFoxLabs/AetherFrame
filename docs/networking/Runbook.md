@@ -90,6 +90,7 @@ The kit is in [`deploy/`](../../deploy):
       - The server reads this setting only when it starts, and refuses to start if it isn't an address and a port.
       - The check in step 5 runs from the server's host. After the first real check in game, the relay's window should show a tunnel too, which confirms the server's container goes through it.
       - To go back to reaching the Lodestone directly, remove the line and restart again.
+   7. **Keep the relay set for now** (October 3, 2026; "Checking a character through the player's own connection" in the [decision register](DecisionRegister.md)). Since that change, a plugin can check its character through the player's own connection, and the relay isn't used for it. Plugins from before it still check only through the relay, and the server's daily re-read of every binding runs only while the relay is set. So the relay stays set until a release with the new check is out and `MinimumPlugin` is raised to it (ROADMAP.md, section 8, the owner's choice of October 3, step 5). Only then remove the line, as in step 6.
 
 8. **Opening the alpha to everyone** (the owner's direction of October 1, 2026; "Opening the alpha" in the [decision register](DecisionRegister.md)). Once a deployment with per-run worker sockets is running (`docker compose exec server env | grep ImageWorkerRuns` prints a line), add `"OpenToEveryone": true` to the `AetherFrame` section of `/opt/aetherframe/config/aetherframe.json`, beside the allowlist, then run `docker compose restart server` in `/opt/aetherframe`. `admin allowlist` then starts with "Open to everyone". To close it again, set it to `false` and restart: only the listed ids may then share and view.
 
@@ -103,7 +104,7 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 | See the image worker's runs | `systemctl status aetherframe-worker` and `docker ps --filter name=aetherframe-worker` (one `aetherframe-worker-` container is up, or starts within seconds, whenever the server is up) |
 | The server logs "No image worker connected in time." and no worker container ever starts | The worker service must run as root (it reads the socket volume's folder). On a server set up before October 2, 2026, run once, as root or a sudo user (not as `aetherframe-deploy`): `sudo sed -i '/^User=aetherframe-deploy$/d' /etc/systemd/system/aetherframe-worker.service && sudo systemctl daemon-reload && sudo systemctl restart aetherframe-worker` |
 | Read the logs (14 days, no addresses or names) | `docker compose logs --since 1h` |
-| List bound characters | `docker compose exec server dotnet AetherFrame.Server.dll admin characters` |
+| List bound characters, with the day (UTC) of each one's last Lodestone read | `docker compose exec server dotnet AetherFrame.Server.dll admin characters` |
 | List reports | `docker compose exec server dotnet AetherFrame.Server.dll admin reports` |
 | Close a report you've dealt with | `docker compose exec server dotnet AetherFrame.Server.dll admin resolve-report <number>` |
 | Remove a character and everything it published | `docker compose exec server dotnet AetherFrame.Server.dll admin remove-character <Lodestone id>` |
@@ -123,6 +124,8 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 - **A stolen or lost key.** The tester checks their character again from AetherFrame on the new or cleaned PC. That moves the character to the new key and deletes everything the old key published (decision C1). If the old PC is compromised, remove the character first, then have them check again.
 - **The Lodestone changes its page layout.** Checks and re-reads fail closed: no binding is lost, because only the Lodestone's own "not found" page, seen twice a day apart, removes one. Tell Claude in the Owner inbox; the parser is updated and redeployed.
 - **The Lodestone check's ownership rule** rests on the character profile being editable only by its signed-in owner (decision C2). If Square Enix ever changes that, turn sharing off by emptying the allowlist, and tell Claude.
+- **A character not read for 30 days** stops showing its Plate to others until its player next uses sharing, which reads its page again. It isn't deleted. `admin characters` shows each character's last read; while the relay is set, the daily re-read keeps them current.
+- **.NET and OpenSSL security advisories.** The server now runs TLS to the Lodestone over players' own connections, so anyone holding a key can feed its TLS client handshake and certificate bytes ("A new surface" in the register's "Checking a character through the player's own connection"). When .NET or OpenSSL publishes a security advisory, run **Deploy the server** again with the commit already deployed, once Microsoft's .NET 10 images carry the fix. The workflow builds the server's image afresh on them, which brings both.
 
 ### Health alerts
 
@@ -154,11 +157,11 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
   docker compose start server
   ```
   A restore brings back anything deleted since the backup was made. Only restore one made after the last removal, or remove again afterwards.
-- **What the server keeps** (decision C7): for each bound character, the Lodestone id, name and World, the key's identity and the profile id, the latest Plate and its images, and its revision records; and reports. It keeps no addresses, no lookup log and no copy of a Lodestone page. Logs hold only a request's route, status, time and kind of failure, for 14 days.
+- **What the server keeps** (decision C7): for each bound character, the Lodestone id, name and World, the key's identity and the profile id, the day of its last Lodestone read, the latest Plate and its images, and its revision records; and reports. It keeps no addresses, no lookup log and no copy of a Lodestone page. Logs hold only a request's route, status, time and kind of failure, for 14 days.
 
 ## 5. What each part does
 
-- **Caddy** answers HTTPS on ports 443 and 80 and passes requests to the server. It keeps no access log, and its error logs, which could hold an address, are switched off.
+- **Caddy** answers HTTPS on ports 443 and 80 and passes requests to the server. It keeps no access log, and its error logs, which could hold an address, are switched off. It closes a WebSocket for the Lodestone check or re-read after 60 seconds; the server ends its own within 40.
 - **The server** listens only inside Docker. It trusts the client address Caddy reports and no other, and refuses to start with a name reserved for tests or ASP.NET Core's forwarded-headers switch on.
 - **The image worker** runs from the `aetherframe-worker` service, one container at a time (decision I2).
   - Each container takes at most one image, then ends; an idle one ends after 15 seconds. Whatever it is doing, it is ended from outside after 60 seconds, and a fresh one starts. The service removes any worker container left behind when it starts or stops.

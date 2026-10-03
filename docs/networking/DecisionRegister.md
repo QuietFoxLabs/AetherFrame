@@ -1718,6 +1718,16 @@ Its recheck of `31176d8` (October 3, 2026) **concurred**: all three blocking iss
 - hiding that affects lookups only;
 - telling players about the 30 days, with what the server keeps stated.
 
+**Applied by the server's change, October 3, 2026** (ROADMAP.md, section 8, the owner's choice of October 3, step 2). `server/AetherFrame.Server` answers the check and the re-read as WebSockets at their own paths, reads through each pipe with a client of its own, and keeps each binding's day of last read. [ServerApi-v1.md](ServerApi-v1.md), section 2.3, states the exchange exactly. The details the design left to the build, within it:
+- **The final message** is one JSON object: the `status`, and the `body` a `POST` would get, a `409`'s fresh `challenge` in base64, or the `reason` `lodestone:refused`.
+- **The delay after the read** is 2 seconds (`CheckFailureAfterRead`), besides the 3-second floor from the start. It is longer than parsing a page and the steps after the allowlist take.
+- **Before the upgrade:** a `GET` that isn't a WebSocket gets `400`; then the address limit, the `Origin` header and the places, in that order, each refused with its status and no body.
+- **The places per address group** take each group's multiple, as every address limit does: 1, 4 and 16 for an IPv6 /64, /56 and /48. Kestrel's outer bound is 32 upgraded connections, and Caddy's 60 seconds on the two paths.
+- **A piped re-read** applies the allowlist with the binding's lookup, before `open`, as a `POST` does: the key learns only what a `POST` tells it.
+- **"Try again later"** covers every pipe failure: `failed`, no `opened` in time, the fetch's deadline, a broken or cut-off connection, a failed handshake and a body ended only by the close; and all 20 places taken.
+- **After `close`,** bytes, `eof` or a late answer to `open` already in flight are dropped, within the byte totals. Anything else the exchange doesn't expect ends the session with no final message.
+- **Bindings from before the change** get the day the server first starts with it.
+
 ## Gates
 
 | Gate | Must be decided before |

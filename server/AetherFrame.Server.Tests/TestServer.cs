@@ -81,6 +81,9 @@ internal sealed class TestServer : WebApplicationFactory<Program>
     /// <summary>The failed check's floor: none, unless a test sets one before the server starts.</summary>
     public TimeSpan CheckFailureFloor { get; set; } = TimeSpan.Zero;
 
+    /// <summary>A failed piped check's delay after its read: none, unless a test sets one before the server starts.</summary>
+    public TimeSpan CheckFailureAfterRead { get; set; } = TimeSpan.Zero;
+
     public string DatabasePath => Path.Combine(folder, "server.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -115,7 +118,11 @@ internal sealed class TestServer : WebApplicationFactory<Program>
 
             // The real Lodestone client, logging and all, with only its connection replaced.
             services.AddHttpClient(LodestoneHttpPages.ClientName).ConfigurePrimaryHttpMessageHandler(() => new FakeLodestoneHandler(Lodestone));
-            services.PostConfigure<ServerOptions>(options => options.CheckFailureFloor = CheckFailureFloor);
+            services.PostConfigure<ServerOptions>(options =>
+            {
+                options.CheckFailureFloor = CheckFailureFloor;
+                options.CheckFailureAfterRead = CheckFailureAfterRead;
+            });
             if (!UseImageWorker && !UseImageWorkerRuns)
             {
                 services.RemoveAll<AetherFrame.Server.Images.IImageProcessor>();

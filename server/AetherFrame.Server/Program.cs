@@ -79,6 +79,10 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 {
     kestrel.AddServerHeader = false;
     kestrel.Limits.MaxRequestBodySize = SignedRequests.MaxActionRequestBytes;
+
+    // The Lodestone check and re-read as WebSockets (ServerApi-v1.md, section 2.3): an outer bound
+    // on upgraded connections, which Kestrel doesn't otherwise limit, behind the server's own places.
+    kestrel.Limits.MaxConcurrentUpgradedConnections = LodestoneSockets.UpgradedConnectionBound;
 });
 
 builder.Services.AddOptions<ServerOptions>()
@@ -101,6 +105,11 @@ builder.Services.AddSingleton(services => new Worlds(services.GetRequiredService
 builder.Services.AddSingleton<LodestoneBudget>();
 builder.Services.AddSingleton<LodestoneReader>();
 builder.Services.AddSingleton<ILodestonePages, LodestoneHttpPages>();
+builder.Services.AddSingleton<LodestoneActions>();
+builder.Services.AddSingleton<LodestoneSockets>();
+builder.Services.AddSingleton<PipedReads>();
+builder.Services.AddSingleton<PipedPages>();
+builder.Services.AddSingleton<IPipedPages>(services => services.GetRequiredService<PipedPages>());
 builder.Services.AddSingleton<Rereads>();
 builder.Services.AddSingleton<ContentStore>();
 builder.Services.AddSingleton<PublishSlots>();
@@ -125,7 +134,7 @@ builder.Services.AddHttpClient(LodestoneHttpPages.ClientName, (services, client)
     {
         var options = services.GetRequiredService<IOptions<ServerOptions>>().Value;
         client.Timeout = TimeSpan.FromSeconds(10);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd($"AetherFrame-Server/1 (+https://{options.DeploymentName}/)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(LodestoneHttpPages.UserAgent(options.DeploymentName));
     })
     .ConfigurePrimaryHttpMessageHandler(services => LodestoneHttpPages.CreateHandler(services.GetRequiredService<IOptions<ServerOptions>>().Value.Relay))
     .RemoveAllLoggers();
@@ -148,6 +157,7 @@ builder.Services.AddOptions<ForwardedHeadersOptions>().Configure<IOptions<Server
 var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseMiddleware<RequestLog>();
+app.UseWebSockets();
 CharacterEndpoints.Map(app);
 PlateEndpoints.Map(app);
 HealthEndpoints.Map(app);

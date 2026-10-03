@@ -38,9 +38,15 @@ internal sealed class LodestoneHttpPages(IHttpClientFactory clients) : ILodeston
     /// <summary>The deadline over one whole fetch: connecting, the headers and the body (decision C2).</summary>
     internal TimeSpan Deadline { get; set; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>The address of a character's page: the one address the server ever fetches (decision C2).</summary>
+    public static Uri AddressOf(long lodestoneId) => new(Origin, "lodestone/character/" + lodestoneId.ToString(CultureInfo.InvariantCulture) + "/");
+
+    /// <summary>The fixed User-Agent of every Lodestone fetch: AetherFrame and the deployment's own name (decision C2).</summary>
+    public static string UserAgent(string deploymentName) => $"AetherFrame-Server/1 (+https://{deploymentName}/)";
+
     public async Task<LodestoneResponse> GetAsync(long lodestoneId, CancellationToken cancellation)
     {
-        var address = new Uri(Origin, "lodestone/character/" + lodestoneId.ToString(CultureInfo.InvariantCulture) + "/");
+        var address = AddressOf(lodestoneId);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(Deadline);
         var token = deadline.Token;
@@ -54,26 +60,32 @@ internal sealed class LodestoneHttpPages(IHttpClientFactory clients) : ILodeston
                 return new LodestoneResponse(status, null);
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(token);
-            using var buffer = new MemoryStream();
-            var chunk = new byte[16 * 1024];
-            int read;
-            while ((read = await stream.ReadAsync(chunk, token)) > 0)
-            {
-                if (buffer.Length + read > MaxBytes)
-                {
-                    return new LodestoneResponse(status, null);
-                }
-
-                buffer.Write(chunk, 0, read);
-            }
-
-            return new LodestoneResponse(status, System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
+            return new LodestoneResponse(status, await ReadBodyAsync(response, token));
         }
         catch (Exception e) when (e is HttpRequestException or OperationCanceledException or IOException && !cancellation.IsCancellationRequested)
         {
             return new LodestoneResponse(0, null);
         }
+    }
+
+    /// <summary>A page's body as text, or null once it passes <see cref="MaxBytes"/>: nothing past the bound is read.</summary>
+    internal static async Task<string?> ReadBodyAsync(HttpResponseMessage response, CancellationToken token)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(token);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[16 * 1024];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, token)) > 0)
+        {
+            if (buffer.Length + read > MaxBytes)
+            {
+                return null;
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
     }
 
     /// <summary>
@@ -120,6 +132,20 @@ internal enum LodestoneOutcome
 
     /// <summary>The fetch budget or queue is full; nothing was fetched.</summary>
     Busy,
+
+    /// <summary>
+    /// A read through the player's own connection that the Lodestone turned away, with a 403 or a
+    /// 429: the player's connection, not the page, is at fault.
+    /// </summary>
+    Refused,
+
+    /// <summary>
+    /// A read through the player's own connection that got no complete, framed answer: the plugin
+    /// couldn't connect or didn't in time, the fetch's deadline passed, the connection broke or was
+    /// cut off, TLS failed (a certificate the server doesn't trust, say), or the body was ended only
+    /// by the connection closing. Never "not found".
+    /// </summary>
+    Unanswered,
 }
 
 internal sealed record LodestoneRead(LodestoneOutcome Outcome, LodestoneCharacter? Character = null);
@@ -214,22 +240,37 @@ internal sealed class LodestoneReader(ILodestonePages pages, LodestoneBudget bud
                 oneAtATime.Release();
             }
 
-            if (response is { Status: 404, Html: { } missing } && LodestonePage.IsNotFoundPage(missing))
+            var read = Interpret(response, worlds);
+            if (read.Outcome == LodestoneOutcome.Failed)
             {
-                return new LodestoneRead(LodestoneOutcome.NotFound);
+                logger.LogInformation("A Lodestone read failed with status {Status}.", response.Status);
             }
 
-            if (response is { Status: 200, Html: { } html } && LodestonePage.Read(html, worlds) is { } character)
-            {
-                return new LodestoneRead(LodestoneOutcome.Found, character);
-            }
-
-            logger.LogInformation("A Lodestone read failed with status {Status}.", response.Status);
-            return new LodestoneRead(LodestoneOutcome.Failed);
+            return read;
         }
         finally
         {
             budget.Release();
         }
+    }
+
+    /// <summary>
+    /// What a fetched page says (decisions C1 and C2): the Lodestone's own "not found" page with a 404
+    /// is <see cref="LodestoneOutcome.NotFound"/>, a character page that passes with a 200 is
+    /// <see cref="LodestoneOutcome.Found"/>, and anything else is <see cref="LodestoneOutcome.Failed"/>.
+    /// </summary>
+    internal static LodestoneRead Interpret(LodestoneResponse response, Worlds worlds)
+    {
+        if (response is { Status: 404, Html: { } missing } && LodestonePage.IsNotFoundPage(missing))
+        {
+            return new LodestoneRead(LodestoneOutcome.NotFound);
+        }
+
+        if (response is { Status: 200, Html: { } html } && LodestonePage.Read(html, worlds) is { } character)
+        {
+            return new LodestoneRead(LodestoneOutcome.Found, character);
+        }
+
+        return new LodestoneRead(LodestoneOutcome.Failed);
     }
 }

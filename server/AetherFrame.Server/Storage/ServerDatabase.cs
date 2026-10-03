@@ -34,7 +34,8 @@ internal sealed class ServerDatabase
             world TEXT NOT NULL,
             profile_id TEXT NOT NULL UNIQUE,
             hidden INTEGER NOT NULL DEFAULT 0,
-            not_found_day INTEGER
+            not_found_day INTEGER,
+            read_day INTEGER NOT NULL
         ) WITHOUT ROWID;
         CREATE UNIQUE INDEX IF NOT EXISTS bindings_shown ON bindings (name_key, world) WHERE hidden = 0;
         CREATE TABLE IF NOT EXISTS revisions (
@@ -76,11 +77,13 @@ internal sealed class ServerDatabase
 
     private readonly string connectionString;
     private readonly ILogger<ServerDatabase> logger;
+    private readonly TimeProvider time;
 
-    public ServerDatabase(IOptions<ServerOptions> options, ILogger<ServerDatabase> logger)
+    public ServerDatabase(IOptions<ServerOptions> options, ILogger<ServerDatabase> logger, TimeProvider? time = null)
     {
         connectionString = ConnectionStringFor(options.Value.DatabasePath);
         this.logger = logger;
+        this.time = time ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -101,12 +104,43 @@ internal sealed class ServerDatabase
     /// <summary>Whether a checkpoint gave up and is owed: <see cref="CheckpointRetries"/> runs it until it completes.</summary>
     internal bool CheckpointOwed { get; private set; }
 
-    /// <summary>Creates the tables and switches the file to write-ahead logging. Idempotent.</summary>
+    /// <summary>Creates the tables, brings an older file's up to date, and switches the file to write-ahead logging. Idempotent.</summary>
     public async Task InitializeAsync(CancellationToken cancellation)
     {
         await using var connection = await OpenAsync(cancellation);
         await ExecuteAsync(connection, "PRAGMA journal_mode = WAL;", cancellation);
         await ExecuteAsync(connection, Schema, cancellation);
+        await AddReadDayAsync(connection, cancellation);
+    }
+
+    /// <summary>
+    /// The day of each binding's last successful Lodestone read ("Checking a character through the
+    /// player's own connection"), for a file from before it: the column is added, and every binding
+    /// already there gets the day of this change, so none stops answering lookups at once. The check
+    /// and the change are one transaction, so two processes starting together add it once.
+    /// </summary>
+    private async Task AddReadDayAsync(SqliteConnection connection, CancellationToken cancellation)
+    {
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellation);
+        await using (var check = connection.CreateCommand())
+        {
+            check.Transaction = transaction;
+            check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('bindings') WHERE name = 'read_day';";
+            if ((long)(await check.ExecuteScalarAsync(cancellation))! != 0)
+            {
+                return;
+            }
+        }
+
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.Transaction = transaction;
+            migrate.CommandText = "ALTER TABLE bindings ADD COLUMN read_day INTEGER NOT NULL DEFAULT 0; UPDATE bindings SET read_day = $today;";
+            migrate.Parameters.AddWithValue("$today", time.GetUtcNow().ToUnixTimeSeconds() / 86_400);
+            await migrate.ExecuteNonQueryAsync(cancellation);
+        }
+
+        await transaction.CommitAsync(cancellation);
     }
 
     /// <summary>

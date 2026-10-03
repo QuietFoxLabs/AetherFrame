@@ -12,6 +12,15 @@
 		max_size 43MB
 	}
 
+	# The Lodestone check and re-read may come as WebSockets ("Checking a character through the
+	# player's own connection"). Caddy closes such an upgraded connection after 60 seconds, an outer
+	# bound behind the server's own 40. stream_timeout applies only to upgraded connections, and only
+	# on these two paths, so a publish, which may take 820 seconds, is never cut.
+	@lodestone path /v1/lodestone/check /v1/lodestone/reread
+	reverse_proxy @lodestone server:8080 {
+		stream_timeout 60s
+	}
+
 	reverse_proxy server:8080
 
 	header {
