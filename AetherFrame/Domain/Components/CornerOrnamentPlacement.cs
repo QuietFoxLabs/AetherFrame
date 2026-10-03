@@ -83,6 +83,19 @@ public static class CornerOrnamentPlacement
         component.Offset = OffsetFor(profile, definition, PlateComponentLimits.ClampScale(component.Scale), distances);
     }
 
+    /// <summary>
+    /// Changes the ornament's style to <paramref name="to"/>, keeping its distance from the edge. A
+    /// style's artwork can be larger or smaller (<see cref="ComponentPaintPlan.ArtSizeFactor"/>), and
+    /// at any size but 100% the same offset would then put it elsewhere, even past the edge. At 100%
+    /// the offset is unchanged, so an ornament no one resized keeps exactly its saved values.
+    /// </summary>
+    public static void ChangeDefinition(ProfileDocument profile, PlateComponent component, ComponentDefinition from, ComponentDefinition to)
+    {
+        var distances = EdgeDistances(profile, component, from);
+        component.DefinitionId = to.Id;
+        component.Offset = OffsetFor(profile, to, PlateComponentLimits.ClampScale(component.Scale), distances);
+    }
+
     /// <summary>Puts the ornament at <see cref="DefaultScale"/> and <see cref="DefaultEdgeDistance"/>.
     /// Rotation, opacity, color and the chosen corners are not touched.</summary>
     public static void ApplyDefault(ProfileDocument profile, PlateComponent component, ComponentDefinition definition)

@@ -79,6 +79,10 @@ internal sealed partial class EditorSession
         return ComponentPaintPlan.ContentAnchor(profile, drawn, kind, measure);
     }
 
+    /// <summary>Advanced: another style of the same kind (<see cref="PlateComponentEditor.SetDefinition"/>). One undo step; nothing if unchanged.</summary>
+    internal void SetComponentDefinition(Guid componentId, string definitionId) =>
+        ApplyDocumentEdit(() => PlateComponentEditor.SetDefinition(RequireProfileForComponents(), componentId, definitionId, BuiltInComponentCatalog.Instance));
+
     internal void RemoveComponent(Guid componentId) =>
         ApplyDocumentEdit(() => PlateComponentEditor.Remove(RequireProfileForComponents(), componentId));
 

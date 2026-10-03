@@ -189,7 +189,9 @@ public static class PlateComponentEditor
 
     /// <summary>
     /// Basic: chooses a slot's style, or empties the slot (null). An existing slot Component keeps
-    /// its instance and every Advanced refinement (offset, scale, color...) and only changes style;
+    /// its instance and every Advanced refinement (offset, scale, color...) and only changes style
+    /// (a Corner Ornament keeps its distance from the edge, which at a size other than 100% can
+    /// change its offset: <see cref="CornerOrnamentPlacement.ChangeDefinition"/>);
     /// an empty slot gets a new Component with default placement. Only built-in, image-free
     /// definitions of the slot's own kind are accepted. Returns false when nothing changed.
     /// </summary>
@@ -214,13 +216,42 @@ public static class PlateComponentEditor
                 return false;
             }
 
-            existing.DefinitionId = definition.Id;
+            SetDefinitionCore(profile, existing, definition, catalog);
             existing.AssetId = null;
             return true;
         }
 
         Add(profile, definition);
         return true;
+    }
+
+    /// <summary>
+    /// Advanced: changes a Component's style to another of its kind. Everything else is kept, except
+    /// that a Corner Ornament keeps its distance from the edge rather than its raw offset
+    /// (<see cref="CornerOrnamentPlacement.ChangeDefinition"/>). False when nothing changed or the
+    /// definition isn't one of the Component's kind.
+    /// </summary>
+    public static bool SetDefinition(ProfileDocument profile, Guid componentId, string definitionId, IComponentCatalog catalog)
+    {
+        if (Find(profile, componentId) is not { } component || component.DefinitionId == definitionId
+            || catalog.Find(definitionId) is not { } definition || definition.Kind != component.Kind)
+        {
+            return false;
+        }
+
+        return Update(profile, componentId, c => SetDefinitionCore(profile, c, definition, catalog));
+    }
+
+    private static void SetDefinitionCore(ProfileDocument profile, PlateComponent component, ComponentDefinition definition, IComponentCatalog catalog)
+    {
+        if (component.Kind == PlateComponentKind.CornerOrnament && catalog.Find(component.DefinitionId) is { Kind: PlateComponentKind.CornerOrnament } previous)
+        {
+            CornerOrnamentPlacement.ChangeDefinition(profile, component, previous, definition);
+        }
+        else
+        {
+            component.DefinitionId = definition.Id;
+        }
     }
 
     /// <summary>Adds a new Component of <paramref name="definition"/> with default placement, on top

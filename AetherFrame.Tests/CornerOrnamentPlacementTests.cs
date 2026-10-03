@@ -113,8 +113,37 @@ public class CornerOrnamentPlacementTests
         Assert.Equal(CornerMask.TopLeft | CornerMask.BottomRight, loaded.Corners);
     }
 
+    /// <summary>A resized ornament that changes style, in Basic, Advanced or with an Art Style, stays
+    /// the same distance from the edge, though the new art is a different size.</summary>
     [Fact]
-    public async Task ApplyingAnArtStyle_GivesANewOrnamentTheDefaults_ButKeepsAnExistingOnesPlacement()
+    public async Task ChangingStyle_KeepsTheDistanceFromTheEdge_InBothEditors()
+    {
+        var (document, ornament, _) = NewOrnament(Bracket);
+        PlateComponentEditor.SetCornerOrnamentScale(document, ornament.Id, 2f, BuiltInComponentCatalog.Instance);
+        PlateComponentEditor.SetCornerOrnamentEdgeDistance(document, ornament.Id, 0f, BuiltInComponentCatalog.Instance);
+
+        PlateComponentEditor.SetSlot(document, PlateComponentKind.CornerOrnament, Sakura, BuiltInComponentCatalog.Instance);
+        Assert.Equal(0f, CornerOrnamentPlacement.EdgeDistance(document, ornament, BuiltInComponentCatalog.Find(Sakura)!), Precision);
+        Assert.Equal(2f, ornament.Scale);
+        Assert.All(CornerRects(document, ornament), rect => Assert.True(rect.Position.X >= -0.05f && rect.Position.Y >= -0.05f));
+
+        Assert.True(PlateComponentEditor.SetDefinition(document, ornament.Id, BuiltInComponentCatalog.CornerOrnamentAstrolabePivot, BuiltInComponentCatalog.Instance));
+        Assert.Equal(0f, CornerOrnamentPlacement.EdgeDistance(document, ornament, BuiltInComponentCatalog.Find(BuiltInComponentCatalog.CornerOrnamentAstrolabePivot)!), Precision);
+        Assert.False(PlateComponentEditor.SetDefinition(document, ornament.Id, BuiltInComponentCatalog.CornerOrnamentAstrolabePivot, BuiltInComponentCatalog.Instance));
+        Assert.False(PlateComponentEditor.SetDefinition(document, ornament.Id, BuiltInComponentCatalog.DividerDiamond, BuiltInComponentCatalog.Instance));
+
+        using var harness = await BasicHarness.NewClassicAsync();
+        harness.Session.SetComponentSlot(PlateComponentKind.CornerOrnament, Bracket);
+        var slot = PlateComponentEditor.FindSlot(harness.Document, PlateComponentKind.CornerOrnament)!;
+        harness.Session.SetCornerOrnamentScale(slot.Id, 2f, continuous: false);
+        harness.Session.SetCornerOrnamentEdgeDistance(slot.Id, 4f, continuous: false);
+        harness.Basic.ApplyTheme(ProfileThemePresets.Find("af.style.celestial-sakura")!);
+        Assert.Equal(Sakura, slot.DefinitionId);
+        Assert.Equal(4f, CornerOrnamentPlacement.EdgeDistance(harness.Document, slot, BuiltInComponentCatalog.Find(Sakura)!), Precision);
+    }
+
+    [Fact]
+    public async Task ApplyingAnArtStyle_GivesANewOrnamentTheDefaults_ButKeepsAnExistingOnesSizeAndDistance()
     {
         var style = ProfileThemePresets.Find("af.style.celestial-sakura")!;
 
@@ -131,11 +160,14 @@ public class CornerOrnamentPlacementTests
         old.Offset = new Vector2(3, 5);
         document.Components = [old];
         using var existing = await BasicHarness.OpenDocumentAsync(document);
-        existing.Basic.ApplyTheme(style);
         var kept = PlateComponentEditor.FindSlot(existing.Document, PlateComponentKind.CornerOrnament)!;
+        var edges = CornerOrnamentPlacement.EdgeDistances(existing.Document, kept, BuiltInComponentCatalog.Find(Bracket)!);
+        existing.Basic.ApplyTheme(style);
         Assert.Equal(Sakura, kept.DefinitionId);
         Assert.Equal(0.8f, kept.Scale);
-        Assert.Equal(new Vector2(3, 5), kept.Offset);
+        var after = CornerOrnamentPlacement.EdgeDistances(existing.Document, kept, BuiltInComponentCatalog.Find(Sakura)!);
+        Assert.Equal(edges.X, after.X, Precision);
+        Assert.Equal(edges.Y, after.Y, Precision);
     }
 
     // ---- Size --------------------------------------------------------------------------------------
