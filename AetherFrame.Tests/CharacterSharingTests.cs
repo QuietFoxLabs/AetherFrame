@@ -319,6 +319,24 @@ public partial class CharacterSharingTests
     }
 
     [Fact]
+    public void ARereadAnsweredTakenOver_IsNotFollowedByAnOptOut()
+    {
+        // The server answers a re-read that a takeover overtook with 410: the plugin records the
+        // takeover and sends nothing more, so the server keeps the mark it says so with.
+        using var harness = new SharingHarness();
+        harness.Sharing.TryStart(Aria, newKey: false);
+        harness.Sharing.TryCheck(Aria, "12345678", "Aria Starfall", "Gilgamesh");
+        harness.Server.Answers["/v1/lodestone/reread"] = _ => (HttpStatusCode.Gone, null);
+
+        harness.Sharing.TryReread(Aria, "Aria Moonfall", "Gilgamesh");
+
+        Assert.Equal("/v1/lodestone/reread", harness.Server.Actions.Last().Path);
+        Assert.DoesNotContain(harness.Server.Actions, action => action.Path == "/v1/opt-out");
+        Assert.Equal(SharingStage.TakenOver, harness.Sharing.View.Find(Aria)!.Stage);
+        Assert.Equal(SharingNoticeKind.TakenOver, harness.Sharing.View.Notice!.Kind);
+    }
+
+    [Fact]
     public void ARereadTheServerAnswersNotFound_OptsOutBeforeSharingIsRecordedOff()
     {
         using var harness = new SharingHarness();

@@ -35,7 +35,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 |---|---|---|---|
 | `/v1/lodestone/code` | 2, a code | `{}` | `200` `{"code": "AF-…", "expiresInSeconds": 3600}` |
 | `/v1/lodestone/check` | 3, a check | `{"lodestoneId": "12345678", "code": "AF-…", "name": "…", "world": "…"}` | `200` `{"profileId": "prf_…", "name": "…", "world": "…"}`; `422` for every failure (C2), including a page that doesn't show the name and World the body claims |
-| `/v1/lodestone/reread` | 4, a re-read | `{}` | `200` `{"name": "…", "world": "…"}`; `404` when the key is bound to no character, or its character is no longer on the allowlist (the binding is kept); `410` when another key's check took it over |
+| `/v1/lodestone/reread` | 4, a re-read | `{}` | `200` `{"name": "…", "world": "…"}`; `404` when the key is bound to no character, or its character is no longer on the allowlist (the binding is kept); `410` when another key's check took it over, also when it lands while the re-read's own fetch is under way `[updated 2026-10-03]` |
 | `/v1/opt-out` | 5, opting out or pausing | `{}` to opt out; `{"mode": "pause"}` to pause | `204`, whether or not anything was bound |
 | `/v1/lookup` | 6, a lookup | `{"name": "…", "world": "…"}` | `200` a served profile (section 8.6 of the specification); `404` for every cause (C5) |
 | `/v1/image` | 7, an image | `{"name": "…", "world": "…", "marker": "mrk_…", "index": 0}` | `200` the image; `404` for every cause |
@@ -102,8 +102,9 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 | `body` | when that `POST`'s answer is JSON, the same object (section 2.1) |
 | `challenge` | with `409`, the fresh challenge's 32 bytes in base64: the plugin signs again under it, on a new WebSocket |
 | `reason` | with `503`, `lodestone:refused` when the Lodestone answered the player's connection with `403` or `429` |
+| `readDay` | with `200` for a check or a re-read: the answered binding's day of last successful Lodestone read as stored, a whole number of UTC days since the Unix epoch (1970-01-01), read in the same transaction that applied the read. A first "not found" keeps the day it had; a failed read carries none and moves none. A day the server gave a binding when it brought its file up to date, or repaired at a start, is a grace date: it doesn't prove that the Lodestone was read then. A `POST`'s body never carries it, since released plugins' readers refuse any field they don't know, and lookups, images, reports and the logs never show it. |
 
-For example `{"status":200,"body":{"profileId":"prf_…","name":"…","world":"…"}}`, or `{"status":422}`.
+For example `{"status":200,"body":{"profileId":"prf_…","name":"…","world":"…"},"readDay":20729}`, or `{"status":422}`.
 
 **The read** is C2's: `GET` of the one fixed address with the server's `User-Agent`, over HTTP/1.1, following no redirect, at most 1 MiB, with no compression. It runs over a client made for that one pipe and disposed with it. Its TLS is version 1.3 only, and the Lodestone's certificate is checked as .NET checks any, so a pipe that answers with its own certificate, or one for another name, gets no request. A response whose body would end only when the connection closes, with neither a length nor chunks, is refused. The Lodestone's response headers are never logged.
 

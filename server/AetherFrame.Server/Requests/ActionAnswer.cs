@@ -11,10 +11,12 @@ namespace AetherFrame.Server.Requests;
 /// What a signed action answers, whether its body came as a <c>POST</c> or as a WebSocket's first
 /// message (ServerApi-v1.md, sections 2.1 and 2.3): a status, the kind the request log records, and
 /// at most one of a JSON body, a fresh challenge (a <c>409</c>) or a reason (a <c>503</c> when the
-/// Lodestone turned the player's own connection away). A <c>POST</c> gets it exactly as the endpoints
-/// answered before the WebSocket mode; a WebSocket gets it as its final message.
+/// Lodestone turned the player's own connection away). A successful check or re-read also carries
+/// <paramref name="ReadDay"/>: the stored day of the answered binding's last successful Lodestone
+/// read, in UTC days since the Unix epoch. A <c>POST</c> gets the answer exactly as the endpoints
+/// answered before the WebSocket mode, never with the day; a WebSocket gets it as its final message.
 /// </summary>
-internal sealed record ActionAnswer(int Status, string? Kind, object? Json = null, byte[]? Challenge = null, string? Reason = null)
+internal sealed record ActionAnswer(int Status, string? Kind, object? Json = null, byte[]? Challenge = null, string? Reason = null, long? ReadDay = null)
 {
     /// <summary>A status with no body, its kind left for the request log.</summary>
     public static ActionAnswer Fail(int status, string kind) => new(status, kind);
@@ -43,8 +45,9 @@ internal sealed record ActionAnswer(int Status, string? Kind, object? Json = nul
 
     /// <summary>
     /// The answer as a WebSocket's final message (ServerApi-v1.md, section 2.3): one JSON object with
-    /// <c>status</c>, and <c>body</c> (the JSON a <c>POST</c> gets), <c>challenge</c> (the fresh
-    /// challenge, in base64) or <c>reason</c> when the answer has one.
+    /// <c>status</c>, and <c>body</c> (the JSON a <c>POST</c> gets) with <c>readDay</c> beside it for
+    /// a successful check or re-read, <c>challenge</c> (the fresh challenge, in base64) or
+    /// <c>reason</c> when the answer has one.
     /// </summary>
     public byte[] ToFinalMessage()
     {
@@ -57,6 +60,11 @@ internal sealed record ActionAnswer(int Status, string? Kind, object? Json = nul
             {
                 writer.WritePropertyName("body");
                 JsonSerializer.Serialize(writer, Json, Json.GetType(), ServerJson.Options);
+            }
+
+            if (ReadDay is { } readDay)
+            {
+                writer.WriteNumber("readDay", readDay);
             }
 
             if (Challenge is not null)

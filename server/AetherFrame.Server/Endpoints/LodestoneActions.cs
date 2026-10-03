@@ -150,7 +150,8 @@ internal sealed class LodestoneActions(RateLimiter limiter, BindingStore binding
             return await CheckFailedAsync("check:second-character");
         }
 
-        return ActionAnswer.Ok(new CharacterEndpoints.CheckAnswer(bound.ProfileId.ToString(), character.Name, character.World));
+        // The day as the binding's own transaction stored it; a POST's body never carries it.
+        return ActionAnswer.Ok(new CharacterEndpoints.CheckAnswer(bound.ProfileId.ToString(), character.Name, character.World)) with { ReadDay = bound.ReadDay };
     }
 
     /// <summary>
@@ -196,30 +197,24 @@ internal sealed class LodestoneActions(RateLimiter limiter, BindingStore binding
             return ActionAnswer.Fail(StatusCodes.Status503ServiceUnavailable, "reread:" + read.Outcome);
         }
 
-        var result = await bindings.ApplyRereadAsync(persona, binding.LodestoneId, read.Character, cancellation);
+        var applied = await bindings.ApplyRereadAndReadAsync(persona, binding.LodestoneId, read.Character, cancellation);
 
-        // A takeover that landed while a piped read was under way answers as one found before it
-        // did: "taken over", never "not bound", which a plugin follows with an opt-out that would
-        // forget the takeover. A POST keeps today's answer.
-        if (pipe is not null && result is RereadResult.NotBound && await bindings.WasTakenOverAsync(persona, cancellation))
+        // A takeover that landed while the read was under way, through a pipe or the server's own
+        // client, answers as one found before it did: "taken over", never "not bound", which a plugin
+        // follows with an opt-out that would forget the takeover.
+        if (applied.Result is RereadResult.NotBound && await bindings.WasTakenOverAsync(persona, cancellation))
         {
             return ActionAnswer.Fail(StatusCodes.Status410Gone, "reread:taken-over");
         }
 
-        if (result is RereadResult.Removed or RereadResult.NotBound)
+        if (applied.Result is RereadResult.Removed or RereadResult.NotBound)
         {
-            return ActionAnswer.Fail(StatusCodes.Status404NotFound, "reread:" + result);
+            return ActionAnswer.Fail(StatusCodes.Status404NotFound, "reread:" + applied.Result);
         }
 
-        var current = await bindings.FindByPersonaAsync(persona, cancellation);
-        if (current is null && pipe is not null && await bindings.WasTakenOverAsync(persona, cancellation))
-        {
-            return ActionAnswer.Fail(StatusCodes.Status410Gone, "reread:taken-over");
-        }
-
-        return current is null
-            ? ActionAnswer.Fail(StatusCodes.Status404NotFound, "reread:not-bound")
-            : ActionAnswer.Ok(new CharacterEndpoints.RereadAnswer(current.Name, current.World));
+        // The name, World and day come from the transaction that applied the read, so they are this
+        // binding's, whatever happened since; a POST's body never carries the day.
+        return ActionAnswer.Ok(new CharacterEndpoints.RereadAnswer(applied.Name!, applied.World!)) with { ReadDay = applied.ReadDay };
     }
 
     /// <summary>

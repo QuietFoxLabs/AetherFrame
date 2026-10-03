@@ -313,6 +313,9 @@ internal sealed class FakeLodestone
     public ConcurrentQueue<long> Fetched { get; } = new();
 
     public ConcurrentQueue<Uri> Addresses { get; } = new();
+
+    /// <summary>Runs while a fetch is under way, before its page comes back: what happens meanwhile. None unless a test sets it.</summary>
+    public Action<long>? OnFetch { get; set; }
 }
 
 /// <summary>The fake Lodestone's connection, which the real client sends its requests through.</summary>
@@ -324,6 +327,7 @@ internal sealed class FakeLodestoneHandler(FakeLodestone lodestone) : HttpMessag
         lodestone.Addresses.Enqueue(address);
         var id = long.Parse(address.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries)[^1], System.Globalization.CultureInfo.InvariantCulture);
         lodestone.Fetched.Enqueue(id);
+        lodestone.OnFetch?.Invoke(id);
         var page = lodestone.Pages.TryGetValue(id, out var found) ? found : new LodestoneResponse(404, LodestoneHtml.NotFoundPage);
         if (page.Status == 0)
         {

@@ -1189,6 +1189,7 @@ public sealed class LodestonePipeTests
         var run = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
 
         Assert.Equal(410, run.Status);
+        Assert.False(run.Final!.Value.TryGetProperty("readDay", out _));
         await AssertReleasedAsync(server);
         await AssertLoggedAsync(server, "socket:410:reread:taken-over");
     }
@@ -1262,6 +1263,124 @@ public sealed class LodestonePipeTests
         await AdminCommands.RunAsync(["characters"], server.Services.GetRequiredService<ServerDatabase>(), server.Services.GetRequiredService<BindingStore>(), output);
 
         Assert.Contains(server.Time.Now.UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheFinalMessage_CarriesTheStoredDayOfTheLastRead_AndOnlyAReadMovesIt()
+    {
+        using var server = NewServer();
+        await using var lodestone = new TlsLodestone();
+        using var player = server.NewPlayer();
+        var code = await player.CodeAsync();
+        lodestone.Answer = _ => TlsLodestone.Framed(200, Page("Aria Starfall", "Gilgamesh", code));
+
+        // A check: the day of its read, as stored.
+        var check = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, CheckPath, await player.CheckBodyAsync(Aria, code));
+        Assert.Equal(200, check.Status);
+        var checkedOn = Today(server);
+        Assert.Equal(checkedOn, ReadDay(check));
+        Assert.Equal(checkedOn, await server.CountAsync("SELECT read_day FROM bindings;"));
+
+        // A re-read three days on that reads the page: that day.
+        server.Time.Advance(TimeSpan.FromDays(3));
+        lodestone.Answer = _ => TlsLodestone.Framed(200, Page("Aria Starfall", "Gilgamesh", ""));
+        var reread = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
+        Assert.Equal(200, reread.Status);
+        Assert.Equal(checkedOn + 3, ReadDay(reread));
+        Assert.Equal(checkedOn + 3, await server.CountAsync("SELECT read_day FROM bindings;"));
+
+        // The Lodestone's own "not found", the first time, two days later: answered, with the day kept.
+        server.Time.Advance(TimeSpan.FromDays(2));
+        lodestone.Answer = _ => TlsLodestone.Framed(404, LodestoneHtml.NotFoundPage);
+        var notFound = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
+        Assert.Equal(200, notFound.Status);
+        Assert.Equal(checkedOn + 3, ReadDay(notFound));
+
+        // A failed read: no day at all, and the stored one unmoved.
+        var failed = await new PluginPipe { OnOpen = OpenAnswer.Fail }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
+        Assert.Equal(503, failed.Status);
+        Assert.False(failed.Final!.Value.TryGetProperty("readDay", out _));
+        Assert.Equal(checkedOn + 3, await server.CountAsync("SELECT read_day FROM bindings;"));
+
+        // Never logged.
+        await AssertReleasedAsync(server);
+        Assert.DoesNotContain("readDay", server.Log.All, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ThePostAnswers_StayExactlyWhatReleasedPluginsRead_WithNoDay()
+    {
+        using var server = NewServer();
+        using var player = server.NewPlayer();
+        var code = await player.CodeAsync();
+        server.Lodestone.Pages[Aria] = LodestoneHtml.Character("Aria Starfall", "Gilgamesh", "Hello! " + code + " Thanks.");
+
+        // Exactly the fields 0.1.9's readers take, and refuse any other (the plugin's
+        // SharingWire.ReadCheck and ReadReread, unchanged since 0.1.9, whose own tests show it).
+        using (var check = await player.CheckAsync(Aria, code))
+        {
+            Assert.Equal(HttpStatusCode.OK, check.StatusCode);
+            var body = await check.Content.ReadAsByteArrayAsync();
+            Assert.Equal(["profileId", "name", "world"], PropertyNames(body));
+        }
+
+        using (var reread = await player.SendAsync(RereadPath, RequestProofKind.LodestoneReread, "{}"))
+        {
+            Assert.Equal(HttpStatusCode.OK, reread.StatusCode);
+            Assert.Equal("{\"name\":\"Aria Starfall\",\"world\":\"Gilgamesh\"}", await reread.Content.ReadAsStringAsync());
+        }
+    }
+
+    [Fact]
+    public async Task APostReread_OvertakenByATakeover_AnswersTakenOver()
+    {
+        using var server = NewServer();
+        using var player = server.NewPlayer();
+        using var newKey = server.NewPlayer();
+        await player.BindAsync(Aria);
+        var store = server.Services.GetRequiredService<BindingStore>();
+
+        // While the server's own client fetches the page, another key takes the character over.
+        server.Lodestone.OnFetch = id => store.BindCharacterAsync(newKey.Key.PublicKey.Id, id, new LodestoneCharacter("Aria Starfall", "Gilgamesh", ""), default).GetAwaiter().GetResult();
+        using (var reread = await player.SendAsync(RereadPath, RequestProofKind.LodestoneReread, "{}"))
+        {
+            Assert.Equal(HttpStatusCode.Gone, reread.StatusCode);
+        }
+
+        server.Lodestone.OnFetch = null;
+        await AssertLoggedAsync(server, "reread:taken-over");
+    }
+
+    [Fact]
+    public async Task APipedReread_WhoseKeyBoundAnotherCharacterMeanwhile_AnswersNotBound_WithNoDay()
+    {
+        using var server = NewServer();
+        await using var lodestone = new TlsLodestone();
+        using var player = server.NewPlayer();
+        await player.BindAsync(Aria);
+        var store = server.Services.GetRequiredService<BindingStore>();
+
+        // While the page is on its way, the key opts out and binds another character: the page read
+        // is no longer its binding's, so no day can be paired with it.
+        lodestone.Answer = _ =>
+        {
+            store.OptOutAsync(player.Key.PublicKey.Id, default).GetAwaiter().GetResult();
+            store.BindCharacterAsync(player.Key.PublicKey.Id, Bram, new LodestoneCharacter("Bram Oakes", "Gilgamesh", ""), default).GetAwaiter().GetResult();
+            return TlsLodestone.Framed(200, Page("Aria Starfall", "Gilgamesh", ""));
+        };
+        var run = await new PluginPipe { Lodestone = lodestone.EndPoint }.RunAsync(server, RereadPath, await player.RereadBodyAsync());
+
+        Assert.Equal(404, run.Status);
+        Assert.False(run.Final!.Value.TryGetProperty("readDay", out _));
+        await AssertReleasedAsync(server);
+    }
+
+    private static long ReadDay(PipeRun run) => run.Final!.Value.GetProperty("readDay").GetInt64();
+
+    private static string[] PropertyNames(byte[] json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        return document.RootElement.EnumerateObject().Select(property => property.Name).ToArray();
     }
 
     /// <summary>A database file as a server from before the day of the last read left it: the bindings table without the column.</summary>
