@@ -59,11 +59,11 @@ public class MyPlatesPrivacyTests
     public void MyPlatesWindowSources_NeverFormatTheCharactersNameOrWorld()
     {
         // The window is ImGui code (not built here), so this reads its source: no line of My Plates,
-        // nor of the Plate menus it shares with the editors, may read a CharacterContext's Name or
-        // HomeWorld, or bring back the "Playing as" line.
+        // nor of the Plate menus and the Create Plate chooser it shares with the editors, may read a
+        // CharacterContext's Name or HomeWorld, or bring back the "Playing as" line.
         var windows = Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows");
         var files = Directory.GetFiles(windows, "PlateLibraryWindow*.cs")
-            .Concat([Path.Combine(windows, "PlateMenu.cs"), Path.Combine(windows, "EditorPlateMenu.cs")])
+            .Concat([Path.Combine(windows, "PlateMenu.cs"), Path.Combine(windows, "EditorPlateMenu.cs"), Path.Combine(windows, "TemplateChooser.cs")])
             .ToList();
         Assert.True(files.Count > 2);
         Assert.All(files, file => Assert.True(File.Exists(file), file));

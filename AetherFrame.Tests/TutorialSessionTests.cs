@@ -954,6 +954,20 @@ public class TutorialSessionTests
         Assert.Matches(new Regex("\"" + Regex.Escape(label) + "(\"|##|\\.\\.\\.\")"), text);
     }
 
+    [Theory]
+    [InlineData("saving.plate-menu", "Open another Plate")]
+    [InlineData("saving.plate-menu", "New Plate...")]
+    [InlineData("first.template", "New Plate...")]
+    [InlineData("templates.chooser", "New Plate...")]
+    public void RealScript_ThePlateMenusWayToOtherPlates_IsNamedByItsOwnLabels(string stepId, string label)
+    {
+        // Interface task 2's items in the editors' Plate menu, named where the tour explains the menu,
+        // the chooser and Templates, in the words the menu itself uses.
+        Assert.Contains(label, Step(stepId).Body, StringComparison.Ordinal);
+        var menu = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "PlateMenu.cs"));
+        Assert.Contains("\"" + label + "\"", menu, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void RealScript_TheSharingChapters_SayWhatTheSharingWindowSays()
     {

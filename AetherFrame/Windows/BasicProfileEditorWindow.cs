@@ -216,8 +216,14 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         fileDialogManager.Draw();
 
         // Before the open Plate is read: a Plate action that opens another Plate (Save as New
-        // Plate) takes effect before anything is drawn.
+        // Plate, Open another Plate, New Plate) takes effect before anything is drawn.
         actionBar.PlateMenu.DrawFrame();
+
+        // It opened in the Advanced Editor, which draws it from now on.
+        if (!IsOpen)
+        {
+            return;
+        }
 
         // Before the null check, so closing or deleting the open Plate also resets the session.
         editorSession.SyncWithCurrentProfile();

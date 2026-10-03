@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -7,9 +8,12 @@ using AetherFrame.Domain.Templates;
 using AetherFrame.Services;
 using AetherFrame.Services.Packages;
 using AetherFrame.Services.Plates;
+using AetherFrame.Services.Templates;
 using AetherFrame.Services.Thumbnails;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Library;
+using AetherFrame.UI.Rendering;
+using AetherFrame.UI.Theme;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Interface.Utility.Raii;
@@ -21,8 +25,11 @@ namespace AetherFrame.Windows;
 /// (a card's right-click) and the Plate menu in both editors' action bar. It is one component, so
 /// both offer the same actions with the same words in the same order and ask the same questions;
 /// the actions themselves are <see cref="PlateActions"/>, which reports through its window's
-/// <see cref="PlateOperationRunner"/>. Delete, and the unsaved-changes question before opening
-/// another Plate, belong to My Plates, where the whole Library is in view.
+/// <see cref="PlateOperationRunner"/>. Delete belongs to My Plates, where the whole Library is in
+/// view. The editors' menu ends with Open another Plate and New Plate... (interface task 2,
+/// through <see cref="PlateSwitcher"/>), and both windows draw Create Plate's chooser from here
+/// (<see cref="Chooser"/>). The unsaved-changes question before another Plate opens is asked by
+/// whichever window opens it, through the guard it attaches.
 ///
 /// <para>A menu item only asks for its prompt: every prompt is opened and drawn by
 /// <see cref="DrawPopups"/>, from the host window's outermost scope, because OpenPopup and
@@ -39,12 +46,27 @@ internal sealed class PlateMenu
     private const string UnsavedPopupId = "Unsaved Changes##AetherFramePlateSwitch";
     private const string PackageFilter = "AetherFrame Plate{" + PackagePolicy.FileExtension + "}";
 
+    // The editors' last two items (interface task 2). Open another Plate is a submenu, so its label
+    // has no "...", as the editors' other submenus (Align to Canvas) have none.
+    private const string OpenAnotherLabel = "Open another Plate";
+    private const string NewPlateLabel = "New Plate...";
+    private const string OnlyPlateNote = "This is your only Plate. New Plate... starts another.";
+    private const string NewPlateTooltip = "Start a new Plate from a Template, without leaving the editor.\nWith unsaved changes, it asks first, before anything is made.";
+
+    // Open another Plate's list width (unscaled pixels).
+    private const float OpenAnotherWidth = 300f;
+
     private readonly PlateActions actions;
     private readonly PlateLibraryService library;
     private readonly ProfileService profileService;
     private readonly EditorSession editorSession;
     private readonly PlateThumbnailService thumbnails;
     private readonly FileDialogManager fileDialogs;
+
+    // Open another Plate's rows: an id per Plate, made once, and the search typed into its list.
+    private readonly Dictionary<Guid, string> openAnotherRowIds = new();
+    private string openAnotherSearch = string.Empty;
+    private PlateSwitcher? switcher;
 
     private bool pendingRenamePopup;
     private bool pendingDeletePopup;
@@ -69,12 +91,23 @@ internal sealed class PlateMenu
 
     /// <param name="actions">The actions, and the runner of the window drawing this menu.</param>
     /// <param name="library">Finds Plates by id.</param>
+    /// <param name="templates">The Templates Create Plate's chooser lists.</param>
     /// <param name="profileService">The open Plate, for Delete's warning and the unsaved-changes question.</param>
     /// <param name="editorSession">Whether the open Plate has unsaved changes, for Delete's warning.</param>
+    /// <param name="characterIdentity">The logged-in character, for the chooser.</param>
     /// <param name="thumbnails">Export's preview image, when a thumbnail of exactly the saved Plate is ready.</param>
+    /// <param name="renderResources">The chooser's preview.</param>
     /// <param name="fileDialogs">The host window's file dialogs, which it draws every frame.</param>
     internal PlateMenu(
-        PlateActions actions, PlateLibraryService library, ProfileService profileService, EditorSession editorSession, PlateThumbnailService thumbnails, FileDialogManager fileDialogs)
+        PlateActions actions,
+        PlateLibraryService library,
+        TemplateLibraryService templates,
+        ProfileService profileService,
+        EditorSession editorSession,
+        CharacterIdentityService characterIdentity,
+        PlateThumbnailService thumbnails,
+        ProfileRenderResources renderResources,
+        FileDialogManager fileDialogs)
     {
         this.actions = actions;
         this.library = library;
@@ -82,9 +115,13 @@ internal sealed class PlateMenu
         this.editorSession = editorSession;
         this.thumbnails = thumbnails;
         this.fileDialogs = fileDialogs;
+        Chooser = new TemplateChooser(templates, actions, characterIdentity, renderResources);
     }
 
     internal PlateActions Actions => actions;
+
+    /// <summary>Create Plate's Template chooser, drawn by <see cref="DrawPopups"/>; its window says what Use Template does.</summary>
+    internal TemplateChooser Chooser { get; }
 
     /// <summary>Runs this menu's actions and holds their results.</summary>
     internal PlateOperationRunner Runner => actions.Runner;
@@ -108,6 +145,18 @@ internal sealed class PlateMenu
     {
         openGuard = guard;
         openNow = open;
+    }
+
+    /// <summary>
+    /// The editors: Open another Plate and New Plate... replace the open Plate through
+    /// <paramref name="plates"/>, which asks first when it has unsaved changes, before a new Plate
+    /// is made. The chooser's Use Template goes through it too.
+    /// </summary>
+    internal void AttachSwitcher(PlateSwitcher plates)
+    {
+        switcher = plates;
+        AttachOpenGuard(plates.Guard, plates.Proceed);
+        Chooser.Use = templateId => plates.New(templateId);
     }
 
     /// <summary>Shows the unsaved-changes question for the guard's pending open (see <see cref="PlateOpenGuard.Request"/>).</summary>
@@ -178,7 +227,8 @@ internal sealed class PlateMenu
     /// <summary>
     /// The editors' Plate menu, for the open Plate: View, Set Active, Save as New Plate, Save as
     /// Template, Export and Rename, in the card menu's order, with a note while there are unsaved
-    /// changes.
+    /// changes; then, once a switcher is attached (<see cref="AttachSwitcher"/>), Open another Plate
+    /// and New Plate..., which leave this Plate for another.
     /// Must be called between a matching BeginPopup/EndPopup.
     /// </summary>
     /// <param name="plate">The open Plate, as My Plates lists it.</param>
@@ -220,12 +270,33 @@ internal sealed class PlateMenu
             ImGui.Separator();
             DrawRenameItem(plate);
         }
+
+        if (switcher is { } plates)
+        {
+            ImGui.Separator();
+            DrawOpenAnotherMenu(plates, activePlateId, saving);
+
+            using (ImRaii.Disabled(IsBusy || saving))
+            {
+                if (ImGui.MenuItem(NewPlateLabel))
+                {
+                    Chooser.Open();
+                }
+            }
+
+            EditorWidgets.Tooltip(NewPlateTooltip);
+        }
     }
 
-    /// <summary>Every prompt this menu asks. Call once per frame from the host window's outermost scope.</summary>
+    /// <summary>
+    /// Every prompt this menu asks, Create Plate's chooser first: a Use Template that asks about
+    /// unsaved changes closes the chooser before the question opens. Call once per frame from the
+    /// host window's outermost scope.
+    /// </summary>
     /// <param name="character">The logged-in character, if any (Delete's warnings).</param>
     internal void DrawPopups(CharacterContext? character)
     {
+        Chooser.Draw();
         DrawRenamePopup();
         DrawSaveAsTemplatePopup();
         DrawOverwritePopup();
@@ -234,11 +305,18 @@ internal sealed class PlateMenu
     }
 
     /// <summary>
-    /// My Plates: after the unsaved-changes question's Save, opens the other Plate once the save
-    /// succeeds, or shows why it didn't. Call once per frame.
+    /// After the unsaved-changes question's Save: opens the other Plate once the save succeeds, or
+    /// shows why it didn't. In the editors, the switcher also opens a Plate waiting for this frame
+    /// (<see cref="PlateSwitcher.Advance"/>). Call once per frame, before the open Plate is read.
     /// </summary>
     internal void AdvanceOpenGuard()
     {
+        if (switcher is { } plates)
+        {
+            plates.Advance();
+            return;
+        }
+
         if (openGuard?.Advance() is not { } outcome)
         {
             return;
@@ -315,6 +393,130 @@ internal sealed class PlateMenu
             renameError = null;
             pendingRenamePopup = true;
         }
+    }
+
+    // ---------------------------------------------------------------- Open another Plate (the editors)
+
+    /// <summary>
+    /// Open another Plate: a submenu of every Plate in My Plates' own order, the one being edited
+    /// marked Editing and greyed out, the character's Active Plate marked Active. With more Plates
+    /// than fit (<see cref="PlateSwitcher.VisibleRows"/>), the list scrolls under a search field
+    /// that filters it as My Plates' search does. Choosing a Plate closes the menu and switches to
+    /// it, asking first when this one has unsaved changes. Greyed out, with the reason, when there is
+    /// no other Plate or an action or a save is running.
+    /// </summary>
+    private void DrawOpenAnotherMenu(PlateSwitcher plates, Guid? activePlateId, bool saving)
+    {
+        var hasAnother = plates.HasAnotherPlate;
+        var available = hasAnother && !IsBusy && !saving;
+        using var disabled = ImRaii.Disabled(!available);
+        using var menu = ImRaii.Menu(OpenAnotherLabel);
+        if (!available)
+        {
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            {
+                ImGui.SetTooltip(hasAnother ? PlateOperationRunner.BusyMessage : OnlyPlateNote);
+            }
+
+            return;
+        }
+
+        if (!menu.Success)
+        {
+            return;
+        }
+
+        var width = EditorWidgets.Scaled(OpenAnotherWidth);
+        var searching = plates.NeedsSearch;
+        if (ImGui.IsWindowAppearing())
+        {
+            openAnotherSearch = string.Empty;
+            if (searching)
+            {
+                ImGui.SetKeyboardFocusHere();
+            }
+        }
+
+        if (searching)
+        {
+            ImGui.SetNextItemWidth(width);
+            ImGui.InputTextWithHint("##OpenAnotherSearch", "Search Plates...", ref openAnotherSearch, 64);
+        }
+
+        var shown = plates.Plates(searching ? openAnotherSearch : null);
+        if (shown.Count == 0)
+        {
+            ImGui.TextDisabled("No Plates match your search.");
+            return;
+        }
+
+        // A list of its own, so a long one scrolls under the search field. Its rows aren't items of
+        // the menu itself, so a choice closes the menu explicitly.
+        var rows = Math.Min(shown.Count, PlateSwitcher.VisibleRows);
+        using var list = ImRaii.Child("##OpenAnotherList", new Vector2(width, rows * ImGui.GetTextLineHeightWithSpacing()), false);
+        if (!list.Success)
+        {
+            return;
+        }
+
+        for (var i = 0; i < shown.Count; i++)
+        {
+            if (DrawOpenAnotherRow(plates, shown[i], activePlateId))
+            {
+                var chosen = shown[i].PlateId;
+                ImGui.CloseCurrentPopup();
+                plates.Open(chosen);
+                return;
+            }
+        }
+    }
+
+    /// <summary>One Plate in Open another Plate's list: its name, drawn as text, and its marks. True when it was chosen.</summary>
+    private bool DrawOpenAnotherRow(PlateSwitcher plates, PlateSummary plate, Guid? activePlateId)
+    {
+        if (!openAnotherRowIds.TryGetValue(plate.PlateId, out var id))
+        {
+            id = "##OpenAnother" + plate.PlateId.ToString("N");
+            openAnotherRowIds[plate.PlateId] = id;
+        }
+
+        // Where a label would go: the row's highlight reaches half the item spacing beyond it.
+        var textPos = ImGui.GetCursorScreenPos();
+        var rowEnd = textPos.X + ImGui.GetContentRegionAvail().X;
+        var reason = plates.WhyNotOpen(plate);
+        var editing = plate.PlateId == profileService.OpenPlateId;
+        var chosen = ImGui.Selectable(id, editing, reason is null ? ImGuiSelectableFlags.None : ImGuiSelectableFlags.Disabled, Vector2.Zero);
+        if (reason is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+        {
+            ImGui.SetTooltip(reason);
+        }
+
+        var drawList = ImGui.GetWindowDrawList();
+        var gap = EditorWidgets.Scaled(AetherMetrics.SpaceSm);
+
+        // The marks, right-aligned: Editing for the open Plate, and Active, in the Active badge's
+        // gold, for the logged-in character's Active Plate.
+        var nameEnd = rowEnd;
+        if (editing)
+        {
+            nameEnd -= ImGui.CalcTextSize("Editing").X;
+            drawList.AddText(new Vector2(nameEnd, textPos.Y), ImGui.GetColorU32(EditorWidgets.DimTextColor), "Editing");
+            nameEnd -= gap;
+        }
+
+        if (plate.PlateId == activePlateId)
+        {
+            nameEnd -= ImGui.CalcTextSize("Active").X;
+            drawList.AddText(new Vector2(nameEnd, textPos.Y), ImGui.GetColorU32(AetherPalette.Gold), "Active");
+            nameEnd -= gap;
+        }
+
+        // Player text: drawn as it is, never as a label, and cut off before the marks.
+        var lineEnd = new Vector2(Math.Max(textPos.X, nameEnd), textPos.Y + ImGui.GetTextLineHeight());
+        drawList.PushClipRect(textPos, lineEnd, true);
+        drawList.AddText(textPos, ImGui.GetColorU32(reason is null ? ImGuiCol.Text : ImGuiCol.TextDisabled), plate.DisplayName);
+        drawList.PopClipRect();
+        return chosen && reason is null;
     }
 
     // ---------------------------------------------------------------- rename
@@ -571,7 +773,7 @@ internal sealed class PlateMenu
         ImGui.EndPopup();
     }
 
-    // ---------------------------------------------------------------- unsaved changes before opening (My Plates)
+    // ---------------------------------------------------------------- unsaved changes before opening
 
     private void DrawUnsavedChangesPopup()
     {
@@ -599,9 +801,19 @@ internal sealed class PlateMenu
         }
 
         var openName = profileService.CurrentProfile?.Name ?? "The open Plate";
-        var targetName = library.FindPlate(open.PlateId)?.DisplayName ?? "the other Plate";
         ImGui.TextUnformatted($"\"{openName}\" has unsaved changes.");
-        ImGui.TextUnformatted($"Save them before opening \"{targetName}\"?");
+        if (open.TemplateId is { } templateId)
+        {
+            // The editors' New Plate: asked before the new Plate is made, so Cancel leaves nothing behind.
+            var templateName = actions.TemplateName(templateId) ?? "the Template";
+            ImGui.TextUnformatted($"Save them before starting a new Plate from \"{templateName}\"?");
+        }
+        else
+        {
+            var targetName = library.FindPlate(open.PlateId)?.DisplayName ?? "the other Plate";
+            ImGui.TextUnformatted($"Save them before opening \"{targetName}\"?");
+        }
+
         ImGui.Spacing();
 
         var buttonSize = EditorWidgets.Scaled(new Vector2(110f, 0f));
@@ -619,10 +831,13 @@ internal sealed class PlateMenu
         ImGui.SameLine();
         using (ImRaii.Disabled(!guard.CanAnswer))
         {
-            if (AetherControls.DangerButton("Discard", buttonSize) && guard.Discard() is { } discarded)
+            if (AetherControls.DangerButton("Discard", buttonSize)
+                && (switcher is { } editorPlates ? editorPlates.Discard() : guard.Discard()) is { } discarded)
             {
                 // Only once the edits are really gone: a refused revert (a save landed meanwhile)
-                // keeps the question open, with the editor's own message saying why.
+                // keeps the question open, with the editor's own message saying why. In the
+                // editors, a new Plate's Template is checked again first: when it can't be used,
+                // the question closes with the edits kept (PlateSwitcher.Discard).
                 ImGui.CloseCurrentPopup();
                 openNow?.Invoke(discarded);
             }

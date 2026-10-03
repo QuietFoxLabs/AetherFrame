@@ -30,10 +30,11 @@ namespace AetherFrame.Windows;
 /// My Plates: the visual collection of every saved Plate, and the way into the editors and the
 /// Plate Viewer. Cards show a thumbnail (or a fallback built from the Plate's own background),
 /// the name, and whether it's the current character's Active Plate; a card's right-click menu holds
-/// its actions (the shared <see cref="PlateMenu"/>, which the editors' Plate menu uses too). Split
-/// across partial files: this one (lifecycle, header, card grid), <c>.Actions.cs</c> (the footer and
-/// opening Plates), <c>.Templates.cs</c> (the Create Plate chooser and Manage Templates), and
-/// <c>.Packages.cs</c> (Import of .aetherframe files; Export is the Plate menu's).
+/// its actions (the shared <see cref="PlateMenu"/>, which the editors' Plate menu uses too, as it
+/// does Create Plate's chooser). Split across partial files: this one (lifecycle, header, card
+/// grid), <c>.Actions.cs</c> (the footer and opening Plates), <c>.Templates.cs</c> (Use Template
+/// and Manage Templates), and <c>.Packages.cs</c> (Import of .aetherframe files; Export is the
+/// Plate menu's).
 ///
 /// Never shows technical identifiers (ids, versions, file names, revisions). Works with no
 /// character logged in — only Set Active needs one.
@@ -151,7 +152,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         runner = new PlateOperationRunner(log);
         plateMenu = new PlateMenu(
             new PlateActions(library, templates, packages, profileService, editorSession, runner, log),
-            library, profileService, editorSession, thumbnails, fileDialogManager)
+            library, templates, profileService, editorSession, characterIdentity, thumbnails, renderResources, fileDialogManager)
         {
             Duplicated = copyId => selectedPlateId = copyId,
             Deleted = plateId =>
@@ -164,6 +165,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         };
         openGuard = new PlateOpenGuard(profileService, editorSession);
         plateMenu.AttachOpenGuard(openGuard, open => OpenNow(open.PlateId, open.Basic));
+        AttachTemplateChooser();
     }
 
     /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
@@ -197,16 +199,20 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         // An Advanced open still waiting on the Basic suggestion is dropped (nothing opens, nothing
         // is handled); the next request asks again.
         advancedEntry.Abandon();
+        openOnManageTemplates = false;
         thumbnailTextures.Clear();
         templateThumbnailTextures.Clear();
         cardPreviews.Clear();
     }
 
     /// <summary>My Plates is always what this window opens to — Manage Templates is a mode
-    /// entered from inside a session, never something that persists across reopens.</summary>
+    /// entered from inside a session, never something that persists across reopens. The one
+    /// exception is the editors' Create Plate chooser, whose Manage Templates... opens this window
+    /// on it (<see cref="ShowManageTemplates"/>).</summary>
     public override void OnOpen()
     {
-        activeView = LibraryView.MyPlates;
+        activeView = openOnManageTemplates ? LibraryView.Templates : LibraryView.MyPlates;
+        openOnManageTemplates = false;
     }
 
     public override void PreDraw()
@@ -221,6 +227,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     public override void Draw()
     {
         using var popupEscape = escape.Update(this);
+
+        // OnOpen, which runs before Draw, has used it if this window just opened.
+        openOnManageTemplates = false;
         runner.Advance();
         plateMenu.AdvanceOpenGuard();
 
@@ -243,23 +252,10 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             DrawTemplatesView();
         }
 
-        DrawTemplateChooserPopup();
+        // Create Plate's chooser (with its Template prompts, which Manage Templates asks for too),
+        // then the Plate menu's prompts: all the shared PlateMenu's.
         plateMenu.DrawPopups(characterIdentity.CurrentCharacter);
         DrawBasicGuidancePopup();
-
-        // While the Create Plate chooser is open, its own Rename/Delete requests (from a row's
-        // context menu) are drawn from inside the chooser's popup scope instead — see
-        // DrawTemplateChooserPopup for why: ImGui.OpenPopup() picks its stack level from how many
-        // BeginPopup/EndPopup blocks it's lexically nested inside at the moment it's called, and
-        // opening a second popup at the SAME level the chooser occupies closes the chooser first.
-        // Calling these two from here too whenever that happens would open Rename/Delete twice in
-        // one frame for the same popup id, which is unsafe — so exactly one of the two call sites
-        // ever runs on a given frame.
-        if (!ImGui.IsPopupOpen(TemplateChooserPopupId))
-        {
-            DrawTemplateRenamePopup();
-            DrawTemplateDeletePopup();
-        }
 
         fileDialogManager.Draw();
     }
@@ -308,7 +304,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         var headerMin = ImGui.GetCursorScreenPos();
         if (AetherControls.PrimaryButton("Create Plate", tooltip: "Start a new Plate from a Template."))
         {
-            pendingTemplateChooserPopup = true;
+            plateMenu.Chooser.Open();
         }
 
         TutorialAnchorMarks.Mark(TutorialTarget.LibraryCreatePlate);
@@ -424,7 +420,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
                 "Create Your First Plate",
                 "Start a new Plate from a Template."))
         {
-            pendingTemplateChooserPopup = true;
+            plateMenu.Chooser.Open();
         }
     }
 

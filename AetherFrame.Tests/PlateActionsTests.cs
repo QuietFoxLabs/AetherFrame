@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.Domain.Templates;
 using AetherFrame.Persistence;
 using AetherFrame.Services.Lifecycle;
 using AetherFrame.Services.Packages;
@@ -59,6 +60,23 @@ internal sealed class PlateActionsHarness : IDisposable
 
     /// <summary>Another saved Plate, not open.</summary>
     internal async Task<Guid> AnotherPlateAsync() => (await Library.CreatePlateAsync(PlateStartingLayout.Blank, character: null, name: "Second Look")).PlateId;
+
+    /// <summary>A saved Template a newer version of AetherFrame wrote: listed in My Templates, but it can't be used.</summary>
+    internal Task<Guid> TemplateFromTheFutureAsync() =>
+        TemplateFileAsync(templateId => TemplateSamples.Envelope(templateId, "From the future", "{}", version: 999));
+
+    /// <summary>A saved Template whose file is damaged, with no copy to recover it from: listed, but it can't be used.</summary>
+    internal Task<Guid> DamagedTemplateAsync() => TemplateFileAsync(_ => "{ this is not valid json");
+
+    // A Template file written straight into the Library, then the Templates loaded again, as at the next start.
+    private async Task<Guid> TemplateFileAsync(Func<Guid, string> json)
+    {
+        var templateId = Guid.NewGuid();
+        Directory.CreateDirectory(Editor.Fixture.Paths.TemplatesDirectory);
+        File.WriteAllText(Editor.Fixture.Paths.GetTemplatePath(templateId), json(templateId));
+        await Templates.InitializeAsync();
+        return templateId;
+    }
 
     /// <summary>Waits for the running action, then applies its outcome as the window's next frame would.</summary>
     internal async Task FinishAsync()
@@ -176,6 +194,46 @@ public class PlateOpenGuardTests
         Assert.Null(harness.Guard.Pending);
         Assert.True(harness.Editor.Session.IsDirty);
         Assert.Equal(harness.OpenId, harness.Editor.Profiles.OpenPlateId);
+    }
+
+    [Fact]
+    public async Task ANewPlate_WithNothingUnsaved_GoesAhead()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+
+        Assert.Equal(PlateOpenDecision.Open, harness.Guard.RequestNew(BuiltInTemplateCatalog.AdventurePlateClassicId));
+        Assert.Null(harness.Guard.Pending);
+    }
+
+    [Fact]
+    public async Task ANewPlate_WithUnsavedChanges_AsksFirst_ForTheTemplate()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        harness.Edit();
+
+        Assert.Equal(PlateOpenDecision.Ask, harness.Guard.RequestNew(BuiltInTemplateCatalog.BlankCanvasId));
+        Assert.Equal(PlateOpenRequest.NewPlate(BuiltInTemplateCatalog.BlankCanvasId), harness.Guard.Pending);
+        Assert.Equal(BuiltInTemplateCatalog.BlankCanvasId, harness.Guard.Pending!.Value.TemplateId);
+        Assert.Null(new PlateOpenRequest(BuiltInTemplateCatalog.BlankCanvasId, false).TemplateId);
+    }
+
+    [Fact]
+    public async Task ANewPlate_Discard_And_Save_HandBackTheNewPlatesRequest()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var request = PlateOpenRequest.NewPlate(BuiltInTemplateCatalog.AdventurePlateClassicId);
+
+        harness.Edit();
+        harness.Guard.RequestNew(BuiltInTemplateCatalog.AdventurePlateClassicId);
+        Assert.Equal(request, harness.Guard.Discard());
+        Assert.False(harness.Editor.Session.IsDirty);
+
+        harness.Edit();
+        harness.Guard.RequestNew(BuiltInTemplateCatalog.AdventurePlateClassicId);
+        harness.Guard.Save();
+        var outcome = await AdvanceUntilAnsweredAsync(harness.Guard);
+        Assert.Equal(request, outcome.Open);
+        Assert.False(harness.Editor.Session.IsDirty);
     }
 
     [Fact]
@@ -503,6 +561,143 @@ public class PlateActionsTests
         release.SetResult();
         await harness.FinishAsync();
         Assert.Single(harness.Library.GetOrderedPlates());
+    }
+
+    // ---------------------------------------------------------------- Create Plate's chooser (moved with it by interface task 2)
+
+    [Fact]
+    public async Task UseTemplate_MakesANewPlateFromTheTemplate_AndHandsItBack()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        PlateCreationResult? made = null;
+
+        harness.Actions.UseTemplate(BuiltInTemplateCatalog.AdventurePlateClassicId, Characters.Alice, new PlateStarterContent(null), result => made = result);
+        await harness.FinishAsync();
+
+        Assert.NotNull(made);
+        Assert.False(made!.BecameActive);
+        Assert.Equal(made.PlateId, harness.Library.GetOrderedPlates()[0].PlateId);
+        Assert.Equal("Adventure Plate Classic", harness.Library.FindPlate(made.PlateId)!.DisplayName);
+        Assert.Contains(made.PlateId, harness.Library.GetBinding(Characters.Alice.ContentId)!.PlateIds);
+        Assert.Null(harness.Runner.Status);
+        Assert.Null(harness.Runner.Error);
+    }
+
+    [Fact]
+    public async Task UseTemplate_ForACharactersFirstPlate_SaysItIsNowActive()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        PlateCreationResult? made = null;
+
+        harness.Actions.UseTemplate(BuiltInTemplateCatalog.BlankCanvasId, Characters.Bob, new PlateStarterContent(null), result => made = result);
+        await harness.FinishAsync();
+
+        Assert.True(made!.BecameActive);
+        Assert.Equal(made.PlateId, harness.Library.GetActivePlateId(Characters.Bob.ContentId));
+        Assert.Equal(MyPlatesCharacterText.FirstPlateCreated, harness.Runner.Status);
+    }
+
+    [Fact]
+    public async Task UseTemplate_WhileAnotherActionRuns_IsRefused()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var release = new TaskCompletionSource();
+        harness.Runner.Run("wait", () => release.Task);
+        var created = false;
+
+        harness.Actions.UseTemplate(BuiltInTemplateCatalog.AdventurePlateClassicId, Characters.Alice, new PlateStarterContent(null), _ => created = true);
+
+        Assert.Equal(PlateOperationRunner.BusyMessage, harness.Runner.Error);
+        release.SetResult();
+        await harness.FinishAsync();
+        Assert.False(created);
+        Assert.Single(harness.Library.GetOrderedPlates());
+    }
+
+    [Fact]
+    public async Task TemplateName_NamesBuiltInAndSavedTemplates()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
+
+        Assert.Equal("Adventure Plate Classic", harness.Actions.TemplateName(BuiltInTemplateCatalog.AdventurePlateClassicId));
+        Assert.Equal("Blank Canvas", harness.Actions.TemplateName(BuiltInTemplateCatalog.BlankCanvasId));
+        Assert.Equal("Night Out", harness.Actions.TemplateName(saved));
+        Assert.Null(harness.Actions.TemplateName(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task TemplateProblem_IsNothingForAUsableTemplate_AndWhyForOneThatCantBeUsed()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
+        var future = await harness.TemplateFromTheFutureAsync();
+        var damaged = await harness.DamagedTemplateAsync();
+
+        Assert.Null(harness.Actions.TemplateProblem(BuiltInTemplateCatalog.AdventurePlateClassicId));
+        Assert.Null(harness.Actions.TemplateProblem(BuiltInTemplateCatalog.BlankCanvasId));
+        Assert.Null(harness.Actions.TemplateProblem(saved));
+        Assert.Equal(TemplateStatus.NewerVersion, harness.Templates.FindTemplate(future)!.Status);
+        Assert.Equal(harness.Templates.FindTemplate(future)!.Problem, harness.Actions.TemplateProblem(future));
+        Assert.Contains("newer version", harness.Actions.TemplateProblem(future), StringComparison.Ordinal);
+        Assert.Equal(TemplateStatus.Unreadable, harness.Templates.FindTemplate(damaged)!.Status);
+        Assert.Equal(harness.Templates.FindTemplate(damaged)!.Problem ?? PlateActions.CannotUseTemplateNote, harness.Actions.TemplateProblem(damaged));
+        Assert.Equal(PlateActions.TemplateGoneNote, harness.Actions.TemplateProblem(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task RenameTemplate_RefusesAnInvalidName_WithoutStartingAnything()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
+
+        Assert.NotNull(harness.Actions.RenameTemplate(saved, "  "));
+        Assert.False(harness.Runner.IsBusy);
+        Assert.Equal("Night Out", harness.Templates.FindTemplate(saved)!.DisplayName);
+    }
+
+    [Fact]
+    public async Task RenameTemplate_RenamesIt()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
+
+        Assert.Null(harness.Actions.RenameTemplate(saved, "  Evening Out  "));
+        await harness.FinishAsync();
+
+        Assert.Equal("Evening Out", harness.Templates.FindTemplate(saved)!.DisplayName);
+        Assert.Null(harness.Runner.Error);
+    }
+
+    [Fact]
+    public async Task DuplicateTemplate_CopiesIt_AndHandsBackTheCopy()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
+        Guid? copy = null;
+
+        harness.Actions.DuplicateTemplate(saved, id => copy = id);
+        await harness.FinishAsync();
+
+        Assert.NotNull(copy);
+        Assert.NotEqual(saved, copy);
+        Assert.NotNull(harness.Templates.FindTemplate(copy!.Value));
+        Assert.NotNull(harness.Templates.FindTemplate(saved));
+    }
+
+    [Fact]
+    public async Task DeleteTemplate_SaysWhatHappened_AndCallsBackFirst()
+    {
+        using var harness = await PlateActionsHarness.CreateAsync();
+        var saved = await harness.Templates.SaveAsTemplateAsync(harness.OpenId, "Night Out");
+        string? statusWhenCalledBack = "not called";
+
+        harness.Actions.DeleteTemplate(saved, "Night Out", () => statusWhenCalledBack = harness.Runner.Status);
+        await harness.FinishAsync();
+
+        Assert.Null(statusWhenCalledBack);
+        Assert.Null(harness.Templates.FindTemplate(saved));
+        Assert.Equal("Deleted \"Night Out\".", harness.Runner.Status);
     }
 
     [Fact]
