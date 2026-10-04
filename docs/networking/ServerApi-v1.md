@@ -25,7 +25,7 @@ Every request but `status`, `health` and `challenge` is signed. Its body is:
 2. It signs a proof of the request's kind, for the deployment it is configured with, under that challenge, binding the payload: `SignAction` for an action, `Sign` for a submission.
 3. The server takes the expected kind **from the path**, never from the request, then checks the proof as section 14.4 (a submission) or 14.5 (an action) says, then consumes the challenge (rule 10), and only then acts.
 
-A challenge the server doesn't know, has already consumed, or issued more than 300 seconds ago gets `409` with a fresh challenge as its body: the client signs again under it. That fresh challenge counts against the address's challenge limit like any other: past it, the answer is `429` with none.
+A challenge the server doesn't know, has already consumed, or issued more than 300 seconds ago gets `409` with a fresh challenge as its body: the client signs again under it. That fresh challenge counts against the address's challenge limit like any other: past it, the answer is `429` with none. A presence start is the one exception: it signs a presence challenge (section 2.4), and a refused one gets `409` with no body.
 
 ### 2.1 Actions
 
@@ -40,7 +40,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 | `/v1/lookup` | 6, a lookup | `{"name": "…", "world": "…"}` | `200` a served profile (section 8.6 of the specification); `404` for every cause (C5) |
 | `/v1/image` | 7, an image | `{"name": "…", "world": "…", "marker": "mrk_…", "index": 0}` | `200` the image; `404` for every cause |
 | `/v1/report` | 8, a report | `{"name": "…", "world": "…", "reason": "…"}` | `204`; `404` when no Plate is found |
-| `/v1/presence` | 9, a presence start | `{}` | `200` `{"session": "<44 characters of base64>", "online": 12}`; see section 2.4 |
+| `/v1/presence` | 9, a presence start | `{}` | `200` `{"session": "<44 characters of base64>", "online": 12}`, under a presence challenge; see section 2.4 |
 
 - **A Lodestone id** is its decimal digits, as a string: 1 to 10 digits with no leading zero (C2).
 - **A name** is the character's full name, and **a World** its Home World's name, compared as C1 says: the name in NFC, lower case, with runs of spaces folded, and the World without regard to case.
@@ -132,7 +132,7 @@ Added October 4, 2026 ("The online count" in DecisionRegister.md, the one except
 - **The count** is the number of distinct Lodestone ids with a session, so a character is counted once however many sessions name it. Expired sessions are swept at most every 5 seconds, so a session can count that long past its expiry. Answers carry the count alone: no name, World, id, key, time or list. A count under 5 is answered as `0`, meaning "fewer than 5", so a handful of players who know each other can't watch one another log in and out; the plugin shows it as `Fewer than 5 online`.
 - **Nothing is kept.** Sessions live in the server's memory only, as each token's SHA-256 with the key's identity, the Lodestone id and two times. Nothing about them is written to disk or logged, and a session's times go with it. A restart forgets every session; each plugin's next heartbeat gets `404` and it starts a new one, spread over up to 10 seconds. The server holds at most 100,000 sessions.
 - **Limits.** A start signs a challenge from `/v1/presence/challenge`, held in memory for 300 seconds and accepted once, by a presence start alone; no other action accepts one, and a start accepts no other. Presence challenges and starts are each limited to 240 an hour per address group, and starts to 12 an hour per key. Heartbeats and leaves take no challenge, and count against a limit of their own, 120 a minute per address group (C6's groups). None of these takes from `/v1/challenge`'s 600 an hour or any other limit, so players sharing a network can't use up each other's publishing, lookups or checks with presence, and at the plugin's pace about 100 of them fit behind one IPv4 address, starting again after a server restart included.
-- **The plugin's pace.** A start when the character logs in or starts sharing, then a heartbeat every 50 to 70 seconds. After a failure it waits a minute, then twice as long each time, to 15 minutes at most; after a `429` it waits the 15 minutes at once. A start's `410` stops it until the character's sharing changes. A challenge the persona session was too busy to sign under is kept for the next try, for up to 240 seconds. A heartbeat's `404` starts a new session once; a second `404` before a counted heartbeat counts as a failure. A logout, a pause, turning sharing off, a takeover, another character or unloading the plugin ends the session with a leave; a crash leaves it to expire. The start's signature is made under the persona session in one short operation, and every request is sent outside it, so presence never holds up a publish. Nothing is sent for a character that doesn't share, or before the player has seen what the count sends (the one-time notice in Sharing, or the consent).
+- **The plugin's pace.** A start when the character logs in or starts sharing, then a heartbeat every 50 to 70 seconds. After a failure it waits a minute, then twice as long each time, to 15 minutes at most; after a `429` it waits the longest, 12 to 18 minutes, at once. A start's `410` stops it until the character's sharing changes. A challenge the persona session was too busy to sign under is kept for the next try, for up to 240 seconds. A heartbeat's `404` starts a new session once; a second `404` before a counted heartbeat counts as a failure. A logout, a pause, turning sharing off, a takeover, another character or unloading the plugin ends the session with a leave; a crash leaves it to expire. The start's signature is made under the persona session in one short operation, and every request is sent outside it, so presence never holds up a publish. Nothing is sent for a character that doesn't share, or before the player has seen what the count sends (the one-time notice in Sharing, or the consent).
 
 ## 3. Unsigned requests
 
@@ -159,7 +159,7 @@ Added October 4, 2026 ("The online count" in DecisionRegister.md, the one except
 
 | Request | Largest body |
 |---|---|
-| `challenge`, `health` | 0 bytes |
+| `challenge`, `presence/challenge`, `health` | 0 bytes |
 | a presence heartbeat or leave | 32 bytes |
 | an action | 2 + 454 + 4,096 = 4,552 bytes |
 | `publish` | 2 + 454 + 4 + 1,048,576 + 1 + 8 × 4 + 41,943,040 = 42,992,109 bytes; the bound is 43,000,000 |
