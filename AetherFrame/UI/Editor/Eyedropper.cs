@@ -77,8 +77,12 @@ internal enum EyedropperPhase
 /// says why and changes nothing; the player can point elsewhere or cancel.
 ///
 /// <para>The click that started the pick is never taken as the pick: a pick by button needs the button
-/// up first. The press that ends a pick is the eyedropper's until it is let go
-/// (<see cref="EyedropperPhase.Ending"/>), so its release reaches nothing under the pointer.</para>
+/// up first, and a press within <see cref="StartGraceMs"/> of the start is the second click of a
+/// double-click on the eyedropper button. Likewise a key already held when the pick started counts
+/// only once it is let go. The press that ends a pick is the eyedropper's until it is let go
+/// (<see cref="EyedropperPhase.Ending"/>), so its release reaches nothing under the pointer. A pick
+/// whose control is no longer drawn (its window closed) ends with nothing changed after
+/// <see cref="OwnerGoneFrames"/> frames.</para>
 ///
 /// <para>Free of Dalamud and Win32: the editors feed it a frame's input and read what it shows; the
 /// control that started a pick takes the picked color with <see cref="TryTakePick"/> the next time it
@@ -98,6 +102,15 @@ internal sealed class Eyedropper
     /// <summary>Frames a picked color waits for its control to take it (one that is no longer drawn never will).</summary>
     internal const int UnclaimedFrames = 30;
 
+    /// <summary>Frames a pick goes on without its control being drawn (<see cref="SeeOwner"/>) before it ends with nothing changed.</summary>
+    internal const int OwnerGoneFrames = 30;
+
+    /// <summary>
+    /// How soon after the start a button press is still the click that started the pick: the second
+    /// click of a double-click on the eyedropper button (Windows' default double-click time).
+    /// </summary>
+    internal const long StartGraceMs = 500;
+
     internal const string NoPointer = "Windows didn't say where the pointer is. Move it a little and try again.";
     internal const string NoAnswer = "That spot took too long to read. Try again, or press Escape.";
     internal const string Unreadable = "That spot can't be read.";
@@ -105,6 +118,9 @@ internal sealed class Eyedropper
     private readonly IScreenColorReader reader;
 
     private bool armed;
+    private bool keysArmed;
+    private long startedMs;
+    private int? ownerSeenFrame;
     private bool pickWasDown;
     private bool cancelWasDown;
     private ScreenPixel pickAt;
@@ -138,7 +154,10 @@ internal sealed class Eyedropper
     internal bool IsPickingFor(uint owner) => Owner == owner && Phase is EyedropperPhase.Sampling or EyedropperPhase.Picking;
 
     /// <summary>Starts a pick for the control <paramref name="owner"/>; false while another is under way.</summary>
-    internal bool Start(uint owner)
+    /// <param name="owner">The control's ImGui id.</param>
+    /// <param name="startedAtMs">When, on <see cref="EyedropperInput.Milliseconds"/>'s clock (for <see cref="StartGraceMs"/>); null for no grace.</param>
+    /// <param name="keysHeld">Whether a pick or cancel key is already held: it counts only once let go.</param>
+    internal bool Start(uint owner, long? startedAtMs = null, bool keysHeld = false)
     {
         if (Phase != EyedropperPhase.Idle)
         {
@@ -148,6 +167,9 @@ internal sealed class Eyedropper
         Phase = EyedropperPhase.Sampling;
         Owner = owner;
         armed = false;
+        keysArmed = !keysHeld;
+        startedMs = startedAtMs ?? long.MinValue;
+        ownerSeenFrame = null;
         pickWasDown = true;
         cancelWasDown = true;
         pending = null;
@@ -157,6 +179,15 @@ internal sealed class Eyedropper
         picked = null;
         reader.Begin();
         return true;
+    }
+
+    /// <summary>The control <paramref name="owner"/> was drawn this frame (<see cref="OwnerGoneFrames"/>).</summary>
+    internal void SeeOwner(uint owner, int frame)
+    {
+        if (owner == Owner && Phase is EyedropperPhase.Sampling or EyedropperPhase.Picking)
+        {
+            ownerSeenFrame = frame;
+        }
     }
 
     /// <summary>Ends any pick at once, with nothing changed (the plugin stopping).</summary>
@@ -190,14 +221,30 @@ internal sealed class Eyedropper
         pickWasDown = input.PickButtonDown;
         cancelWasDown = input.CancelButtonDown;
 
+        // A key held since before the pick counts once it has been let go.
+        var keys = keysArmed ? input : input with { PickKeyPressed = false, CancelKeyPressed = false };
+        keysArmed |= !input.KeysDown;
+
+        if (pickPressed && startedMs != long.MinValue && input.Milliseconds - startedMs < StartGraceMs)
+        {
+            pickPressed = false; // the second click of a double-click on the eyedropper button
+        }
+
+        if (Phase is EyedropperPhase.Sampling or EyedropperPhase.Picking && ownerSeenFrame is { } seen && input.Frame - seen > OwnerGoneFrames)
+        {
+            Problem = null;
+            End(); // its window closed: nothing to give the color to
+            return;
+        }
+
         TakeReadings(input.Frame);
         switch (Phase)
         {
             case EyedropperPhase.Sampling:
-                Point(input, pickPressed, cancelPressed);
+                Point(keys, pickPressed, cancelPressed);
                 break;
             case EyedropperPhase.Picking:
-                Pick(input, cancelPressed);
+                Pick(keys, cancelPressed);
                 break;
             case EyedropperPhase.Ending when !input.PickButtonDown && !input.CancelButtonDown && !input.KeysDown:
                 Phase = EyedropperPhase.Idle;

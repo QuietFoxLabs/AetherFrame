@@ -87,6 +87,8 @@ public class EyedropperTests
 
         internal int Frame => frame;
 
+        internal long Milliseconds => milliseconds;
+
         internal void Frames(int count, ScreenPixel? pointer = null, bool button = false, bool secondary = false, bool keysDown = false)
         {
             for (var i = 0; i < count; i++)
@@ -224,6 +226,65 @@ public class EyedropperTests
         player.Frames(1, Red, button: false);
         player.Frames(1, Red, button: true);
         Assert.Equal(EyedropperPhase.Picking, eyedropper.Phase);
+    }
+
+    [Fact]
+    public void ADoubleClickOnTheEyedropperButton_IsNotAPick()
+    {
+        var screen = new FakeScreen();
+        var eyedropper = new Eyedropper(screen);
+        var player = new Player(eyedropper);
+        Assert.True(eyedropper.Start(Owner, player.Milliseconds));
+
+        player.Frames(1, Red, button: true); // the first click, still held
+        player.Frames(2, Red, button: false);
+        player.Frames(2, Red, button: true); // the second click, well within a double-click
+        Assert.Equal(EyedropperPhase.Sampling, eyedropper.Phase);
+        player.Frames(1, Red, button: false);
+
+        player.Wait(Eyedropper.StartGraceMs);
+        player.Frames(1, Red, button: true);
+        Assert.Equal(EyedropperPhase.Picking, eyedropper.Phase);
+    }
+
+    [Fact]
+    public void AKeyHeldWhenThePickStarted_CountsOnlyOnceLetGo()
+    {
+        var screen = new FakeScreen();
+        var eyedropper = new Eyedropper(screen);
+        var player = new Player(eyedropper);
+        Assert.True(eyedropper.Start(Owner, keysHeld: true));
+
+        player.Enter(Red); // the held key, seen by the eyedropper as a fresh press
+        player.Escape(Red);
+        Assert.Equal(EyedropperPhase.Sampling, eyedropper.Phase);
+
+        player.Frames(1, Red); // let go
+        player.Enter(Red);
+        Assert.Equal(EyedropperPhase.Picking, eyedropper.Phase);
+    }
+
+    [Fact]
+    public void APickWhoseControlIsNoLongerDrawn_EndsWithNothingPicked()
+    {
+        var (eyedropper, screen, player) = Started();
+        for (var i = 0; i < Eyedropper.OwnerGoneFrames * 2; i++)
+        {
+            eyedropper.SeeOwner(Owner, player.Frame); // its editor is open
+            player.Frames(1, Red);
+        }
+
+        Assert.Equal(EyedropperPhase.Sampling, eyedropper.Phase);
+
+        eyedropper.SeeOwner(Owner + 1, player.Frame); // another control is no sign of it
+        player.Frames(Eyedropper.OwnerGoneFrames, Red);
+        Assert.Equal(EyedropperPhase.Sampling, eyedropper.Phase);
+        player.Frames(1, Red); // its editor closed
+        Assert.Equal(EyedropperPhase.Ending, eyedropper.Phase);
+        player.Frames(1, Red);
+        Assert.Equal(EyedropperPhase.Idle, eyedropper.Phase);
+        Assert.False(eyedropper.TryTakePick(Owner, out _));
+        Assert.Equal(1, screen.Ends);
     }
 
     [Fact]

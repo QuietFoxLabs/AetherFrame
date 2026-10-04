@@ -17,6 +17,9 @@ internal static class ScreenPixels
 {
     private const int VkLButton = 0x01;
     private const int VkRButton = 0x02;
+    private const int VkReturn = 0x0D;
+    private const int VkEscape = 0x1B;
+    private const int VkSpace = 0x20;
     private const int SmSwapButton = 23;
     private const uint GaRoot = 2;
     private const uint ClrInvalid = 0xFFFFFFFF;
@@ -50,14 +53,28 @@ internal static class ScreenPixels
         try
         {
             var swapped = NativeMethods.GetSystemMetrics(SmSwapButton) != 0;
-            var key = primary != swapped ? VkLButton : VkRButton;
-            return (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0;
+            return IsDown(primary != swapped ? VkLButton : VkRButton);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
             return false;
         }
     }
+
+    /// <summary>Whether Enter, Space or Escape (the eyedropper's keys) is down, wherever the keyboard's focus is.</summary>
+    internal static bool KeysDown()
+    {
+        try
+        {
+            return IsDown(VkReturn) || IsDown(VkSpace) || IsDown(VkEscape);
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsDown(int virtualKey) => (NativeMethods.GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 
     /// <summary>
     /// Where <paramref name="at"/> falls in the game window's picture (0 to 1 across each way, see

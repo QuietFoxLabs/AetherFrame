@@ -18,7 +18,9 @@ namespace AetherFrame.Windows;
 /// <list type="bullet">
 /// <item>covers the game's window with a clear, focused window, so a click there picks and reaches
 /// neither the game nor any window under it (Dalamud keeps the mouse from the game while ImGui
-/// has it);</item>
+/// has it). AetherFrame's own windows also stop taking the mouse (<see cref="ClaimsInput"/>,
+/// <c>AetherWindowChrome.ApplyPolicy</c>): one on another monitor is a window of its own, out from
+/// under the cover;</item>
 /// <item>claims the keyboard (<c>io.WantTextInput</c>, as <see cref="PopupEscapeGuard"/> does), so
 /// Escape, Enter and Space reach the eyedropper alone, never the game or a window's close
 /// hotkey;</item>
@@ -57,6 +59,12 @@ internal static class ScreenEyedropper
         reader = null;
     }
 
+    /// <summary>
+    /// Whether a pick has the mouse and keyboard: AetherFrame's windows then take no mouse input,
+    /// wherever they are (<c>AetherWindowChrome.ApplyPolicy</c>).
+    /// </summary>
+    internal static bool ClaimsInput => eyedropper?.ClaimsInput == true;
+
     /// <summary>The room <see cref="Button"/> takes after a control on its line, to keep for it.</summary>
     internal static float ButtonRoom => ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X;
 
@@ -86,10 +94,12 @@ internal static class ScreenEyedropper
         {
             if (EditorWidgets.IconToggle($"Eyedropper{id}", FontAwesomeIcon.EyeDropper, picking, ButtonTooltip))
             {
-                eyedropper?.Start(key);
+                eyedropper?.Start(key, Environment.TickCount64, ScreenPixels.KeysDown());
             }
         }
 
+        // A pick whose control is no longer drawn (its window closed) ends by itself.
+        eyedropper?.SeeOwner(key, ImGui.GetFrameCount());
         return arrived;
     }
 
@@ -162,9 +172,9 @@ internal static class ScreenEyedropper
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted(Eyedropper.Hex(live));
         }
-        else
+        else if (current.Problem is null)
         {
-            ImGui.TextUnformatted(current.Problem is null ? "Reading..." : "No color here");
+            ImGui.TextUnformatted("Reading...");
         }
 
         if (current.Problem is { } problem)

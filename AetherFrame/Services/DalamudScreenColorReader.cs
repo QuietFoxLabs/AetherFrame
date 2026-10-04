@@ -208,7 +208,16 @@ internal sealed class DalamudScreenColorReader : IScreenColorReader
         running.Add(Task.Run(
             () =>
             {
-                var color = ScreenPixels.ReadDesktop(at);
+                Vector3? color;
+                try
+                {
+                    color = ScreenPixels.ReadDesktop(at);
+                }
+                catch (Exception)
+                {
+                    color = null; // never left unobserved: the reading says it failed
+                }
+
                 readings.Enqueue(new ScreenReading(id, color, color is null ? DesktopUnreadable : null));
             },
             cancellation));
