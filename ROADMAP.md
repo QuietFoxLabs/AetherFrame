@@ -8,6 +8,8 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
+**October 4, 2026, Community Desk update:** the owner-authorized dashboard rebuild is on `codex/admin-dashboard-rebuild`, disabled by default and not deployed. Solution build: zero warnings/errors; 15 new dashboard tests pass. Independent reviews, exact-head CI and browser acceptance remain pending. [Design and validation limits](docs/networking/AdminDashboard.md). This update covers the desk only; the existing build and release records below keep their own verification dates.
+
 Verified October 3, 2026, at 18:00 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, section 3 the milestones, and section 8 the next tasks.
 
 - **Where things stand:**
@@ -384,6 +386,8 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 | The owner's open questions | The interface audit's questions 1 and 3 (tasks 6 and 5). What the beta includes. Not yet asked: whether D2 is still wanted (section 3). The consent question is answered: no one is asked again (section 5). |
 
 ## 8. Next five small PR sized tasks and acceptance criteria
+
+**Owner-authorized parallel work, October 4, 2026:** GPT is rebuilding the [Community Desk](docs/networking/AdminDashboard.md) on `codex/admin-dashboard-rebuild`. It adds a disabled staff dashboard to the existing server, with GitHub login, report review, hide/restore and audited moderator actions. Remains a draft pending independent security/correctness review, exact-head CI and browser acceptance. No production activation, plugin installation or release is authorized by this task. The owner and GPT retain orchestration; this entry does not authorize Claude to select or merge additional work. Existing in-game checks and release gates below remain outstanding.
 
 **RECOMMENDATION, not new owner decisions.** Recheck current heads first and skip work already completed. [updated 2026-10-02: since NETWORK2 and the open alpha, the next five below the done list are Claude's recommendation, and the owner picks what starts. The rest of this paragraph describes the list until then.] The list follows the order decided in section 5 after the owner's request of September 29, 2026: the NETWORK2 increments first ([docs/networking/NETWORK2.md](docs/networking/NETWORK2.md), section 5), and the 0.1.7 release, which the owner chose on September 30, 2026 to make from `master` without a pass (section 5). The NETWORK2 tasks need the named decisions: under the September 29 delegation the autopilot makes each one, records it in the register, and then implements it. The autopilot keeps five tasks here, refilling from NETWORK2's increment table and, where networking waits on the owner or a review, from the interface work (NETWORK2.md, section 6).
 
