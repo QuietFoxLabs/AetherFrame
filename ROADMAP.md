@@ -8,6 +8,8 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
+**October 4, 2026, Community Desk update:** the owner-authorized dashboard rebuild is on `codex/admin-dashboard-rebuild`, disabled by default and not deployed. Solution build: zero warnings/errors; 15 new dashboard tests pass. Independent reviews, exact-head CI and browser acceptance remain pending. [Design and validation limits](docs/networking/AdminDashboard.md). This update covers the desk only; the existing build and release records below keep their own verification dates.
+
 Verified October 3, 2026, at 18:00 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, section 3 the milestones, and section 8 the next tasks.
 
 - **Where things stand:**
@@ -387,6 +389,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 
 ## 8. Next five small PR sized tasks and acceptance criteria
 
+**Owner-authorized parallel work, October 4, 2026:** GPT is rebuilding the [Community Desk](docs/networking/AdminDashboard.md) on `codex/admin-dashboard-rebuild`. It adds a disabled staff dashboard to the existing server, with GitHub login, report review, hide/restore and audited moderator actions. Remains a draft pending independent security/correctness review, exact-head CI and browser acceptance. No production activation, plugin installation or release is authorized by this task. The owner and GPT retain orchestration; this entry does not authorize Claude to select or merge additional work. Existing in-game checks and release gates below remain outstanding.
 **First: Kim's P0 usability issues (the owner's priority, October 3, 2026).** The owner put all nine ahead of every task below. They are worked in this order, one focused pull request each, with these couplings: #115 and #114 are designed together, #117 lands before #116's previews, and #118 before #119. Each issue holds its acceptance criteria.
 
 | Issue | What | State |

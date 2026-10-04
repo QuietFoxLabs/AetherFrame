@@ -124,7 +124,7 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT served FROM latest WHERE persona = $persona AND profile_id = $profile;";
+        command.CommandText = "SELECT served FROM latest WHERE persona = $persona AND profile_id = $profile AND NOT EXISTS(SELECT 1 FROM admin_holds WHERE profile_id=$profile);";
         command.Parameters.AddWithValue("$persona", persona.ToString());
         command.Parameters.AddWithValue("$profile", profileId.ToString());
         return await command.ExecuteScalarAsync(cancellation) as byte[];
@@ -139,7 +139,7 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT latest.marker, images.format, images.bytes FROM latest JOIN images ON images.persona = latest.persona AND images.profile_id = latest.profile_id WHERE latest.persona = $persona AND latest.profile_id = $profile AND images.idx = $index;";
+        command.CommandText = "SELECT latest.marker, images.format, images.bytes FROM latest JOIN images ON images.persona = latest.persona AND images.profile_id = latest.profile_id WHERE latest.persona = $persona AND latest.profile_id = $profile AND images.idx = $index AND NOT EXISTS(SELECT 1 FROM admin_holds WHERE profile_id=$profile);";
         command.Parameters.AddWithValue("$persona", persona.ToString());
         command.Parameters.AddWithValue("$profile", profileId.ToString());
         command.Parameters.AddWithValue("$index", index);
@@ -183,8 +183,9 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
     {
         await using var connection = await database.OpenAsync(cancellation);
         await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM reports WHERE day <= $expired;";
+        command.CommandText = "DELETE FROM reports WHERE day <= $expired; DELETE FROM admin_audit WHERE at <= $auditExpired;";
         command.Parameters.AddWithValue("$expired", Today - (long)ReportLifetime.TotalDays);
+        command.Parameters.AddWithValue("$auditExpired", time.GetUtcNow().ToUnixTimeSeconds() - 30 * 86400);
         var dropped = await command.ExecuteNonQueryAsync(cancellation);
         if (dropped > 0)
         {
@@ -200,7 +201,8 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
         await DropExpiredReportsAsync(cancellation);
         await using var connection = await database.OpenAsync(cancellation);
         await using var command = connection.CreateCommand();
-        command.CommandText = "INSERT INTO reports (lodestone_id, reason, reporter, day) VALUES ($id, $reason, $reporter, $today);";
+        command.CommandText = "INSERT INTO reports (lodestone_id, reason, reporter, day, review_token) VALUES ($id, $reason, $reporter, $today, $token);";
+        command.Parameters.AddWithValue("$token", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("$id", lodestoneId);
         command.Parameters.AddWithValue("$reason", reason);
         command.Parameters.AddWithValue("$reporter", reporter.ToString());
