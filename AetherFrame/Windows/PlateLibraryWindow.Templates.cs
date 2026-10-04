@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using AetherFrame.Domain.Plates;
-using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Templates;
 using AetherFrame.Services.Thumbnails;
@@ -43,9 +42,10 @@ internal sealed partial class PlateLibraryWindow
 
     private readonly Dictionary<Guid, string> templateCardIds = new();
 
-    // A built-in Template's document is generated on every request; its background never changes,
-    // so the fallback thumbnail reads it once per Template instead of once per frame.
-    private readonly Dictionary<Guid, ProfileBackground?> builtInBackgrounds = new();
+    // Each Template's fallback thumbnail, worked out once per saved version (its ModifiedUtc, the
+    // thumbnail's own version key) instead of once per frame: a built-in Template's document is
+    // generated on every request, and finding covering artwork lays out the Template's Components.
+    private readonly Dictionary<Guid, (DateTime Modified, CardFallback Fallback)> templateFallbacks = new();
 
     private LibraryView activeView = LibraryView.MyPlates;
     private Guid? selectedTemplateId;
@@ -242,7 +242,7 @@ internal sealed partial class PlateLibraryWindow
     }
 
     /// <summary>The thumbnail when one is Ready and loads; otherwise a fallback from the Template's
-    /// own background. Hits the exact same (currently non-functional) thumbnail pipeline as Plates
+    /// saved colors. Hits the exact same (currently non-functional) thumbnail pipeline as Plates
     /// — a separate cache directory only, never a second mechanism.</summary>
     private void DrawTemplateThumbnail(ImDrawListPtr drawList, TemplateSummary template, Vector2 min, Vector2 max)
     {
@@ -261,65 +261,25 @@ internal sealed partial class PlateLibraryWindow
         DrawTemplateFallbackThumbnail(drawList, template, min, max);
     }
 
+    /// <summary>As My Plates' fallback: what the renderer shows over the Template (covering
+    /// background artwork's plain color, or else its own background), or a warning while it isn't Ready.</summary>
     private void DrawTemplateFallbackThumbnail(ImDrawListPtr drawList, TemplateSummary template, Vector2 min, Vector2 max)
     {
-        drawList.AddRectFilled(min, max, ImGui.GetColorU32(FallbackBackdropColor), 4f);
-
-        var background = template.IsReady ? SavedBackgroundOf(template) : null;
-        var icon = FontAwesomeIcon.Copy;
-
-        if (!template.IsReady)
-        {
-            icon = FontAwesomeIcon.ExclamationTriangle;
-        }
-        else if (background is { } style)
-        {
-            var opacity = Math.Clamp(style.Opacity, 0f, 1f);
-            var primary = style.PrimaryColor with { W = style.PrimaryColor.W * opacity };
-            var secondary = style.SecondaryColor with { W = style.SecondaryColor.W * opacity };
-
-            switch (style.Mode)
-            {
-                case ProfileBackgroundMode.SolidColor:
-                case ProfileBackgroundMode.TexturedFill:
-                    drawList.AddRectFilled(min, max, ImGui.GetColorU32(primary), 4f);
-                    break;
-
-                case ProfileBackgroundMode.LinearGradient:
-                    var mixed = Vector4.Lerp(primary, secondary, 0.5f);
-                    drawList.AddRectFilledMultiColor(min, max, ImGui.GetColorU32(primary), ImGui.GetColorU32(mixed), ImGui.GetColorU32(secondary), ImGui.GetColorU32(mixed));
-                    break;
-
-                case ProfileBackgroundMode.Image:
-                    icon = FontAwesomeIcon.Image;
-                    break;
-            }
-        }
-
-        var iconText = EditorWidgets.GetIconString(icon);
-        using (DalamudServices.PluginInterface.UiBuilder.IconFontHandle.Push())
-        {
-            var iconSize = ImGui.CalcTextSize(iconText);
-            drawList.AddText((min + max - iconSize) / 2f, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.35f)), iconText);
-        }
+        var fallback = template.IsReady ? SavedFallbackOf(template) : default;
+        DrawCardFallback(drawList, fallback, template.IsReady ? FontAwesomeIcon.Copy : FontAwesomeIcon.ExclamationTriangle, min, max);
     }
 
-    /// <summary>The Template's saved background, read only: a user Template's is the saved
-    /// document's own; a built-in one's is kept from the first request.</summary>
-    private ProfileBackground? SavedBackgroundOf(TemplateSummary template)
+    /// <summary>The Template's fallback, from its saved document, read only and kept per saved version.</summary>
+    private CardFallback SavedFallbackOf(TemplateSummary template)
     {
-        if (!template.IsBuiltIn)
+        if (templateFallbacks.TryGetValue(template.TemplateId, out var kept) && kept.Modified == template.ModifiedUtc)
         {
-            return templates.GetSavedDocument(template.TemplateId)?.Background;
+            return kept.Fallback;
         }
 
-        if (!builtInBackgrounds.TryGetValue(template.TemplateId, out var background))
-        {
-            background = templates.GetSavedDocument(template.TemplateId)?.Background;
-            builtInBackgrounds[template.TemplateId] = background;
-        }
-
-        return background;
+        var fallback = AppearanceControls.CardFallbackOf(templates.GetSavedDocument(template.TemplateId));
+        templateFallbacks[template.TemplateId] = (template.ModifiedUtc, fallback);
+        return fallback;
     }
 
     private static void DrawTemplateKindBadge(ImDrawListPtr drawList, TemplateSummary template, Vector2 thumbnailMin, Vector2 thumbnailMax)

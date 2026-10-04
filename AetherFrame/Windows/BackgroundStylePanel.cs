@@ -20,7 +20,8 @@ namespace AetherFrame.Windows;
 /// gradient, texture, image, and opacity — used by both the Advanced editor's Canvas tab and the
 /// Basic editor, so there is one background editor, not two. Every mode's settings are kept while
 /// switching modes; every edit goes through <see cref="EditorSession"/> (sliders and colors are
-/// one undo step per drag).
+/// one undo step per drag). Both editors offer it only while the Plate's own background shows
+/// (<see cref="AppearanceControls"/>): Basic leaves it out, and Advanced greys it out.
 /// </summary>
 internal sealed class BackgroundStylePanel
 {
@@ -38,6 +39,9 @@ internal sealed class BackgroundStylePanel
     private readonly ProfileRenderResources renderResources;
     private readonly Action<string, Action<string>> openImageFileDialog;
 
+    // The flags of the color fields Draw draws this frame (see Draw's greyedOut).
+    private ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags.NoAlpha;
+
     /// <param name="editorSession">The shared editing session.</param>
     /// <param name="renderResources">For the background image's native size.</param>
     /// <param name="openImageFileDialog">Opens the owning window's image picker (title, on-selected).</param>
@@ -53,9 +57,16 @@ internal sealed class BackgroundStylePanel
     /// editor recolors the background only, so its row is labelled Presets, not Theme); the row is
     /// left out in Image mode (where a background preset would replace the image), or entirely when
     /// null — the Basic editor draws its own Theme browser (<see cref="DrawThemeBrowser"/>) first.
+    /// <paramref name="greyedOut"/> draws every control disabled, values in view, for the Advanced
+    /// editor while background artwork covers the Plate (<see cref="AppearanceControls"/>).
     /// </summary>
-    internal void Draw(ProfileDocument profile, Action<ProfileThemePreset>? applyTheme)
+    internal void Draw(ProfileDocument profile, Action<ProfileThemePreset>? applyTheme, bool greyedOut = false)
     {
+        // A disabled color field still takes a color dropped on it (ImGui's drop target checks
+        // read-only, not disabled), so greyed-out color fields take no drops.
+        colorEditFlags = greyedOut ? ImGuiColorEditFlags.NoAlpha | ImGuiColorEditFlags.NoDragDrop : ImGuiColorEditFlags.NoAlpha;
+        using var disabled = ImRaii.Disabled(greyedOut);
+
         if (profile.Background is not { } background)
         {
             EditorWidgets.Hint("Background unavailable.");
@@ -155,7 +166,7 @@ internal sealed class BackgroundStylePanel
     {
         EditorWidgets.PropertyLabel("Presets", 0f);
         ImGui.TextDisabled("Background colors only");
-        EditorWidgets.Tooltip("Sets the background's colors. Text colors stay as they are.\nThe Basic Editor's Theme sets the background and every Basic text color together.");
+        EditorWidgets.Tooltip("Sets the background's colors. Text colors stay as they are.\nA Simple Theme, under Style in the Basic Editor, sets the background and every Basic text color together.");
 
         foreach (var family in ProfileThemePresets.FamilyOrder)
         {
@@ -188,21 +199,12 @@ internal sealed class BackgroundStylePanel
     /// </summary>
     internal void DrawThemeBrowser(ProfileDocument profile, Action<ProfileThemePreset> applyTheme)
     {
-        if (themeBrowser.PlateId != profile.ProfileId)
-        {
-            themeBrowser.PlateId = profile.ProfileId;
-            themeBrowser.Showing = PlateStyle.OpensOn(profile);
-            themeBrowser.Family = null;
-            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
-        }
-
+        // Each Plate, and each system, opens unfiltered, on its own choice when it has one.
+        themeBrowser.ShowPlate(profile);
         var shown = EditorWidgets.Segmented("StyleSystem", [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)], (int)themeBrowser.Showing);
         if (shown >= 0)
         {
-            // Each system opens unfiltered, on its own choice when it has one.
-            themeBrowser.Showing = (StyleSystem)shown;
-            themeBrowser.Clear();
-            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
+            themeBrowser.ShowSystem(profile, (StyleSystem)shown);
         }
 
         var showing = themeBrowser.Showing;
@@ -814,7 +816,7 @@ internal sealed class BackgroundStylePanel
         var color = current;
         EditorWidgets.PropertyLabel(label);
         ScreenEyedropper.LeaveRoom();
-        if (ImGui.ColorEdit4(id, ref color, ImGuiColorEditFlags.NoAlpha))
+        if (ImGui.ColorEdit4(id, ref color, colorEditFlags))
         {
             var value = color with { W = 1f };
             editorSession.BeginOrContinueBackgroundEdit(style => SetColor(style, value));

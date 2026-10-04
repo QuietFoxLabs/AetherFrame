@@ -169,4 +169,28 @@ internal sealed class ThemeBrowserState
         Search = string.Empty;
         Family = null;
     }
+
+    /// <summary>
+    /// Called each frame with the Plate shown. Another Plate than last time opens on its own system
+    /// (<see cref="PlateStyle.OpensOn"/>), unfiltered, search included, so a search left from the
+    /// last Plate can't hide this one's choice, which is scrolled into view when it has one.
+    /// </summary>
+    internal void ShowPlate(ProfileDocument profile)
+    {
+        if (PlateId == profile.ProfileId)
+        {
+            return;
+        }
+
+        PlateId = profile.ProfileId;
+        ShowSystem(profile, PlateStyle.OpensOn(profile));
+    }
+
+    /// <summary>Shows <paramref name="system"/>'s tab, unfiltered, on the Plate's choice there when it has one.</summary>
+    internal void ShowSystem(ProfileDocument profile, StyleSystem system)
+    {
+        Showing = system;
+        Clear();
+        ScrollToCurrent = PlateStyle.Chosen(profile, system) is not null;
+    }
 }

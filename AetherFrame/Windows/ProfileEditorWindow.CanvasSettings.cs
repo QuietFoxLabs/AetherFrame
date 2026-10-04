@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.UI.Editor;
 using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Tutorial;
 using Dalamud.Bindings.ImGui;
@@ -12,8 +13,9 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// The Inspector's Canvas tab: canvas size (presets / custom, applied through the resize-choice
-/// popup), the shared <see cref="ProfileBackground"/> (through the shared <see cref="BackgroundStylePanel"/>),
-/// and the Plate's Components (see <c>.Components.cs</c>).
+/// popup), the shared <see cref="ProfileBackground"/> (through the shared <see cref="BackgroundStylePanel"/>,
+/// greyed out while background artwork covers the whole Plate), and the Plate's Components (see
+/// <c>.Components.cs</c>).
 /// </summary>
 internal sealed partial class ProfileEditorWindow
 {
@@ -118,7 +120,24 @@ internal sealed partial class ProfileEditorWindow
             EditorWidgets.Tooltip("The Plate's Art Style or Simple Theme, chosen under Style in the Basic Editor.\nThe Presets below set the background's colors only, and change neither.");
         }
 
-        backgroundPanel.Draw(profile, preset => editorSession.ApplyBackgroundEdit(preset.ApplyTo));
+        // While background artwork covers the whole Plate, none of the settings below can show
+        // (issue #119, the Basic editor's rule too: AppearanceControls). Greyed out rather than
+        // hidden, so they stay where a player looks for them, with their values kept; one line says
+        // why, and taking the artwork away is one undo step, here or under Components.
+        var cover = AppearanceControls.Background(profile);
+        if (cover.Component is { } covering)
+        {
+            EditorWidgets.Hint(AppearanceControls.AdvancedCoveredHint(cover));
+            if (ImGui.SmallButton("Remove the Artwork"))
+            {
+                editorSession.RemoveComponent(covering.Id);
+            }
+
+            EditorWidgets.Tooltip("Takes the background artwork away (undoable), so the Plate's own background shows and these settings apply.\nAdd artwork again with Add Component, under Components.");
+        }
+
+        backgroundPanel.Draw(profile, preset => editorSession.ApplyBackgroundEdit(preset.ApplyTo), greyedOut: !cover.BackgroundShows);
+
         var right = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
         TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedBackground, backgroundMin, new Vector2(right, ImGui.GetItemRectMax().Y));
         TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedBackground);

@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Threading.Tasks;
+using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
@@ -66,6 +67,45 @@ public class ThemeBrowserTests
 
         Assert.False(state.IsFiltered);
         Assert.Equal(Ids(All), Ids(ThemeBrowser.Filter(All, state.Search, state.Family)));
+    }
+
+    /// <summary>
+    /// Another Plate opens unfiltered, its search cleared too (a search left from the last Plate could
+    /// hide this one's choice, and leave its scroll into view waiting), on its own system and choice.
+    /// The same Plate keeps what the player typed.
+    /// </summary>
+    [Fact]
+    public void AnotherPlate_OpensUnfiltered_SearchIncluded_OnItsOwnChoice()
+    {
+        var artStyle = BasicDocuments.Classic(FakeCharacter.Hero);
+        BasicDocuments.Editor(artStyle).ApplyTheme(ProfileThemePresets.Find("af.style.celestial-sakura")!);
+        var dark = BasicDocuments.Classic(FakeCharacter.Hero);
+        BasicDocuments.Editor(dark).ApplyTheme(ProfileThemePresets.Find("Dark")!);
+        var state = new ThemeBrowserState();
+
+        state.ShowPlate(artStyle);
+        Assert.Equal(StyleSystem.ArtStyle, state.Showing);
+        Assert.True(state.ScrollToCurrent);
+
+        state.Search = "royal";
+        state.ScrollToCurrent = false;
+        state.ShowPlate(artStyle);
+        Assert.Equal("royal", state.Search);
+
+        state.ShowSystem(artStyle, StyleSystem.SimpleTheme);
+        state.Search = "royal";
+        state.Family = ThemeFamily.Special;
+        state.ShowPlate(dark);
+        Assert.False(state.IsFiltered);
+        Assert.Equal(StyleSystem.SimpleTheme, state.Showing);
+        Assert.True(state.ScrollToCurrent);
+
+        // A tab with no choice yet opens unfiltered, with nothing to scroll to.
+        state.Search = "gold";
+        state.ShowSystem(dark, StyleSystem.ArtStyle);
+        Assert.False(state.IsFiltered);
+        Assert.Equal(StyleSystem.ArtStyle, state.Showing);
+        Assert.False(state.ScrollToCurrent);
     }
 
     [Fact]
