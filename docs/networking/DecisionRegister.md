@@ -1883,3 +1883,18 @@ An approval that changes signed bytes also needs:
 - regenerated vectors;
 - the independent checker updated and re-run;
 - the specification updated in the same change.
+
+
+## Community Desk: owner and moderator dashboard (October 4, 2026)
+
+**APPROVED (GPT, October 4, 2026; relayed by the owner at 06:38 UTC).** Scope: the design below as built in PR #133 at `6c622b5`, its merge, and a controlled deployment afterward. Proposed by GPT earlier the same day. Independent security/privacy and correctness reviews were clean at `f8e4b13` and their rechecks clean at `ecca237`; browser acceptance and CI passed at `6c622b5`. The owner authorized GPT to rebuild a visually pleasing web dashboard; this approval does not change the plugin release gate or activate the desk, which stays off until the owner configures it on the server.
+
+Accepted limitations, which do not block rollout: no HSTS header (it would cover the whole host, including the plugin's `/v1` endpoints); signing out clears only that browser's cookie, and the owner's session ends only on expiry or a server restart; `[U+XXXX]` marking covers bidi controls, zero-width characters and the BOM but not Hangul fillers or tag characters; the browser Plate preview is approximate; cached copies cannot be recalled; a hold is not a ban (a new binding starts without one); and an older server binary ignores holds (Runbook, rollback caveat). Live GitHub login, Caddy cookies, revocation and public suppression of a held Plate are verified after deployment.
+
+Host the desk in the existing server at `/admin/`, disabled by default. Use a dedicated GitHub OAuth app, a configured owner numeric GitHub ID and explicitly granted moderators. OAuth requests no extra scopes, uses PKCE and correlation, and retains no provider access token. Sessions expire after four hours and on restart. Revocation is checked on every request and inside action transactions. Only the owner grants access. Same-origin antiforgery-protected POST queries/actions carry identifiers in bodies; logs retain route/status metadata only.
+
+Use existing stored content and health signals, with no concurrent-player metric or new telemetry. Staff may view reports/current published content, dismiss reports and hide/restore sharing with reasons. Holds preserve ownership and survive republication, but disappear when a binding is deleted. A prior binary does not enforce holds, so rollback has an explicit content-exposure caveat. The desk does not edit player content, ban accounts, change server settings or reveal reporters.
+
+Retain transactional moderation audit entries for 30 days, without copies of reported content or reporter identity; unlink a deleted binding from its audit target. Retain moderator IDs and grant generations as access configuration. Staff must not put personal information in reasons. This extends C5's operator report handling with a private web surface and a separately reviewed audit record; it does not approve additional player tracking or public identifiers.
+
+See [AdminDashboard.md](AdminDashboard.md) for exact behavior, limits and verification gaps, and [Runbook.md](Runbook.md#community-desk-disabled-until-separately-approved) for owner-only activation and rollback. Existing decisions remain history; none is silently relabelled by this proposal.

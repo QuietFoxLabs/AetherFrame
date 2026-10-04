@@ -112,6 +112,7 @@ internal sealed class ServerDatabase
         await ExecuteAsync(connection, Schema, cancellation);
         await AddReadDayAsync(connection, cancellation);
         await DateUnreadBindingsAsync(connection, cancellation);
+        await Admin.AdminStore.InitializeAsync(connection, cancellation);
     }
 
     /// <summary>

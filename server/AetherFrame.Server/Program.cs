@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Net;
 using AetherFrame.Server;
+using AetherFrame.Server.Admin;
 using AetherFrame.Server.Endpoints;
 using AetherFrame.Server.Hosting;
 using AetherFrame.Server.Images;
@@ -51,6 +52,8 @@ if (Environment.GetEnvironmentVariable("AETHERFRAME_CONFIG_FILE") is { Length: >
 }
 
 ServerOptions.RefuseForwardedHeadersSwitch(builder.Configuration);
+var deskOptions = builder.Configuration.GetSection("AetherFrame:Admin").Get<AdminOptions>() ?? new AdminOptions();
+deskOptions.Validate();
 
 // The operator's commands (docs/networking/Runbook.md) run instead of the server.
 if (args is ["admin", .. var command])
@@ -95,6 +98,13 @@ builder.Services.AddOptions<ServerOptions>()
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(deskOptions);
+builder.Services.AddSingleton<AdminStore>();
+if (deskOptions.Enabled)
+{
+    AdminAuthentication.Add(builder.Services, deskOptions);
+    builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication", LogLevel.None);
+}
 builder.Services.AddSingleton<ServerDatabase>();
 builder.Services.AddSingleton<ChallengeStore>();
 builder.Services.AddSingleton<BindingStore>();
@@ -143,7 +153,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
 {
     // Decision R4: only the reverse proxy's forwarded header is believed, and by default only
     // loopback is trusted; the trusted lists are never cleared.
-    forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+    forwarded.ForwardedHeaders = deskOptions.Enabled
+        ? ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+        : ForwardedHeaders.XForwardedFor;
     forwarded.ForwardLimit = 1;
 });
 builder.Services.AddOptions<ForwardedHeadersOptions>().Configure<IOptions<ServerOptions>>((forwarded, options) =>
@@ -157,7 +169,14 @@ builder.Services.AddOptions<ForwardedHeadersOptions>().Configure<IOptions<Server
 var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseMiddleware<RequestLog>();
+AdminEndpoints.UseGuard(app, deskOptions);
+if (deskOptions.Enabled)
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
 app.UseWebSockets();
+AdminEndpoints.Map(app, deskOptions);
 CharacterEndpoints.Map(app);
 PlateEndpoints.Map(app);
 HealthEndpoints.Map(app);

@@ -8,6 +8,8 @@ Product requirements below preserve the September 2026 Product and Technical Spe
 
 ## Status at a glance
 
+**October 4, 2026, Community Desk update (verified 06:40 UTC):** the staff dashboard (PR #133) lands on `master` with this pull request, **disabled by default and not deployed or activated**. Independent security/privacy and correctness reviews were clean at `f8e4b13`, and their rechecks of the fixes clean at `ecca237`; browser acceptance passed 54 of 54 at `6c622b5`, and CI passed all four jobs there. GPT passed code review at `6c622b5` and approved the design, the merge and a controlled deployment afterward (relayed by the owner, October 4, 2026, 06:38 UTC). Still outstanding: the owner's GitHub OAuth App, server configuration and deployment, then live checks of GitHub login, Caddy cookies, revocation and public suppression of a held Plate ([activation steps](docs/networking/Runbook.md#community-desk-disabled-until-separately-approved), [design and limits](docs/networking/AdminDashboard.md)). This update covers the desk only; the existing build and release records below keep their own verification dates.
+
 Verified October 3, 2026, at 18:00 UTC. **For the live status, see [issue #52](https://github.com/QuietFoxLabs/AetherFrame/issues/52), which Claude edits in place as work moves.** This block changes only with each pull request, so between merges the issue is the newer of the two. Section 2 is the verified detail, section 3 the milestones, and section 8 the next tasks.
 
 - **Where things stand:**
@@ -399,6 +401,7 @@ Every item below is **OPEN** unless an owner approval is subsequently recorded w
 
 ## 8. Next five small PR sized tasks and acceptance criteria
 
+**Owner-authorized parallel work, October 4, 2026:** GPT rebuilt the [Community Desk](docs/networking/AdminDashboard.md) (PR #133): a disabled staff dashboard in the existing server, with GitHub login, report review, hide/restore and audited moderator actions. Reviewed, browser-tested and approved by GPT for merge and a controlled deployment; it merges with this pull request. Next, on the owner's side: create the OAuth App, deploy the merge commit, enable the desk in the server config and run the live checks in the Runbook. No plugin installation or release is part of this work. The owner and GPT retain orchestration; this entry does not authorize Claude to select or merge additional work. Existing in-game checks and release gates below remain outstanding.
 **First: Kim's P0 usability issues (the owner's priority, October 3, 2026).** The owner put all nine ahead of every task below. They are worked in this order, one focused pull request each, with these couplings: #115 and #114 are designed together, #117 lands before #116's previews, and #118 before #119. Each issue holds its acceptance criteria.
 
 | Issue | What | State |

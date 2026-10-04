@@ -169,3 +169,33 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
   - It runs as its own user in the server's group, so it can reach the server's socket and nothing else.
   - It refuses to run if it finds a network.
   - If it keeps failing, publishes with images get "try again later", and publishes without images still work. The health check reports it, and its alert opens an issue ([Health alerts](#health-alerts)).
+
+
+## Community Desk (disabled until separately approved)
+
+The dashboard implementation, its limitations and the checks still due after activation are described in [AdminDashboard.md](AdminDashboard.md). It runs on this same server at `https://plates.aetherframe.dev/admin/`; no new DNS record or hosting service is required. The PR's security/correctness reviews, exact-head CI and browser acceptance are complete, and GPT approved a controlled deployment (October 4, 2026). Activation remains the owner's step.
+
+For activation, the owner:
+
+1. Creates a **new, dedicated GitHub OAuth App**. Use the dashboard URL as its homepage and `https://plates.aetherframe.dev/admin/signin-github` as its authorization callback. No repository, email or write scopes are requested. Do not reuse a broadly authorized app; previous grants can carry broader scopes. The owner and moderators should protect their GitHub accounts with two-factor authentication.
+2. Verifies the owner's immutable numeric GitHub account ID (open `https://api.github.com/users/` followed by the GitHub username, and read `"id"`), and keeps the client secret outside Git and chat. Add an `Admin` object inside the existing `AetherFrame` object in `/opt/aetherframe/config/aetherframe.json`, preserving every other setting:
+
+   ```json
+   "Admin": {
+     "Enabled": true,
+     "ClientId": "<dedicated OAuth app client ID>",
+     "ClientSecret": "<owner enters the secret on the server>",
+     "OwnerGitHubId": 123456
+   }
+   ```
+
+   `123456` is a placeholder, not an approved account. Restrict access to the configuration file as with other production configuration. Never place the secret in a URL, PR, diagnostic output or a browser preview.
+3. Deploys the reviewed commit through the normal protected workflow and restarts the server after changing these settings. Admin configuration is captured at startup; changing it requires a restart. Invalid enabled configuration stops startup. Keep `LodestoneRelay`, `MinimumPlugin` and existing allowlist settings unchanged.
+4. Confirms `/v1/health`, existing plugin check/re-read/publish/lookup, HTTPS login, unapproved account refusal and an owner session. The trusted Caddy proxy must supply `X-Forwarded-Proto: https`; do not clear the trusted proxy lists or expose Kestrel directly to make login work.
+5. Adds only trusted moderators through Team, verifying numeric IDs outside the dashboard before granting access. An approval here grants access to published content, current reports and staff activity, and permission to hide/restore Plates and dismiss reports. Moderator accounts cannot grant access or operate infrastructure.
+
+Moderation changes require a reason and confirmation. Do not include personal information in reasons. A hold preserves ownership and storage and survives republishing; public reads return not-found. Staff still see the held content. Restoring removes only this hold. A hold is not a ban: if the player opts out, or the character is taken over or removed, the binding and its hold are deleted, and a new binding starts without a hold and can publish again. The browser Plate preview is approximate, with complete text and uploaded images separately displayed.
+
+To disable the desk, set `Admin.Enabled` to `false` and restart **the new server version**. All `/admin` routes then return 404; holds remain enforced. Restarting also invalidates every staff cookie and pending login. Moderator revocation normally takes effect on the next request without restarting. Restoring access requires a new login. Signing out removes the cookie from that browser only; the owner's session cannot be revoked from the dashboard, so if the owner's browser or cookie may be compromised, restart the server to end every session.
+
+**Rollback caveat:** an older server binary ignores moderation holds and can serve previously hidden content again. Disabling the desk on the current version is the preferred emergency response. Before rolling back the binary, the owner must account for every active hold and decide how to prevent hidden content from becoming public. The additive schema remains readable by the old binary, but this does not preserve moderation enforcement. While the old binary runs, it does not purge desk audit entries, so their 30-day removal resumes only after rolling forward; reports it stores get a blank review token, which the next start of the new version repairs. Its opt-outs and character removals still delete the binding's hold and unlink its audit entries. Existing backups may retain records for the normal backup lifetime. No credential, configuration, DNS or deployment changes are made by the dashboard rebuild itself.

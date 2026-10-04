@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="AetherFrame.Server.Tests" />
+    <EmbeddedResource Include="Admin/Web/*" />
   </ItemGroup>
 
   <ItemGroup>
