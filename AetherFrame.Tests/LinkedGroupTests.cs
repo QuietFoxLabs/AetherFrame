@@ -379,6 +379,24 @@ public class LinkedGroupEditorTests
     }
 
     [Fact]
+    public async Task SeveralComponentsThatAreNotDrawn_HaveNoHandles_ButStillNudge()
+    {
+        var (harness, image1, image2, frame1, frame2) = await TwoFramedPicturesAsync();
+        using var _h = harness;
+        image1.Visible = false;
+        image2.Visible = false;
+        harness.Session.SetSelection([CanvasItemRef.Component(frame1.Id), CanvasItemRef.Component(frame2.Id)]);
+
+        Assert.False(harness.Session.PreviewSelectionGesture(Plan(harness))!.HasHandles);
+        harness.Session.BeginSelectionResize(Plan(harness), 2, Vector2.Zero);
+        Assert.Equal(ElementInteractionKind.None, harness.Session.ActiveInteraction);
+
+        var offset = frame2.Offset;
+        harness.Session.NudgeSelected(new Vector2(0f, 1f));
+        Assert.Equal(offset + new Vector2(0f, 1f), harness.Document.Components!.Single(c => c.Id == frame2.Id).Offset);
+    }
+
+    [Fact]
     public async Task OneSelectedCornerOrnament_SnapsByTheCornerBeingDragged()
     {
         using var harness = await BasicHarness.NewClassicAsync();

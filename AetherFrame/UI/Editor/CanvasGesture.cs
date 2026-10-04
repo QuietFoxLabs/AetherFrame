@@ -29,8 +29,8 @@ internal sealed class CanvasGesture
     /// (and turned) placement, or the box around everything that moves.</summary>
     internal Vector2[] Corners { get; private set; } = new Vector2[4];
 
-    /// <summary>False when the one Component selected isn't drawn now (hidden, or its picture gone), so
-    /// there is nowhere to put handles; it still moves by a nudge.</summary>
+    /// <summary>False when nothing that moves is drawn now (hidden, or a frame's picture gone), so there
+    /// is nowhere to put handles; it still moves by a nudge.</summary>
     internal bool HasHandles { get; private set; } = true;
 
     /// <summary>The axis-aligned box around everything that moves, as it was when the gesture began.</summary>
@@ -142,7 +142,9 @@ internal sealed class CanvasGesture
 
         if (!(min.X <= max.X) || !(min.Y <= max.Y))
         {
+            // Nothing among them is drawn now: no box to put handles on (a nudge still moves them).
             min = max = Vector2.Zero;
+            gesture.HasHandles = false;
         }
 
         gesture.Bounds = (min, max);
