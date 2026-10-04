@@ -284,7 +284,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
         // Two plain text lines now (status/info, then the right-click hint) — no button row.
         var footerHeight = (ImGui.GetTextLineHeightWithSpacing() * 2f) + EditorWidgets.Scaled(4f);
-        using (var grid = ImRaii.Child("##PlateGrid", new Vector2(-1, -footerHeight), false))
+        using (var grid = AetherChild.Begin("##PlateGrid", new Vector2(-1, -footerHeight), false))
         {
             if (grid.Success)
             {

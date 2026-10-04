@@ -357,7 +357,7 @@ internal sealed partial class BasicProfileEditorWindow
         var selectedId = profile.BasicIdentity is { TitleSource: IdentityTitleSource.GameTitle } settings ? settings.GameTitleId : 0u;
         var search = titleSearch.Trim();
 
-        using (var list = ImRaii.Child("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
+        using (var list = AetherChild.Begin("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
         {
             if (list.Success)
             {

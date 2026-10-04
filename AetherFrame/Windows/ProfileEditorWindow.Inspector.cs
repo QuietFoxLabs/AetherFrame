@@ -39,7 +39,7 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawInspectorPanel(ProfileDocument profile, Vector2 size)
     {
-        using var panel = ImRaii.Child("##AetherFrameInspectorPanel", size, true);
+        using var panel = AetherChild.Begin("##AetherFrameInspectorPanel", size, true);
         if (!panel.Success)
         {
             return;
@@ -73,7 +73,7 @@ internal sealed partial class ProfileEditorWindow
             TutorialAnchorMarks.Mark(TutorialTarget.AdvancedInspectorElementTab);
             if (elementTab.Success)
             {
-                using var scroll = ImRaii.Child("##ElementInspectorScroll", new Vector2(-1, -1), false);
+                using var scroll = AetherChild.Begin("##ElementInspectorScroll", new Vector2(-1, -1), false);
                 if (scroll.Success)
                 {
                     DrawSelectedElementInspector(profile);
@@ -86,7 +86,7 @@ internal sealed partial class ProfileEditorWindow
             TutorialAnchorMarks.Mark(TutorialTarget.AdvancedInspectorCanvasTab);
             if (canvasTab.Success)
             {
-                using var scroll = ImRaii.Child("##CanvasInspectorScroll", new Vector2(-1, -1), false);
+                using var scroll = AetherChild.Begin("##CanvasInspectorScroll", new Vector2(-1, -1), false);
                 if (scroll.Success)
                 {
                     DrawCanvasSettings(profile);
@@ -426,9 +426,12 @@ internal sealed partial class ProfileEditorWindow
         }
 
         var content = text.Text;
-        if (ImGui.InputTextMultiline("##TextContent", ref content, TextProfileElement.MaxTextLength, new Vector2(-1, 72f), contentFlags))
+        using (AetherChild.WhilePicking())
         {
-            ContinueTextEdit(text.Id, element => element.Text = content);
+            if (ImGui.InputTextMultiline("##TextContent", ref content, TextProfileElement.MaxTextLength, new Vector2(-1, 72f), contentFlags))
+            {
+                ContinueTextEdit(text.Id, element => element.Text = content);
+            }
         }
 
         TutorialAnchorMarks.Mark(TutorialTarget.AdvancedTextContent);

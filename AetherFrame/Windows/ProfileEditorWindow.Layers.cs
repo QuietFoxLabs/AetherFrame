@@ -46,7 +46,7 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawLayersPanel(ProfileDocument profile, Vector2 size)
     {
-        using var panel = ImRaii.Child("##AetherFrameLayersPanel", size, true);
+        using var panel = AetherChild.Begin("##AetherFrameLayersPanel", size, true);
         if (!panel.Success)
         {
             return;
@@ -63,7 +63,7 @@ internal sealed partial class ProfileEditorWindow
         var footerHeight = ImGui.GetFrameHeightWithSpacing() + ImGui.GetStyle().ItemSpacing.Y + EditorWidgets.Scaled(4f);
         var listHeight = Math.Max(EditorWidgets.Scaled(60f), ImGui.GetContentRegionAvail().Y - footerHeight);
 
-        using (var list = ImRaii.Child("##AetherFrameLayersList", new Vector2(-1, listHeight), false))
+        using (var list = AetherChild.Begin("##AetherFrameLayersList", new Vector2(-1, listHeight), false))
         {
             if (list.Success)
             {

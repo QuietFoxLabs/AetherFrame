@@ -53,7 +53,7 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawCanvasPanel(ProfileDocument profile, Vector2 size)
     {
-        using var child = ImRaii.Child("##AetherFrameCanvasPanel", size, true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        using var child = AetherChild.Begin("##AetherFrameCanvasPanel", size, true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         if (!child.Success)
         {
             return;

@@ -365,7 +365,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         var scale = ImGuiHelpers.GlobalScale;
         using var rounding = ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 6f * scale);
         using var background = ImRaii.PushColor(ImGuiCol.ChildBg, RailBackground);
-        using var child = ImRaii.Child("##BasicNavigator", size, false);
+        using var child = AetherChild.Begin("##BasicNavigator", size, false);
         if (!child.Success)
         {
             return;
@@ -526,7 +526,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// </summary>
     private void DrawInspector(ProfileDocument profile, Vector2 size, bool withCategoryStrip)
     {
-        using var frame = ImRaii.Child("##BasicInspector", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        using var frame = AetherChild.Begin("##BasicInspector", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         if (!frame.Success)
         {
             return;
@@ -548,7 +548,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         ImGui.Separator();
 
-        using var body = ImRaii.Child("##BasicInspectorBody", new Vector2(-1f, -1f), false);
+        using var body = AetherChild.Begin("##BasicInspectorBody", new Vector2(-1f, -1f), false);
         if (!body.Success)
         {
             return;
@@ -721,7 +721,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// </summary>
     private void DrawPreview(ProfileDocument profile, Vector2 size)
     {
-        using var outer = ImRaii.Child("##BasicPreviewArea", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        using var outer = AetherChild.Begin("##BasicPreviewArea", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         if (!outer.Success)
         {
             return;
@@ -731,7 +731,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         var zoomed = navigation.Zoom != PreviewZoom.Fit;
         var flags = zoomed ? ImGuiWindowFlags.HorizontalScrollbar : ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
-        using var child = ImRaii.Child("##BasicPreview", new Vector2(-1f, -1f), true, flags);
+        using var child = AetherChild.Begin("##BasicPreview", new Vector2(-1f, -1f), true, flags);
         if (!child.Success)
         {
             return;

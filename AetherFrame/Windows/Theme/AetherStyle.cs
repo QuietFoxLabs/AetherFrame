@@ -279,8 +279,8 @@ internal sealed class AetherWindowChrome : IOutstandingStyle
     /// While the screen eyedropper picks (issue #120), an AetherFrame window takes no mouse input:
     /// one on another monitor (Dalamud's multi-monitor windows) is a window of its own, out from
     /// under the eyedropper's cover, and a click there would select or drag instead of picking.
-    /// Mouse input only, so ImGui still gives the focus back to the window the pick started from
-    /// once it ends.
+    /// Its child windows need the same of their own (<c>AetherChild</c>). Mouse input only, so
+    /// ImGui still gives the focus back to the window the pick started from once it ends.
     /// </summary>
     internal static void ApplyPolicy(Window window)
     {

@@ -263,7 +263,7 @@ internal sealed class BackgroundStylePanel
 
         var simpleCardHeight = ThemeCardHeight(profile, ThemeFamily.Classic, ThemeCardWidth);
         var maxHeight = (ThemeBrowserVisibleRows * simpleCardHeight) + ((ThemeBrowserVisibleRows - 0.5f) * style.ItemSpacing.Y);
-        using (var grid = ImRaii.Child("##ThemeGrid", new Vector2(-1f, MathF.Min(contentHeight, maxHeight)), false))
+        using (var grid = AetherChild.Begin("##ThemeGrid", new Vector2(-1f, MathF.Min(contentHeight, maxHeight)), false))
         {
             if (grid.Success)
             {

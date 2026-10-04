@@ -18,9 +18,9 @@ namespace AetherFrame.Windows;
 /// <list type="bullet">
 /// <item>covers the game's window with a clear, focused window, so a click there picks and reaches
 /// neither the game nor any window under it (Dalamud keeps the mouse from the game while ImGui
-/// has it). AetherFrame's own windows also stop taking the mouse (<see cref="ClaimsInput"/>,
-/// <c>AetherWindowChrome.ApplyPolicy</c>): one on another monitor is a window of its own, out from
-/// under the cover;</item>
+/// has it). AetherFrame's own windows and their panels also stop taking the mouse
+/// (<see cref="ClaimsInput"/>, <c>AetherWindowChrome.ApplyPolicy</c>, <see cref="AetherChild"/>): one
+/// on another monitor is a window of its own, out from under the cover;</item>
 /// <item>claims the keyboard (<c>io.WantTextInput</c>, as <see cref="PopupEscapeGuard"/> does), so
 /// Escape, Enter and Space reach the eyedropper alone, never the game or a window's close
 /// hotkey;</item>
@@ -60,8 +60,8 @@ internal static class ScreenEyedropper
     }
 
     /// <summary>
-    /// Whether a pick has the mouse and keyboard: AetherFrame's windows then take no mouse input,
-    /// wherever they are (<c>AetherWindowChrome.ApplyPolicy</c>).
+    /// Whether a pick has the mouse and keyboard: AetherFrame's windows and their panels then take no
+    /// mouse input, wherever they are (<c>AetherWindowChrome.ApplyPolicy</c>, <see cref="AetherChild"/>).
     /// </summary>
     internal static bool ClaimsInput => eyedropper?.ClaimsInput == true;
 
@@ -125,7 +125,10 @@ internal static class ScreenEyedropper
             CancelButtonDown: ScreenPixels.ButtonDown(primary: false) || ImGui.IsMouseDown(ImGuiMouseButton.Right),
             PickKeyPressed: ImGui.IsKeyPressed(ImGuiKey.Enter, false) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, false) || ImGui.IsKeyPressed(ImGuiKey.Space, false),
             CancelKeyPressed: ImGui.IsKeyPressed(ImGuiKey.Escape, false),
-            KeysDown: ImGui.IsKeyDown(ImGuiKey.Escape) || ImGui.IsKeyDown(ImGuiKey.Enter) || ImGui.IsKeyDown(ImGuiKey.KeypadEnter) || ImGui.IsKeyDown(ImGuiKey.Space)));
+            // Windows' own key state too, as the pick started with (Start's keysHeld): a key held
+            // since before ImGui saw it go down never reads as down to ImGui, and its key repeat
+            // would then count as a fresh press.
+            KeysDown: ScreenPixels.KeysDown() || ImGui.IsKeyDown(ImGuiKey.Escape) || ImGui.IsKeyDown(ImGuiKey.Enter) || ImGui.IsKeyDown(ImGuiKey.KeypadEnter) || ImGui.IsKeyDown(ImGuiKey.Space)));
 
         if (!current.ClaimsInput)
         {
