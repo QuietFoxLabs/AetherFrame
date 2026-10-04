@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Numerics;
 using AetherFrame.Domain.Basic;
-using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
 using Dalamud.Bindings.ImGui;
@@ -16,8 +15,9 @@ namespace AetherFrame.Windows;
 /// first-class visual browsers), Customize Background (detailed color/mode tuning, collapsed by
 /// default), Text (the shared section heading size), the Plate Frame and decoration Components,
 /// then Layout: the orientation together with the layout actions that apply to every Basic section.
-/// Pattern and Customize Background show only while the Plate's own background does: background
-/// artwork that covers it (an Art Style's) leaves them out, with one line saying how to bring them back.
+/// Pattern and Customize Background show only while the Plate's own background does
+/// (<see cref="AppearanceControls"/>, the Advanced editor's rule too): background artwork that covers
+/// it (an Art Style's) leaves them out, with one line saying why and a way to bring them back.
 /// </summary>
 internal sealed partial class BasicProfileEditorWindow
 {
@@ -39,15 +39,18 @@ internal sealed partial class BasicProfileEditorWindow
             : "A Simple Theme sets the background and every Basic text color at once. Each value stays editable.");
 
         ImGui.Spacing();
-        if (PlateComponentEditor.CoveringBackground(profile, BuiltInComponentCatalog.Instance) is not null)
+
+        // Asked after the Look, so a style chosen this frame is already reflected (issue #119).
+        var cover = AppearanceControls.Background(profile);
+        if (cover.Component is { } covering)
         {
             // Background artwork covers the Plate's own background, so its settings would change
             // nothing here. They are kept, and come back with the background: taking the artwork away
             // is one undo step, here or under Frame & Decorations.
-            Hint("Pattern and Customize Background are hidden while background artwork covers the Plate.");
+            Hint(AppearanceControls.BasicCoveredHint(cover));
             if (ImGui.SmallButton("Remove the Artwork"))
             {
-                editorSession.SetComponentSlot(PlateComponentKind.Background, null);
+                editorSession.RemoveComponent(covering.Id);
             }
 
             ToolTip("Takes the background artwork away (undoable), so your own background shows, with its Pattern and Customize Background.\nYou can choose artwork again under Frame & Decorations.");

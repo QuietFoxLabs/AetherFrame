@@ -20,7 +20,8 @@ namespace AetherFrame.Windows;
 /// gradient, texture, image, and opacity — used by both the Advanced editor's Canvas tab and the
 /// Basic editor, so there is one background editor, not two. Every mode's settings are kept while
 /// switching modes; every edit goes through <see cref="EditorSession"/> (sliders and colors are
-/// one undo step per drag).
+/// one undo step per drag). Both editors offer it only while the Plate's own background shows
+/// (<see cref="AppearanceControls"/>): Basic leaves it out, and Advanced greys it out.
 /// </summary>
 internal sealed class BackgroundStylePanel
 {
@@ -155,7 +156,7 @@ internal sealed class BackgroundStylePanel
     {
         EditorWidgets.PropertyLabel("Presets", 0f);
         ImGui.TextDisabled("Background colors only");
-        EditorWidgets.Tooltip("Sets the background's colors. Text colors stay as they are.\nThe Basic Editor's Theme sets the background and every Basic text color together.");
+        EditorWidgets.Tooltip("Sets the background's colors. Text colors stay as they are.\nA Simple Theme, under Style in the Basic Editor, sets the background and every Basic text color together.");
 
         foreach (var family in ProfileThemePresets.FamilyOrder)
         {
@@ -188,21 +189,12 @@ internal sealed class BackgroundStylePanel
     /// </summary>
     internal void DrawThemeBrowser(ProfileDocument profile, Action<ProfileThemePreset> applyTheme)
     {
-        if (themeBrowser.PlateId != profile.ProfileId)
-        {
-            themeBrowser.PlateId = profile.ProfileId;
-            themeBrowser.Showing = PlateStyle.OpensOn(profile);
-            themeBrowser.Family = null;
-            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
-        }
-
+        // Each Plate, and each system, opens unfiltered, on its own choice when it has one.
+        themeBrowser.ShowPlate(profile);
         var shown = EditorWidgets.Segmented("StyleSystem", [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)], (int)themeBrowser.Showing);
         if (shown >= 0)
         {
-            // Each system opens unfiltered, on its own choice when it has one.
-            themeBrowser.Showing = (StyleSystem)shown;
-            themeBrowser.Clear();
-            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
+            themeBrowser.ShowSystem(profile, (StyleSystem)shown);
         }
 
         var showing = themeBrowser.Showing;

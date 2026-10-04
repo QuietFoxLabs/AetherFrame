@@ -8,8 +8,8 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// Basic mode's Component slots: one style picker per slot ("None" or a built-in style), placed by
-/// the Adventure Plate Classic layout and colored by the theme. No transforms here — those are the
-/// Advanced editor's refinements of the very same Components.
+/// the Adventure Plate Classic layout and colored by the theme (Art Style artwork keeps its own
+/// colors). No transforms here: those are the Advanced editor's refinements of the very same Components.
 /// </summary>
 internal sealed partial class BasicProfileEditorWindow
 {
@@ -25,7 +25,9 @@ internal sealed partial class BasicProfileEditorWindow
             DrawComponentSlot(profile, kind);
         }
 
-        Hint("Colors follow your theme. Fine-tune placement and color in the Advanced Editor (Canvas tab, Components).");
+        // Art Style artwork keeps its own colors (issue #119, AppearanceControls.ColorApplies), so
+        // only the line and shape styles follow the Look.
+        Hint("Line and shape styles take their colors from your Look; Art Style artwork keeps its own. Fine-tune placement, opacity and color in the Advanced Editor (Canvas tab, Components).");
     }
 
     /// <summary>One slot: a label and a style combo. Choosing is one undo step.</summary>

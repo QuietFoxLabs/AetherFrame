@@ -154,7 +154,7 @@ internal static class TutorialScript
                 "The Inspector's Canvas tab holds what belongs to the whole Plate rather than one element: its size and its background.",
                 TutorialTarget.AdvancedInspectorCanvasTab, TutorialStepMode.Interact, Requires: TutorialCondition.AdvancedEditorOpen, FallbackBody: SwitchToAdvanced, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenAdvancedEditor),
             new TutorialStep("images.background", "Background",
-                "A background can be a solid colour, a two-colour gradient at any angle, or an image; a Pattern chosen in the Basic Editor's Style keeps its intensity, scale and rotation here. Opacity lets the game show through.",
+                "A background can be a solid colour, a two-colour gradient at any angle, or an image; a Pattern chosen in the Basic Editor's Style keeps its intensity, scale and rotation here. Opacity lets the game show through. While background artwork covers the whole Plate, these settings are greyed out, and kept.",
                 TutorialTarget.AdvancedBackground, Requires: TutorialCondition.AdvancedEditorOpen, FallbackBody: SwitchToAdvanced, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenAdvancedEditor),
         ]),
 
