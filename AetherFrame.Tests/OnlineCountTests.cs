@@ -101,9 +101,15 @@ public class OnlineCountTests
         await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Unavailable);
         Assert.Equal(0, harness.Count.View.Count);
 
-        // A minute, then two, then four (scaled down here): far fewer than one try a heartbeat.
-        await Task.Delay(600);
-        Assert.InRange(harness.Server.Paths.Count(path => path == "/v1/presence"), 1, 4);
+        // A minute, then two, then four (scaled down here): each wait at least 80% of its step,
+        // however slowly the machine runs, so far fewer than one try a heartbeat.
+        await harness.WaitFor(() => harness.Server.StartTimes.Count >= 4);
+        var times = harness.Server.StartTimes;
+        for (var gap = 1; gap < 4; gap++)
+        {
+            var step = Quick.Beat * Math.Pow(2, gap - 1);
+            Assert.True(times[gap] - times[gap - 1] >= step * 0.8 - TimeSpan.FromMilliseconds(15), $"Try {gap + 1} came {(times[gap] - times[gap - 1]).TotalMilliseconds} ms after the one before.");
+        }
     }
 
     [Fact]
@@ -131,6 +137,7 @@ public class OnlineCountTests
         using var harness = new Harness();
         harness.SessionBusy = true;
         harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Paths.Count >= 1);
         await Task.Delay(150);
         Assert.Equal(OnlineCountState.Connecting, harness.Count.View.State);
         Assert.DoesNotContain("/v1/presence", harness.Server.Paths);
@@ -380,6 +387,22 @@ public class OnlineCountTests
 
         private readonly List<string> paths = new();
 
+        private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+
+        private readonly List<TimeSpan> startTimes = new();
+
+        /// <summary>When each start arrived, on a monotonic clock.</summary>
+        internal List<TimeSpan> StartTimes
+        {
+            get
+            {
+                lock (this)
+                {
+                    return startTimes.ToList();
+                }
+            }
+        }
+
         internal List<string> Paths
         {
             get
@@ -462,6 +485,10 @@ public class OnlineCountTests
             lock (this)
             {
                 paths.Add(path);
+                if (path == "/v1/presence")
+                {
+                    startTimes.Add(clock.Elapsed);
+                }
             }
 
             switch (path)
