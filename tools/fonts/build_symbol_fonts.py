@@ -6,7 +6,7 @@ Reserved Font Name) have them. This downloads both from Google Fonts' CSS API, a
 fetch_google_fonts.py does, and keeps only the blocks AetherFrame falls back for
 (SymbolFallback.Blocks: U+2190 to U+2BFF, Arrows to Miscellaneous Symbols and Arrows, and the
 hexagrams U+4DC0 to U+4DFF) with fontTools' subsetter, which takes them from 1.4 MB to about
-330 KB. Every glyph kept is unchanged. It writes:
+317 KB. Every glyph kept is unchanged. It writes:
 
 - AetherFrame/Fonts/Symbols/NotoSansSymbols2-Regular.ttf
 - AetherFrame/Fonts/Symbols/NotoSansSymbols-Regular.ttf

@@ -41,10 +41,14 @@ internal sealed class SymbolFallback
     internal const int MaxSymbols = 48;
 
     /// <summary>
-    /// What the fallback draws from, inclusive: Arrows to Miscellaneous Symbols and Arrows
-    /// (U+2190 to U+2BFF: technical, enclosed, box drawing, geometric shapes, miscellaneous symbols,
-    /// dingbats, Braille and more), and the Yijing hexagrams. Letters, punctuation and digits are
-    /// the font's own business, and the faces' Latin is left out of them.
+    /// Where the fallback looks, inclusive: Arrows to Miscellaneous Symbols and Arrows (U+2190 to
+    /// U+2BFF) and the Yijing hexagrams. The faces draw 1,455 of these 2,736 codepoints: all of
+    /// Enclosed Alphanumerics, Geometric Shapes, Miscellaneous Symbols, Braille and the hexagrams,
+    /// nearly all Dingbats and Miscellaneous Symbols and Arrows, about half of Miscellaneous
+    /// Technical, but only 23 of the 112 Arrows, almost no mathematical operators or supplemental
+    /// arrows, and no box drawing or block elements; the rest stays "?" unless the text's own font
+    /// has it. Letters, punctuation and digits are the font's own business, and the faces' Latin is
+    /// left out of them.
     /// </summary>
     internal static readonly (int First, int Last)[] Blocks = [(0x2190, 0x2BFF), (0x4DC0, 0x4DFF)];
 
@@ -114,24 +118,28 @@ internal sealed class SymbolFallback
     /// <summary>Whether <paramref name="codepoint"/> has been taken, so fonts are (or are being) built with it.</summary>
     internal bool Holds(int codepoint) => Array.BinarySearch(Volatile.Read(ref held), codepoint) >= 0;
 
+    /// <summary>Whether a font without <paramref name="codepoint"/> draws it all the same: it is taken, or a face draws it and there is room to take it.</summary>
+    internal bool CanStillDraw(int codepoint) => Holds(codepoint) || (Count < MaxSymbols && CanDraw(codepoint));
+
     /// <summary>Takes every symbol in <paramref name="text"/> the faces draw (see <see cref="Take(int)"/>); true when any was new.</summary>
     internal bool Take(ReadOnlySpan<char> text)
     {
-        if (!AnyInBlocks(text))
+        // Measuring asks every frame while a symbol is on its way: nothing is allocated unless one is new.
+        if (Count >= MaxSymbols || !AnyInBlocks(text))
         {
             return false;
         }
 
-        var added = new List<int>();
+        List<int>? added = null;
         foreach (var c in text)
         {
-            if (InBlocks(c) && !Holds(c) && !added.Contains(c) && CanDraw(c))
+            if (InBlocks(c) && !Holds(c) && added?.Contains(c) != true && CanDraw(c))
             {
-                added.Add(c);
+                (added ??= new List<int>()).Add(c);
             }
         }
 
-        return Add(added);
+        return added is not null && Add(added);
     }
 
     /// <summary>
@@ -152,11 +160,6 @@ internal sealed class SymbolFallback
 
     private bool Add(List<int> codepoints)
     {
-        if (codepoints.Count == 0)
-        {
-            return false;
-        }
-
         lock (gate)
         {
             var next = new SortedSet<int>(held);

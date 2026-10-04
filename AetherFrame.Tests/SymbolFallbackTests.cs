@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
@@ -145,6 +146,37 @@ public class SymbolFallbackTests
         Assert.False(fallback.Take(past));
         Assert.False(fallback.Holds(past));
         Assert.Contains("full", fallback.Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CanStillDraw_IsWhatTheFallbackHolds_OrCouldStillTake()
+    {
+        var fallback = FromDisk();
+        Assert.True(fallback.CanStillDraw(0x2726)); // ✦
+        Assert.False(fallback.CanStillDraw(0x2728)); // ✨, no face draws it
+        Assert.False(fallback.CanStillDraw('A'));
+        Assert.Equal(0, fallback.Count); // asking takes nothing
+
+        var drawable = Enumerable.Range(0x2190, 0x2C00 - 0x2190).Where(fallback.CanDraw).ToList();
+        Assert.True(fallback.Take(new string(drawable.Take(SymbolFallback.MaxSymbols).Select(c => (char)c).ToArray())));
+        Assert.Equal(SymbolFallback.MaxSymbols, fallback.Count);
+        Assert.True(fallback.CanStillDraw(drawable[0]));
+        Assert.False(fallback.CanStillDraw(drawable[SymbolFallback.MaxSymbols]));
+    }
+
+    [Fact]
+    public void TheAccentStar_IsNoLongerCalledOut_WhileTheFallbackDrawsIt()
+    {
+        // Earlier builds wrote "✦" into Accent titles, and the Basic editor warns about a decoration
+        // that shows as "?". The fonts still lack it, but the fallback draws it now.
+        var fallback = FromDisk();
+        Assert.False(IdentityHeaderRules.IsDrawableDecoration("✦"));
+        Assert.True(IdentityHeaderRules.IsDrawableDecoration("✦", fallback.CanStillDraw));
+        Assert.True(IdentityHeaderRules.IsDrawableDecoration("« ✦ ♥ »", fallback.CanStillDraw));
+        Assert.False(IdentityHeaderRules.IsDrawableDecoration("✨", fallback.CanStillDraw));
+        Assert.False(IdentityHeaderRules.IsDrawableDecoration("\U0001F600", fallback.CanStillDraw));
+        Assert.False(IdentityHeaderRules.IsDrawableDecoration("\t", fallback.CanStillDraw));
+        Assert.Equal(0, fallback.Count);
     }
 
     [Fact]

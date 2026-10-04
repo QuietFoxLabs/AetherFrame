@@ -122,6 +122,9 @@ internal sealed class ProfileFontService : IDisposable
     /// <summary>Whether fonts are built (or being built) with <paramref name="codepoint"/> from the symbol fallback.</summary>
     internal bool HoldsSymbol(int codepoint) => symbols.Holds(codepoint);
 
+    /// <summary>Whether a font without <paramref name="codepoint"/> draws it all the same, from the symbol fallback.</summary>
+    internal bool CanDrawSymbol(int codepoint) => symbols.CanStillDraw(codepoint);
+
     /// <summary>
     /// Gets (building and caching on first use) a font handle for the given family at
     /// approximately <paramref name="requestedPixelSize"/> — see the type doc for the snap-to-
@@ -186,11 +189,6 @@ internal sealed class ProfileFontService : IDisposable
             }
         }
 
-        if (tookSymbols)
-        {
-            cache.RebuildAll();
-        }
-
         // One rebuild per atlas for the whole profile's worth of newly-needed handles, not one per handle.
         using var batch = cache.Batch();
 
@@ -219,6 +217,13 @@ internal sealed class ProfileFontService : IDisposable
             // left to the lazy/on-demand path alone.
             var ownTier = FontTierPolicy.SizeLadder[FontTierPolicy.FindTierIndex(descriptor.Id, text.FontSize)];
             cache.GetOrCreate(new FontCacheKey(descriptor.Id, ownTier, effectiveBold, effectiveItalic));
+        }
+
+        if (tookSymbols)
+        {
+            // Every other loaded font, with the new symbols; the batch's own atlases rebuild with them
+            // as it ends, so none builds twice.
+            cache.RebuildAll();
         }
     }
 

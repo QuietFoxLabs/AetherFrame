@@ -498,12 +498,6 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         Assert.Throws<ObjectDisposedException>(() => cache.GetOrCreate(Key(Library[0], 32f)));
     }
 
-    /// <summary>
-    /// Kim's case: one name in the Basic editor (32 px, live view at 60%), switched through 40
-    /// library fonts in turn; each font builds its live view tier and its smallest tier (for
-    /// measuring). Before: one atlas for every family. After: an atlas per family. What each switch
-    /// rebuilds is the measure: before, every font tried so far; after, the new font's own faces.
-    /// </summary>
     [Fact]
     public void RebuildAll_BuildsEveryHeldAtlasAgain_AndLeavesABatchsAtlasToTheBatchsRebuild()
     {
@@ -539,6 +533,12 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         Assert.Equal(2, mono.RebuildsAskedFor);
     }
 
+    /// <summary>
+    /// Kim's case: one name in the Basic editor (32 px, live view at 60%), switched through 40
+    /// library fonts in turn; each font builds its live view tier and its smallest tier (for
+    /// measuring). Before: one atlas for every family. After: an atlas per family. What each switch
+    /// rebuilds is the measure: before, every font tried so far; after, the new font's own faces.
+    /// </summary>
     [Fact]
     public void BrowsingFonts_EachNewFontCostsItsOwnFaces_NotEveryFontBeforeIt()
     {
