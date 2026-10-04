@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light"><title>AetherFrame · Community Desk</title>
+  <link rel="stylesheet" href="/admin/assets/app.css"><script src="/admin/assets/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="login" class="login">
+  <div class="login-card"><span class="brand-mark large" aria-hidden="true">A</span>
+    <p class="eyebrow">AETHERFRAME / STAFF WORKSPACE</p><h1>A little care.<br>A better community.</h1>
+    <p class="muted">A quiet place to look after the Plates<br>and people that make AetherFrame yours.</p>
+    <a class="button primary" href="/admin/login">Continue with GitHub <span aria-hidden="true">↗</span></a>
+    <p id="login-message" class="small muted" role="status">For the owner and approved moderators.</p>
+  </div><p class="login-footer">COMMUNITY DESK <span>✦</span> AETHERFRAME</p>
+</div>
+<div id="workspace" class="workspace" hidden>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">A</span><div><strong>AetherFrame</strong><small>COMMUNITY DESK</small></div></div>
+    <p class="nav-label">WORKSPACE</p>
+    <nav aria-label="Workspace">
+      <button data-view="overview" class="nav active"><span class="nav-icon" aria-hidden="true">◈</span>Overview</button>
+      <button data-view="reports" class="nav"><span class="nav-icon" aria-hidden="true">⚑</span>Reports<span id="report-badge" class="badge" hidden></span></button>
+      <button data-view="plates" class="nav"><span class="nav-icon" aria-hidden="true">▧</span>Plates</button>
+      <button data-view="audit" class="nav"><span class="nav-icon" aria-hidden="true">◷</span>Activity</button>
+      <button data-view="staff" class="nav" id="team-nav" hidden><span class="nav-icon" aria-hidden="true">♧</span>Team</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="private-note"><span class="green-dot"></span> Private staff workspace</div><div class="account"><span class="avatar" aria-hidden="true">AF</span><div><strong id="staff-role">Staff</strong><small id="staff-id"></small></div><button id="logout" class="icon-button" aria-label="Sign out" title="Sign out">↪</button></div></div>
+  </aside>
+  <div class="body-area">
+    <header class="topbar"><span><span class="muted">Workspace</span><span class="separator">/</span><span id="breadcrumb">Overview</span></span><div class="top-actions"><span class="staff-pill">STAFF ONLY</span><button id="theme" class="icon-button" aria-label="Switch to light theme" title="Switch theme">☼</button></div></header>
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><p class="eyebrow" id="section-kicker">THE BIG PICTURE</p><h1 id="page-title">Community overview</h1><p class="muted" id="page-description">A good place to see how things are going.</p></div><button id="refresh" class="button secondary"><span aria-hidden="true">↻</span> Refresh</button></div>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <div id="content" aria-live="polite"></div>
+      <footer class="page-footer"><span>AetherFrame Community Desk</span><span id="updated">Updates on request</span></footer>
+    </main>
+  </div>
+</div>
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <form id="confirm-form"><p class="eyebrow">MODERATION ACTION</p><h2 id="confirm-title"></h2><p id="confirm-description" class="muted"></p>
+    <label for="reason">Reason</label><textarea id="reason" minlength="3" maxlength="500" rows="4" required placeholder="A short explanation for the activity log"></textarea>
+    <p class="small muted">Do not include personal information or copy reported content.</p>
+    <div class="dialog-actions"><button id="cancel-action" type="button" class="button secondary">Cancel</button><button id="confirm-action" class="button primary" type="submit">Confirm</button></div>
+  </form>
+</dialog>
+</body></html>
