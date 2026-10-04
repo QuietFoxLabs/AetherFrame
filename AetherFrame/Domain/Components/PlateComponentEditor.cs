@@ -56,6 +56,31 @@ public static class PlateComponentEditor
         });
     }
 
+    /// <summary>Kinds that can be attached to a picture of the player's choosing
+    /// (<see cref="PlateComponent.TargetElementId"/>) instead of the Basic portrait.</summary>
+    public static bool CanTarget(PlateComponentKind kind) => kind is PlateComponentKind.PortraitFrame or PlateComponentKind.PortraitOverlay;
+
+    /// <summary>
+    /// Attaches a Portrait Frame or Overlay to the picture <paramref name="elementId"/> (an image element
+    /// of the Plate), or back to the Basic portrait (null). Its Offset, Scale and Rotation are kept, now
+    /// relative to that picture. False when nothing changed, the kind can't be attached, or the element
+    /// isn't a picture on this Plate.
+    /// </summary>
+    public static bool SetTarget(ProfileDocument profile, Guid componentId, Guid? elementId)
+    {
+        if (Find(profile, componentId) is not { } component || !CanTarget(component.Kind) || component.TargetElementId == elementId)
+        {
+            return false;
+        }
+
+        if (elementId is { } id && profile.Elements.Find(e => e.Id == id) is not ImageProfileElement)
+        {
+            return false;
+        }
+
+        return Update(profile, componentId, c => c.TargetElementId = elementId);
+    }
+
     public static string KindLabel(PlateComponentKind kind) => kind switch
     {
         PlateComponentKind.Background => "Background",

@@ -335,6 +335,10 @@ internal sealed class ProfileService
             // role lookup would then silently pick whichever happens to come first.
             duplicate.Role = ProfileElementRole.None;
 
+            // One element's copy is a separate element, outside the original's linked group (copying a
+            // whole group makes a new group of the copies: LinkedGroups.Duplicate).
+            duplicate.LinkGroupId = null;
+
             var maxX = Math.Max(0f, profile.CanvasWidth - duplicate.Size.X);
             var maxY = Math.Max(0f, profile.CanvasHeight - duplicate.Size.Y);
             duplicate.Position = new Vector2(

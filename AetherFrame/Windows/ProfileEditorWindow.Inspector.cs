@@ -37,6 +37,9 @@ internal sealed partial class ProfileEditorWindow
     private bool nameFieldWasActive;
     private int textContentSelectAllFrames;
 
+    // Whether several things were selected when the Inspector last looked (runtime only).
+    private bool lastInspectedSeveral;
+
     private void DrawInspectorPanel(ProfileDocument profile, Vector2 size)
     {
         using var panel = AetherChild.Begin("##AetherFrameInspectorPanel", size, true);
@@ -56,6 +59,15 @@ internal sealed partial class ProfileEditorWindow
                 selectElementTabPending = true;
             }
         }
+
+        // A new selection of several things (a linked group, Ctrl+click) brings the Element tab forward too.
+        var severalSelected = editorSession.SelectedItems.Count > 1;
+        if (severalSelected && !lastInspectedSeveral)
+        {
+            selectElementTabPending = true;
+        }
+
+        lastInspectedSeveral = severalSelected;
 
         // A newly selected Component (from the canvas, Layers or the Basic editor) brings the Canvas
         // tab forward with its Components section open and that Component's controls expanded.
@@ -122,6 +134,12 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawSelectedElementInspector(ProfileDocument profile)
     {
+        if (editorSession.SelectedItems.Count > 1)
+        {
+            DrawSelectionInspector(profile);
+            return;
+        }
+
         var selected = GetSelectedElement(profile);
         if (selected is null)
         {
@@ -138,6 +156,15 @@ internal sealed partial class ProfileEditorWindow
         if (ProfileElementNames.GetRoleLabel(selected.Role) is { } role && Domain.Basic.BasicSections.SectionOf(selected.Role) is not null)
         {
             EditorWidgets.Hint($"Basic editor: {role}");
+        }
+
+        if (editorSession.GroupOf(Domain.Components.CanvasItemRef.Element(selected.Id)) is { } groupId)
+        {
+            EditorWidgets.Hint("Linked: you're editing this one on its own. Its group moves and resizes together.");
+            if (ImGui.Button("Select Linked Group", new Vector2(-1, 0f)))
+            {
+                editorSession.SelectGroup(groupId);
+            }
         }
 
         // Locking only freezes Position & Size; content, appearance, typography, and the layer's
@@ -164,6 +191,85 @@ internal sealed partial class ProfileEditorWindow
         {
             ImGui.Spacing();
             EditorWidgets.Hint("Locked: position, size, rotation, and alignment can't change until it's unlocked (Layer, or the lock in the Layers panel). Everything else stays editable.");
+        }
+    }
+
+    /// <summary>
+    /// Several things selected (Ctrl+click, or a linked group): what they are, Link or Unlink, each
+    /// member to edit on its own, and the actions that apply to all of them.
+    /// </summary>
+    private void DrawSelectionInspector(ProfileDocument profile)
+    {
+        var items = editorSession.SelectedItems;
+        var group = editorSession.SelectedGroupId;
+        ImGui.Spacing();
+        ImGui.TextUnformatted(group is not null ? $"Linked group of {items.Count}" : $"{items.Count} selected");
+        EditorWidgets.Hint(group is not null
+            ? "They move and resize together on the canvas. Drag a corner to resize them all, keeping their layout."
+            : "Drag any of them to move them together. Link them to keep them together.");
+
+        if (group is null)
+        {
+            var blocked = editorSession.LinkSelectionBlockedReason;
+            using (ImRaii.Disabled(blocked is not null))
+            {
+                if (ImGui.Button("Link Elements", new Vector2(-1, 0f)))
+                {
+                    editorSession.LinkSelection();
+                }
+            }
+
+            if (blocked is not null)
+            {
+                EditorWidgets.Hint(blocked);
+            }
+        }
+
+        if (editorSession.SelectionHasLinks && ImGui.Button("Unlink", new Vector2(-1, 0f)))
+        {
+            editorSession.UnlinkSelection();
+        }
+
+        if (editorSession.SelectionTransformBlockedReason is { } locked)
+        {
+            EditorWidgets.Hint(locked);
+        }
+
+        ImGui.Spacing();
+        ImGui.TextDisabled("EDIT ONE ON ITS OWN");
+        foreach (var item in items.ToArray())
+        {
+            string label;
+            if (item.IsComponent)
+            {
+                var component = Domain.Components.PlateComponentEditor.Find(profile, item.Id);
+                label = component is null ? "Component" : Domain.Components.PlateComponentEditor.KindLabel(component.Kind);
+            }
+            else
+            {
+                var element = profile.Elements.Find(e => e.Id == item.Id);
+                label = element is null ? "Element" : ProfileElementNames.GetDisplayName(element);
+            }
+
+            if (ImGui.Selectable($"{label}##Member{item.Id:N}"))
+            {
+                editorSession.SelectFromList(item, additive: false);
+                selectElementTabPending = !item.IsComponent;
+            }
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Duplicate (Ctrl+D)", new Vector2(-1, 0f)))
+        {
+            editorSession.DuplicateSelection();
+        }
+
+        using (ImRaii.PushColor(ImGuiCol.Text, EditorWidgets.ErrorColor))
+        {
+            if (ImGui.Button("Delete Selection (Del)", new Vector2(-1, 0f)))
+            {
+                editorSession.DeleteSelection();
+            }
         }
     }
 

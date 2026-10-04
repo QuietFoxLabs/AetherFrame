@@ -136,6 +136,29 @@ internal static class CanvasHitTest
             && !Inside(local, min + new Vector2(inner), max - new Vector2(inner));
     }
 
+    /// <summary>Which of <paramref name="component"/>'s placements in <paramref name="plan"/> is hit at
+    /// <paramref name="point"/> (0 for its first, in plan order), or 0 when none is.</summary>
+    internal static int PlacementIndexAt(IReadOnlyList<PaintStep> plan, PlateComponent component, Vector2 point, float unit)
+    {
+        var index = 0;
+        foreach (var step in plan)
+        {
+            if (!ReferenceEquals(step.Component, component))
+            {
+                continue;
+            }
+
+            if (Hits(step, point, unit))
+            {
+                return index;
+            }
+
+            index++;
+        }
+
+        return 0;
+    }
+
     /// <summary>The four corners of each placement <paramref name="component"/> has in <paramref name="plan"/>
     /// (rotated, in logical canvas coordinates), for outlining it; nothing when it isn't drawn.</summary>
     internal static void Outlines(IReadOnlyList<PaintStep> plan, PlateComponent component, List<Vector2[]> output)

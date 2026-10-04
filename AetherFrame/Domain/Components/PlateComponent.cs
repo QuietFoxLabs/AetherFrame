@@ -83,6 +83,27 @@ public sealed class PlateComponent
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Vector2? FixedAnchorSize { get; set; }
 
+    /// <summary>
+    /// Portrait Frames and Portrait Overlays only (see <see cref="PlateComponentEditor.CanTarget"/>): the
+    /// picture this instance is drawn on, by the element's stable id, instead of the Basic portrait.
+    /// Null, the default and every Plate saved before this existed, follows the Basic portrait as it
+    /// always has. When the picture it names is hidden, or no longer on the Plate, the Component isn't
+    /// drawn (it is kept, so undo or choosing another picture brings it back). Ignored for other kinds.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? TargetElementId { get; set; }
+
+    /// <summary>The linked group this Component belongs to (see <see cref="ProfileElement.LinkGroupId"/>):
+    /// editor metadata only, never used to draw it.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? LinkGroupId { get; set; }
+
+    /// <summary>Locked in the Advanced editor: selectable, but never moved or resized from the canvas,
+    /// as a locked element. False, the default, is never written, so an unlocked Component serializes
+    /// exactly as before.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Locked { get; set; }
+
     /// <summary>Properties this build doesn't know, kept through clone and save unchanged.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
@@ -103,6 +124,9 @@ public sealed class PlateComponent
         Corners = Corners,
         FixedAnchorPosition = FixedAnchorPosition,
         FixedAnchorSize = FixedAnchorSize,
+        TargetElementId = TargetElementId,
+        LinkGroupId = LinkGroupId,
+        Locked = Locked,
         ExtensionData = ProfileElement.CopyExtensionData(ExtensionData),
     };
 
@@ -123,6 +147,9 @@ public sealed class PlateComponent
         && AssetId == other.AssetId
         && FixedAnchorPosition == other.FixedAnchorPosition
         && FixedAnchorSize == other.FixedAnchorSize
+        && TargetElementId == other.TargetElementId
+        && LinkGroupId == other.LinkGroupId
+        && Locked == other.Locked
         && Corners == other.Corners;
 
     /// <summary>Element-wise <see cref="ContentEquals(PlateComponent?)"/> of two lists (null and empty are equal: both mean "no components").</summary>

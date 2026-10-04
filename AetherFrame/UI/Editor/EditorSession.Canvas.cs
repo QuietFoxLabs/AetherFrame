@@ -193,6 +193,20 @@ internal sealed partial class EditorSession
             return;
         }
 
+        if (itemsGesture is { } gesture)
+        {
+            try
+            {
+                UpdateSelectionGesture(gesture, mouseCanvasPosition, snap, snapThreshold);
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = UserFacingError.Describe(ex, EditFailedMessage);
+            }
+
+            return;
+        }
+
         var elementId = interactingElementId;
         var rotationDegrees = interactionBeforeSnapshot is null ? 0f : RotationGeometry.GetRotationDegrees(interactionBeforeSnapshot);
         var canvasSize = CurrentCanvasSize;
@@ -284,6 +298,13 @@ internal sealed partial class EditorSession
     /// </summary>
     internal void EndInteraction()
     {
+        if (itemsGesture is not null)
+        {
+            EndSelectionGesture();
+            ResetInteraction();
+            return;
+        }
+
         if (ActiveInteraction != ElementInteractionKind.None && interactionBeforeSnapshot is { } before)
         {
             var elementId = interactingElementId;
@@ -313,6 +334,13 @@ internal sealed partial class EditorSession
     /// </summary>
     internal void CancelInteraction()
     {
+        if (itemsGesture is not null)
+        {
+            CancelSelectionGesture();
+            ResetInteraction();
+            return;
+        }
+
         if (ActiveInteraction != ElementInteractionKind.None && interactionBeforeSnapshot is { } before)
         {
             try
@@ -331,10 +359,19 @@ internal sealed partial class EditorSession
     /// <summary>
     /// Moves the selected unlocked element by a logical canvas offset (e.g. an arrow-key
     /// nudge), clamped to canvas bounds. Records one history entry; a no-op that hits the
-    /// canvas edge (no actual movement) records nothing.
+    /// canvas edge (no actual movement) records nothing. A selection of several things, or a
+    /// Component, moves together instead (see <see cref="NudgeSelection"/>).
     /// </summary>
     internal void NudgeSelected(Vector2 delta)
     {
+        if (SelectionUsesGestures)
+        {
+            ErrorMessage = null;
+            CommitPendingEdits();
+            NudgeSelection(delta);
+            return;
+        }
+
         if (SelectedElementId is not { } elementId)
         {
             return;
@@ -478,6 +515,8 @@ internal sealed partial class EditorSession
     private void ResetInteraction()
     {
         interactionBeforeSnapshot = null;
+        itemsGesture = null;
+        itemsGestureBefore = null;
         ActiveInteraction = ElementInteractionKind.None;
         ActiveResizeHandle = ResizeHandle.None;
         snapEngine.Clear();
