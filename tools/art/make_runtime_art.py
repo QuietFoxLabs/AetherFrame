@@ -47,6 +47,7 @@ FAMILIES = [
     ("enchanted-toybox", "Enchanted Toybox", "EnchantedToybox", "painted wooden toys, puzzle pieces, beads and stars", ["toybox", "toys", "wooden", "puzzle", "playful", "stars"]),
     ("frontier-silver", "Frontier Silver", "FrontierSilver", "tooled leather, silver conchos and turquoise stones", ["frontier", "western", "leather", "silver", "turquoise", "cowboy"]),
     ("high-fantasy-royal", "High Fantasy Royal", "HighFantasyRoyal", "ornate gold, marble, royal blue velvet and gemstones", ["royal", "gold", "marble", "velvet", "blue", "lion"]),
+    ("honeybee-garden", "Honeybee Garden", "HoneybeeGarden", "honey gold, amber honeycomb, white daisies and cute bees", ["honeybee", "bee", "honey", "honeycomb", "daisy", "gold"]),
     ("industrial-salvage", "Industrial Salvage", "IndustrialSalvage", "painted steel, bolts, vent grilles and hazard stripes", ["industrial", "salvage", "steel", "rust", "hazard", "bolts"]),
     ("ishgardian-gothic", "Ishgardian Gothic", "IshgardianGothic", "cathedral stone, silver filigree and deep blue stained glass", ["ishgard", "gothic", "cathedral", "silver", "blue", "frost"]),
     ("liquid-chrome", "Liquid Chrome", "LiquidChrome", "fluid silver forms and glossy iridescent accents", ["chrome", "liquid", "silver", "metallic", "iridescent", "y2k"]),
