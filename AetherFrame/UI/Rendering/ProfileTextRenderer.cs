@@ -187,7 +187,7 @@ internal static class ProfileTextRenderer
 
         using (handle.Push())
         {
-            var metrics = new FontMetrics(ImGui.GetFont(), ImGui.GetFontSize());
+            var metrics = new FontMetrics(ImGui.GetFont());
             BuildLines(MeasureLines, text, metrics, Math.Max(1f, element.FontSize), element.LetterSpacing, float.PositiveInfinity, keepTrailingSpaces: false);
         }
 
@@ -224,7 +224,7 @@ internal static class ProfileTextRenderer
 
         using (handle.Push())
         {
-            var metrics = new FontMetrics(ImGui.GetFont(), ImGui.GetFontSize());
+            var metrics = new FontMetrics(ImGui.GetFont());
             BuildLines(MeasureLines, text, metrics, Math.Max(1f, fontSize), element.LetterSpacing, Math.Max(1f, maxWidth), keepTrailingSpaces: false);
         }
 
@@ -253,7 +253,7 @@ internal static class ProfileTextRenderer
 
         cached.CaptureInputs(element, content);
 
-        var metrics = new FontMetrics(ImGui.GetFont(), ImGui.GetFontSize());
+        var metrics = new FontMetrics(ImGui.GetFont());
         var box = element.Size;
         var available = new Vector2(Math.Max(1f, box.X - (2f * PaddingLogical)), Math.Max(1f, box.Y - (2f * PaddingLogical)));
 
@@ -475,7 +475,7 @@ internal static class ProfileTextRenderer
         screenPos.Y += element.DrawnVerticalOffset * scale;
 
         var font = ImGui.GetFont();
-        var bakedFontSize = ImGui.GetFontSize();
+        var bakedFontSize = font.FontSize; // what AddText draws at scale 1 (see FontMetrics)
         var padding = element.UsesLegacyLayout ? LegacyPaddingScreenPixels : PaddingLogical * scale;
         var lineHeight = renderedFontSize * element.LineSpacing;
         var lines = layout.Lines;
@@ -716,16 +716,23 @@ internal static class ProfileTextRenderer
 
     private readonly record struct LineSpan(int Start, int Length, float Width);
 
-    /// <summary>Normalized (logical, size-independent) glyph metrics from the pushed font.</summary>
+    /// <summary>
+    /// Normalized (logical, size-independent) glyph metrics from the pushed font. They are
+    /// normalized by the font's own FontSize, the size AddText draws at scale 1, never by
+    /// ImGui.GetFontSize(): that is FontGlobalScale times FontSize, and Dalamud sets
+    /// FontGlobalScale to its interface scale, while these atlases aren't globally scaled and
+    /// AddText ignores it. So at any interface scale a measured width is the drawn width
+    /// (issue #131: at 150% text measured two thirds of its width and overflowed its box).
+    /// </summary>
     private readonly struct FontMetrics
     {
         private readonly ImFontPtr font;
         private readonly float inverseBakedSize;
 
-        internal FontMetrics(ImFontPtr font, float bakedSize)
+        internal FontMetrics(ImFontPtr font)
         {
             this.font = font;
-            inverseBakedSize = bakedSize > 0f ? 1f / bakedSize : 0f;
+            inverseBakedSize = font.FontSize > 0f ? 1f / font.FontSize : 0f;
         }
 
         internal float Advance(char c, float size) => font.GetCharAdvance(c) * inverseBakedSize * size;
