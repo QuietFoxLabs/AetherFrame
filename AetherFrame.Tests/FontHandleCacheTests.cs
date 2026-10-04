@@ -12,9 +12,10 @@ namespace AetherFrame.Tests;
 /// <summary>
 /// The Plate font cache's rules (issue #117), against a fake font system that counts what each
 /// atlas rebuild rasterizes: one atlas per family, nothing in use let go, bounded browsing, batches
-/// and load times; and a before/after measurement of browsing fonts.
+/// and load times; and a before/after measurement of browsing fonts. The font list's previews (issue
+/// #116) are measured against the same fake, in FontHandleCacheTests.Previews.cs.
 /// </summary>
-public class FontHandleCacheTests(ITestOutputHelper output)
+public partial class FontHandleCacheTests(ITestOutputHelper output)
 {
     private static readonly string[] Library = FontLibrary.Families.Select(f => f.Id).ToArray();
 
@@ -63,6 +64,9 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         /// <summary>The glyph surface each rebuild rasterized, in order.</summary>
         public List<long> Rebuilt { get; } = [];
 
+        /// <summary>How many faces were asked for.</summary>
+        public int HandlesCreated { get; private set; }
+
         public FakeAtlas CreateAtlas(string familyId)
         {
             if (oneSharedAtlas)
@@ -76,6 +80,7 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         public FakeHandle CreateHandle(FakeAtlas atlas, FontCacheKey key)
         {
             Assert.False(atlas.Disposed);
+            HandlesCreated++;
             var handle = new FakeHandle(key, atlas);
             atlas.Handles.Add(handle);
             RequestRebuild(atlas);
