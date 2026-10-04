@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
 using AetherFrame.Services.Fonts;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility;
 
 namespace AetherFrame.UI.Rendering;
 
@@ -71,6 +73,7 @@ internal static class ProfileTextRenderer
 
     private static readonly Dictionary<Guid, LayoutEntry> Layouts = new();
     private static readonly List<LineSpan> MeasureLines = new();
+    private static readonly List<char> MissingSymbols = new();
     private static readonly Dictionary<int, Vector2[]> OutlineOffsetsByThickness = new();
     private static readonly Vector2[] ZeroOffset = [Vector2.Zero];
 
@@ -119,7 +122,7 @@ internal static class ProfileTextRenderer
         LayoutEntry layout;
         using (measureHandle.Push())
         {
-            layout = GetOrBuildLayout(element, content);
+            layout = GetOrBuildLayout(element, content, fonts);
         }
 
         var renderedFontSize = Math.Max(1f, layout.EffectiveFontSize * scale);
@@ -160,7 +163,9 @@ internal static class ProfileTextRenderer
     /// own FontSize and letter spacing, in logical canvas pixels (the widest explicit line) — the
     /// exact metrics the renderer itself lays text out with, so a layout built from this lines up
     /// with what's drawn. Excludes padding. Returns false (width 0) if no built face of the
-    /// element's font is available yet, rather than measuring with a stand-in font.
+    /// element's font is available yet, rather than measuring with a stand-in font, and likewise
+    /// while the font is being built with a symbol of the text (issue #121), rather than measuring
+    /// the "?" it draws until then.
     /// </summary>
     internal static bool TryMeasureNaturalWidth(TextProfileElement element, ProfileFontService fonts, out float width) =>
         TryMeasureNaturalWidth(element, element.GetDisplayText(), fonts, out width);
@@ -187,7 +192,12 @@ internal static class ProfileTextRenderer
 
         using (handle.Push())
         {
-            var metrics = new FontMetrics(ImGui.GetFont(), ImGui.GetFontSize());
+            if (AwaitSymbols(text, fonts) != 0)
+            {
+                return false;
+            }
+
+            var metrics = new FontMetrics(ImGui.GetFont());
             BuildLines(MeasureLines, text, metrics, Math.Max(1f, element.FontSize), element.LetterSpacing, float.PositiveInfinity, keepTrailingSpaces: false);
         }
 
@@ -204,7 +214,7 @@ internal static class ProfileTextRenderer
     /// The number of lines <paramref name="element"/>'s display text word-wraps to at
     /// <paramref name="fontSize"/> within <paramref name="maxWidth"/> (logical canvas pixels, text
     /// padding excluded), with the renderer's own line breaking. False (0) while no built face of
-    /// the element's font is available.
+    /// the element's font is available, or while it is being built with a symbol of the text.
     /// </summary>
     internal static bool TryCountLines(TextProfileElement element, float fontSize, float maxWidth, ProfileFontService fonts, out int lines)
     {
@@ -224,7 +234,12 @@ internal static class ProfileTextRenderer
 
         using (handle.Push())
         {
-            var metrics = new FontMetrics(ImGui.GetFont(), ImGui.GetFontSize());
+            if (AwaitSymbols(text, fonts) != 0)
+            {
+                return false;
+            }
+
+            var metrics = new FontMetrics(ImGui.GetFont());
             BuildLines(MeasureLines, text, metrics, Math.Max(1f, fontSize), element.LetterSpacing, Math.Max(1f, maxWidth), keepTrailingSpaces: false);
         }
 
@@ -233,9 +248,9 @@ internal static class ProfileTextRenderer
         return true;
     }
 
-    private static LayoutEntry GetOrBuildLayout(TextProfileElement element, string content)
+    private static LayoutEntry GetOrBuildLayout(TextProfileElement element, string content, ProfileFontService fonts)
     {
-        if (Layouts.TryGetValue(element.Id, out var cached) && cached.Matches(element, content))
+        if (Layouts.TryGetValue(element.Id, out var cached) && cached.Matches(element, content) && !SymbolArrived(cached))
         {
             return cached;
         }
@@ -253,7 +268,7 @@ internal static class ProfileTextRenderer
 
         cached.CaptureInputs(element, content);
 
-        var metrics = new FontMetrics(ImGui.GetFont(), ImGui.GetFontSize());
+        var metrics = new FontMetrics(ImGui.GetFont());
         var box = element.Size;
         var available = new Vector2(Math.Max(1f, box.X - (2f * PaddingLogical)), Math.Max(1f, box.Y - (2f * PaddingLogical)));
 
@@ -308,6 +323,7 @@ internal static class ProfileTextRenderer
 
         cached.EffectiveFontSize = size;
         BuildLines(cached.Lines, content, metrics, size, element.LetterSpacing, wrapWidth, element.UsesLegacyLayout);
+        cached.AwaitedSymbol = AwaitSymbols(content, fonts);
 
         // Legacy layout aligns the whole block (its widest line) as one unit.
         cached.BlockWidth = 0f;
@@ -317,6 +333,57 @@ internal static class ProfileTextRenderer
         }
 
         return cached;
+    }
+
+    /// <summary>
+    /// Issue #121: takes the symbols in <paramref name="content"/> the pushed font has no glyph for,
+    /// so the fonts are built again with them from the symbol fallback, and returns one of them
+    /// (0 if none): the layout, measured with "?" in their place, is made again once it arrives
+    /// (<see cref="SymbolArrived"/>). A symbol the fallback has no glyph for, or one past its limit,
+    /// stays "?" and is never waited for.
+    /// </summary>
+    private static int AwaitSymbols(string content, ProfileFontService fonts)
+    {
+        if (!SymbolFallback.AnyInBlocks(content))
+        {
+            return 0;
+        }
+
+        var font = ImGui.GetFont();
+        MissingSymbols.Clear();
+        foreach (var c in content)
+        {
+            if (SymbolFallback.InBlocks(c) && !HasGlyph(font, c) && !MissingSymbols.Contains(c))
+            {
+                MissingSymbols.Add(c);
+            }
+        }
+
+        if (MissingSymbols.Count == 0)
+        {
+            return 0;
+        }
+
+        fonts.TakeSymbols(CollectionsMarshal.AsSpan(MissingSymbols));
+        foreach (var c in MissingSymbols)
+        {
+            if (fonts.HoldsSymbol(c))
+            {
+                return c;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>Whether the symbol a layout waits for is now in the pushed font (all of them came in one rebuild).</summary>
+    private static bool SymbolArrived(LayoutEntry entry) => entry.AwaitedSymbol != 0 && HasGlyph(ImGui.GetFont(), entry.AwaitedSymbol);
+
+    /// <summary>Whether <paramref name="font"/> has a glyph of its own for <paramref name="codepoint"/>, as ImGui's FindGlyphNoFallback answers.</summary>
+    private static bool HasGlyph(ImFontPtr font, int codepoint)
+    {
+        var lookup = font.IndexLookupWrapped();
+        return codepoint < lookup.Length && lookup[codepoint] != ushort.MaxValue;
     }
 
     private static bool Fits(LayoutEntry scratch, string content, FontMetrics metrics, float size, Vector2 available, TextProfileElement element)
@@ -475,7 +542,7 @@ internal static class ProfileTextRenderer
         screenPos.Y += element.DrawnVerticalOffset * scale;
 
         var font = ImGui.GetFont();
-        var bakedFontSize = ImGui.GetFontSize();
+        var bakedFontSize = font.FontSize; // what AddText draws at scale 1 (see FontMetrics)
         var padding = element.UsesLegacyLayout ? LegacyPaddingScreenPixels : PaddingLogical * scale;
         var lineHeight = renderedFontSize * element.LineSpacing;
         var lines = layout.Lines;
@@ -716,16 +783,23 @@ internal static class ProfileTextRenderer
 
     private readonly record struct LineSpan(int Start, int Length, float Width);
 
-    /// <summary>Normalized (logical, size-independent) glyph metrics from the pushed font.</summary>
+    /// <summary>
+    /// Normalized (logical, size-independent) glyph metrics from the pushed font. They are
+    /// normalized by the font's own FontSize, the size AddText draws at scale 1, never by
+    /// ImGui.GetFontSize(): that is FontGlobalScale times FontSize, and Dalamud sets
+    /// FontGlobalScale to its interface scale, while these atlases aren't globally scaled and
+    /// AddText ignores it. So at any interface scale a measured width is the drawn width
+    /// (issue #131: at 150% text measured two thirds of its width and overflowed its box).
+    /// </summary>
     private readonly struct FontMetrics
     {
         private readonly ImFontPtr font;
         private readonly float inverseBakedSize;
 
-        internal FontMetrics(ImFontPtr font, float bakedSize)
+        internal FontMetrics(ImFontPtr font)
         {
             this.font = font;
-            inverseBakedSize = bakedSize > 0f ? 1f / bakedSize : 0f;
+            inverseBakedSize = font.FontSize > 0f ? 1f / font.FontSize : 0f;
         }
 
         internal float Advance(char c, float size) => font.GetCharAdvance(c) * inverseBakedSize * size;
@@ -791,6 +865,9 @@ internal static class ProfileTextRenderer
 
         internal float EffectiveFontSize;
         internal float BlockWidth;
+
+        // A symbol the font was being built with when this was laid out (0: none): see AwaitSymbols.
+        internal int AwaitedSymbol;
 
         internal string Text = string.Empty;
         private string fontFamily = string.Empty;

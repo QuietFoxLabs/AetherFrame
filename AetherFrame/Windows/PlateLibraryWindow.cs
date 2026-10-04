@@ -28,7 +28,7 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// My Plates: the visual collection of every saved Plate, and the way into the editors and the
-/// Plate Viewer. Cards show a thumbnail (or a fallback built from the Plate's own background),
+/// Plate Viewer. Cards show a thumbnail (or a fallback built from its saved colors),
 /// the name, and whether it's the current character's Active Plate; a card's right-click menu holds
 /// its actions (the shared <see cref="PlateMenu"/>, which the editors' Plate menu uses too, as it
 /// does Create Plate's chooser). Split across partial files: this one (lifecycle, header, card
@@ -257,7 +257,12 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         plateMenu.DrawPopups(characterIdentity.CurrentCharacter);
         DrawBasicGuidancePopup();
 
-        fileDialogManager.Draw();
+        // Hidden while the eyedropper picks (issue #120), and back as it was once the pick ends: it
+        // is Dalamud's window, not AetherFrame's, so on another monitor a pick's click would reach it.
+        if (!ScreenEyedropper.ClaimsInput)
+        {
+            fileDialogManager.Draw();
+        }
     }
 
     private void DrawMyPlatesView()
@@ -284,7 +289,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
         // Two plain text lines now (status/info, then the right-click hint) — no button row.
         var footerHeight = (ImGui.GetTextLineHeightWithSpacing() * 2f) + EditorWidgets.Scaled(4f);
-        using (var grid = ImRaii.Child("##PlateGrid", new Vector2(-1, -footerHeight), false))
+        using (var grid = AetherChild.Begin("##PlateGrid", new Vector2(-1, -footerHeight), false))
         {
             if (grid.Success)
             {
@@ -589,42 +594,40 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     }
 
     /// <summary>
-    /// A cheap stand-in built only from the saved background's colors (no textures, no text
-    /// rendering): enough to tell Plates apart at a glance.
+    /// A cheap stand-in built only from the saved Plate's colors (no textures, no text rendering):
+    /// enough to tell Plates apart at a glance. It shows what the renderer shows over the Plate
+    /// (<see cref="AppearanceControls.CardFallbackOf"/>): covering background artwork's plain color,
+    /// or else the Plate's own background.
     /// </summary>
     private void DrawFallbackThumbnail(ImDrawListPtr drawList, PlateSummary plate, Vector2 min, Vector2 max)
     {
+        var fallback = plate.IsReady ? AppearanceControls.CardFallbackOf(library.GetSavedDocument(plate.PlateId)) : default;
+        DrawCardFallback(drawList, fallback, plate.IsReady ? FontAwesomeIcon.IdCard : FontAwesomeIcon.ExclamationTriangle, min, max);
+    }
+
+    /// <summary>
+    /// A fallback thumbnail, for Plates and Templates alike: the card's backdrop, then
+    /// <paramref name="fallback"/>'s fill, then <paramref name="icon"/> centred over it (an image icon
+    /// in its place when the fill is a picture the card can't draw).
+    /// </summary>
+    private static void DrawCardFallback(ImDrawListPtr drawList, CardFallback fallback, FontAwesomeIcon icon, Vector2 min, Vector2 max)
+    {
         drawList.AddRectFilled(min, max, ImGui.GetColorU32(FallbackBackdropColor), 4f);
 
-        var background = plate.IsReady ? library.GetSavedDocument(plate.PlateId)?.Background : null;
-        var icon = FontAwesomeIcon.IdCard;
-
-        if (!plate.IsReady)
+        switch (fallback.Fill)
         {
-            icon = FontAwesomeIcon.ExclamationTriangle;
-        }
-        else if (background is { } style)
-        {
-            var opacity = Math.Clamp(style.Opacity, 0f, 1f);
-            var primary = style.PrimaryColor with { W = style.PrimaryColor.W * opacity };
-            var secondary = style.SecondaryColor with { W = style.SecondaryColor.W * opacity };
+            case CardFill.Solid:
+                drawList.AddRectFilled(min, max, ImGui.GetColorU32(fallback.Primary), 4f);
+                break;
 
-            switch (style.Mode)
-            {
-                case ProfileBackgroundMode.SolidColor:
-                case ProfileBackgroundMode.TexturedFill:
-                    drawList.AddRectFilled(min, max, ImGui.GetColorU32(primary), 4f);
-                    break;
+            case CardFill.Gradient:
+                var mixed = Vector4.Lerp(fallback.Primary, fallback.Secondary, 0.5f);
+                drawList.AddRectFilledMultiColor(min, max, ImGui.GetColorU32(fallback.Primary), ImGui.GetColorU32(mixed), ImGui.GetColorU32(fallback.Secondary), ImGui.GetColorU32(mixed));
+                break;
 
-                case ProfileBackgroundMode.LinearGradient:
-                    var mixed = Vector4.Lerp(primary, secondary, 0.5f);
-                    drawList.AddRectFilledMultiColor(min, max, ImGui.GetColorU32(primary), ImGui.GetColorU32(mixed), ImGui.GetColorU32(secondary), ImGui.GetColorU32(mixed));
-                    break;
-
-                case ProfileBackgroundMode.Image:
-                    icon = FontAwesomeIcon.Image;
-                    break;
-            }
+            case CardFill.Image:
+                icon = FontAwesomeIcon.Image;
+                break;
         }
 
         var iconText = EditorWidgets.GetIconString(icon);

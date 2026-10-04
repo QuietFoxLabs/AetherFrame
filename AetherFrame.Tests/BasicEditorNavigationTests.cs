@@ -261,7 +261,7 @@ public class BasicEditorNavigationTests
         harness.Basic.CommitTextEdit();
         var document = harness.Document;
 
-        Assert.Equal(["Normal layout  ·  Royal theme"], BasicEditorView.SummaryOf(document, BasicEditorCategory.Style));
+        Assert.Equal(["Normal layout  ·  Simple Theme: Royal"], BasicEditorView.SummaryOf(document, BasicEditorCategory.Style));
         Assert.Equal(["No portrait yet"], BasicEditorView.SummaryOf(document, BasicEditorCategory.Portrait));
         Assert.Equal(["Hero Example", "The Heart of the Party"], BasicEditorView.SummaryOf(document, BasicEditorCategory.Identity));
         Assert.Equal(

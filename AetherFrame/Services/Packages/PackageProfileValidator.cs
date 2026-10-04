@@ -579,6 +579,11 @@ internal static class PackageProfileValidator
             {
                 Unrecognized();
             }
+
+            // Each style system's last choice (issue #118) only remembers it: one this build doesn't
+            // know changes nothing drawn, and is kept unread.
+            Text(plate.ArtStyleId, PackagePolicy.MaxIdentifierLength, "Art Style");
+            Text(plate.SimpleThemeId, PackagePolicy.MaxIdentifierLength, "Simple Theme");
         }
 
         // ---------------------------------------------------------------- primitives

@@ -49,7 +49,7 @@ internal sealed partial class BasicProfileEditorWindow
             : null;
 
     /// <summary>The collapsed "Appearance" group: font, size, color, and opacity for each target.</summary>
-    private static void DrawAppearance(IEnumerable<StyleTarget?> targets)
+    private void DrawAppearance(IEnumerable<StyleTarget?> targets)
     {
         var list = targets.OfType<StyleTarget>().ToList();
         if (list.Count == 0 || !ImGui.CollapsingHeader("Appearance##Appearance"))
@@ -112,12 +112,12 @@ internal sealed partial class BasicProfileEditorWindow
         }
     }
 
-    private static void DrawAppearanceControls(StyleTarget target)
+    private void DrawAppearanceControls(StyleTarget target)
     {
         var element = target.Element;
 
         StyleLabel("Font");
-        if (FontPicker.Draw("##Font", element.FontFamily, out var family))
+        if (FontPicker.Draw("##Font", element.FontFamily, renderResources.Fonts, out var family))
         {
             target.Edit(e => e.FontFamily = family, false);
         }
@@ -146,6 +146,7 @@ internal sealed partial class BasicProfileEditorWindow
 
         var color = element.Color;
         StyleLabel("Color");
+        ScreenEyedropper.LeaveRoom();
         if (ImGui.ColorEdit4("##Color", ref color, ImGuiColorEditFlags.NoAlpha))
         {
             var rgb = color;
@@ -153,6 +154,11 @@ internal sealed partial class BasicProfileEditorWindow
         }
 
         CommitOnRelease(target);
+        if (ScreenEyedropper.Button("Color", ref color))
+        {
+            var rgb = color;
+            target.Edit(e => e.Color = rgb with { W = e.Color.W }, false);
+        }
 
         var opacity = element.Color.W * 100f;
         StyleLabel("Opacity");
@@ -215,6 +221,12 @@ internal sealed partial class BasicProfileEditorWindow
                 }
 
                 CommitOnRelease(target);
+                if (ScreenEyedropper.Button("OutlineColor", ref outlineColor))
+                {
+                    var rgb = outlineColor;
+                    target.Edit(e => e.OutlineColor = rgb with { W = 1f }, false);
+                }
+
                 ImGui.SameLine();
                 ImGui.SetNextItemWidth(-1);
                 var thickness = element.OutlineThickness;
@@ -245,6 +257,12 @@ internal sealed partial class BasicProfileEditorWindow
                 }
 
                 CommitOnRelease(target);
+                if (ScreenEyedropper.Button("ShadowColor", ref shadowColor))
+                {
+                    var rgb = shadowColor;
+                    target.Edit(e => e.ShadowColor = rgb with { W = 1f }, false);
+                }
+
                 ImGui.SameLine();
                 ImGui.SetNextItemWidth(-1);
                 var shadowOpacity = element.ShadowOpacity * 100f;

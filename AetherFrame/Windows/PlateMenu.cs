@@ -453,7 +453,7 @@ internal sealed class PlateMenu
         // A list of its own, so a long one scrolls under the search field. Its rows aren't items of
         // the menu itself, so a choice closes the menu explicitly.
         var rows = Math.Min(shown.Count, PlateSwitcher.VisibleRows);
-        using var list = ImRaii.Child("##OpenAnotherList", new Vector2(width, rows * ImGui.GetTextLineHeightWithSpacing()), false);
+        using var list = AetherChild.Begin("##OpenAnotherList", new Vector2(width, rows * ImGui.GetTextLineHeightWithSpacing()), false);
         if (!list.Success)
         {
             return;

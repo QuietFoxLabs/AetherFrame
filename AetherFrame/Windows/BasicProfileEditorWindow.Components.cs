@@ -9,9 +9,10 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// Basic mode's Component slots: one style picker per slot ("None" or a built-in style), placed by
-/// the Adventure Plate Classic layout and colored by the theme. The only transforms here are a Corner
-/// Ornament's size and distance from the edge (<see cref="CornerOrnamentPlacement"/>); the rest are
-/// the Advanced editor's refinements of the very same Components.
+/// the Adventure Plate Classic layout and colored by the theme (Art Style artwork keeps its own
+/// colors). The only transforms here are a Corner Ornament's size and distance from the edge
+/// (<see cref="CornerOrnamentPlacement"/>); the rest are the Advanced editor's refinements of the
+/// very same Components.
 /// </summary>
 internal sealed partial class BasicProfileEditorWindow
 {
@@ -27,7 +28,10 @@ internal sealed partial class BasicProfileEditorWindow
             DrawComponentSlot(profile, kind);
         }
 
-        Hint("Colors follow your theme. Fine-tune rotation, color and every other placement in the Advanced Editor (Canvas tab, Components).");
+        // Art Style artwork keeps its own colors (issue #119, AppearanceControls.ColorApplies); every
+        // other style these slots offer, Celestial Dream's tintable corner included, takes the Look's
+        // colors (tested against the catalog).
+        Hint(AppearanceControls.SlotColorsHint);
     }
 
     /// <summary>The <see cref="ChooserMemories"/> key of a Component kind's style list, shared by both editors.</summary>

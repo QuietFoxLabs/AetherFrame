@@ -69,7 +69,7 @@ internal sealed class FontLicencesWindow : Window
         ImGui.Separator();
 
         // Unwrapped, so ImGui draws only the lines in view of this long text.
-        using var child = Dalamud.Interface.Utility.Raii.ImRaii.Child("##FontLicenceText", new Vector2(-1f, -1f), false, ImGuiWindowFlags.HorizontalScrollbar);
+        using var child = AetherChild.Begin("##FontLicenceText", new Vector2(-1f, -1f), false, ImGuiWindowFlags.HorizontalScrollbar);
         if (child.Success)
         {
             ImGui.TextUnformatted(text);

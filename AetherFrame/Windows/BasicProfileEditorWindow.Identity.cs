@@ -52,6 +52,9 @@ internal sealed partial class BasicProfileEditorWindow
     private readonly List<(GameTitle Title, bool? Unlocked)> titlePickerRows = new();
     private bool titlePickerUnlockKnown;
 
+    // Whether the symbol fallback draws a character (ProfileFontService.CanDrawSymbol), made once.
+    private Func<int, bool>? drawsSymbol;
+
     private void DrawIdentityCategory(ProfileDocument profile)
     {
         var identity = basicEditorSession.Identity;
@@ -189,14 +192,16 @@ internal sealed partial class BasicProfileEditorWindow
     }
 
     /// <summary>
-    /// A title decoration the Plate's fonts can't draw (it shows as "?") — e.g. the symbols earlier
-    /// builds added when choosing Accent — is called out where it's seen, with an explicit fix.
-    /// Never removed on its own: it can't be told apart from a symbol the user picked.
+    /// A title decoration the Plate's fonts can't draw (it shows as "?"), even through the symbol
+    /// fallback (issue #121), is called out where it's seen, with an explicit fix. The "✦" earlier
+    /// builds added when choosing Accent is drawn by the fallback, so it is called out only once the
+    /// fallback is full. Never removed on its own: it can't be told apart from a symbol the user picked.
     /// </summary>
-    private static void DrawUndrawableDecorationWarning(ProfileDocument profile, BasicIdentitySession identity)
+    private void DrawUndrawableDecorationWarning(ProfileDocument profile, BasicIdentitySession identity)
     {
+        drawsSymbol ??= renderResources.Fonts.CanDrawSymbol;
         if (BasicIdentitySession.Find(profile, ProfileElementRole.BasicTitle) is not { } title
-            || (IdentityHeaderRules.IsDrawableDecoration(title.Prefix) && IdentityHeaderRules.IsDrawableDecoration(title.Suffix)))
+            || (IdentityHeaderRules.IsDrawableDecoration(title.Prefix, drawsSymbol) && IdentityHeaderRules.IsDrawableDecoration(title.Suffix, drawsSymbol)))
         {
             return;
         }
@@ -370,7 +375,7 @@ internal sealed partial class BasicProfileEditorWindow
 
         var search = titleSearch.Trim();
 
-        using (var list = ImRaii.Child("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
+        using (var list = AetherChild.Begin("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
         {
             if (list.Success)
             {

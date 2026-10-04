@@ -59,7 +59,8 @@ public class BackgroundSettingsTests
         harness.Session.SetComponentSlot(PlateComponentKind.Background, BuiltInComponentCatalog.BackgroundCelestialSakura);
         Assert.NotNull(Covering(harness.Document));
 
-        harness.Basic.ApplyTheme(ProfileThemePresets.Find("Light")!);
+        harness.Basic.ApplyTheme(ProfileThemePresets.Find("Ivory")!);
+        Assert.Equal("Ivory", harness.Document.BasicPlate!.ThemeId);
         Assert.NotNull(Covering(harness.Document));
 
         harness.Session.SetComponentSlot(PlateComponentKind.Background, null);
