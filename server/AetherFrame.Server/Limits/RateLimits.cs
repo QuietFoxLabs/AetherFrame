@@ -67,11 +67,17 @@ internal static class ServerLimits
     public static readonly Limit PresenceStartsPerKey = new("presence-start/key", 12, TimeSpan.FromHours(1));
 
     /// <summary>
-    /// Signed starts of a presence session from one address group: a tenth of
-    /// <see cref="ChallengesPerAddress"/>, so presence never takes more than that share of the
-    /// challenges that publishing, looking up and checking from the same network also need.
+    /// Presence challenges (<c>/v1/presence/challenge</c>) issued to one address group, and signed
+    /// starts of a presence session from it, each counted on its own: some 100 players behind one
+    /// IPv4 address at one start an hour each (the session's lifetime), with room for all of them
+    /// to start again after a server restart. Presence challenges are its own, so presence never
+    /// takes from <see cref="ChallengesPerAddress"/>, which publishing, looking up and checking from
+    /// the same network need.
     /// </summary>
-    public static readonly Limit PresenceStartsPerAddress = new("presence-start/address", 60, TimeSpan.FromHours(1));
+    public static readonly Limit PresenceChallengesPerAddress = new("presence-challenge/address", 240, TimeSpan.FromHours(1));
+
+    /// <inheritdoc cref="PresenceChallengesPerAddress"/>
+    public static readonly Limit PresenceStartsPerAddress = new("presence-start/address", 240, TimeSpan.FromHours(1));
 
     /// <summary>
     /// Heartbeats and leaves from one address group, counted in a minute so the counter holds few

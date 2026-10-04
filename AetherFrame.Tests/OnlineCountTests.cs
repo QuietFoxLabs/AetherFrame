@@ -75,7 +75,7 @@ public class OnlineCountTests
         Assert.Equal(OnlineCountState.Connecting, harness.Count.View.State);
         await harness.WaitFor(() => harness.Server.Beats.Count >= 2);
 
-        Assert.Equal(["/v1/challenge", "/v1/presence"], harness.Server.Paths.Take(2));
+        Assert.Equal(["/v1/presence/challenge", "/v1/presence"], harness.Server.Paths.Take(2));
         Assert.Equal(harness.Key.PublicKey.Id, harness.Server.Signers.Single());
         Assert.All(harness.Server.Beats, beat => Assert.Equal(harness.Server.Tokens.Single(), beat));
         Assert.Equal(new OnlineCountView(OnlineCountState.Online, 4, harness.Now), harness.Count.View);
@@ -134,8 +134,46 @@ public class OnlineCountTests
         await Task.Delay(150);
         Assert.Equal(OnlineCountState.Connecting, harness.Count.View.State);
         Assert.DoesNotContain("/v1/presence", harness.Server.Paths);
+
+        // Several tries at signing, under the one challenge it asked for.
+        Assert.Equal(["/v1/presence/challenge"], harness.Server.Paths);
         harness.SessionBusy = false;
         await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Online);
+        Assert.Equal(1, harness.Server.Paths.Count(path => path == "/v1/presence/challenge"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ALimitsRefusal_WaitsTheLongestBackoff(bool atTheChallenge)
+    {
+        using var harness = new Harness(Quick with { LongestBackoff = TimeSpan.FromSeconds(30) });
+        if (atTheChallenge)
+        {
+            harness.Server.ChallengeStatus = HttpStatusCode.TooManyRequests;
+        }
+        else
+        {
+            harness.Server.StartStatus = HttpStatusCode.TooManyRequests;
+        }
+
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Unavailable);
+
+        // A doubling from a minute (60 ms here) would have tried again several times by now.
+        await Task.Delay(500);
+        Assert.Equal(1, harness.Server.Paths.Count(path => path == "/v1/presence/challenge"));
+    }
+
+    [Fact]
+    public async Task ATakeover_EndsTheRun_AndNothingMoreIsSent()
+    {
+        using var harness = new Harness();
+        harness.Server.StartStatus = HttpStatusCode.Gone;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Unavailable);
+        await Task.Delay(500);
+        Assert.Equal(["/v1/presence/challenge", "/v1/presence"], harness.Server.Paths);
     }
 
     [Fact]
@@ -231,7 +269,10 @@ public class OnlineCountTests
         var counted = new OnlineCountView(OnlineCountState.Online, 1234, now);
         Assert.Equal(new MyPlatesFooterItemProbe("1,234 online", OnlineCountFooter.Scope), Probe(OnlineCountFooter.ItemFor(counted, now + TimeSpan.FromSeconds(179), noticeDue: false)));
         Assert.Equal(OnlineCountFooter.Unavailable, OnlineCountFooter.ItemFor(counted, now + OnlineCount.Fresh, noticeDue: false));
-        Assert.Equal("0 online", OnlineCountFooter.Text(0));
+        Assert.Equal("Fewer than 5 online", OnlineCountFooter.Text(0));
+        Assert.Equal("Fewer than 5 online", OnlineCountFooter.Text(OnlineCountFooter.Floor - 1));
+        Assert.Equal("5 online", OnlineCountFooter.Text(OnlineCountFooter.Floor));
+        Assert.Contains("fewer than 5", OnlineCountFooter.Scope, StringComparison.Ordinal);
         Assert.Contains("counted once each", OnlineCountFooter.Scope, StringComparison.Ordinal);
         Assert.All(new[] { OnlineCountFooter.Connecting, OnlineCountFooter.Unavailable, OnlineCountFooter.NoticeDue }, item => Assert.DoesNotContain("0", item.Text, StringComparison.Ordinal));
     }
@@ -254,13 +295,13 @@ public class OnlineCountTests
     /// <summary>A persona manager over memory with one character key, a presence server answered in memory, and the count over them.</summary>
     private sealed class Harness : IDisposable
     {
-        internal Harness()
+        internal Harness(OnlineCountPace? pace = null)
         {
             Personas = PersonaManager.Load(new ProtectedPersonaKeyStore(new MemoryKeyBlobs(), new MaskingProtector()), new NoBackups(), new MemoryRegistry());
             Key = Personas.Acknowledge(Personas.Create("Character key").Slot);
             Server = new PresenceServer();
             Client = new SharingClient(PresenceServer.Deployment, Server, disposeHandler: false, new Version(0, 1, 9));
-            Count = new OnlineCount(Client, RunWork, () => Now, CancellationToken.None, Log.Add, Quick);
+            Count = new OnlineCount(Client, RunWork, () => Now, CancellationToken.None, Log.Add, pace ?? Quick);
         }
 
         internal PersonaManager Personas { get; }
@@ -330,6 +371,8 @@ public class OnlineCountTests
         internal HttpStatusCode StartStatus { get; set; } = HttpStatusCode.OK;
 
         internal HttpStatusCode BeatStatus { get; set; } = HttpStatusCode.OK;
+
+        internal HttpStatusCode ChallengeStatus { get; set; } = HttpStatusCode.OK;
 
         internal Task? StartGate { get; set; }
 
@@ -423,7 +466,12 @@ public class OnlineCountTests
 
             switch (path)
             {
-                case "/v1/challenge":
+                case "/v1/presence/challenge":
+                    if (ChallengeStatus != HttpStatusCode.OK)
+                    {
+                        return new HttpResponseMessage(ChallengeStatus);
+                    }
+
                     if (ChallengeGate is { } challengeGate)
                     {
                         await challengeGate.WaitAsync(cancellationToken);
@@ -487,7 +535,7 @@ public class OnlineCountTests
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
 
                 default:
-                    throw new InvalidOperationException("Only the presence paths and the challenge are expected: " + path);
+                    throw new InvalidOperationException("Only the presence paths are expected, never the general challenge: " + path);
             }
         }
 

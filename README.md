@@ -151,7 +151,7 @@ Sharing is opt-in, one character at a time, and it keeps to these rules:
 - No silent telemetry.
 - No automatic scraping of nearby players.
 - No public Content IDs, no alt correlation, and no public location history.
-- One exception to sending nothing in the background: while a character shares, the plugin tells the sharing server about once a minute that it is still logged in, so My Plates can show how many sharing characters are online. The server keeps this in memory only, forgets the character within 3 minutes of the last message, answers with the total alone and keeps no history. Characters that don't share, and players who never turn sharing on, send nothing.
+- One exception to sending nothing in the background: while a character shares, the plugin tells the sharing server about once a minute that it is still logged in, so My Plates can show how many sharing characters are online. The server keeps this in memory only, forgets the character within about 3 minutes of the last message, answers with the total alone ("fewer than 5" while it is under 5) and keeps no history. Characters that don't share, and players who never turn sharing on, send nothing.
 
 ---
 

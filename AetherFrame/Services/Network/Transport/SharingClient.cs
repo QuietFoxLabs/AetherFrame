@@ -157,6 +157,17 @@ internal sealed class SharingClient : IDisposable
     }
 
     /// <summary>
+    /// A challenge for a presence start alone (<c>POST /v1/presence/challenge</c>), under presence's
+    /// own limit: no other action accepts it, and it takes nothing from <c>/v1/challenge</c>'s.
+    /// </summary>
+    /// <exception cref="SharingException">The server answered with anything but a challenge.</exception>
+    public async Task<RequestChallenge> PresenceChallengeAsync(CancellationToken cancellation)
+    {
+        var response = await SendAsync(() => Post("v1/presence/challenge", new ByteArrayContent([])), ProtocolConstants.ChallengeLength, PresenceTimeout, cancellation).ConfigureAwait(false);
+        return ChallengeFrom(response, HttpStatusCode.OK) ?? throw new SharingException(response.Status, "The server didn't answer with a presence challenge.");
+    }
+
+    /// <summary>
     /// Sends one action, signed by <paramref name="signer"/> as <paramref name="kind"/>, with
     /// <paramref name="body"/> (at most 4,096 bytes, checked before a challenge is asked for) to
     /// that kind's path, and reads the answer within that kind's bound. A refused challenge is

@@ -25,6 +25,7 @@ public class PresenceTests
 {
     private const long Aria = 12345678;
     private const long Bram = 23456789;
+    private static readonly string[] Names = ["Aria Starfall", "Bram Oakes", "Cora Vale"];
 
     [Fact]
     public async Task Status_IsByteForByteWhatOlderPluginsRead()
@@ -49,7 +50,8 @@ public class PresenceTests
         await aria.BindAsync(Aria);
         var (token, online) = await StartedAsync(aria);
         Assert.Equal(PresenceStore.TokenLength, token.Length);
-        Assert.Equal(1, online);
+        Assert.Equal(PresenceStore.Reported(1), online);
+        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
     }
 
     [Fact]
@@ -63,7 +65,7 @@ public class PresenceTests
             Assert.Equal(HttpStatusCode.Forbidden, asLookup.StatusCode);
         }
 
-        using (var withBody = await aria.SendAsync("/v1/presence", RequestProofKind.Presence, "{\"name\":\"Aria Starfall\"}"))
+        using (var withBody = await aria.SendAsync("/v1/presence", RequestProofKind.Presence, "{\"name\":\"Aria Starfall\"}", challenge: await PresenceChallengeAsync(aria)))
         {
             Assert.Equal(HttpStatusCode.BadRequest, withBody.StatusCode);
         }
@@ -83,18 +85,21 @@ public class PresenceTests
         await bram.BindAsync(Bram, "Bram Oakes");
         var (first, _) = await StartedAsync(aria);
         var (_, both) = await StartedAsync(bram);
-        Assert.Equal(2, both);
+        Assert.Equal(PresenceStore.Reported(2), both);
+        Assert.Equal(2, server.Services.GetRequiredService<PresenceStore>().Online());
 
         // A reload of Aria's plugin starts again: still one Aria, and her first token is gone.
         var (second, again) = await StartedAsync(aria);
-        Assert.Equal(2, again);
+        Assert.Equal(PresenceStore.Reported(2), again);
+        Assert.Equal(2, server.Services.GetRequiredService<PresenceStore>().Online());
         server.Time.Advance(TimeSpan.FromSeconds(60));
         using (var old = await BeatAsync(aria, first))
         {
             Assert.Equal(HttpStatusCode.NotFound, old.StatusCode);
         }
 
-        Assert.Equal(2, await BeatOnlineAsync(aria, second));
+        Assert.Equal(PresenceStore.Reported(2), await BeatOnlineAsync(aria, second));
+        Assert.Equal(2, server.Services.GetRequiredService<PresenceStore>().Online());
     }
 
     [Fact]
@@ -122,7 +127,8 @@ public class PresenceTests
         }
 
         server.Time.Advance(TimeSpan.FromSeconds(60));
-        Assert.Equal(1, await BeatOnlineAsync(aria, ariaToken));
+        Assert.Equal(PresenceStore.Reported(1), await BeatOnlineAsync(aria, ariaToken));
+        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
         using var expired = await BeatAsync(bram, bramToken);
         Assert.Equal(HttpStatusCode.NotFound, expired.StatusCode);
     }
@@ -215,7 +221,8 @@ public class PresenceTests
         }
 
         var (_, online) = await StartedAsync(newPc);
-        Assert.Equal(1, online);
+        Assert.Equal(PresenceStore.Reported(1), online);
+        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
     }
 
     [Fact]
@@ -260,11 +267,91 @@ public class PresenceTests
 
         // Signed requests from the same address go on: a challenge, and a presence start with it.
         var (token, online) = await StartedAsync(aria);
-        Assert.Equal(1, online);
+        Assert.Equal(PresenceStore.Reported(1), online);
+        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
 
         // A minute later there is room again.
         server.Time.Advance(TimeSpan.FromSeconds(61));
-        Assert.Equal(1, await BeatOnlineAsync(aria, token));
+        Assert.Equal(PresenceStore.Reported(1), await BeatOnlineAsync(aria, token));
+        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
+    }
+
+    [Fact]
+    public async Task AStart_TakesOnlyAPresenceChallenge_AndAPresenceChallengeAuthorizesNothingElse()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+
+        // A challenge from /v1/challenge is refused, with no fresh one from the general store.
+        using (var general = await aria.SendAsync("/v1/presence", RequestProofKind.Presence, "{}"))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, general.StatusCode);
+            Assert.Empty(await general.Content.ReadAsByteArrayAsync());
+        }
+
+        // A presence challenge is refused by every other action, and is used once.
+        var presence = await PresenceChallengeAsync(aria);
+        using (var code = await aria.SendAsync("/v1/lodestone/code", RequestProofKind.LodestoneCode, "{}", challenge: presence))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, code.StatusCode);
+        }
+
+        using (var first = await aria.SendAsync("/v1/presence", RequestProofKind.Presence, "{}", challenge: presence))
+        {
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        }
+
+        using var again = await aria.SendAsync("/v1/presence", RequestProofKind.Presence, "{}", challenge: presence);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+    }
+
+    [Fact]
+    public async Task PresenceChallenges_HaveTheirOwnAddressLimit_AndTakeNoChallengeFromAnythingElse()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        for (var issued = 0; issued < ServerLimits.PresenceChallengesPerAddress.Count; issued++)
+        {
+            await PresenceChallengeAsync(aria);
+        }
+
+        using (var over = await aria.PostRawAsync("/v1/presence/challenge", []))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, over.StatusCode);
+        }
+
+        // Every general challenge the address group has is still there.
+        for (var issued = 0; issued < ServerLimits.ChallengesPerAddress.Count; issued++)
+        {
+            await aria.ChallengeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ACountUnderTheFloor_IsAnsweredAsZero_AndFromTheFloorUpAsItself()
+    {
+        using var server = new TestServer();
+        var players = TestServer.Allowed.Select(_ => server.NewPlayer()).ToArray();
+        try
+        {
+            for (var index = 0; index < players.Length; index++)
+            {
+                await players[index].BindAsync(TestServer.Allowed[index], Names[index]);
+                var (_, online) = await StartedAsync(players[index]);
+                Assert.Equal(0, online);
+                Assert.Equal(index + 1, server.Services.GetRequiredService<PresenceStore>().Online());
+            }
+        }
+        finally
+        {
+            foreach (var player in players)
+            {
+                player.Dispose();
+            }
+        }
+
+        Assert.Equal([0, 0, 0, 0, 0, 5, 6, 100_000], new[] { 0, 1, 2, 3, PresenceStore.Floor - 1, PresenceStore.Floor, 6, 100_000 }.Select(PresenceStore.Reported));
     }
 
     [Fact]
@@ -343,8 +430,15 @@ public class PresenceTests
         return PersonaId.Parse("psn_" + Convert.ToHexString(bytes).ToLowerInvariant());
     }
 
-    private static Task<HttpResponseMessage> StartAsync(Player player) =>
-        player.SendAsync("/v1/presence", RequestProofKind.Presence, "{}");
+    private static async Task<HttpResponseMessage> StartAsync(Player player) =>
+        await player.SendAsync("/v1/presence", RequestProofKind.Presence, "{}", challenge: await PresenceChallengeAsync(player));
+
+    private static async Task<RequestChallenge> PresenceChallengeAsync(Player player)
+    {
+        using var response = await player.PostRawAsync("/v1/presence/challenge", []);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return RequestChallenge.FromBytes(await response.Content.ReadAsByteArrayAsync());
+    }
 
     private static async Task<(byte[] Token, int Online)> StartedAsync(Player player)
     {

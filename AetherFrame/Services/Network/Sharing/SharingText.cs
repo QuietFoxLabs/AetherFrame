@@ -43,7 +43,7 @@ internal static class SharingText
 
     /// <summary>What the online count sends and keeps ("The online count"): in the consent, and in the one-time notice.</summary>
     internal const string OnlineCountSends =
-        "While this character is logged in with sharing on, AetherFrame tells the sharing server about once a minute that it is online, so My Plates can show how many sharing characters are online. The server holds this in memory only, for 3 minutes after the last signal, counts each character once, and only ever gives out the total. It keeps no record of when anyone was online. Logging out, pausing or turning off sharing, or closing the game stops it, and the server then forgets the character within 3 minutes at most. Characters that don't share send nothing.";
+        "While this character is logged in with sharing on, AetherFrame tells the sharing server about once a minute that it is online, so My Plates can show how many sharing characters are online. The server holds this in memory only, for 3 minutes after the last signal, counts each character once, and only ever gives out the total, as \"fewer than 5\" while it is under 5. It keeps no record of when anyone was online. Logging out, pausing or turning off sharing, or closing the game stops it, and the server then forgets the character within about 3 minutes. Characters that don't share send nothing.";
 
     internal const string OnlineNoticeTitle = "My Plates now shows how many are online";
 
@@ -51,7 +51,7 @@ internal static class SharingText
     internal static readonly string[] OnlineNotice =
     [
         OnlineCountSends,
-        "Each signal shows the server your network address, which it doesn't store. Nothing is sent until you choose Got it.",
+        "Each signal shows the server your network address, which it never writes down or logs, and holds in memory only for its rate limits. Nothing is sent until you choose Got it.",
     ];
 
     internal const string ConnectionNoticeTitle = "Checks now use your own connection";

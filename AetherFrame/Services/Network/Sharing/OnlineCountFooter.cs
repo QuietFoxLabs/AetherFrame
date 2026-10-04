@@ -14,7 +14,13 @@ namespace AetherFrame.Services.Network.Sharing;
 internal sealed class OnlineCountFooter
 {
     internal const string Scope =
-        "Characters logged in right now with AetherFrame sharing turned on, counted once each across every player. Characters that don't share aren't counted. Updated about once a minute.";
+        "Characters logged in right now with AetherFrame sharing turned on, counted once each across every player. Characters that don't share aren't counted. Below 5, the server says only that there are fewer than 5. Updated about once a minute.";
+
+    /// <summary>
+    /// The smallest count the server answers as itself; below it, it answers 0, "fewer than this",
+    /// so a handful of players can't watch one another log in and out.
+    /// </summary>
+    internal const int Floor = 5;
 
     internal static readonly MyPlatesFooterItem Connecting = new("Online: connecting...", "Getting the number of sharing characters online from AetherFrame's sharing server.\n" + Scope);
 
@@ -56,8 +62,9 @@ internal sealed class OnlineCountFooter
         };
     }
 
-    /// <summary>The count's text: "12 online".</summary>
-    internal static string Text(int online) => online.ToString("N0", CultureInfo.InvariantCulture) + " online";
+    /// <summary>The count's text: "12 online", or "Fewer than 5 online" for any count under <see cref="Floor"/>.</summary>
+    internal static string Text(int online) =>
+        online < Floor ? "Fewer than " + Floor.ToString(CultureInfo.InvariantCulture) + " online" : online.ToString("N0", CultureInfo.InvariantCulture) + " online";
 
     /// <summary>The item this frame, for the framework thread: the one made last unless what it says changed.</summary>
     internal MyPlatesFooterItem? Item()

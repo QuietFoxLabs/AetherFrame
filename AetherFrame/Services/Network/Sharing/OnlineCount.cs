@@ -72,9 +72,10 @@ internal sealed record OnlineCountPace(TimeSpan Beat, TimeSpan Jitter, TimeSpan 
 /// <see cref="Update"/> runs on the framework thread and only compares and hands over: every
 /// request runs in a background task, never in a frame. The start's challenge and request are sent
 /// outside the persona session, which is held only for the one signature, so presence never holds
-/// the session a publish needs, and a busy session only delays presence. Heartbeats carry the
-/// session's token alone, so they never take a challenge, and the server counts them against a
-/// limit of their own. A logout, a pause, turning sharing off, a takeover, another character or
+/// the session a publish needs, and a busy session only delays presence. The start's challenge is
+/// presence's own (<c>/v1/presence/challenge</c>), and heartbeats carry the session's token alone,
+/// so presence never takes from the challenges or limits publishing needs; a limit's refusal waits
+/// the longest backoff. A takeover's 410 ends the run. A logout, a pause, turning sharing off, a takeover, another character or
 /// unloading stops the run, which then ends its session with a leave; a crash leaves it to expire
 /// on the server. An answer that comes back after its run stopped changes nothing. The log gets
 /// outcome kinds only: never a token, a key or a count. Compiled only in the networking preview
@@ -85,6 +86,12 @@ internal sealed class OnlineCount
 {
     /// <summary>How long a count is shown after the server gave it: the server's expiry of a session.</summary>
     internal static readonly TimeSpan Fresh = TimeSpan.FromSeconds(180);
+
+    /// <summary>
+    /// How long a presence challenge is kept for another try at signing: well inside the 300
+    /// seconds the server accepts it for, leaving time for the start itself.
+    /// </summary>
+    internal static readonly TimeSpan ChallengeKept = TimeSpan.FromSeconds(240);
 
     private readonly SharingClient client;
     private readonly Func<string, Action<PersonaManager>, bool> tryRun;
@@ -233,10 +240,25 @@ internal sealed class OnlineCount
                     }
                 }
 
+                if (outcome == Outcome.Ended)
+                {
+                    // Another key took the character over: nothing more is sent for this target.
+                    Failed(run);
+                    return;
+                }
+
                 TimeSpan wait;
                 if (outcome == Outcome.Busy)
                 {
                     wait = pace.BusyRetry;
+                }
+                else if (outcome == Outcome.Limited)
+                {
+                    // A limit refused it: the longest wait, not the doubling from a minute, so a
+                    // crowded network's plugins don't keep asking.
+                    failures++;
+                    Failed(run);
+                    wait = Between(pace.LongestBackoff * 0.8, pace.LongestBackoff * 1.2);
                 }
                 else if (outcome == Outcome.Counted)
                 {
@@ -271,13 +293,29 @@ internal sealed class OnlineCount
         }
     }
 
-    /// <summary>A signed start: a challenge, the signature under the persona session, then the request, both requests outside it.</summary>
+    /// <summary>
+    /// A signed start: a presence challenge, the signature under the persona session, then the
+    /// request, both requests outside it. A challenge the session was too busy to sign under is
+    /// kept for the next try while it is younger than <see cref="ChallengeKept"/>, so a long
+    /// publish doesn't spend one every few seconds.
+    /// </summary>
     private async Task<(Outcome Outcome, byte[]? Token)> StartAsync(Run run)
     {
         try
         {
-            var challenge = await client.ChallengeAsync(run.Stop.Token).ConfigureAwait(false);
-            var (signed, envelope) = await SignAsync(run, challenge).ConfigureAwait(false);
+            if (run.Challenge is null || utcNow() - run.ChallengeAt >= ChallengeKept || utcNow() < run.ChallengeAt)
+            {
+                run.Challenge = await client.PresenceChallengeAsync(run.Stop.Token).ConfigureAwait(false);
+                run.ChallengeAt = utcNow();
+            }
+
+            var (signed, envelope) = await SignAsync(run, run.Challenge).ConfigureAwait(false);
+            if (signed == Outcome.Busy)
+            {
+                return (signed, null);
+            }
+
+            run.Challenge = null;
             if (signed != Outcome.Counted)
             {
                 return (signed, null);
@@ -287,7 +325,12 @@ internal sealed class OnlineCount
             if (response.Status != HttpStatusCode.OK)
             {
                 log($"Online count: the start answered {(int)response.Status}.");
-                return (Outcome.Failed, null);
+                return (response.Status switch
+                {
+                    HttpStatusCode.Gone => Outcome.Ended,
+                    HttpStatusCode.TooManyRequests => Outcome.Limited,
+                    _ => Outcome.Failed,
+                }, null);
             }
 
             var (token, online) = SharingWire.ReadPresenceStart(response.Body);
@@ -299,11 +342,18 @@ internal sealed class OnlineCount
         catch (SharingException exception)
         {
             log($"Online count: the start got no usable answer ({StatusOf(exception)}).");
-            return (Outcome.Failed, null);
+            return (exception.Status == HttpStatusCode.TooManyRequests ? Outcome.Limited : Outcome.Failed, null);
         }
         catch (InvalidDataException)
         {
             log("Online count: the start's answer wasn't one.");
+            return (Outcome.Failed, null);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Anything else, a signer's own error say, is one failure, not the end of the run.
+            run.Challenge = null;
+            log($"Online count: the start failed ({exception.GetType().Name}).");
             return (Outcome.Failed, null);
         }
     }
@@ -386,7 +436,7 @@ internal sealed class OnlineCount
             if (response.Status != HttpStatusCode.OK)
             {
                 log($"Online count: a heartbeat answered {(int)response.Status}.");
-                return Outcome.Failed;
+                return response.Status == HttpStatusCode.TooManyRequests ? Outcome.Limited : Outcome.Failed;
             }
 
             Counted(run, SharingWire.ReadPresenceBeat(response.Body));
@@ -481,6 +531,12 @@ internal sealed class OnlineCount
         Busy,
         Gone,
         Failed,
+
+        /// <summary>A rate limit refused it (429): the longest wait follows.</summary>
+        Limited,
+
+        /// <summary>Another key took the character over (410): the run ends and sends nothing more.</summary>
+        Ended,
     }
 
     private sealed class Run(PresenceTarget target, CancellationTokenSource stop)
@@ -488,5 +544,10 @@ internal sealed class OnlineCount
         internal PresenceTarget Target { get; } = target;
 
         internal CancellationTokenSource Stop { get; } = stop;
+
+        /// <summary>A presence challenge not yet signed under, kept across a busy session; only the run's own task touches it.</summary>
+        internal RequestChallenge? Challenge { get; set; }
+
+        internal DateTimeOffset ChallengeAt { get; set; }
     }
 }

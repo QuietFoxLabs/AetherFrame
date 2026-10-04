@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using AetherFrame.Protocol.Identity;
+using AetherFrame.Protocol.Requests;
 
 namespace AetherFrame.Server.Presence;
 
@@ -60,6 +61,16 @@ internal sealed class PresenceStore(TimeProvider time)
     /// <summary>A session's token: 32 random bytes.</summary>
     public const int TokenLength = 32;
 
+    /// <summary>
+    /// The smallest count answered as itself: below it, the answer is 0, which means "fewer than
+    /// this", so a handful of players who know each other can't watch one another log in and out
+    /// (<see cref="Reported"/>).
+    /// </summary>
+    public const int Floor = 5;
+
+    /// <summary>The most presence challenges held at once.</summary>
+    public const int MaxChallenges = 10_000;
+
     private readonly object gate = new();
     private readonly Dictionary<string, Session> byToken = new(StringComparer.Ordinal);
     private readonly Dictionary<PersonaId, string> byKey = new();
@@ -67,6 +78,9 @@ internal sealed class PresenceStore(TimeProvider time)
     // Each character with a session held, and how many: its count of entries is the online count.
     private readonly Dictionary<long, int> characters = new();
     private DateTimeOffset sweptAt = DateTimeOffset.MinValue;
+
+    // The presence challenges issued and not yet used, by their hex, with when each stops being accepted.
+    private readonly Dictionary<string, DateTimeOffset> challenges = new(StringComparer.Ordinal);
 
     /// <summary>How many sessions are held, expired ones not yet swept included: for tests of the bound.</summary>
     internal int Sessions
@@ -192,6 +206,69 @@ internal sealed class PresenceStore(TimeProvider time)
             }
         }
     }
+
+    /// <summary>
+    /// A challenge for a presence start alone, from <c>/v1/presence/challenge</c>: held in memory
+    /// for <see cref="AetherFrame.Server.Storage.ChallengeStore.Lifetime"/>, accepted once and only
+    /// by <see cref="TryConsumeChallenge"/>, so presence never takes from the challenges that
+    /// publishing, looking up and checking need, and no other action accepts one. Null when
+    /// <see cref="MaxChallenges"/> are held even after expired ones are cleared.
+    /// </summary>
+    public RequestChallenge? IssueChallenge()
+    {
+        var now = time.GetUtcNow();
+        lock (gate)
+        {
+            if (challenges.Count >= MaxChallenges)
+            {
+                List<string>? expired = null;
+                foreach (var (id, until) in challenges)
+                {
+                    if (until <= now)
+                    {
+                        (expired ??= []).Add(id);
+                    }
+                }
+
+                foreach (var id in expired ?? [])
+                {
+                    challenges.Remove(id);
+                }
+
+                if (challenges.Count >= MaxChallenges)
+                {
+                    return null;
+                }
+            }
+
+            var challenge = RequestChallenge.NewRandom();
+            challenges[Convert.ToHexString(challenge.ToArray())] = now + AetherFrame.Server.Storage.ChallengeStore.Lifetime;
+            return challenge;
+        }
+    }
+
+    /// <summary>Consumes a presence challenge: issued here, unexpired and unused, then removed. False otherwise, and then nothing was consumed.</summary>
+    public bool TryConsumeChallenge(RequestChallenge challenge)
+    {
+        var now = time.GetUtcNow();
+        lock (gate)
+        {
+            var id = Convert.ToHexString(challenge.ToArray());
+            if (!challenges.TryGetValue(id, out var until) || until <= now)
+            {
+                return false;
+            }
+
+            challenges.Remove(id);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A count as an answer gives it: itself from <see cref="Floor"/> up, and 0, meaning "fewer than
+    /// <see cref="Floor"/>", below it.
+    /// </summary>
+    public static int Reported(int online) => online < Floor ? 0 : online;
 
     /// <summary>The count now: distinct characters with a live session.</summary>
     public int Online()
