@@ -796,7 +796,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private static void ShowVersion() => ChatGui.Print(AetherFrameBuildInfo.Current.Describe());
 
     /// <summary><c>/aetherframe fonts</c> (or <c>/af fonts</c>): the Plate font cache, in chat.</summary>
-    private void ShowFontStats() => ChatGui.Print(fontService.Stats.Describe());
+    private void ShowFontStats() => ChatGui.Print(fontService.Describe());
 
     /// <summary>The main entry point is My Plates.</summary>
     public void ToggleMainUi() => plateLibraryWindow.Toggle();
