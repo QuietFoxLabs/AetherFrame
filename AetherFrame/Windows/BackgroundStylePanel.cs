@@ -262,7 +262,7 @@ internal sealed class BackgroundStylePanel
         var current = PlateStyle.Chosen(profile, showing);
         var simpleCardHeight = ThemeCardHeight(profile, ThemeFamily.Classic, ThemeCardWidth);
         var maxHeight = (ThemeBrowserVisibleRows * simpleCardHeight) + ((ThemeBrowserVisibleRows - 0.5f) * style.ItemSpacing.Y);
-        using (var grid = ImRaii.Child("##ThemeGrid", new Vector2(-1f, MathF.Min(contentHeight, maxHeight)), false))
+        using (var grid = AetherChild.Begin("##ThemeGrid", new Vector2(-1f, MathF.Min(contentHeight, maxHeight)), false))
         {
             if (grid.Success)
             {
@@ -813,23 +813,31 @@ internal sealed class BackgroundStylePanel
     {
         var color = current;
         EditorWidgets.PropertyLabel(label);
+        ScreenEyedropper.LeaveRoom();
         if (ImGui.ColorEdit4(id, ref color, ImGuiColorEditFlags.NoAlpha))
         {
             var value = color with { W = 1f };
-            editorSession.BeginOrContinueBackgroundEdit(style =>
-            {
-                if (primary)
-                {
-                    style.PrimaryColor = value;
-                }
-                else
-                {
-                    style.SecondaryColor = value;
-                }
-            });
+            editorSession.BeginOrContinueBackgroundEdit(style => SetColor(style, value));
         }
 
         CommitBackgroundOnRelease();
+        if (ScreenEyedropper.Button(id, ref color))
+        {
+            var value = color with { W = 1f };
+            editorSession.ApplyBackgroundEdit(style => SetColor(style, value));
+        }
+
+        void SetColor(ProfileBackground style, Vector4 value)
+        {
+            if (primary)
+            {
+                style.PrimaryColor = value;
+            }
+            else
+            {
+                style.SecondaryColor = value;
+            }
+        }
     }
 
     private void CommitBackgroundOnRelease()

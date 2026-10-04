@@ -117,7 +117,7 @@ internal sealed partial class PlateLibraryWindow
 
         var shown = string.IsNullOrWhiteSpace(templateSearchText) ? allTemplates : templates.Search(templateSearchText);
         var footerHeight = (ImGui.GetFrameHeightWithSpacing() * 2f) + ImGui.GetStyle().ItemSpacing.Y + EditorWidgets.Scaled(4f);
-        using (var grid = ImRaii.Child("##TemplateGrid", new Vector2(-1, -footerHeight), false))
+        using (var grid = AetherChild.Begin("##TemplateGrid", new Vector2(-1, -footerHeight), false))
         {
             if (grid.Success)
             {

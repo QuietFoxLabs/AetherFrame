@@ -65,7 +65,7 @@ internal static class FontPicker
             MathF.Min(ListHeight(query), ImGui.GetMainViewport().WorkSize.Y * MaxListScreenShare));
 
         var changed = false;
-        using (var list = ImRaii.Child("##FontList", listSize, false))
+        using (var list = AetherChild.Begin("##FontList", listSize, false))
         {
             if (list.Success)
             {

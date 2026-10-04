@@ -370,7 +370,7 @@ internal sealed partial class BasicProfileEditorWindow
 
         var search = titleSearch.Trim();
 
-        using (var list = ImRaii.Child("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
+        using (var list = AetherChild.Begin("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
         {
             if (list.Success)
             {

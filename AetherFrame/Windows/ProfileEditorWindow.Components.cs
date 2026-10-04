@@ -286,7 +286,7 @@ internal sealed partial class ProfileEditorWindow
         if (component.Color is { } color)
         {
             ImGui.SameLine();
-            ImGui.SetNextItemWidth(-1);
+            ScreenEyedropper.LeaveRoom();
             if (ImGui.ColorEdit4("##Color", ref color, ImGuiColorEditFlags.AlphaBar))
             {
                 var picked = color;
@@ -294,6 +294,11 @@ internal sealed partial class ProfileEditorWindow
             }
 
             CommitComponentOnRelease();
+            if (ScreenEyedropper.Button("ComponentColor", ref color))
+            {
+                var picked = color;
+                editorSession.EditComponent(componentId, c => c.Color = picked, continuous: false);
+            }
         }
 
         var opacity = component.Opacity * 100f;

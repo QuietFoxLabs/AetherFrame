@@ -206,7 +206,7 @@ internal sealed class TemplateChooser
         var bodyHeight = -footerHeight;
         var leftWidth = ChooserLeftPaneWidth * ImGuiHelpers.GlobalScale;
 
-        using (var left = ImRaii.Child("##TemplateChooserLeft", new Vector2(leftWidth, bodyHeight), true))
+        using (var left = AetherChild.Begin("##TemplateChooserLeft", new Vector2(leftWidth, bodyHeight), true))
         {
             if (left.Success)
             {
@@ -216,7 +216,7 @@ internal sealed class TemplateChooser
 
         ImGui.SameLine();
 
-        using (var right = ImRaii.Child("##TemplateChooserRight", new Vector2(-1f, bodyHeight), false))
+        using (var right = AetherChild.Begin("##TemplateChooserRight", new Vector2(-1f, bodyHeight), false))
         {
             if (right.Success)
             {
