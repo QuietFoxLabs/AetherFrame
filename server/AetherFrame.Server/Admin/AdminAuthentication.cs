@@ -85,7 +85,7 @@ internal static class AdminAuthentication
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", c.AccessToken);
                     request.Headers.UserAgent.ParseAdd("AetherFrame-CommunityDesk/1");
                     request.Headers.Accept.ParseAdd("application/vnd.github+json");
-                    using var response = await c.Backchannel.SendAsync(request, c.HttpContext.RequestAborted);
+                    using var response = await c.Backchannel.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, c.HttpContext.RequestAborted);
                     response.EnsureSuccessStatusCode();
                     await response.Content.LoadIntoBufferAsync(65536, c.HttpContext.RequestAborted);
                     using var user = JsonDocument.Parse(await response.Content.ReadAsStringAsync(c.HttpContext.RequestAborted));
@@ -93,8 +93,7 @@ internal static class AdminAuthentication
                     var actor = await c.HttpContext.RequestServices.GetRequiredService<AdminStore>().FindStaffAsync(id, c.HttpContext.RequestAborted);
                     if (actor is null)
                     {
-                        c.Fail("Staff access is required.");
-                        return;
+                        throw new AuthenticationFailureException("Staff access is required.");
                     }
                     c.Identity!.AddClaim(new Claim(ClaimTypes.NameIdentifier, id.ToString(CultureInfo.InvariantCulture)));
                     c.Identity.AddClaim(new Claim(ClaimTypes.Role, actor.Role));

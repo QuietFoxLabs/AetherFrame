@@ -132,7 +132,7 @@ internal static class AdminEndpoints
         if (input.Action == "image")
         {
             var image = await store.ImageAsync(input.Profile, input.Marker, input.Image, ct);
-            return image is null ? Results.NotFound() : Results.Bytes(image.Bytes, image.Format == ImageFormat.Png ? "image/png" : "image/jpeg");
+            return image is null ? Results.NotFound() : Results.Bytes(image.Bytes, image.Format switch { ImageFormat.Png => "image/png", ImageFormat.WebP => "image/webp", _ => "image/jpeg" });
         }
         return Results.BadRequest();
     }
