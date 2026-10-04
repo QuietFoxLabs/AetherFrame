@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Tutorial;
 using AetherFrame.Windows.Tutorial;
@@ -109,6 +110,14 @@ internal sealed partial class ProfileEditorWindow
         }
 
         var backgroundMin = ImGui.GetCursorScreenPos();
+        if (profile.BasicPlate is not null)
+        {
+            // The same style state the Basic editor shows (issue #118), named here so both agree.
+            EditorWidgets.PropertyLabel("Look", 0f);
+            ImGui.TextUnformatted(PlateStyle.Describe(profile));
+            EditorWidgets.Tooltip("The Plate's Art Style or Simple Theme, chosen under Style in the Basic Editor.\nThe Presets below set the background's colors only, and change neither.");
+        }
+
         backgroundPanel.Draw(profile, preset => editorSession.ApplyBackgroundEdit(preset.ApplyTo));
         var right = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
         TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedBackground, backgroundMin, new Vector2(right, ImGui.GetItemRectMax().Y));

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using AetherFrame.Domain.Basic;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
@@ -134,8 +135,11 @@ internal sealed class BackgroundStylePanel
     // How many rows of theme cards the Basic Theme browser shows before its grid scrolls.
     private const float ThemeBrowserVisibleRows = 2.5f;
 
-    // The Basic Theme browser's search and filter (editor-only view state).
+    // The Basic style browser's system, search and filter (editor-only view state).
     private readonly ThemeBrowserState themeBrowser = new();
+
+    /// <summary>Whether the Basic style browser is showing the Art Styles (else the Simple Themes).</summary>
+    internal bool ShowingArtStyles => themeBrowser.Showing == StyleSystem.ArtStyle;
 
     private static readonly Vector4 CardColor = new(1f, 1f, 1f, 0.04f);
     private static readonly Vector4 CardHoverColor = new(1f, 1f, 1f, 0.08f);
@@ -172,51 +176,43 @@ internal sealed class BackgroundStylePanel
     }
 
     /// <summary>
-    /// The Basic editor's Theme browser: every theme in one collection — no tab or section per
-    /// family, so it keeps working however large the catalog grows. From the top: the Plate's
-    /// current theme (always named, whatever is filtered or scrolled away), a search field, family
-    /// filters (All by default; one per family the catalog actually has), then one responsive grid
-    /// of truthful preview cards that scrolls on its own once it's taller than a few rows — under All,
-    /// grouped by family (a small heading above each family's own grid, in catalog order). The
-    /// current theme's card is marked and scrolled into view when a Plate opens. Clicking a card
-    /// applies that theme exactly as before (<paramref name="applyTheme"/>, by its stable id).
-    /// Filtering is <see cref="ThemeBrowser"/>'s; the search and filter are view state only.
+    /// The Basic editor's style browser (issue #118): the two systems, Art Styles first, each its own
+    /// catalog with its own remembered choice (<see cref="PlateStyle"/>). From the top: which system to
+    /// browse (it opens on <see cref="PlateStyle.OpensOn"/>); the style in use, always named, with what
+    /// choosing from the other system does; a search field; for Simple Themes, family filters (All by
+    /// default); then one responsive grid of truthful preview cards that scrolls on its own once it's
+    /// taller than a few rows. The system's choice is marked and scrolled into view when a Plate opens
+    /// or the system changes. Clicking a card chooses it (<paramref name="applyTheme"/>, by its stable
+    /// id), which switches the Plate to that card's system. Filtering is <see cref="ThemeBrowser"/>'s;
+    /// the system shown, the search and the filter are view state only.
     /// </summary>
     internal void DrawThemeBrowser(ProfileDocument profile, Action<ProfileThemePreset> applyTheme)
     {
-        var current = ThemeBrowser.Current(profile);
         if (themeBrowser.PlateId != profile.ProfileId)
         {
             themeBrowser.PlateId = profile.ProfileId;
-            themeBrowser.ScrollToCurrent = true;
+            themeBrowser.Showing = PlateStyle.OpensOn(profile);
+            themeBrowser.Family = null;
+            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
         }
 
-        // The current theme, at a glance.
-        EditorWidgets.PropertyLabel("Current", 0f);
-        if (current is { } chosen)
+        var shown = EditorWidgets.Segmented("StyleSystem", [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)], (int)themeBrowser.Showing);
+        if (shown >= 0)
         {
-            var swatch = ImGui.GetTextLineHeight();
-            var min = ImGui.GetCursorScreenPos() + new Vector2(0f, (ImGui.GetFrameHeight() - swatch) / 2f);
-            ImGui.GetWindowDrawList().AddRectFilledMultiColor(
-                min, min + new Vector2(swatch * 1.6f, swatch),
-                ImGui.GetColorU32(chosen.PrimaryColor), ImGui.GetColorU32(chosen.SecondaryColor),
-                ImGui.GetColorU32(chosen.SecondaryColor), ImGui.GetColorU32(chosen.PrimaryColor));
-            ImGui.Dummy(new Vector2(swatch * 1.6f, ImGui.GetFrameHeight()));
-            ImGui.SameLine();
-            ImGui.TextUnformatted(chosen.Name);
-            ImGui.SameLine();
-            ImGui.TextDisabled(chosen.IsArtStyle ? "Art Style" : ThemeBrowser.SimpleThemesLabel);
+            // Each system opens unfiltered, on its own choice when it has one.
+            themeBrowser.Showing = (StyleSystem)shown;
+            themeBrowser.Clear();
+            themeBrowser.ScrollToCurrent = PlateStyle.Chosen(profile, themeBrowser.Showing) is not null;
         }
-        else
-        {
-            ImGui.TextDisabled("None chosen yet");
-        }
+
+        var showing = themeBrowser.Showing;
+        DrawStyleInUse(profile, showing);
 
         // Search, with a clear button while it holds anything.
         var search = themeBrowser.Search;
         var clearWidth = search.Length > 0 ? ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X : 0f;
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - clearWidth);
-        if (ImGui.InputTextWithHint("##ThemeSearch", "Search themes...", ref search, ThemeBrowserState.MaxSearchLength))
+        if (ImGui.InputTextWithHint("##ThemeSearch", showing == StyleSystem.ArtStyle ? "Search Art Styles..." : "Search Simple Themes...", ref search, ThemeBrowserState.MaxSearchLength))
         {
             themeBrowser.Search = search;
         }
@@ -230,13 +226,17 @@ internal sealed class BackgroundStylePanel
             }
         }
 
-        DrawThemeFilters();
+        var catalog = ThemeBrowser.Catalog(showing);
+        if (showing == StyleSystem.SimpleTheme)
+        {
+            DrawThemeFilters(catalog);
+        }
 
-        var groups = ThemeBrowser.Group(ProfileThemePresets.All, themeBrowser.Search, themeBrowser.Family);
+        var groups = ThemeBrowser.Group(catalog, themeBrowser.Search, themeBrowser.Family);
         if (groups.Count == 0)
         {
-            EditorWidgets.Hint("No themes match.");
-            if (ImGui.SmallButton("Show all themes"))
+            EditorWidgets.Hint(showing == StyleSystem.ArtStyle ? "No Art Styles match." : "No Simple Themes match.");
+            if (ImGui.SmallButton("Show all##ShowAllThemes"))
             {
                 themeBrowser.Clear();
             }
@@ -244,15 +244,13 @@ internal sealed class BackgroundStylePanel
             return;
         }
 
-        // All: each family under a small heading, with its own grid (a search keeps its matches
-        // under their families). One family filter: just its grid, no heading repeating the filter.
+        // Simple Themes under All: each family under a small heading, with its own grid (a search keeps
+        // its matches under their families). Art Styles, or one family: just the grid.
         // Sized to the content up to a few rows, then scrolling on its own.
-        var headings = themeBrowser.Family is null;
+        var headings = showing == StyleSystem.SimpleTheme && themeBrowser.Family is null;
         var style = ImGui.GetStyle();
         var available = ImGui.GetContentRegionAvail().X - style.ScrollbarSize;
-        var firstSimple = groups.FindIndex(g => g.Family != ThemeFamily.ArtStyle);
-        var simpleHeading = headings && firstSimple > 0;
-        var contentHeight = simpleHeading ? ImGui.GetTextLineHeightWithSpacing() + style.ItemSpacing.Y : 0f;
+        var contentHeight = 0f;
         foreach (var (family, themes) in groups)
         {
             var cardWidth = CardWidth(family);
@@ -261,35 +259,19 @@ internal sealed class BackgroundStylePanel
             contentHeight += (rows * ThemeCardHeight(profile, family, cardWidth)) + ((rows - 1) * style.ItemSpacing.Y) + (headings ? ImGui.GetTextLineHeightWithSpacing() + style.ItemSpacing.Y : 0f);
         }
 
+        var current = PlateStyle.Chosen(profile, showing);
         var simpleCardHeight = ThemeCardHeight(profile, ThemeFamily.Classic, ThemeCardWidth);
         var maxHeight = (ThemeBrowserVisibleRows * simpleCardHeight) + ((ThemeBrowserVisibleRows - 0.5f) * style.ItemSpacing.Y);
         using (var grid = ImRaii.Child("##ThemeGrid", new Vector2(-1f, MathF.Min(contentHeight, maxHeight)), false))
         {
             if (grid.Success)
             {
-                for (var g = 0; g < groups.Count; g++)
+                foreach (var (family, themes) in groups)
                 {
-                    var (family, themes) = groups[g];
                     using var id = ImRaii.PushId($"ThemeGroup{family}");
-                    if (simpleHeading && g == firstSimple)
-                    {
-                        // Under All: the Art Styles first, then the Simple Themes.
-                        ImGui.Spacing();
-                        ImGui.TextUnformatted(ThemeBrowser.SimpleThemesLabel);
-                        EditorWidgets.Tooltip("Colors only. Choosing one after an Art Style takes away the style's own pieces.");
-                    }
-
                     if (headings)
                     {
-                        if (family == ThemeFamily.ArtStyle)
-                        {
-                            ImGui.TextUnformatted(ThemeBrowser.FamilyLabel(family));
-                            EditorWidgets.Tooltip("A whole look: a background, frames, corners, a name plaque, a divider and section headers,\nwith text colors to match. Each piece stays yours to change under Frame & Decorations.");
-                        }
-                        else
-                        {
-                            ImGui.TextDisabled(ThemeBrowser.FamilyLabel(family));
-                        }
+                        ImGui.TextDisabled(ThemeBrowser.FamilyLabel(family));
                     }
 
                     DrawThemeCardGrid(profile, themes, current, applyTheme, CardWidth(family));
@@ -298,16 +280,48 @@ internal sealed class BackgroundStylePanel
         }
     }
 
-    /// <summary>All, then one filter per family the catalog has (with its count); they wrap rather than run off.</summary>
-    private void DrawThemeFilters()
+    /// <summary>
+    /// The style in use, always named whatever is browsed, and, while the other system is browsed,
+    /// what choosing from it does: the system in use keeps its choice for later.
+    /// </summary>
+    private static void DrawStyleInUse(ProfileDocument profile, StyleSystem showing)
+    {
+        EditorWidgets.PropertyLabel("In use", 0f);
+        if (PlateStyle.InUse(profile) is { } chosen)
+        {
+            var swatch = ImGui.GetTextLineHeight();
+            var min = ImGui.GetCursorScreenPos() + new Vector2(0f, (ImGui.GetFrameHeight() - swatch) / 2f);
+            ImGui.GetWindowDrawList().AddRectFilledMultiColor(
+                min, min + new Vector2(swatch * 1.6f, swatch),
+                ImGui.GetColorU32(chosen.PrimaryColor), ImGui.GetColorU32(chosen.SecondaryColor),
+                ImGui.GetColorU32(chosen.SecondaryColor), ImGui.GetColorU32(chosen.PrimaryColor));
+            ImGui.Dummy(new Vector2(swatch * 1.6f, ImGui.GetFrameHeight()));
+            ImGui.SameLine();
+            ImGui.TextUnformatted(chosen.Name);
+            ImGui.SameLine();
+            ImGui.TextDisabled(chosen.IsArtStyle ? "Art Style" : "Simple Theme");
+        }
+        else
+        {
+            ImGui.TextDisabled("None chosen yet");
+        }
+
+        if (ThemeBrowser.SwitchHint(profile, showing) is { } hint)
+        {
+            EditorWidgets.Hint(hint);
+        }
+    }
+
+    /// <summary>All, then one filter per family <paramref name="catalog"/> has (with its count); they wrap rather than run off.</summary>
+    private void DrawThemeFilters(IReadOnlyCollection<ProfileThemePreset> catalog)
     {
         using var id = ImRaii.PushId("ThemeFilters");
-        var families = ThemeBrowser.Families(ProfileThemePresets.All);
+        var families = ThemeBrowser.Families(catalog);
         var style = ImGui.GetStyle();
         var available = ImGui.GetContentRegionAvail().X;
         var rowUsed = 0f;
 
-        Filter("All", null, ProfileThemePresets.All.Length);
+        Filter("All", null, catalog.Count);
         foreach (var (family, count) in families)
         {
             Filter(ThemeBrowser.FamilyLabel(family), family, count);

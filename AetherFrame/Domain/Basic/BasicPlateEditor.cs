@@ -574,24 +574,39 @@ internal sealed class BasicPlateEditor
     // ---------------------------------------------------------------- theme
 
     /// <summary>
-    /// Applies a theme preset: the background's colors (an image background keeps its image), and
-    /// the matching text color for every Basic text element (opacity kept) — except a character name
-    /// with a custom color, which keeps it (see <see cref="BasicNameColor"/>). Only copies values —
-    /// every one stays editable, and nothing references the preset afterwards. An Art Style also
-    /// places its pieces (<see cref="ApplyStylePieces"/>): its background artwork covers the Plate's
-    /// own background, image included, until it is taken away (under Frame &amp; Decorations, or with
-    /// Style's Remove the Artwork); the background itself is kept under it.
+    /// Chooses a style (issue #118): an Art Style or a Simple Theme, each its own system with its
+    /// own remembered choice (<see cref="PlateStyle"/>). Only copies values: every one stays
+    /// editable, and nothing references the preset afterwards.
+    /// <list type="bullet">
+    /// <item>Every Basic text element takes the style's matching color (opacity kept), except a
+    /// character name with a custom color, which keeps it (see <see cref="BasicNameColor"/>).</item>
+    /// <item>An Art Style places its pieces (<see cref="ApplyStylePieces"/>) and leaves the Plate's
+    /// own background as it is: its background artwork covers it, image included, and it is kept
+    /// under the artwork for the Simple Theme to come back to (Style's Pattern and Customize
+    /// Background show it again wherever the artwork is taken away).</item>
+    /// <item>A Simple Theme takes away the Art Style's own pieces and sets the background's colors,
+    /// as a theme always has (an image background keeps its image). Except when coming back from
+    /// an Art Style to the Simple Theme last chosen on this Plate: the background then stays exactly
+    /// as it was left, pattern and colors included.</item>
+    /// <item>The choice is remembered for its own system, and the style left stays its own system's
+    /// choice, so going back to either finds it.</item>
+    /// </list>
     /// </summary>
     internal void ApplyTheme(ProfileThemePreset preset)
     {
         var previousTheme = AdventurePlateClassicLayout.ResolveTheme(Profile);
-        Profile.NormalizeLegacyBackground();
-        var background = Profile.Background!;
-        var keepImage = background.HasImage;
-        preset.ApplyTo(background);
-        if (keepImage)
+        var artStyleInUse = PlateStyle.ArtStyleInUse(Profile);
+        var returning = !preset.IsArtStyle && artStyleInUse is not null && PlateStyle.ChosenSimpleTheme(Profile)?.Id == preset.Id;
+        if (!preset.IsArtStyle && !returning)
         {
-            background.Mode = ProfileBackgroundMode.Image;
+            Profile.NormalizeLegacyBackground();
+            var background = Profile.Background!;
+            var keepImage = background.HasImage;
+            preset.ApplyTo(background);
+            if (keepImage)
+            {
+                background.Mode = ProfileBackgroundMode.Image;
+            }
         }
 
         foreach (var element in Profile.Elements)
@@ -609,8 +624,29 @@ internal sealed class BasicPlateEditor
             }
         }
 
-        ApplyStylePieces(ProfileThemePresets.Find(Settings.ThemeId), preset);
+        ApplyStylePieces(artStyleInUse, preset);
+
+        // The style being left stays its system's choice. A Plate saved before the two systems, and
+        // the starter theme, hold it only as the style in use; writing it also replaces a choice an
+        // earlier build left behind when it changed the style in use.
+        if (preset.IsArtStyle && PlateStyle.SimpleThemeInUse(Profile) is { } leavingTheme)
+        {
+            Settings.SimpleThemeId = leavingTheme.Id;
+        }
+        else if (!preset.IsArtStyle && artStyleInUse is not null)
+        {
+            Settings.ArtStyleId = artStyleInUse.Id;
+        }
+
         Settings.ThemeId = preset.Id;
+        if (preset.IsArtStyle)
+        {
+            Settings.ArtStyleId = preset.Id;
+        }
+        else
+        {
+            Settings.SimpleThemeId = preset.Id;
+        }
     }
 
     /// <summary>
