@@ -3,14 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
+using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.FontIdentifier;
+using Dalamud.Interface.GameFonts;
 using Dalamud.Interface.ManagedFontAtlas;
 
 namespace AetherFrame.Services.Fonts;
 
 /// <summary>
-/// Owns AetherFrame's own isolated <see cref="IFontAtlas"/> and hands out cached
+/// Owns AetherFrame's own isolated <see cref="IFontAtlas"/>es (one per family) and hands out cached
 /// <see cref="IFontHandle"/>s so <c>ProfileRenderer</c> can draw a <see cref="TextProfileElement"/>
 /// crisply at its own requested size, without ever visibly stretching a smaller rasterized font
 /// up to get there — and without the startup cost of building every size anyone might ever ask
@@ -49,35 +54,36 @@ namespace AetherFrame.Services.Fonts;
 /// </list>
 ///
 /// Everything else — an unusual zoom level, a size nobody anticipated — is built lazily, once,
-/// the first time <see cref="GetHandle"/> actually needs it, and reused forever after via the
-/// same cache. Every batch of more-than-one handle creation (both eager-warm paths above) is
-/// wrapped in <see cref="IFontAtlas.SuppressAutoRebuild"/> so it costs one atlas rebuild instead
-/// of one per handle — see that method's own doc, which recommends exactly this for "creating
-/// multiple new handles."
+/// the first time <see cref="GetHandle"/> actually needs it, and reused after via the same cache.
+/// Every batch of more-than-one handle creation (both eager-warm paths above) holds back each
+/// atlas's rebuilds (<see cref="IFontAtlas.SuppressAutoRebuild"/>), so it costs one rebuild per
+/// atlas instead of one per handle.
 ///
-/// What any of this costs is bounded by <see cref="FontTierPolicy"/>: every handle in the atlas
-/// is re-rasterized on every rebuild, so each family only builds tiers up to the size its glyph
-/// set can afford (a request above that uses the largest allowed tier, as a request above the
-/// ladder's top always has), and the cache evicts by estimated surface as well as by handle
-/// count — see <see cref="EvictExcess"/>. The bundled families keep every glyph their TTFs map.
+/// Each family's faces live in an atlas of their own, and what is kept and let go is
+/// <see cref="FontHandleCache{TAtlas, THandle}"/>'s rule (issue #117): an atlas rebuild
+/// re-rasterizes every face in that atlas, so with one shared atlas every font tried made the next
+/// one slower to appear. Each family only builds tiers up to the size its glyph set can afford
+/// (<see cref="FontTierPolicy"/>; a request above that uses the largest allowed tier, as a request
+/// above the ladder's top always has). The bundled families keep every glyph their TTFs map.
+///
+/// A symbol a font has no glyph for (a ♥ in AetherFrame Sans, say) is drawn from the bundled symbol
+/// faces instead of as "?" (issue #121, <see cref="SymbolFallback"/>): the symbols the session's
+/// Plates use are merged into every font, and taking a new one builds the fonts again with it.
 /// </summary>
 internal sealed class ProfileFontService : IDisposable
 {
-    // Bounds how many distinct (family, tier, bold, italic) font handles are kept alive at once.
-    // Steady-state usage (CommonEditorSizes for a handful of combos, plus whatever a session
-    // actually zooms/views) sits well below this. Eviction is LRU (see accessOrder) so it's the
-    // least-recently-USED entry that goes, not simply the oldest-built one.
-    private const int MaxCachedHandles = 160;
+    private readonly FontHandleCache<IFontAtlas, IFontHandle> cache;
 
-    private readonly IFontAtlas atlas;
-    private readonly Dictionary<FontKey, IFontHandle> handles = new();
-    private readonly LinkedList<FontKey> accessOrder = new();
-    private readonly Dictionary<FontKey, LinkedListNode<FontKey>> accessNodes = new();
+    // The font list's previews (issue #116, GetPreview), separate again: each family's one small
+    // preview face has an atlas of its own, apart from the Plate's, built with only the sample's
+    // glyphs, so browsing the list never rebuilds a font a Plate draws with.
+    private readonly FontPreviews<IFontAtlas, IFontHandle> previews;
+
+    // Read on the atlases' build threads, several of which can run at once (one per family).
     private readonly Dictionary<string, byte[]> embeddedFontBytesCache = new();
-
-    // The summed FontTierPolicy.EstimatedSurfacePixels of every cached handle, kept in step with
-    // `handles` so EvictExcess can bound the atlas by surface without walking the cache.
-    private long cachedSurfacePixels;
+    private readonly Dictionary<string, FontVerticalMetrics> faceMetricsCache = new();
+    private readonly object embeddedFontBytesLock = new();
+    private readonly SymbolFallback symbols;
 
     private static readonly object PrewarmedMarker = new();
 
@@ -89,19 +95,46 @@ internal sealed class ProfileFontService : IDisposable
 
     internal ProfileFontService()
     {
-        atlas = DalamudServices.PluginInterface.UiBuilder.CreateFontAtlas(
-            FontAtlasAutoRebuildMode.Async, isGlobalScaled: false, "AetherFrame.ProfileFonts");
+        cache = new FontHandleCache<IFontAtlas, IFontHandle>(new DalamudFontBackend(this), static () => Environment.TickCount64);
+        symbols = new SymbolFallback(GetEmbeddedFontBytes);
 
         // "A sensible set of common editor sizes", and only for the family new text actually
         // uses. Dalamud Default is deliberately NOT warmed here — it can carry a much larger
         // glyph set (CJK, game symbols, icons), and every legacy profile that actually uses it
         // gets it warmed on load instead (see EnsurePrewarmed); one that doesn't use it never
         // pays for it at all.
-        using (atlas.SuppressAutoRebuild())
+        using (cache.Batch())
         {
             WarmSizes(ProfileFontFamilies.AetherFrameSans, bold: false, italic: false, FontTierPolicy.CommonEditorSizes);
         }
+
+        // Nothing is built for the font list until it shows a row.
+        previews = new FontPreviews<IFontAtlas, IFontHandle>(new DalamudFontBackend(this, forPreviews: true), static () => Environment.TickCount64, static () => ImGui.GetFrameCount());
     }
+
+    /// <summary>What the cache holds and how long new fonts took to appear (<c>/af fonts</c>).</summary>
+    internal FontCacheStats Stats => cache.Stats;
+
+    /// <summary>What <c>/af fonts</c> prints: <see cref="Stats"/>, and the symbols drawn from the fallback.</summary>
+    internal string Describe() => cache.Stats.Describe() + " " + symbols.Describe();
+
+    /// <summary>
+    /// For characters a built font has no glyph for: takes those the symbol fallback draws, so every
+    /// font is built with them (issue #121), building the fonts again when any is new. Render thread.
+    /// </summary>
+    internal void TakeSymbols(ReadOnlySpan<char> missing)
+    {
+        if (symbols.Take(missing))
+        {
+            cache.RebuildAll();
+        }
+    }
+
+    /// <summary>Whether fonts are built (or being built) with <paramref name="codepoint"/> from the symbol fallback.</summary>
+    internal bool HoldsSymbol(int codepoint) => symbols.Holds(codepoint);
+
+    /// <summary>Whether a font without <paramref name="codepoint"/> draws it all the same, from the symbol fallback.</summary>
+    internal bool CanDrawSymbol(int codepoint) => symbols.CanStillDraw(codepoint);
 
     /// <summary>
     /// Gets (building and caching on first use) a font handle for the given family at
@@ -130,46 +163,40 @@ internal sealed class ProfileFontService : IDisposable
     {
         var descriptor = ProfileFontCatalog.Resolve(familyId);
         var (effectiveBold, effectiveItalic) = FontLibrary.EffectiveStyle(descriptor.Id, bold, italic, descriptor.SupportsBold, descriptor.SupportsItalic);
-
         var tierIndex = FontTierPolicy.FindTierIndex(descriptor.Id, requestedPixelSize);
 
-        var idealKey = new FontKey(descriptor.Id, FontTierPolicy.SizeLadder[tierIndex], effectiveBold, effectiveItalic);
-        var idealHandle = GetOrCreateHandle(idealKey, descriptor);
-        if (idealHandle.Available)
-        {
-            return idealHandle;
-        }
-
-        // The ideal tier is still building (its atlas rebuild hasn't completed yet). Rather than
-        // use it anyway — Push() would silently fall back to whatever font is currently active,
-        // which AddText would then stretch to the requested size, exactly the blur bug this
-        // service exists to avoid — look for an already-available LARGER tier of the same
-        // family/style. Only ever searches upward (never a smaller tier): drawing at the
-        // requested size from a bigger-than-needed raster is a downscale, not the upscale that
-        // causes visible blur. Only considers tiers already built — never builds more just to
-        // search, since that would defeat the point of building lazily — and only up to the
-        // family's largest allowed tier, above which nothing is ever built.
-        var maxTierIndex = FontTierPolicy.MaxTierIndex(descriptor.Id);
-        for (var i = tierIndex + 1; i <= maxTierIndex; i++)
-        {
-            var fallbackKey = new FontKey(descriptor.Id, FontTierPolicy.SizeLadder[i], effectiveBold, effectiveItalic);
-            if (handles.TryGetValue(fallbackKey, out var fallback))
-            {
-                TouchAccess(fallbackKey);
-                if (fallback.Available)
-                {
-                    return fallback;
-                }
-            }
-        }
-
-        // Nothing in this family/style is ready at or above the requested size yet — true only
-        // for a cold-start frame before the ideal tier just kicked off above has finished
-        // building. Dalamud's own default font handle is (for all practical purposes) always
-        // already available, so this is the only path that can still show a transient upscale,
-        // and only ever for a frame or two the first time a given size is ever requested.
-        return DalamudServices.PluginInterface.UiBuilder.DefaultFontHandle;
+        // The ideal tier, or an already-built larger one of the same family and style (a
+        // downscale, never the blurry upscale this service exists to avoid). Nothing ready yet is
+        // true only for the frames before this family's first tier finishes building; then
+        // Dalamud's own default font handle is returned, which callers treat as "not yet"
+        // (see the isColdStartFallback overload).
+        return cache.Get(descriptor.Id, tierIndex, effectiveBold, effectiveItalic)
+            ?? DalamudServices.PluginInterface.UiBuilder.DefaultFontHandle;
     }
+
+    /// <summary>
+    /// The font list's preview face for <paramref name="familyId"/> at <paramref name="sizePx"/>
+    /// (<see cref="FontPreview.Size"/>; issue #116): its Regular face, built with only
+    /// <see cref="FontPreview.GlyphRanges"/>, or null while it builds or waits its turn (see
+    /// <see cref="FontPreviews{TAtlas, THandle}"/>). For a row on screen only. The framework thread only.
+    /// </summary>
+    internal IFontHandle? GetPreview(string familyId, float sizePx) => previews.Get(familyId, sizePx);
+
+    /// <summary>
+    /// Dalamud Default's preview face: Dalamud's default font, as Dalamud builds it, with only
+    /// <paramref name="glyphs"/>. The toolkit's AddDalamudDefaultFont keeps to the glyph ranges it is
+    /// given only when it falls back to AXIS. The default font is a SingleFontSpec, whether the player
+    /// chose a font in Dalamud's settings or not, which it builds with the spec's own ranges, every
+    /// glyph of the font, then adds the game's symbols to a font other than AXIS and, for a player
+    /// using Chinese or Korean (or once they type it), those languages' glyphs. So the spec is built
+    /// here with the preview's ranges instead. A default of another kind, or one naming Dalamud's
+    /// default itself, is AXIS, as Dalamud falls back to. Called on the atlas's build thread, where
+    /// Dalamud reads the default font too.
+    /// </summary>
+    private static ImFontPtr AddDalamudDefaultPreview(IFontAtlasBuildToolkitPreBuild toolkit, float sizePx, ushort[] glyphs) =>
+        DalamudServices.PluginInterface.UiBuilder.DefaultFontSpec is SingleFontSpec { FontId: not DalamudDefaultFontAndFamilyId } spec
+            ? (spec with { SizePx = sizePx, GlyphRanges = glyphs }).AddToBuildToolkit(toolkit)
+            : toolkit.AddGameGlyphs(new GameFontStyle(GameFontFamily.Axis, sizePx), glyphs, default);
 
     /// <summary>
     /// Ensures every distinct (family, bold, italic) combination actually used by
@@ -186,8 +213,19 @@ internal sealed class ProfileFontService : IDisposable
 
         prewarmedProfiles.AddOrUpdate(profile, PrewarmedMarker);
 
-        // One rebuild for the whole profile's worth of newly-needed handles, not one per handle.
-        using var suppression = atlas.SuppressAutoRebuild();
+        // The symbols the Plate's text uses, taken before its fonts are built so they are built with
+        // them once (issue #121); whatever else a font turns out to lack is taken as it is drawn.
+        var tookSymbols = false;
+        foreach (var element in profile.Elements)
+        {
+            if (element is TextProfileElement symbolText)
+            {
+                tookSymbols |= symbols.Take(symbolText.GetDisplayText());
+            }
+        }
+
+        // One rebuild per atlas for the whole profile's worth of newly-needed handles, not one per handle.
+        using var batch = cache.Batch();
 
         var warmedCombos = new HashSet<(string FamilyId, bool Bold, bool Italic)>();
 
@@ -213,24 +251,26 @@ internal sealed class ProfileFontService : IDisposable
             // allowed tier, for a size beyond it), so what the profile actually contains is never
             // left to the lazy/on-demand path alone.
             var ownTier = FontTierPolicy.SizeLadder[FontTierPolicy.FindTierIndex(descriptor.Id, text.FontSize)];
-            GetOrCreateHandle(new FontKey(descriptor.Id, ownTier, effectiveBold, effectiveItalic), descriptor);
+            cache.GetOrCreate(new FontCacheKey(descriptor.Id, ownTier, effectiveBold, effectiveItalic));
+        }
+
+        if (tookSymbols)
+        {
+            // Every other loaded font, with the new symbols; the batch's own atlases rebuild with them
+            // as it ends, so none builds twice.
+            cache.RebuildAll();
         }
     }
 
     public void Dispose()
     {
-        foreach (var handle in handles.Values)
+        previews.Dispose();
+        cache.Dispose();
+        lock (embeddedFontBytesLock)
         {
-            handle.Dispose();
+            embeddedFontBytesCache.Clear();
+            faceMetricsCache.Clear();
         }
-
-        handles.Clear();
-        accessOrder.Clear();
-        accessNodes.Clear();
-        cachedSurfacePixels = 0;
-        embeddedFontBytesCache.Clear();
-
-        atlas.Dispose();
     }
 
     /// <summary>Kicks off building the given sizes for one (family, bold, italic) combo. Safe to
@@ -244,53 +284,24 @@ internal sealed class ProfileFontService : IDisposable
 
         foreach (var size in sizes)
         {
-            GetOrCreateHandle(new FontKey(descriptor.Id, size, effectiveBold, effectiveItalic), descriptor);
+            cache.GetOrCreate(new FontCacheKey(descriptor.Id, size, effectiveBold, effectiveItalic));
         }
     }
 
-    private IFontHandle GetOrCreateHandle(FontKey key, ProfileFontFamilyDescriptor descriptor)
-    {
-        if (handles.TryGetValue(key, out var existing))
-        {
-            TouchAccess(key);
-            return existing;
-        }
-
-        var handle = BuildHandle(descriptor, key.SizePx, key.Bold, key.Italic);
-        handles[key] = handle;
-        accessNodes[key] = accessOrder.AddLast(key);
-        cachedSurfacePixels += FontTierPolicy.EstimatedSurfacePixels(key.FamilyId, key.SizePx);
-
-        EvictExcess();
-
-        return handle;
-    }
-
-    /// <summary>Moves a key to the most-recently-used end, for LRU eviction. Re-links the key's
-    /// existing node rather than allocating a new one: this runs once or twice per visible text
-    /// element per frame.</summary>
-    private void TouchAccess(FontKey key)
-    {
-        if (!accessNodes.TryGetValue(key, out var node))
-        {
-            return;
-        }
-
-        accessOrder.Remove(node);
-        accessOrder.AddLast(node);
-    }
-
-    private IFontHandle BuildHandle(ProfileFontFamilyDescriptor descriptor, float sizePx, bool bold, bool italic) =>
+    /// <summary>A face of <paramref name="descriptor"/>'s family: with every glyph it maps for a Plate, or with only
+    /// <paramref name="previewGlyphs"/> for the font list's preview of it (issue #116).</summary>
+    private IFontHandle BuildHandle(IFontAtlas atlas, ProfileFontFamilyDescriptor descriptor, float sizePx, bool bold, bool italic, ushort[]? previewGlyphs = null) =>
         atlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
         {
             // The bundled faces keep every glyph their TTF maps, as 0.1.5 built them (see
-            // FontTierPolicy.GlyphRanges); what bounds a tier is its size cap, not its glyphs.
-            var config = new SafeFontConfig { SizePx = sizePx, GlyphRanges = FontTierPolicy.GlyphRanges(descriptor.Id) };
+            // FontTierPolicy.GlyphRanges); what bounds a tier is its size cap, not its glyphs. A
+            // preview holds only its sample's, Dalamud Default's included.
+            var config = new SafeFontConfig { SizePx = sizePx, GlyphRanges = previewGlyphs ?? FontTierPolicy.GlyphRanges(descriptor.Id) };
             var resourceName = GetEmbeddedResourceName(descriptor.Id, bold, italic);
 
             toolkit.Font = resourceName is not null
                 ? toolkit.AddFontFromMemory(GetEmbeddedFontBytes(resourceName), config, resourceName)
-                : toolkit.AddDalamudDefaultFont(sizePx);
+                : previewGlyphs is null ? toolkit.AddDalamudDefaultFont(sizePx) : AddDalamudDefaultPreview(toolkit, sizePx, previewGlyphs);
 
             // A library family draws a character it lacks (an accented letter in a display face,
             // say) in AetherFrame Sans of the same style, rather than as "?": ImGui merges only the
@@ -298,10 +309,50 @@ internal sealed class ProfileFontService : IDisposable
             if (FontTierPolicy.UsesFallback(descriptor.Id))
             {
                 var fallbackName = FaceResourceName("PTSans", bold, italic);
-                var fallback = new SafeFontConfig { SizePx = sizePx, GlyphRanges = FontTierPolicy.FallbackGlyphRanges, MergeFont = toolkit.Font };
+                var fallback = new SafeFontConfig { SizePx = sizePx, GlyphRanges = previewGlyphs ?? FontTierPolicy.FallbackGlyphRanges, MergeFont = toolkit.Font };
                 toolkit.AddFontFromMemory(GetEmbeddedFontBytes(fallbackName), fallback, fallbackName);
             }
+
+            // The session's symbols (issue #121), from the symbol faces, for those the font lacks:
+            // ImGui merges only what it doesn't map, each face sized so its em is the font's and
+            // drawn on the font's baseline. Read on every build, so a rebuild adds the new ones;
+            // none at all while no Plate uses a symbol, and the font builds exactly as before.
+            var merges = symbols.Merges;
+            if (merges.Count > 0)
+            {
+                var em = FaceMetrics(resourceName ?? FaceResourceName("PTSans", false, false)).EmPixels(sizePx);
+                foreach (var merge in merges)
+                {
+                    var symbolConfig = new SafeFontConfig { SizePx = merge.Metrics.SizeForEm(em), GlyphRanges = merge.GlyphRanges, MergeFont = toolkit.Font };
+                    toolkit.AddFontFromMemory(GetEmbeddedFontBytes(merge.Resource), symbolConfig, merge.Resource);
+                }
+            }
         }));
+
+    /// <summary>
+    /// An embedded face's vertical metrics, read once. Dalamud Default's real face is unknowable
+    /// here (see <see cref="FontTierPolicy"/>), so the symbols merged into it are sized against
+    /// AetherFrame Sans's: about right for any text face. Called on the atlases' build threads.
+    /// </summary>
+    private FontVerticalMetrics FaceMetrics(string resourceName)
+    {
+        lock (embeddedFontBytesLock)
+        {
+            if (faceMetricsCache.TryGetValue(resourceName, out var cached))
+            {
+                return cached;
+            }
+        }
+
+        // An embedded face always has them; a unit em of a unit box would size symbols as the font size.
+        var metrics = TrueTypeTables.TryReadVerticalMetrics(GetEmbeddedFontBytes(resourceName), out var read) ? read : new FontVerticalMetrics(1, 1, 0);
+        lock (embeddedFontBytesLock)
+        {
+            faceMetricsCache[resourceName] = metrics;
+        }
+
+        return metrics;
+    }
 
     /// <summary>Maps a curated family id + real style to its embedded TTF's logical resource
     /// name (see the AetherFrame.csproj Fonts glob), or null for <see cref="ProfileFontFamilies.DalamudDefault"/>
@@ -329,48 +380,70 @@ internal sealed class ProfileFontService : IDisposable
     }
 
     /// <summary>Reads an embedded font's bytes once and reuses them for every ladder tier built
-    /// from it, rather than re-reading the manifest resource stream per tier.</summary>
+    /// from it, rather than re-reading the manifest resource stream per tier. Called on the
+    /// atlases' build threads.</summary>
     private byte[] GetEmbeddedFontBytes(string resourceName)
     {
-        if (embeddedFontBytesCache.TryGetValue(resourceName, out var cached))
+        lock (embeddedFontBytesLock)
         {
-            return cached;
-        }
-
-        var assembly = Assembly.GetExecutingAssembly();
-        using var stream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Embedded font resource '{resourceName}' was not found.");
-
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        var bytes = memory.ToArray();
-
-        embeddedFontBytesCache[resourceName] = bytes;
-        return bytes;
-    }
-
-    /// <summary>LRU eviction once the cache exceeds <see cref="MaxCachedHandles"/> or its
-    /// estimated glyph surface exceeds <see cref="FontTierPolicy.AtlasBudgetPixels"/>: the
-    /// least-recently-used entry goes, not simply the oldest-built one, so a heavily-reused
-    /// common tier is never evicted just because it happened to be built early. The entry just
-    /// added (the most recent) is never evicted, whatever it costs.</summary>
-    private void EvictExcess()
-    {
-        while (accessOrder.Count > 1
-            && (accessOrder.Count > MaxCachedHandles || cachedSurfacePixels > FontTierPolicy.AtlasBudgetPixels)
-            && accessOrder.First is { } lruNode)
-        {
-            var lruKey = lruNode.Value;
-            accessOrder.RemoveFirst();
-            accessNodes.Remove(lruKey);
-
-            if (handles.Remove(lruKey, out var evicted))
+            if (embeddedFontBytesCache.TryGetValue(resourceName, out var cached))
             {
-                cachedSurfacePixels -= FontTierPolicy.EstimatedSurfacePixels(lruKey.FamilyId, lruKey.SizePx);
-                evicted.Dispose();
+                return cached;
             }
+
+            var assembly = Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Embedded font resource '{resourceName}' was not found.");
+
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            var bytes = memory.ToArray();
+
+            embeddedFontBytesCache[resourceName] = bytes;
+            return bytes;
         }
     }
 
-    private readonly record struct FontKey(string FamilyId, float SizePx, bool Bold, bool Italic);
+    /// <summary>Dalamud's side of the cache: one async-rebuilding atlas per family, outside the
+    /// global scale (Plate text is sized by the Plate, not the UI). For the font list's previews
+    /// (<paramref name="forPreviews"/>), atlases of their own, whose faces hold only the sample's glyphs.</summary>
+    private sealed class DalamudFontBackend(ProfileFontService owner, bool forPreviews = false) : IFontAtlasBackend<IFontAtlas, IFontHandle>
+    {
+        public IFontAtlas CreateAtlas(string familyId) =>
+            DalamudServices.PluginInterface.UiBuilder.CreateFontAtlas(FontAtlasAutoRebuildMode.Async, isGlobalScaled: false, $"AetherFrame.{(forPreviews ? "FontPreviews" : "ProfileFonts")}.{familyId}");
+
+        public IFontHandle CreateHandle(IFontAtlas atlas, FontCacheKey key) =>
+            owner.BuildHandle(atlas, ProfileFontCatalog.Resolve(key.FamilyId), key.SizePx, key.Bold, key.Italic, forPreviews ? FontPreview.GlyphRanges : null);
+
+        public bool IsAvailable(IFontHandle handle) => handle.Available;
+
+        public void WhenAvailable(IFontHandle handle, Action available) =>
+            _ = handle.WaitAsync().ContinueWith(
+                task =>
+                {
+                    if (task.IsCompletedSuccessfully)
+                    {
+                        available();
+                    }
+                    else
+                    {
+                        _ = task.Exception; // disposed before it was built: observed, so it isn't logged as an error
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+        public IDisposable SuppressRebuild(IFontAtlas atlas) => atlas.SuppressAutoRebuild();
+
+        public void Rebuild(IFontAtlas atlas) => _ = atlas.BuildFontsAsync().ContinueWith(
+            task => _ = task.Exception, // disposed or failed: observed; its faces keep what they were last built with
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        public void DisposeHandle(IFontHandle handle) => handle.Dispose();
+
+        public void DisposeAtlas(IFontAtlas atlas) => atlas.Dispose();
+    }
 }

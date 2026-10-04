@@ -98,8 +98,13 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     // Which category is shown, and the live view's zoom: view state only, never part of the Plate.
     private readonly BasicEditorNavigation navigation = new();
 
-    // Reused by the preview's click-to-navigate hit test (render thread only).
-    private readonly List<ProfileElement> previewHitBuffer = new(ProfileDocument.MaxElementCount);
+    // The live view's paint sequence, for clicks on sections and Components and the selected
+    // Component's outline (issue #115; render thread only).
+    private readonly List<Domain.Components.PaintStep> previewPlanBuffer = new(ProfileDocument.MaxElementCount + 64);
+    private readonly List<Vector2[]> previewOutlineBuffer = new(8);
+
+    // The Component slot to scroll into view once, after a click selected its Component on the live view.
+    private Domain.Components.PlateComponentKind? revealComponentSlot;
     private bool previewDragged;
 
     // Requested from inside a child window; opened and drawn at window level, where the popup's ID
@@ -213,7 +218,12 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         // Drawn unconditionally so an in-progress file pick isn't stranded if the Plate
         // becomes unavailable (e.g. it's deleted from My Plates) while the dialog is open.
-        fileDialogManager.Draw();
+        // Hidden while the eyedropper picks (issue #120), and back as it was once the pick ends: it
+        // is Dalamud's window, not AetherFrame's, so on another monitor a pick's click would reach it.
+        if (!ScreenEyedropper.ClaimsInput)
+        {
+            fileDialogManager.Draw();
+        }
 
         // Before the open Plate is read: a Plate action that opens another Plate (Save as New
         // Plate, Open another Plate, New Plate) takes effect before anything is drawn.
@@ -365,7 +375,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         var scale = ImGuiHelpers.GlobalScale;
         using var rounding = ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 6f * scale);
         using var background = ImRaii.PushColor(ImGuiCol.ChildBg, RailBackground);
-        using var child = ImRaii.Child("##BasicNavigator", size, false);
+        using var child = AetherChild.Begin("##BasicNavigator", size, false);
         if (!child.Success)
         {
             return;
@@ -526,7 +536,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// </summary>
     private void DrawInspector(ProfileDocument profile, Vector2 size, bool withCategoryStrip)
     {
-        using var frame = ImRaii.Child("##BasicInspector", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        using var frame = AetherChild.Begin("##BasicInspector", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         if (!frame.Success)
         {
             return;
@@ -548,7 +558,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         ImGui.Separator();
 
-        using var body = ImRaii.Child("##BasicInspectorBody", new Vector2(-1f, -1f), false);
+        using var body = AetherChild.Begin("##BasicInspectorBody", new Vector2(-1f, -1f), false);
         if (!body.Success)
         {
             return;
@@ -572,6 +582,14 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             case BasicEditorCategory.Message:
                 DrawMessageCategory(profile);
                 break;
+        }
+
+        // The page that holds the clicked Component's slot has been drawn once: if the slot wasn't on
+        // it (its group is hidden, or the page returned early), the request lapses rather than
+        // scrolling the page later, when the slot comes back for some other reason.
+        if (revealComponentSlot is { } reveal && BasicEditorView.CategoryOf(reveal) == category)
+        {
+            revealComponentSlot = null;
         }
 
         ImGui.Spacing();
@@ -717,11 +735,12 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// The live preview: the shared renderer's finished rendering — exactly what the Plate Viewer
     /// shows, with no placeholders, guides, or other editor-only overlays. Its toolbar only changes
     /// how large the preview is drawn (Fit, 150%, 200%); the Plate itself is never touched.
-    /// Clicking a section opens its category; dragging while zoomed pans.
+    /// Clicking a section opens its category, clicking a Component also selects it (its slot is
+    /// brought into view and it is outlined); dragging while zoomed pans.
     /// </summary>
     private void DrawPreview(ProfileDocument profile, Vector2 size)
     {
-        using var outer = ImRaii.Child("##BasicPreviewArea", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        using var outer = AetherChild.Begin("##BasicPreviewArea", size, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         if (!outer.Success)
         {
             return;
@@ -731,7 +750,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         var zoomed = navigation.Zoom != PreviewZoom.Fit;
         var flags = zoomed ? ImGuiWindowFlags.HorizontalScrollbar : ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
-        using var child = ImRaii.Child("##BasicPreview", new Vector2(-1f, -1f), true, flags);
+        using var child = AetherChild.Begin("##BasicPreview", new Vector2(-1f, -1f), true, flags);
         if (!child.Success)
         {
             return;
@@ -763,6 +782,25 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         previewArt.Begin(renderResources);
         ProfileRenderer.Draw(ImGui.GetWindowDrawList(), profile, canvasOrigin, scale, renderResources, ProfileRenderOptions.Finished);
         previewArt.End(renderResources);
+
+        // The one editor overlay on the live view: the selected Component's outline, each place it
+        // is drawn (every corner of a Corner Ornament), so it's clear what the slot's controls change.
+        if (editorSession.SelectedComponentId is { } selectedId && Domain.Components.PlateComponentEditor.Find(profile, selectedId) is { } selected)
+        {
+            ProfileRenderer.BuildPaintPlan(profile, renderResources, ProfileRenderOptions.Finished, previewPlanBuffer);
+            CanvasHitTest.Outlines(previewPlanBuffer, selected, previewOutlineBuffer);
+            var drawList = ImGui.GetWindowDrawList();
+            var color = ImGui.GetColorU32(EditorWidgets.AccentColor);
+            foreach (var corners in previewOutlineBuffer)
+            {
+                drawList.AddQuad(
+                    canvasOrigin + (corners[0] * scale), canvasOrigin + (corners[1] * scale), canvasOrigin + (corners[2] * scale), canvasOrigin + (corners[3] * scale),
+                    color, 2f);
+            }
+
+            previewOutlineBuffer.Clear();
+            previewPlanBuffer.Clear();
+        }
     }
 
     /// <summary>Pan (drag while zoomed) and click-to-navigate on the preview. Never edits the Plate.</summary>
@@ -785,17 +823,43 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         var logicalMouse = (ImGui.GetMousePos() - canvasOrigin) / scale;
-        if (ImGui.IsItemDeactivated() && !previewDragged
-            && BasicEditorView.CategoryAt(profile, logicalMouse, previewHitBuffer) is { } clicked)
+        var clicked = ImGui.IsItemDeactivated() && !previewDragged;
+        var hovered = ImGui.IsItemHovered() && !ImGui.IsItemActive();
+        if (!clicked && !hovered)
         {
-            navigation.Select(clicked);
+            return;
         }
 
-        if (ImGui.IsItemHovered() && !ImGui.IsItemActive()
-            && BasicEditorView.CategoryAt(profile, logicalMouse, previewHitBuffer) is { } hovered)
+        ProfileRenderer.BuildPaintPlan(profile, renderResources, ProfileRenderOptions.Finished, previewPlanBuffer);
+        var (category, component) = BasicEditorView.TargetAt(profile, previewPlanBuffer, logicalMouse);
+        previewPlanBuffer.Clear();
+
+        if (clicked)
+        {
+            if (category is { } target)
+            {
+                navigation.Select(target);
+            }
+
+            // A Component is selected, and its slot brought into view; a section, or nothing, lets go
+            // of a selected Component. Selection never changes the Plate.
+            if (component is not null)
+            {
+                editorSession.SelectComponent(component.Id);
+                revealComponentSlot = component.Kind;
+            }
+            else if (editorSession.SelectedComponentId is not null)
+            {
+                editorSession.SelectComponent(null);
+            }
+        }
+
+        if (hovered && category is { } hoveredCategory)
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            ImGui.SetTooltip($"Edit {BasicEditorView.Title(hovered)}");
+            ImGui.SetTooltip(component is not null
+                ? $"Edit the {Domain.Components.PlateComponentEditor.KindLabel(component.Kind)} ({BasicEditorView.Title(hoveredCategory)})"
+                : $"Edit {BasicEditorView.Title(hoveredCategory)}");
         }
     }
 

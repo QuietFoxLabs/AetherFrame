@@ -52,7 +52,9 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
     private readonly Action openLibrary;
 
     // Reused per frame (render thread only) for paint-order walks, so none of them allocate.
-    private readonly List<ProfileElement> paintOrderBuffer = new(ProfileDocument.MaxElementCount);
+    // The canvas's paint sequence, for hit testing what it just drew, and a Component's outlines.
+    private readonly List<Domain.Components.PaintStep> canvasPlanBuffer = new(ProfileDocument.MaxElementCount + 64);
+    private readonly List<Vector2[]> componentOutlineBuffer = new(8);
 
     // Which element the currently-open context menu targets (read back when drawing the popup's
     // body). Right-click can be detected from two different places with two different ImGui ID
@@ -79,6 +81,10 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
 
     // Inspector tab and focus requests, raised by canvas/layers interactions.
     private bool selectElementTabPending;
+
+    // The Component selection the Inspector last brought forward, and its pending tab switch.
+    private Guid? lastInspectedComponentId;
+    private bool selectCanvasTabPending;
     private bool focusTextContentPending;
     private Guid? lastInspectedElementId;
 
@@ -210,7 +216,12 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
 
         // Drawn unconditionally so an in-progress file pick isn't stranded if the profile
         // becomes unavailable (e.g. character logs out) while the dialog is open.
-        fileDialogManager.Draw();
+        // Hidden while the eyedropper picks (issue #120), and back as it was once the pick ends: it
+        // is Dalamud's window, not AetherFrame's, so on another monitor a pick's click would reach it.
+        if (!ScreenEyedropper.ClaimsInput)
+        {
+            fileDialogManager.Draw();
+        }
 
         // Before the open Plate is read: a Plate action that opens another Plate (Save as New
         // Plate, Open another Plate, New Plate) takes effect before anything is drawn.
