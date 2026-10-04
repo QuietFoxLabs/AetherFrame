@@ -101,7 +101,9 @@ rows, and its drawing's bounds), October 2, 2026, at the owner's request:
   than plain rail, more so on a canvas of another shape. Honeybee Garden's Plate Frame has plain rod
   on its side rails, but only in runs shorter than the script accepts (between its beads and the
   mid-edge honey drop), so its rows are set by hand on those runs, 16 px inside, with the drop as
-  the center piece; only plain rod stretches.
+  the center piece; only plain rod stretches. Those runs are short, so on the Plate's own shape they
+  stretch about 3.2 times; the owner passed the frame in game on October 4, 2026, and
+  `FrameFittingTests` allows that for this frame alone.
 
 ## Celestial Dream / Corner Ornaments / AstrolabePivot.png — 512 x 512
 
