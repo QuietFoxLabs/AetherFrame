@@ -38,6 +38,22 @@ public sealed class AetherChildTests
     }
 
     [Fact]
+    public void EveryFileDialog_IsHiddenWhilePicking()
+    {
+        // Dalamud's file dialog is a window of its own, which AetherFrame's flags don't reach.
+        var draws = Sources()
+            .SelectMany(source => Regex.Matches(source.Text, @"\b\w*[dD]ialog\w*\.Draw\(\)")
+                .Select(match => (source.Path, Guarded: source.Text[..match.Index].Split('\n').TakeLast(3)
+                    .Any(line => line.Contains("if (!ScreenEyedropper.ClaimsInput)", System.StringComparison.Ordinal)))))
+            .ToList();
+        Assert.Equal(4, draws.Count);
+        Assert.All(draws, draw => Assert.True(draw.Guarded, draw.Path));
+        Assert.Equal(
+            draws.Count,
+            Sources().Sum(source => Regex.Matches(source.Text, @"new FileDialogManager\(\)").Count));
+    }
+
+    [Fact]
     public void NoTable_Scrolls()
     {
         // A scrolling table is a child window of ImGui's own too.
