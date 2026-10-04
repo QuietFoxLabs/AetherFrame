@@ -94,7 +94,10 @@ internal static class FontTierPolicy
     /// ligatures and even the PT faces' private-use alternates (U+F401–F6D4, Adobe's legacy
     /// codepoints, clear of the game's icon codepoints) render as they did — and what no face
     /// maps (CJK, the Dingbats such as U+2726) falls back, as it did. The atlas is bounded by the
-    /// tier caps, never by dropping glyphs.
+    /// tier caps, never by dropping glyphs. A symbol a Plate uses that no face maps (♥ in most of
+    /// them) is merged in from the symbol faces (issue #121, <see cref="SymbolFallback"/>): at most
+    /// <see cref="SymbolFallback.MaxSymbols"/> in a session, which every family's largest tier
+    /// still holds in one atlas texture.
     /// </summary>
     private static readonly ushort[] BundledGlyphRanges = [0x0001, 0xFFFE, 0];
 
