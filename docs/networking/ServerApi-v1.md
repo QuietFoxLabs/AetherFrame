@@ -2,7 +2,7 @@
 
 What `server/AetherFrame.Server` answers, and how the plugin (N2-9 and N2-10) talks to it. It carries the protocol of [ProtocolSpecification-v1.md](ProtocolSpecification-v1.md) over HTTPS and applies decision batches B and C ([DecisionRegister.md](DecisionRegister.md)). It is a draft, like the protocol, until the owner's two-player test (NETWORK2.md, section 2) has passed. `[updated 2026-10-02: the test passed on October 1, 2026 (TwoPlayerTest.md). The interface is still marked DRAFT with the protocol, whose version 1 only the owner's freeze finalises.]`
 
-**Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed. `[updated 2026-10-02: and the health check, GET /v1/health (section 3; known bug 14).]` `[updated 2026-10-03: and the check and the re-read as WebSockets, read through the player's own connection (section 2.3), with each binding's day of last read (sections 6 and 7).]`
+**Built so far** (N2-7b and N2-7c): everything below, and the image worker (section 8). A server with no worker socket configured refuses every image (`image-refused`), so a Plate with images is never served unprocessed. `[updated 2026-10-02: and the health check, GET /v1/health (section 3; known bug 14).]` `[updated 2026-10-03: and the check and the re-read as WebSockets, read through the player's own connection (section 2.3), with each binding's day of last read (sections 6 and 7).]` `[updated 2026-10-04: and the online count's presence sessions (section 2.4).]`
 
 ## 1. Transport
 
@@ -40,6 +40,7 @@ Each body is one JSON object, UTF-8, at most 4,096 bytes, with exactly the prope
 | `/v1/lookup` | 6, a lookup | `{"name": "…", "world": "…"}` | `200` a served profile (section 8.6 of the specification); `404` for every cause (C5) |
 | `/v1/image` | 7, an image | `{"name": "…", "world": "…", "marker": "mrk_…", "index": 0}` | `200` the image; `404` for every cause |
 | `/v1/report` | 8, a report | `{"name": "…", "world": "…", "reason": "…"}` | `204`; `404` when no Plate is found |
+| `/v1/presence` | 9, a presence start | `{}` | `200` `{"session": "<44 characters of base64>", "online": 12}`; see section 2.4 |
 
 - **A Lodestone id** is its decimal digits, as a string: 1 to 10 digits with no leading zero (C2).
 - **A name** is the character's full name, and **a World** its Home World's name, compared as C1 says: the name in NFC, lower case, with runs of spaces folded, and the World without regard to case.
@@ -116,6 +117,22 @@ For example `{"status":200,"body":{"profileId":"prf_…","name":"…","world":"�
 - **Piped reads** have their own 20 places, taken only once the code is valid (a check) or the binding found (a re-read). They never wait for the relay's reads, and spend none of the fetch budget's hour (C2's 60). C6's limits per key, per Lodestone id and per address apply as for a `POST`.
 - **No final message.** When the server ends a session for a violation or a deadline, no final message comes. A plugin treats that as no answer, as for a request that got none, knowing that a binding or a removal may already have been committed: its next request tells it where things stand.
 
+### 2.4 The online count
+
+Added October 4, 2026 ("The online count" in DecisionRegister.md, the one exception to R2's "no background traffic"). While a character is logged in and shares, the plugin keeps it counted, and shows the count of sharing characters online beside its version in My Plates. Its own paths: `/v1/status` is unchanged, since older plugins read it strictly.
+
+| Request | Body | Answer |
+|---|---|---|
+| `POST /v1/presence`, signed, kind 9 | `{}` | `200` `{"session": "…", "online": n}`: a new session's token (32 random bytes, in base64) and the count; `404` when the key is bound to no character or its character isn't on the allowlist; `410` when another key's check took it over; `429` past a limit; `503` when the server holds its most sessions |
+| `POST /v1/presence/beat` | the token's 32 bytes | `200` `{"online": n}`; `404` when the server doesn't know the session (never started, expired, past its hour, replaced, or the server restarted); `429` within 20 seconds of the session's last counted heartbeat, or past the address's limit |
+| `POST /v1/presence/leave` | the token's 32 bytes | `204`, whether or not the token named a session |
+
+- **A session** counts its key's character as online for 180 seconds after its start or its last counted heartbeat, and for an hour after its start at most, whatever its heartbeats. After that the plugin signs a new start, so the binding and the allowlist are checked again at least once an hour. A key holds one session: a new start replaces it. Pausing, opting out (`/v1/opt-out`) and another key's check taking the character over (C1) end the key's sessions at once.
+- **The count** is the number of distinct Lodestone ids with a session, so a character is counted once however many sessions name it. Expired sessions are swept at most every 5 seconds, so a session can count that long past its expiry. Answers carry the count alone: no name, World, id, key, time or list.
+- **Nothing is kept.** Sessions live in the server's memory only, as each token's SHA-256 with the key's identity, the Lodestone id and two times. Nothing about them is written to disk or logged, and a session's times go with it. A restart forgets every session; each plugin's next heartbeat gets `404` and it starts a new one, spread over up to 10 seconds. The server holds at most 100,000 sessions.
+- **Limits.** A start is signed like any action, so it takes one challenge from the address's 600 an hour, and is limited to 12 an hour per key and 60 an hour per address group (a tenth of the challenges). Heartbeats and leaves take no challenge, and count against a limit of their own, 120 a minute per address group (C6's groups), which no other request takes from. So players sharing a network can't use up each other's publishing, lookups or checks with heartbeats, and at the plugin's pace about 100 of them fit behind one IPv4 address.
+- **The plugin's pace.** A start when the character logs in or starts sharing, then a heartbeat every 50 to 70 seconds. After a failure it waits a minute, then twice as long each time, to 15 minutes at most. A heartbeat's `404` starts a new session once; a second `404` before a counted heartbeat counts as a failure. A logout, a pause, turning sharing off, a takeover, another character or unloading the plugin ends the session with a leave; a crash leaves it to expire. The start's signature is made under the persona session in one short operation, and every request is sent outside it, so presence never holds up a publish. Nothing is sent for a character that doesn't share, or before the player has seen what the count sends (the one-time notice in Sharing, or the consent).
+
 ## 3. Unsigned requests
 
 | Request | Answer |
@@ -124,7 +141,7 @@ For example `{"status":200,"body":{"profileId":"prf_…","name":"…","world":"�
 | `POST /v1/challenge`, empty body | `200` the 32 challenge bytes |
 | `GET /v1/health`, no body | `200` `{"worker": true, "images": true, "backup": true}`, with each `true` or `false`; `413` for a body |
 
-`GET /v1/health` is for the operator's monitor (known bug 14). The plugin never calls it, since it sends nothing in the background (R2). It answers `200` with exactly those three booleans, however they stand: a server that answers at all is up, and one that answers `5xx`, or nothing, isn't. It never carries a count, a time, a version, an identifier, an address or an error's text. It reads only what the server holds in memory, so a request does no database, worker, Lodestone or relay work, and many requests change nothing. Any other method gets `405`.
+`GET /v1/health` is for the operator's monitor (known bug 14). The plugin never calls it: its only background traffic is the online count's (section 2.4). It answers `200` with exactly those three booleans, however they stand: a server that answers at all is up, and one that answers `5xx`, or nothing, isn't. It never carries a count, a time, a version, an identifier, an address or an error's text. It reads only what the server holds in memory, so a request does no database, worker, Lodestone or relay work, and many requests change nothing. Any other method gets `405`.
 - **`worker`**: an image worker run connected to the server within the last 2 minutes. It has no grace after a start: it is `false` until the first run connects, which takes seconds on a healthy host. (`images` and `backup` do have one: they read `true` for the server's first 15 minutes, while their first results come in.) While the worker host is up, a run connects at least every 20 seconds or so (a run with no job ends after 15 seconds, and the host starts the next), so a host that starts none (known bug 13) shows here from the start, and within 2 minutes of its last run otherwise.
 - **`images`**: an image went through the worker and passed the server's check (section 8) within the last 3 hours. The server sends its own canary, a fixed 2 by 2 PNG, along a publish image's whole path, on its own timer: a minute after it starts, then every hour, and 5 minutes after a failure. The answer is discarded, and the canary touches no database, character, limit or budget. It is `false` after two failed canaries in a row (refused, or an answer the check refuses). A worker that is busy, or doesn't come in time, counts neither way, and the next canary comes 5 minutes later. Before any canary has finished, it is `true` for the server's first 15 minutes.
 - **`backup`**: the last backup run succeeded within the last 3 hours. The server runs one every hour: it writes the day's copy of the database when there isn't one yet, so there is one copy a UTC day, and deletes each copy at the first run 6 days and 22 hours or more after its day began. A run succeeds when the day's copy is in place and the deletion is done. It is `false` when the last run failed, and when no run has succeeded once the server is 15 minutes old. A failed run is simply tried again at the next one, an hour later, and the deletion runs even when the copy fails. So each copy is gone before its day plus 7 days, and so within 7 days of its writing, through any restart shorter than an hour (D1).
@@ -142,6 +159,7 @@ For example `{"status":200,"body":{"profileId":"prf_…","name":"…","world":"�
 | Request | Largest body |
 |---|---|
 | `challenge`, `health` | 0 bytes |
+| a presence heartbeat or leave | 32 bytes |
 | an action | 2 + 454 + 4,096 = 4,552 bytes |
 | `publish` | 2 + 454 + 4 + 1,048,576 + 1 + 8 × 4 + 41,943,040 = 42,992,109 bytes; the bound is 43,000,000 |
 
@@ -151,7 +169,7 @@ A WebSocket (section 2.3) has its own bounds: a first message of at most 4,552 b
 
 ## 6. What the server keeps
 
-Decision batch C, C7, says it: for each binding, the Lodestone id, the name and World, the key's identity and the profile id, the latest revision's document, served profile and images, and N2's revision records; and reports, for 30 days or until the operator acts. It keeps no lookup log, no address, and no copy of a Lodestone page. The health check keeps nothing either: its three signals live in memory only, the canary's image is discarded, and a request to it writes nothing. A day number is kept only while a binding's Lodestone page shows "not found", for C1's two re-reads a day apart. `[updated 2026-10-03: and, for each binding, the day number (UTC) of its last successful Lodestone read, for the 30 days of section 7.]`
+Decision batch C, C7, says it: for each binding, the Lodestone id, the name and World, the key's identity and the profile id, the latest revision's document, served profile and images, and N2's revision records; and reports, for 30 days or until the operator acts. It keeps no lookup log, no address, and no copy of a Lodestone page. The health check keeps nothing either: its three signals live in memory only, the canary's image is discarded, and a request to it writes nothing. A day number is kept only while a binding's Lodestone page shows "not found", for C1's two re-reads a day apart. `[updated 2026-10-03: and, for each binding, the day number (UTC) of its last successful Lodestone read, for the 30 days of section 7.]` `[updated 2026-10-04: the online count's sessions live in memory only, and nothing about them is ever written or logged (section 2.4).]`
 
 ## 7. Choices batch C left to N2-7
 

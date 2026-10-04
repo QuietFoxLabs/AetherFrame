@@ -562,7 +562,7 @@ A request proof authorizes one submission of one signed document to one deployme
 |---|---|---|---|
 | 0 | 4 | magic | ASCII `AFRQ` (`41 46 52 51`) |
 | 4 | 2 | protocolVersion | `u16` = `0x8001` while the protocol is a draft (section 10); `1` after the freeze |
-| 6 | 1 | proofKind | `u8`: 1 = document submission; 2 to 8 = the actions of section 14.5. Closed: any other value is `InvalidValue` |
+| 6 | 1 | proofKind | `u8`: 1 = document submission; 2 to 9 = the actions of section 14.5. Closed: any other value is `InvalidValue` |
 | 7 | 65 | personaPublicKey | section 3 |
 | 72 | 1 | deploymentLength | `u8`, 1 to 253 |
 | 73 | n | deployment | the deployment name, section 14.1 |
@@ -616,7 +616,7 @@ A reader performs these steps in this order and stops at the first failure with 
 1. If the input is longer than 454 bytes: `LimitExceeded`.
 2. Read the magic; if fewer than 4 bytes remain: `Truncated`; if they are not `AFRQ`: `InvalidFraming`. A signed document (`AFPD`) is never read as a proof, nor a proof as a document.
 3. Read `protocolVersion`, as section 7.2, step 3: `UnsupportedVersion`.
-4. Read `proofKind`; anything but 1 to 8: `InvalidValue`.
+4. Read `proofKind`; anything but 1 to 9: `InvalidValue`.
 5. Read the 65 key bytes (not yet validated).
 6. Read `deploymentLength` and check it (section 14.1), then read the name and check it: `InvalidLength`, `LimitExceeded`, `Truncated` or `InvalidValue`.
 7. Read the challenge and check it (section 14.2), the subject digest and the 64 signature bytes; then, if any input remains: `TrailingBytes`. At each read, too little input is `Truncated`.
@@ -641,7 +641,7 @@ What a server does with a submission is decided by the proof's kind and the docu
 
 ### 14.5 Action requests
 
-An action request is a proof with one of these kinds, sent with a body of at most 4,096 bytes that the proof's `subjectDigest` binds (decisions C1 to C9):
+An action request is a proof with one of these kinds, sent with a body of at most 4,096 bytes that the proof's `subjectDigest` binds (decisions C1 to C9, and "The online count" for kind 9):
 
 | Kind | Action |
 |---|---|
@@ -652,6 +652,7 @@ An action request is a proof with one of these kinds, sent with a body of at mos
 | 6 | looking a character's Plate up by name and World |
 | 7 | fetching one image of a looked-up Plate |
 | 8 | reporting a Plate to the operator |
+| 9 | counting the signer's bound character as online: starting a presence session (October 4, 2026, "The online count") |
 
 The protocol binds the body's bytes, whatever they are: the server defines what each action's body holds. A server that receives an action request at the endpoint for action K checks, in this order, and stops at the first failure:
 1. The proof, as section 14.3.
