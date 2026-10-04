@@ -487,7 +487,7 @@ internal sealed partial class ProfileEditorWindow
         }
 
         EditorWidgets.PropertyLabel("Font");
-        if (FontPicker.Draw("##Family", text.FontFamily, out var newFamily))
+        if (FontPicker.Draw("##Family", text.FontFamily, renderResources.Fonts, out var newFamily))
         {
             ApplyImmediateTextEdit(text.Id, element => element.FontFamily = newFamily);
         }

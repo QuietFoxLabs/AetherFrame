@@ -580,14 +580,55 @@ public class FontTierPolicyTests
         private readonly int ascent;
         private readonly int ascentMinusDescent;
         private readonly (short X0, short Y0, short X1, short Y1)?[] boxes;
+        private readonly int[] advances;
         private readonly Dictionary<int, int> codepointToGlyph;
 
-        private TrueTypeFace(int ascent, int ascentMinusDescent, (short, short, short, short)?[] boxes, Dictionary<int, int> map)
+        private TrueTypeFace(int ascent, int ascentMinusDescent, (short, short, short, short)?[] boxes, int[] advances, Dictionary<int, int> map)
         {
             this.ascent = ascent;
             this.ascentMinusDescent = ascentMinusDescent;
             this.boxes = boxes;
+            this.advances = advances;
             codepointToGlyph = map;
+        }
+
+        /// <summary>
+        /// The box ImGui draws the face in at <paramref name="sizePx"/>: its ascent above the baseline
+        /// and its descent below it (positive), in whole pixels as the builder in Dalamud's ImGui (1.88)
+        /// rounds them, a pixel outward: floor(ascent + 1) and floor(descent - 1), the descent being
+        /// negative there. Its ImFont.Ascent and ImFont.Descent hold them.
+        /// </summary>
+        internal (float Ascent, float Descent) LineBox(float sizePx)
+        {
+            var scale = sizePx / ascentMinusDescent;
+            return ((float)Math.Floor((ascent * scale) + 1), (float)-Math.Floor(((ascent - ascentMinusDescent) * scale) - 1));
+        }
+
+        /// <summary>How far <paramref name="text"/>'s glyphs reach above and below the baseline at
+        /// <paramref name="sizePx"/>, in whole pixels as ImGui rasterizes them.</summary>
+        internal (float Above, float Below) Ink(string text, float sizePx)
+        {
+            var scale = sizePx / ascentMinusDescent;
+            float above = 0f, below = 0f;
+            foreach (var c in text)
+            {
+                if (codepointToGlyph.TryGetValue(c, out var glyph) && boxes[glyph] is { } b)
+                {
+                    above = Math.Max(above, (float)-Math.Floor(-b.Y1 * scale));
+                    below = Math.Max(below, (float)Math.Ceiling(-b.Y0 * scale));
+                }
+            }
+
+            return (above, below);
+        }
+
+        /// <summary><paramref name="text"/>'s width at <paramref name="sizePx"/>, as ImGui draws it with
+        /// Dalamud's SafeFontConfig: each glyph's advance rounded to a whole pixel (PixelSnapH), kerning
+        /// aside.</summary>
+        internal float Width(string text, float sizePx)
+        {
+            var scale = sizePx / ascentMinusDescent;
+            return text.Sum(c => codepointToGlyph.TryGetValue(c, out var glyph) ? (float)Math.Floor((advances[glyph] * scale) + 0.5) : 0f);
         }
 
         /// <summary>
@@ -686,6 +727,13 @@ public class FontTierPolicyTests
             var ascent = (short)U16(b, hhea + 4);
             var descent = (short)U16(b, hhea + 6);
             var numGlyphs = U16(b, tables["maxp"] + 4);
+            var longMetrics = U16(b, hhea + 34);
+            var advances = new int[numGlyphs];
+            for (var g = 0; g < numGlyphs; g++)
+            {
+                advances[g] = U16(b, tables["hmtx"] + (4 * Math.Min(g, longMetrics - 1)));
+            }
+
             var loca = tables["loca"];
             var glyf = tables["glyf"];
             var boxes = new (short, short, short, short)?[numGlyphs];
@@ -735,7 +783,7 @@ public class FontTierPolicyTests
                     }
                 }
 
-                return new TrueTypeFace(ascent, ascent - descent, boxes, map);
+                return new TrueTypeFace(ascent, ascent - descent, boxes, advances, map);
             }
 
             Assert.Equal(4, U16(b, sub));
@@ -774,7 +822,7 @@ public class FontTierPolicyTests
                 }
             }
 
-            return new TrueTypeFace(ascent, ascent - descent, boxes, map);
+            return new TrueTypeFace(ascent, ascent - descent, boxes, advances, map);
         }
 
         private static int U16(byte[] b, int o) => (b[o] << 8) | b[o + 1];
