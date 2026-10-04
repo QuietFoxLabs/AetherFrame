@@ -48,14 +48,19 @@ internal enum SharingProgressAction
     OpenSharing,
 }
 
-/// <summary>What the progress window draws this frame: one immutable value.</summary>
+/// <summary>
+/// What the progress window draws this frame: one immutable value. <paramref name="Operation"/>
+/// numbers the sharing operation it belongs to (0 for none): a save's build and the publish that
+/// carries it on are one operation, and each new share, a Try again included, is a new one.
+/// </summary>
 internal sealed record SharingProgressView(
     SharingProgressStage Stage,
     ulong ContentId,
     string Message,
     TimeSpan Elapsed,
     IReadOnlyList<PlateSnapshotProblem> Problems,
-    SharingProgressAction Action)
+    SharingProgressAction Action,
+    long Operation = 0)
 {
     internal static readonly SharingProgressView Hidden = new(SharingProgressStage.Hidden, 0, string.Empty, TimeSpan.Zero, Array.Empty<PlateSnapshotProblem>(), SharingProgressAction.None);
 
@@ -98,6 +103,8 @@ internal sealed class SharingProgress
     private TimeSpan workingSince;
     private long hiddenShare;
     private (SharingProgressView View, long Share, TimeSpan At, Guid Plate)? result;
+    private long operation;
+    private long operationShare;
 
     /// <summary>
     /// The window's view for this frame, given the character logged in (null for none), the sharing
@@ -149,6 +156,11 @@ internal sealed class SharingProgress
                     workingShare = publish.Share;
                 }
 
+                if (publish.Build != 0 && publish.Build == operationShare)
+                {
+                    operationShare = publish.Share;
+                }
+
                 if (publish is { Step: PublishStep.Ended, Outcome: { } outcome })
                 {
                     Record(ResultOf(id, outcome), publish.Share, now, outcome.Plate);
@@ -175,6 +187,8 @@ internal sealed class SharingProgress
                 workingSince = now;
             }
 
+            var current = OperationOf(share);
+
             if (result is { } older && older.Share < share)
             {
                 // A newer share is under way: an older result has nothing more to say.
@@ -190,7 +204,7 @@ internal sealed class SharingProgress
             var message = working == SharingProgressStage.Waiting && sharing.Publish is { Step: PublishStep.Sending } other && other.ContentId != id
                 ? SharingText.WaitingForOther
                 : MessageOf(working);
-            return new SharingProgressView(working, id, message, now - workingSince, Array.Empty<PlateSnapshotProblem>(), SharingProgressAction.None);
+            return new SharingProgressView(working, id, message, now - workingSince, Array.Empty<PlateSnapshotProblem>(), SharingProgressAction.None, current);
         }
 
         workingShare = 0;
@@ -246,8 +260,25 @@ internal sealed class SharingProgress
 
         if (share != hiddenShare)
         {
-            result = (view, share, now, plate);
+            result = (view with { Operation = OperationOf(share) }, share, now, plate);
         }
+    }
+
+    /// <summary>
+    /// The operation a share belongs to. A share newer than every share seen so far begins a new
+    /// one (share numbers only grow, and the publish of a build's candidate is carried on as that
+    /// build's operation above); an older share, still under way or ending after a newer one
+    /// began, belongs to the newest operation and so never begins one again.
+    /// </summary>
+    private long OperationOf(long share)
+    {
+        if (share > operationShare)
+        {
+            operationShare = share;
+            operation++;
+        }
+
+        return operation;
     }
 
     /// <summary>
@@ -317,5 +348,30 @@ internal sealed class SharingProgress
             ShareCheckFailure.PreparationOff => new SharingProgressView(SharingProgressStage.Problem, id, ShareMessages.For(live.Failure), TimeSpan.Zero, Array.Empty<PlateSnapshotProblem>(), SharingProgressAction.None),
             _ => new SharingProgressView(SharingProgressStage.Problem, id, ShareMessages.For(live.Failure), TimeSpan.Zero, Array.Empty<PlateSnapshotProblem>(), SharingProgressAction.ShareAgain),
         };
+    }
+}
+
+/// <summary>
+/// When the progress window comes to the front: once for each sharing operation it shows (a save's
+/// share, a Try again, or a share already under way when it began following the character), and
+/// never again for the same operation however often its progress changes. A dismissed operation
+/// is never shown again (<see cref="SharingProgress.Dismiss"/>), so it never comes to the front
+/// again either. Framework thread only.
+/// </summary>
+internal sealed class SharingProgressFront
+{
+    private long raised;
+
+    /// <summary>Whether the window should come to the front this frame, for this frame's view.</summary>
+    internal bool ShouldRaise(SharingProgressView view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        if (!view.Visible || view.Operation == 0 || view.Operation == raised)
+        {
+            return false;
+        }
+
+        raised = view.Operation;
+        return true;
     }
 }

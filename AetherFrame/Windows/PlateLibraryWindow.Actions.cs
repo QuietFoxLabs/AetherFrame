@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using AetherFrame.Services;
 using AetherFrame.Services.Diagnostics;
@@ -31,39 +32,120 @@ internal sealed partial class PlateLibraryWindow
 
     // ---------------------------------------------------------------- status footer
 
+    private const string ActionsHint = "Right click a Plate for actions";
+
+    /// <summary>The middle dot between two of the footer's right-hand items.</summary>
+    private const string FooterItemSeparator = "\u00b7";
+
+    /// <summary>The loaded plugin's version, the footer's last right-hand item.</summary>
+    private static readonly MyPlatesFooterItem VersionItem = MyPlatesFooterText.VersionItem(AetherFrameBuildInfo.Current);
+
+    /// <summary>The footer's right-hand items, left to right: a new item goes before the version, which stays at the bottom right.</summary>
+    private static IReadOnlyList<MyPlatesFooterItem> FooterItems() => [VersionItem];
+
+    /// <summary>
+    /// The footer as this frame draws it, measured before the grid so the grid leaves it exactly the
+    /// room it needs: the status line, wrapped to the window, then the right-click hint with the
+    /// right-hand items beside it, or under it when the window is too narrow for both
+    /// (<see cref="MyPlatesFooterLayout"/>).
+    /// </summary>
+    private FooterFrame MeasureFooter()
+    {
+        var (status, color) = FooterStatus();
+        var items = FooterItems();
+        var width = ImGui.GetContentRegionAvail().X;
+        var style = ImGui.GetStyle();
+        var widths = new float[items.Count];
+        for (var i = 0; i < items.Count; i++)
+        {
+            widths[i] = ImGui.CalcTextSize(items[i].Text).X;
+        }
+
+        var separator = ImGui.CalcTextSize(FooterItemSeparator).X + (style.ItemSpacing.X * 2f);
+        var hintWidth = ImGui.CalcTextSize(ActionsHint).X;
+        var layout = MyPlatesFooterLayout.For(width, hintWidth, MyPlatesFooterLayout.ItemsWidth(widths, separator), style.ItemSpacing.X * 2f);
+
+        var line = ImGui.GetTextLineHeightWithSpacing();
+        var statusHeight = ImGui.CalcTextSize(status, false, width).Y + style.ItemSpacing.Y;
+        var rowsHeight = layout.ItemsOnOwnRow ? ImGui.CalcTextSize(ActionsHint, false, width).Y + style.ItemSpacing.Y + line : line;
+        return new FooterFrame(status, color, items, layout, statusHeight + rowsHeight + EditorWidgets.Scaled(4f));
+    }
+
     /// <summary>What's happening (busy/error/status), or the selected Plate's own info, plus a
     /// quiet reminder that actions live on each card's right-click menu (see
-    /// <see cref="PlateMenu.DrawCardItems"/>); the persistent action button row is gone.</summary>
-    private void DrawStatusFooter()
+    /// <see cref="PlateMenu.DrawCardItems"/>), and the right-hand items (the loaded version at the
+    /// bottom right); the persistent action button row is gone.</summary>
+    private void DrawStatusFooter(FooterFrame footer)
     {
-        var selected = selectedPlateId is { } id ? library.FindPlate(id) : null;
+        FooterText(footer.Status, footer.Color);
 
-        if (IsBusy)
+        var rowStart = ImGui.GetCursorPosX();
+        FooterText(ActionsHint, ImGui.GetColorU32(ImGuiCol.TextDisabled));
+        if (footer.Layout.ItemsOnOwnRow)
         {
-            ImGui.TextDisabled("Working...");
-        }
-        else if (runner.Error is { } error)
-        {
-            ImGui.TextColored(EditorWidgets.ErrorColor, error);
-        }
-        else if (runner.Status is { } status)
-        {
-            ImGui.TextColored(EditorWidgets.SuccessColor with { W = 0.85f }, status);
-        }
-        else if (selected is { } plate)
-        {
-            var openHere = profileService.OpenPlateId == plate.PlateId;
-            ImGui.TextDisabled(plate.IsReady
-                ? $"Last saved {plate.ModifiedUtc.ToLocalTime():g}{(openHere ? " · Open in the editor" : string.Empty)}"
-                : plate.Problem ?? "This Plate can't be opened.");
+            ImGui.SetCursorPosX(rowStart + footer.Layout.ItemsX);
         }
         else
         {
-            ImGui.TextDisabled("Select a Plate. Double-click to edit; drag to reorder.");
+            ImGui.SameLine(rowStart + footer.Layout.ItemsX);
         }
 
-        ImGui.TextDisabled("Right click a Plate for actions");
+        for (var i = 0; i < footer.Items.Count; i++)
+        {
+            if (i > 0)
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled(FooterItemSeparator);
+                ImGui.SameLine();
+            }
+
+            ImGui.TextDisabled(footer.Items[i].Text);
+            AetherControls.Tooltip(footer.Items[i].Tooltip);
+        }
     }
+
+    /// <summary>The footer's status line: its text and color.</summary>
+    private (string Text, uint Color) FooterStatus()
+    {
+        var disabled = ImGui.GetColorU32(ImGuiCol.TextDisabled);
+        if (IsBusy)
+        {
+            return ("Working...", disabled);
+        }
+
+        if (runner.Error is { } error)
+        {
+            return (error, ImGui.GetColorU32(EditorWidgets.ErrorColor));
+        }
+
+        if (runner.Status is { } status)
+        {
+            return (status, ImGui.GetColorU32(EditorWidgets.SuccessColor with { W = 0.85f }));
+        }
+
+        if (selectedPlateId is { } id && library.FindPlate(id) is { } plate)
+        {
+            var openHere = profileService.OpenPlateId == plate.PlateId;
+            return (plate.IsReady
+                ? $"Last saved {plate.ModifiedUtc.ToLocalTime():g}{(openHere ? " · Open in the editor" : string.Empty)}"
+                : plate.Problem ?? "This Plate can't be opened.", disabled);
+        }
+
+        return ("Select a Plate. Double-click to edit; drag to reorder.", disabled);
+    }
+
+    /// <summary>A footer line in <paramref name="color"/>, wrapped at the window's edge rather than cut off.</summary>
+    private static void FooterText(string text, uint color)
+    {
+        using (ImRaii.PushColor(ImGuiCol.Text, color))
+        using (ImRaii.TextWrapPos(0f))
+        {
+            ImGui.TextUnformatted(text);
+        }
+    }
+
+    /// <summary>The footer measured for one frame: what it says, and the height it takes.</summary>
+    private readonly record struct FooterFrame(string Status, uint Color, IReadOnlyList<MyPlatesFooterItem> Items, MyPlatesFooterLayout Layout, float Height);
 
     // ---------------------------------------------------------------- opening Plates
 
