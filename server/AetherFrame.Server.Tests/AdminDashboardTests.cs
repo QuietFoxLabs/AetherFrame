@@ -136,6 +136,29 @@ public sealed class AdminDashboardTests
     }
 
     [Fact]
+    public async Task OriginCheckCoversAnyMethodCasing_OtherMethodsAreRefused_AndSessionHidesOwner()
+    {
+        using var desk = new Desk();
+        await desk.SignInAsync();
+        foreach (var method in new[] { "post", "Post" })
+        {
+            // A valid token but no Origin: the guard refuses it however the method is spelled.
+            using var request = new HttpRequestMessage(new HttpMethod(method), "/admin/api/query") { Content = JsonContent.Create(new { action = "overview" }) };
+            request.Headers.Add("X-AF-CSRF", (await desk.SessionAsync()).GetProperty("csrf").GetString());
+            Assert.Equal(HttpStatusCode.Forbidden, (await desk.Client.SendAsync(request)).StatusCode);
+        }
+        foreach (var method in new[] { "PUT", "DELETE", "PATCH", "OPTIONS" })
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(method), "/admin/api/action") { Content = JsonContent.Create(new { action = "logout" }) };
+            request.Headers.Add("Origin", Desk.Origin);
+            Assert.Equal(HttpStatusCode.MethodNotAllowed, (await desk.Client.SendAsync(request)).StatusCode);
+        }
+        var session = await desk.SessionAsync();
+        Assert.False(session.TryGetProperty("ownerId", out _));
+        Assert.Equal(1, await desk.Source.CountAsync("SELECT count(*) FROM sqlite_master WHERE type='index' AND name='admin_audit_profile';"));
+    }
+
+    [Fact]
     public async Task ModeratorCannotManageStaff_RevocationAndRegrantInvalidateOldSession()
     {
         using var desk = new Desk();
@@ -313,6 +336,12 @@ public sealed class AdminDashboardTests
             using var response = await Client.GetAsync("/admin/api/session");
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             csrf = (await response.Content.ReadFromJsonElementAsync()).GetProperty("csrf").GetString()!;
+        }
+        public async Task<JsonElement> SessionAsync()
+        {
+            using var response = await Client.GetAsync("/admin/api/session");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return await response.Content.ReadFromJsonElementAsync();
         }
         public Task<HttpResponseMessage> PostAsync(object data, bool action = false, bool csrf = true, string origin = Origin)
         {

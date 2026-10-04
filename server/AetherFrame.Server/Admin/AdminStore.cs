@@ -42,6 +42,7 @@ internal sealed class AdminStore(ServerDatabase database, AdminOptions options, 
                 action TEXT NOT NULL, profile_id TEXT REFERENCES bindings(profile_id) ON DELETE SET NULL,
                 staff_id INTEGER, reason TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS admin_audit_at ON admin_audit(at);
+            CREATE INDEX IF NOT EXISTS admin_audit_profile ON admin_audit(profile_id);
             SELECT COUNT(*) FROM pragma_table_info('reports') WHERE name='review_token';
             """;
         var exists = Convert.ToInt64(await command.ExecuteScalarAsync(cancellation), CultureInfo.InvariantCulture);

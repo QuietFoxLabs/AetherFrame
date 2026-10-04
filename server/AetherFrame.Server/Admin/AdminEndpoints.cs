@@ -44,11 +44,14 @@ internal static class AdminEndpoints
             http.Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
             var limits = http.RequestServices.GetRequiredService<RateLimiter>();
             if (!limits.TryTakeAddress(Requests, http.Connection.RemoteIpAddress)) { http.Response.StatusCode = 429; return; }
-            if (http.Request.Method == "POST")
+            // Methods compare case-insensitively, as routing does, so "post" gets the same checks.
+            if (HttpMethods.IsPost(http.Request.Method))
             {
                 if (http.Request.Headers.Origin.ToString() != "https://" + host || !http.Request.HasJsonContentType())
                 { http.Response.StatusCode = 403; return; }
             }
+            else if (!HttpMethods.IsGet(http.Request.Method) && !HttpMethods.IsHead(http.Request.Method))
+            { http.Response.StatusCode = 405; return; }
             await next(http);
         });
     }
@@ -66,7 +69,7 @@ internal static class AdminEndpoints
         {
             var actor = AdminAuthentication.Actor(http.User)!;
             return Results.Json(new { id = actor.Id.ToString(CultureInfo.InvariantCulture), actor.Role,
-                csrf = anti.GetAndStoreTokens(http).RequestToken, ownerId = options.OwnerGitHubId.ToString(CultureInfo.InvariantCulture) });
+                csrf = anti.GetAndStoreTokens(http).RequestToken });
         }).RequireAuthorization(AdminAuthentication.Policy);
         app.MapPost("/admin/api/query", QueryAsync).RequireAuthorization(AdminAuthentication.Policy);
         app.MapPost("/admin/api/action", ChangeAsync).RequireAuthorization(AdminAuthentication.Policy);

@@ -176,8 +176,9 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
     }
 
     /// <summary>
-    /// Drops reports past 30 days (decision C5). <see cref="Housekeeping"/> runs it every hour, so
-    /// none outlives its time for want of a new one.
+    /// Drops reports past 30 days (decision C5), and Community Desk audit entries past theirs
+    /// (AdminDashboard.md). <see cref="Housekeeping"/> runs it every hour, so none outlives its
+    /// time for want of a new one.
     /// </summary>
     public async Task<int> DropExpiredReportsAsync(CancellationToken cancellation)
     {
@@ -222,7 +223,7 @@ internal sealed class ContentStore(ServerDatabase database, TimeProvider time)
     }
 }
 
-/// <summary>Hourly housekeeping: drops reports past their 30 days (decision C5), whether or not any new report arrives.</summary>
+/// <summary>Hourly housekeeping: drops reports past their 30 days (decision C5) and desk audit entries past theirs, whether or not any new report arrives.</summary>
 internal sealed class Housekeeping(ContentStore content) : Microsoft.Extensions.Hosting.BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

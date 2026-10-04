@@ -10,6 +10,9 @@ const headings = {
   staff: ['PEOPLE YOU TRUST', 'Your team', 'Give trusted people a place at the desk.']
 };
 function el(tag, className = '', text = '') { const n = document.createElement(tag); n.className = className; n.textContent = text; return n; }
+// Shows invisible and direction-changing characters as their code points, so text cannot hide or reorder itself for a reviewer.
+const hidden = /[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
+function visible(text) { return String(text).replace(hidden, c => `[U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}]`); }
 function button(text, action, style = 'secondary') { const n = el('button', 'button ' + style, text); n.type = 'button'; n.addEventListener('click', () => run(action)); return n; }
 function announce(message) { $('notice').textContent = message; $('notice').hidden = !message; }
 async function run(action) { try { await action(); } catch (error) { if (error.name !== 'AbortError' && session) announce(error.message || 'Something went wrong. Try refreshing.'); } }
@@ -72,7 +75,7 @@ function reportRows(reports) {
     actions.push(button('Dismiss', async () => {
       if (await moderate('dismiss', {id:r.id, token:r.token}, 'Dismiss this report?', 'This closes the report without changing the player’s Plate.')) { await navigate(view, page, filter); announce('Report dismissed.'); }
     }, 'quiet'));
-    list.append(row(r.name || 'Character no longer bound', `${r.world || 'Content removed'} · ${r.reason} · ${reportAge(r.day)}`, actions));
+    list.append(row(r.name || 'Character no longer bound', `${r.world || 'Content removed'} · ${visible(r.reason)} · ${reportAge(r.day)}`, actions));
   }
   return list;
 }
@@ -113,7 +116,7 @@ async function renderList(host, ticket) {
     const list = el('ul', 'data-list');
     for (const r of rows.slice(0, view === 'staff' ? 100 : 50)) {
       if (view === 'plates') list.append(row(r.name, r.world + (r.published ? ' · Published' : ' · No current content'), [status(r.held ? 'Hidden by staff' : 'Published', !!r.held), button('Review ↗', () => showDetail(r.profile), 'quiet')]));
-      else if (view === 'audit') list.append(row(`${r.action} · Staff ${r.actor}`, `${date(r.at)}${r.staffId ? ` · Target staff ${r.staffId}` : ''} · ${r.reason}`, r.profile ? [button('View Plate', () => showDetail(r.profile), 'quiet')] : []));
+      else if (view === 'audit') list.append(row(`${r.action} · Staff ${r.actor}`, `${date(r.at)}${r.staffId ? ` · Target staff ${r.staffId}` : ''} · ${visible(r.reason)}`, r.profile ? [button('View Plate', () => showDetail(r.profile), 'quiet')] : []));
       else list.append(row('GitHub ID ' + r.id, r.active ? 'Moderator access enabled' : 'Access revoked', [button(r.active ? 'Revoke' : 'Grant again', async () => {
         if (await moderate(r.active ? 'revoke' : 'grant', {id:r.id}, r.active ? 'Revoke moderator access?' : 'Grant moderator access?', r.active ? 'Existing sessions will stop working on their next request.' : 'This account will be able to review reports and hide or restore shared Plates.')) { await navigate('staff'); announce('Staff access updated.'); }
       }, r.active ? 'danger' : 'secondary')]));
@@ -156,10 +159,11 @@ async function showDetail(profileId) {
   }, detail.held ? 'primary' : 'danger'));
   host.append(top);
   if (!detail.plate) { host.append(empty('No current published content', 'The player may have paused sharing. A moderation hold remains until restored or the binding is removed.')); $('content').replaceChildren(host); return; }
-  const grid = el('div','detail-grid'), preview = panel(detail.plate.name, 'Browser preview'), surface = el('div','preview-surface'), canvas = el('canvas');
+  const grid = el('div','detail-grid'), preview = panel(visible(detail.plate.name), 'Browser preview'), surface = el('div','preview-surface'), canvas = el('canvas');
   canvas.setAttribute('aria-label','Approximate Plate layout. Full text and original uploaded images are available below.'); canvas.setAttribute('role','img'); surface.append(canvas); preview.append(surface, el('p','preview-note','Approximate layout only. Bundled art, game fonts, textures, text fitting and some effects are not reproduced here. Review all text and uploaded images below; use the game for an exact appearance check.'));
   const textPanel = panel('All text', 'Complete text, including clipped or obscured content'), textBody = el('div','panel-body');
-  const texts = detail.plate.items.filter(i=>i.kind==='Text'); for (const item of texts) textBody.append(el('div','full-text',item.data.text));
+  const texts = detail.plate.items.filter(i=>i.kind==='Text'); for (const item of texts) textBody.append(el('div','full-text',visible(item.data.text)));
+  if (texts.some(i => visible(i.data.text) !== i.data.text)) textBody.append(el('p','small muted','[U+…] marks an invisible or direction-changing character in the player’s text.'));
   if (!texts.length) textBody.append(el('p','muted','No text elements.')); textPanel.append(textBody); grid.append(preview,textPanel); host.append(grid);
   const pictures = panel('Uploaded images', 'The current revision’s images, before layout and cropping'), imageGrid = el('div','panel-body image-grid'); pictures.append(imageGrid); if (detail.plate.images.length) host.append(pictures);
   $('content').replaceChildren(host);
