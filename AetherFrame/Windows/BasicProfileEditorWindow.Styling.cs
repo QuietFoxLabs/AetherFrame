@@ -49,7 +49,7 @@ internal sealed partial class BasicProfileEditorWindow
             : null;
 
     /// <summary>The collapsed "Appearance" group: font, size, color, and opacity for each target.</summary>
-    private static void DrawAppearance(IEnumerable<StyleTarget?> targets)
+    private void DrawAppearance(IEnumerable<StyleTarget?> targets)
     {
         var list = targets.OfType<StyleTarget>().ToList();
         if (list.Count == 0 || !ImGui.CollapsingHeader("Appearance##Appearance"))
@@ -112,12 +112,12 @@ internal sealed partial class BasicProfileEditorWindow
         }
     }
 
-    private static void DrawAppearanceControls(StyleTarget target)
+    private void DrawAppearanceControls(StyleTarget target)
     {
         var element = target.Element;
 
         StyleLabel("Font");
-        if (FontPicker.Draw("##Font", element.FontFamily, out var family))
+        if (FontPicker.Draw("##Font", element.FontFamily, renderResources.Fonts, out var family))
         {
             target.Edit(e => e.FontFamily = family, false);
         }
