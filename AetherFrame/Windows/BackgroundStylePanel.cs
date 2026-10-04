@@ -39,6 +39,9 @@ internal sealed class BackgroundStylePanel
     private readonly ProfileRenderResources renderResources;
     private readonly Action<string, Action<string>> openImageFileDialog;
 
+    // The flags of the color fields Draw draws this frame (see Draw's greyedOut).
+    private ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags.NoAlpha;
+
     /// <param name="editorSession">The shared editing session.</param>
     /// <param name="renderResources">For the background image's native size.</param>
     /// <param name="openImageFileDialog">Opens the owning window's image picker (title, on-selected).</param>
@@ -54,9 +57,16 @@ internal sealed class BackgroundStylePanel
     /// editor recolors the background only, so its row is labelled Presets, not Theme); the row is
     /// left out in Image mode (where a background preset would replace the image), or entirely when
     /// null — the Basic editor draws its own Theme browser (<see cref="DrawThemeBrowser"/>) first.
+    /// <paramref name="greyedOut"/> draws every control disabled, values in view, for the Advanced
+    /// editor while background artwork covers the Plate (<see cref="AppearanceControls"/>).
     /// </summary>
-    internal void Draw(ProfileDocument profile, Action<ProfileThemePreset>? applyTheme)
+    internal void Draw(ProfileDocument profile, Action<ProfileThemePreset>? applyTheme, bool greyedOut = false)
     {
+        // A disabled color field still takes a color dropped on it (ImGui's drop target checks
+        // read-only, not disabled), so greyed-out color fields take no drops.
+        colorEditFlags = greyedOut ? ImGuiColorEditFlags.NoAlpha | ImGuiColorEditFlags.NoDragDrop : ImGuiColorEditFlags.NoAlpha;
+        using var disabled = ImRaii.Disabled(greyedOut);
+
         if (profile.Background is not { } background)
         {
             EditorWidgets.Hint("Background unavailable.");
@@ -805,7 +815,7 @@ internal sealed class BackgroundStylePanel
     {
         var color = current;
         EditorWidgets.PropertyLabel(label);
-        if (ImGui.ColorEdit4(id, ref color, ImGuiColorEditFlags.NoAlpha))
+        if (ImGui.ColorEdit4(id, ref color, colorEditFlags))
         {
             var value = color with { W = 1f };
             editorSession.BeginOrContinueBackgroundEdit(style =>

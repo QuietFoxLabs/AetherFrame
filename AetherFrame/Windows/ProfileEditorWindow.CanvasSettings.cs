@@ -136,10 +136,7 @@ internal sealed partial class ProfileEditorWindow
             EditorWidgets.Tooltip("Takes the background artwork away (undoable), so the Plate's own background shows and these settings apply.\nAdd artwork again with Add Component, under Components.");
         }
 
-        using (ImRaii.Disabled(!cover.BackgroundShows))
-        {
-            backgroundPanel.Draw(profile, preset => editorSession.ApplyBackgroundEdit(preset.ApplyTo));
-        }
+        backgroundPanel.Draw(profile, preset => editorSession.ApplyBackgroundEdit(preset.ApplyTo), greyedOut: !cover.BackgroundShows);
 
         var right = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
         TutorialAnchorMarks.MarkRect(TutorialTarget.AdvancedBackground, backgroundMin, new Vector2(right, ImGui.GetItemRectMax().Y));

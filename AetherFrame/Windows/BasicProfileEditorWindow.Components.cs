@@ -25,9 +25,10 @@ internal sealed partial class BasicProfileEditorWindow
             DrawComponentSlot(profile, kind);
         }
 
-        // Art Style artwork keeps its own colors (issue #119, AppearanceControls.ColorApplies), so
-        // only the line and shape styles follow the Look.
-        Hint("Line and shape styles take their colors from your Look; Art Style artwork keeps its own. Fine-tune placement, opacity and color in the Advanced Editor (Canvas tab, Components).");
+        // Art Style artwork keeps its own colors (issue #119, AppearanceControls.ColorApplies); every
+        // other style these slots offer, Celestial Dream's tintable corner included, takes the Look's
+        // colors (tested against the catalog).
+        Hint(AppearanceControls.SlotColorsHint);
     }
 
     /// <summary>One slot: a label and a style combo. Choosing is one undo step.</summary>

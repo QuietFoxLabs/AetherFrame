@@ -299,6 +299,113 @@ public class AppearanceControlsTests
         Assert.True(AppearanceControls.ColorApplies(null)); // a newer build's: its control stays
     }
 
+    /// <summary>
+    /// The Basic editor's Frame &amp; Decorations line is exact for every style its slots offer: an Art
+    /// Style's artwork (any piece of its set, placed by the style or not, as Celestial Sakura's slim
+    /// divider) keeps its own colors, and every other style there takes its color from the Look, the
+    /// line and shape styles and tintable artwork (Celestial Dream's corner, in no Art Style) alike.
+    /// </summary>
+    [Fact]
+    public void TheFrameAndDecorationsLine_HoldsForEveryStyleItsSlotsOffer()
+    {
+        ComponentColorSource[] fromTheLook = [ComponentColorSource.ThemeAccent, ComponentColorSource.ThemeText, ComponentColorSource.ThemeSoft, ComponentColorSource.ThemeBackground];
+        PlateComponentKind[] slots = [PlateComponentKind.Background, PlateComponentKind.PlateFrame, .. PlateComponentEditor.BasicDecorations];
+        var offered = slots.SelectMany(BuiltInComponentCatalog.OfKind).Where(definition => !definition.RequiresAsset).ToList();
+        Assert.Contains(offered, definition => definition.Id == BuiltInComponentCatalog.CornerOrnamentAstrolabePivot);
+        Assert.Contains(offered, definition => definition.Id == BuiltInComponentCatalog.DividerCelestialSakuraSlim);
+        Assert.Contains(offered, definition => definition.Art is null);
+
+        foreach (var definition in offered)
+        {
+            var artStyleArtwork = definition.Art is { Family: { } family } && ArtSets.Styles.Any(style => style.Name == family);
+            Assert.True(AppearanceControls.ColorApplies(definition) != artStyleArtwork, definition.Id);
+            if (definition.Art is { } art && ArtSets.StyleOfArt(art) is { } style)
+            {
+                Assert.Equal(style.Name, art.Family); // a style's pieces are of its set
+            }
+
+            if (!artStyleArtwork)
+            {
+                Assert.Contains(definition.ColorSource, fromTheLook);
+            }
+        }
+
+        Assert.StartsWith("Art Style artwork keeps its own colors; every other style here takes its color from your Look.", AppearanceControls.SlotColorsHint, StringComparison.Ordinal);
+    }
+
+    // ---- cards that can't draw the Plate -----------------------------------------------------------
+
+    /// <summary>
+    /// A card that can't draw its Plate or Template (My Plates' and Templates' fallback thumbnails) shows
+    /// what the renderer shows over it: covering artwork as its style's plain color, the renderer's own
+    /// stand-in for it, never the Plate's own background, which can't show.
+    /// </summary>
+    [Fact]
+    public void ACardsFallback_UnderCoveringArtwork_IsTheArtworksStandIn_NotTheBackgroundItHides()
+    {
+        var document = CustomizedDark();
+        foreach (var style in ArtSets.Styles)
+        {
+            BasicDocuments.Editor(document).ApplyTheme(style);
+            var standIn = ArtSets.BackgroundStandIn(BuiltInComponentCatalog.Find(BackgroundArtworkOf(style))!.Art!)!.Value;
+
+            Assert.Equal(ProfileBackgroundMode.LinearGradient, document.Background!.Mode); // kept, hidden
+            Assert.Equal(new CardFallback(CardFill.Solid, standIn, standIn), AppearanceControls.CardFallbackOf(document));
+        }
+    }
+
+    [Fact]
+    public void ACardsFallback_WhileTheBackgroundShows_IsThePlatesOwnBackground_AtItsOpacity()
+    {
+        var document = CustomizedDark();
+        var background = document.Background!;
+        background.Opacity = 0.5f;
+        var primary = background.PrimaryColor with { W = background.PrimaryColor.W * 0.5f };
+        var secondary = background.SecondaryColor with { W = background.SecondaryColor.W * 0.5f };
+        Assert.Equal(new CardFallback(CardFill.Gradient, primary, secondary), AppearanceControls.CardFallbackOf(document));
+
+        background.Mode = ProfileBackgroundMode.SolidColor;
+        Assert.Equal(new CardFallback(CardFill.Solid, primary, primary), AppearanceControls.CardFallbackOf(document));
+        background.Mode = ProfileBackgroundMode.TexturedFill;
+        Assert.Equal(new CardFallback(CardFill.Solid, primary, primary), AppearanceControls.CardFallbackOf(document));
+        background.Mode = ProfileBackgroundMode.Image;
+        Assert.Equal(CardFill.Image, AppearanceControls.CardFallbackOf(document).Fill);
+        background.Mode = ProfileBackgroundMode.None;
+        Assert.Equal(default, AppearanceControls.CardFallbackOf(document));
+        document.Background = null;
+        Assert.Equal(default, AppearanceControls.CardFallbackOf(document));
+        Assert.Equal(default, AppearanceControls.CardFallbackOf(null));
+    }
+
+    /// <summary>Artwork see-through, hidden or taken away lets the background show, so the card shows it too.</summary>
+    [Theory]
+    [InlineData("see-through")]
+    [InlineData("hidden")]
+    [InlineData("removed")]
+    public void ACardsFallback_UnderArtworkThatLetsTheBackgroundShow_IsThePlatesOwnBackground(string how)
+    {
+        var document = CustomizedDark();
+        var ownBackground = AppearanceControls.CardFallbackOf(document);
+        Assert.Equal(CardFill.Gradient, ownBackground.Fill);
+
+        BasicDocuments.Editor(document).ApplyTheme(Art("celestial-sakura"));
+        var artwork = PlateComponentEditor.FindSlot(document, PlateComponentKind.Background)!;
+        switch (how)
+        {
+            case "see-through":
+                artwork.Opacity = 0.6f;
+                break;
+            case "hidden":
+                artwork.Visible = false;
+                break;
+            case "removed":
+                PlateComponentEditor.Remove(document, artwork.Id);
+                break;
+        }
+
+        Assert.Equal(ownBackground, AppearanceControls.CardFallbackOf(document));
+    }
+
     // ---- nothing is changed ------------------------------------------------------------------------
 
     /// <summary>
@@ -360,6 +467,7 @@ public class AppearanceControlsTests
 
         using var harness = await BasicHarness.OpenJsonAsync(json, plateId);
         var onDisk = harness.Fixture.ReadPlateJson(plateId);
+        Assert.Equal(json, onDisk); // opening wrote nothing
         var before = harness.Json();
         var browser = new ThemeBrowserState();
 
@@ -378,7 +486,7 @@ public class AppearanceControlsTests
         Assert.False(harness.Session.CanUndo);
     }
 
-    /// <summary>Everything the two editors ask of a Plate to draw its style controls (issue #119), minus drawing.</summary>
+    /// <summary>Everything the two editors (and a card's fallback) ask of a Plate to draw its style controls (issue #119), minus drawing.</summary>
     private static void DrawStyleControls(ProfileDocument document, ThemeBrowserState browser)
     {
         browser.ShowPlate(document);
@@ -390,6 +498,8 @@ public class AppearanceControlsTests
             _ = AppearanceControls.BasicCoveredHint(cover);
             _ = AppearanceControls.AdvancedCoveredHint(cover);
         }
+
+        _ = AppearanceControls.CardFallbackOf(document); // My Plates' card, should it not draw the Plate
 
         foreach (var component in document.Components ?? [])
         {
