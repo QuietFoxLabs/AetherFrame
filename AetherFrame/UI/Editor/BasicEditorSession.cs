@@ -287,7 +287,11 @@ internal sealed class BasicEditorSession
 
     // ---------------------------------------------------------------- theme
 
-    /// <summary>Applies a theme: background colors and every Basic text color, one undo step.</summary>
+    /// <summary>
+    /// Chooses a style, an Art Style or a Simple Theme, as one undo step: every Basic text color, an
+    /// Art Style's pieces, and a Simple Theme's background colors, as <see cref="BasicPlateEditor.ApplyTheme"/>
+    /// describes (issue #118). An Art Style leaves the Plate's own background as it is.
+    /// </summary>
     internal void ApplyTheme(ProfileThemePreset preset) => Edit(editor => editor.ApplyTheme(preset));
 
     // ---------------------------------------------------------------- layout

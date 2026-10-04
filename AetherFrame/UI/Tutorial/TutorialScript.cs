@@ -95,7 +95,7 @@ internal static class TutorialScript
                 "This is your Plate as it will look. Click a part of it to jump to that section. Use the zoom buttons above it to look closer; at 150% and 200% you can scroll or drag to look around.",
                 TutorialTarget.BasicPreview, Requires: TutorialCondition.BasicEditorOpen, FallbackBody: SwitchToBasic, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenBasicEditor),
             new TutorialStep("basic.style", "Style",
-                "Style is the fastest way to a good-looking Plate: pick a Theme. An Art Style sets the background artwork, frames, decorations and text colours together; a Simple Theme sets the colours. Pattern and Customize Background (colour, gradient and image) show while no background artwork covers the Plate.",
+                "Style is the fastest way to a good-looking Plate: pick a Look. Art Styles come first: one sets the background artwork, frames, decorations and text colours together. Simple Themes, on their own tab, set the colours. Each keeps your last choice, so you can switch back. Pattern and Customize Background (colour, gradient and image) show while no background artwork covers the Plate.",
                 TutorialTarget.BasicNavigatorStyle, TutorialStepMode.Interact, Requires: TutorialCondition.BasicEditorOpen, FallbackBody: SwitchToBasic, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenBasicEditor),
             new TutorialStep("basic.identity", "Identity and details",
                 "Identity holds your character's name and title. Details holds Home World, Favorite Jobs, Free Company, Playstyle and Active Hours; Message is free text. Each section of the Plate can be hidden without losing what you typed.",
@@ -154,7 +154,7 @@ internal static class TutorialScript
                 "The Inspector's Canvas tab holds what belongs to the whole Plate rather than one element: its size and its background.",
                 TutorialTarget.AdvancedInspectorCanvasTab, TutorialStepMode.Interact, Requires: TutorialCondition.AdvancedEditorOpen, FallbackBody: SwitchToAdvanced, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenAdvancedEditor),
             new TutorialStep("images.background", "Background",
-                "A background can be a solid colour, a two-colour gradient at any angle, or an image; a Pattern chosen in the Basic Editor's Style keeps its intensity, scale and rotation here. Opacity lets the game show through.",
+                "A background can be a solid colour, a two-colour gradient at any angle, or an image; a Pattern chosen in the Basic Editor's Style keeps its intensity, scale and rotation here. Opacity lets the game show through. While background artwork covers the whole Plate, these settings are greyed out, and kept.",
                 TutorialTarget.AdvancedBackground, Requires: TutorialCondition.AdvancedEditorOpen, FallbackBody: SwitchToAdvanced, FallbackTarget: TutorialTarget.EditorModeSwitch, FallbackAction: TutorialAction.OpenAdvancedEditor),
         ]),
 

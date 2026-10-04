@@ -252,8 +252,7 @@ internal static class BasicEditorView
             case BasicEditorCategory.Style:
             {
                 var orientation = BasicPlateEditor.GetOrientation(profile) == AdventurePlateOrientation.Mirrored ? "Mirrored" : "Normal";
-                var theme = ProfileThemePresets.Find(profile.BasicPlate?.ThemeId) is { } preset ? $"{preset.Name} theme" : "No theme chosen";
-                return [$"{orientation} layout  ·  {theme}"];
+                return [$"{orientation} layout  ·  {PlateStyle.Describe(profile)}"];
             }
 
             case BasicEditorCategory.Portrait:

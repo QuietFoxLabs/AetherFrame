@@ -100,11 +100,17 @@ public static class PlateComponentEditor
     /// at full opacity, over every point of the canvas (every Background artwork is opaque). Null when
     /// any of the Plate's own background can show: no artwork, or artwork hidden, unresolvable,
     /// see-through, moved, shrunk or turned off the canvas, or fitted inside a canvas of another
-    /// shape. The Basic editor shows the background's own settings (Pattern, Customize Background)
-    /// only when this is null, since they change nothing the artwork covers.
+    /// shape. Both editors offer the background's own settings only when this is null, since they
+    /// change nothing the artwork covers (see <c>AppearanceControls</c>, issue #119).
     /// </summary>
-    public static ComponentDefinition? CoveringBackground(ProfileDocument profile, IComponentCatalog catalog)
+    public static ComponentDefinition? CoveringBackground(ProfileDocument profile, IComponentCatalog catalog) =>
+        CoveringBackground(profile, catalog, out _);
+
+    /// <summary>As <see cref="CoveringBackground(ProfileDocument, IComponentCatalog)"/>, with the
+    /// Component drawing it (<paramref name="component"/>, null when nothing covers).</summary>
+    public static ComponentDefinition? CoveringBackground(ProfileDocument profile, IComponentCatalog catalog, out PlateComponent? component)
     {
+        component = null;
         if (!HasAnyBackground(profile))
         {
             return null;
@@ -116,19 +122,20 @@ public static class PlateComponentEditor
         var primitives = new List<ComponentPrimitive>();
         foreach (var step in plan)
         {
-            if (step.Component is not { Kind: PlateComponentKind.Background } component || step.Definition is not { } definition)
+            if (step.Component is not { Kind: PlateComponentKind.Background } background || step.Definition is not { } definition)
             {
                 continue;
             }
 
             primitives.Clear();
-            ComponentGeometry.Build(profile, component, definition, step.Placement, primitives);
+            ComponentGeometry.Build(profile, background, definition, step.Placement, primitives);
             foreach (var primitive in primitives)
             {
                 if (primitive.Kind == ComponentPrimitiveKind.Art && primitive.Color.W >= 1f
                     && Contains(primitive, Vector2.Zero) && Contains(primitive, new Vector2(canvas.X, 0f))
                     && Contains(primitive, canvas) && Contains(primitive, new Vector2(0f, canvas.Y)))
                 {
+                    component = background;
                     return definition;
                 }
             }

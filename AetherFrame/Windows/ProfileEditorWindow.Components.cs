@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
+using AetherFrame.UI.Editor;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
@@ -11,7 +12,8 @@ namespace AetherFrame.Windows;
 /// <summary>
 /// The Inspector Canvas tab's Components section: the same <see cref="PlateComponent"/>s the Basic
 /// editor's slots choose, with the Advanced refinements on top — style (including image styles),
-/// color, opacity, offset, scale, rotation, and order within the Component's layer. Components are
+/// color (where it tints: see <see cref="AppearanceControls.ColorApplies"/>), opacity, offset, scale,
+/// rotation, and order within the Component's layer. Components are
 /// placed by their layer and anchor (see <see cref="ComponentPaintPlan"/>), so they aren't canvas
 /// elements: no selection box or Layers entry, and element Z order never moves them out of their layer.
 /// </summary>
@@ -226,27 +228,44 @@ internal sealed partial class ProfileEditorWindow
             EditorWidgets.Tooltip("On: moves and resizes with the name and title.\nOff: stays where it is, so you can move the name and this independently.");
         }
 
-        // Color: follows the theme until overridden.
-        var hasColor = component.Color is not null;
-        EditorWidgets.PropertyLabel("Color");
-        if (ImGui.Checkbox("Custom##CustomColor", ref hasColor))
+        // Color: follows the theme until overridden. Artwork drawn in its own colors takes none (issue
+        // #119, AppearanceControls), so it offers none, unless one is kept from before: that one's
+        // transparency still applies, so it stays, to be seen and turned off.
+        var colorApplies = AppearanceControls.ColorApplies(definition);
+        if (!colorApplies && component.Color is null)
         {
-            var start = definition?.DefaultColor(profile) ?? Vector4.One;
-            editorSession.EditComponent(componentId, c => c.Color = hasColor ? start : null, continuous: false);
+            EditorWidgets.PropertyLabel("Color", 0f);
+            ImGui.TextDisabled(AppearanceControls.OwnColorsLabel);
+            EditorWidgets.Tooltip(AppearanceControls.OwnColorsReason);
         }
-
-        EditorWidgets.Tooltip("Off: the color follows the Plate's theme.");
-        if (component.Color is { } color)
+        else
         {
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.ColorEdit4("##Color", ref color, ImGuiColorEditFlags.AlphaBar))
+            var hasColor = component.Color is not null;
+            EditorWidgets.PropertyLabel("Color");
+            if (ImGui.Checkbox("Custom##CustomColor", ref hasColor))
             {
-                var picked = color;
-                editorSession.EditComponent(componentId, c => c.Color = picked, continuous: true);
+                var start = definition?.DefaultColor(profile) ?? Vector4.One;
+                editorSession.EditComponent(componentId, c => c.Color = hasColor ? start : null, continuous: false);
             }
 
-            CommitComponentOnRelease();
+            EditorWidgets.Tooltip("Off: the color follows the Plate's theme.");
+            if (component.Color is { } color)
+            {
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.ColorEdit4("##Color", ref color, ImGuiColorEditFlags.AlphaBar))
+                {
+                    var picked = color;
+                    editorSession.EditComponent(componentId, c => c.Color = picked, continuous: true);
+                }
+
+                CommitComponentOnRelease();
+            }
+
+            if (!colorApplies)
+            {
+                EditorWidgets.Hint(AppearanceControls.KeptColorReason);
+            }
         }
 
         var opacity = component.Opacity * 100f;
