@@ -42,7 +42,7 @@ internal static class AppearanceControls
     /// Art Style's artwork (any piece of its set) keeps its own colors, and every other style there
     /// (the line and shape styles, and Celestial Dream's tintable corner) takes a color from the Look (tested).
     /// </summary>
-    internal const string SlotColorsHint = "Art Style artwork keeps its own colors; every other style here takes its color from your Look. Fine-tune placement, opacity and color in the Advanced Editor (Canvas tab, Components).";
+    internal const string SlotColorsHint = "Art Style artwork keeps its own colors; every other style here takes its color from your Look. Fine-tune rotation, opacity, color and every other placement in the Advanced Editor (Canvas tab, Components).";
 
     /// <summary>What covers the whole of the Plate's own background, as the renderer draws it now.</summary>
     internal static BackgroundCover Background(ProfileDocument profile) =>

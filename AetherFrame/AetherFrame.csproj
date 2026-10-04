@@ -35,6 +35,13 @@
     <EmbeddedResource Include="Fonts\Library\*.ttf">
       <LogicalName>AetherFrame.Fonts.Library.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <!-- The symbol faces (issue #121; tools/fonts/build_symbol_fonts.py), drawing symbols a Plate's
+         font lacks: a folder of their own, as they are no text family. Licensed in
+         Fonts/THIRD-PARTY-FONT-LICENSES.txt. -->
+    <None Remove="Fonts\Symbols\*.ttf" />
+    <EmbeddedResource Include="Fonts\Symbols\*.ttf">
+      <LogicalName>AetherFrame.Fonts.Symbols.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
     <!-- The fonts' licences travel with them, shown from Help (FontLicencesWindow). -->
     <EmbeddedResource Include="Fonts\THIRD-PARTY-FONT-LICENSES.txt" LogicalName="AetherFrame.Fonts.THIRD-PARTY-FONT-LICENSES.txt" />
     <EmbeddedResource Include="Fonts\Library\THIRD-PARTY-FONT-LICENSES.txt" LogicalName="AetherFrame.Fonts.Library.THIRD-PARTY-FONT-LICENSES.txt" />

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using AetherFrame.Domain.Basic;
@@ -46,9 +47,13 @@ internal sealed partial class BasicProfileEditorWindow
     ];
 
     private bool pendingTitlePicker;
-    private string titleSearch = string.Empty;
+    /// <summary>The title picker's search and place in its list, kept between openings (issue #114).</summary>
+    private static ChooserMemory TitleChooser => ChooserMemories.For("GameTitles");
     private readonly List<(GameTitle Title, bool? Unlocked)> titlePickerRows = new();
     private bool titlePickerUnlockKnown;
+
+    // Whether the symbol fallback draws a character (ProfileFontService.CanDrawSymbol), made once.
+    private Func<int, bool>? drawsSymbol;
 
     private void DrawIdentityCategory(ProfileDocument profile)
     {
@@ -187,14 +192,16 @@ internal sealed partial class BasicProfileEditorWindow
     }
 
     /// <summary>
-    /// A title decoration the Plate's fonts can't draw (it shows as "?") — e.g. the symbols earlier
-    /// builds added when choosing Accent — is called out where it's seen, with an explicit fix.
-    /// Never removed on its own: it can't be told apart from a symbol the user picked.
+    /// A title decoration the Plate's fonts can't draw (it shows as "?"), even through the symbol
+    /// fallback (issue #121), is called out where it's seen, with an explicit fix. The "✦" earlier
+    /// builds added when choosing Accent is drawn by the fallback, so it is called out only once the
+    /// fallback is full. Never removed on its own: it can't be told apart from a symbol the user picked.
     /// </summary>
-    private static void DrawUndrawableDecorationWarning(ProfileDocument profile, BasicIdentitySession identity)
+    private void DrawUndrawableDecorationWarning(ProfileDocument profile, BasicIdentitySession identity)
     {
+        drawsSymbol ??= renderResources.Fonts.CanDrawSymbol;
         if (BasicIdentitySession.Find(profile, ProfileElementRole.BasicTitle) is not { } title
-            || (IdentityHeaderRules.IsDrawableDecoration(title.Prefix) && IdentityHeaderRules.IsDrawableDecoration(title.Suffix)))
+            || (IdentityHeaderRules.IsDrawableDecoration(title.Prefix, drawsSymbol) && IdentityHeaderRules.IsDrawableDecoration(title.Suffix, drawsSymbol)))
         {
             return;
         }
@@ -315,7 +322,6 @@ internal sealed partial class BasicProfileEditorWindow
         if (pendingTitlePicker)
         {
             pendingTitlePicker = false;
-            titleSearch = string.Empty;
             RebuildTitlePickerRows(titleCatalog);
             ImGui.OpenPopup(TitlePickerPopupId);
         }
@@ -332,14 +338,28 @@ internal sealed partial class BasicProfileEditorWindow
             RebuildTitlePickerRows(titleCatalog);
         }
 
-        if (ImGui.IsWindowAppearing())
+        var feminine = GameTitleCatalog.UseFeminineForms;
+        var selectedId = profile.BasicIdentity is { TitleSource: IdentityTitleSource.GameTitle } settings ? settings.GameTitleId : 0u;
+        var memory = TitleChooser;
+        var selection = selectedId == 0u ? null : selectedId.ToString(CultureInfo.InvariantCulture);
+
+        // Before the search box: a kept search that would hide the chosen title is cleared. The rows
+        // are reordered once unlocked titles are known, so that is part of the list's layout.
+        var appearing = ImGui.IsWindowAppearing();
+        var layout = (titlePickerUnlockKnown ? 1 : 0) | (titlePickerRows.Count << 1);
+        var opening = ChooserScroll.Open(memory, appearing, selection, (_, query) => titlePickerRows.Exists(row => row.Title.Id == selectedId && row.Title.Matches(query)), layout);
+        if (appearing)
         {
             ImGui.SetKeyboardFocusHere();
         }
 
         var pickerWidth = TitlePickerWidth * ImGuiHelpers.GlobalScale;
+        var titleSearch = memory.Search;
         ImGui.SetNextItemWidth(pickerWidth);
-        ImGui.InputTextWithHint("##TitleSearch", "Search titles...", ref titleSearch, 64);
+        if (ImGui.InputTextWithHint("##TitleSearch", "Search titles...", ref titleSearch, 64, ImGuiInputTextFlags.AutoSelectAll))
+        {
+            memory.Search = titleSearch;
+        }
 
         using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + pickerWidth))
         {
@@ -353,14 +373,13 @@ internal sealed partial class BasicProfileEditorWindow
             }
         }
 
-        var feminine = GameTitleCatalog.UseFeminineForms;
-        var selectedId = profile.BasicIdentity is { TitleSource: IdentityTitleSource.GameTitle } settings ? settings.GameTitleId : 0u;
         var search = titleSearch.Trim();
 
-        using (var list = ImRaii.Child("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
+        using (var list = AetherChild.Begin("##TitleList", new Vector2(pickerWidth, TitlePickerListHeight * ImGuiHelpers.GlobalScale), true))
         {
             if (list.Success)
             {
+                ChooserScroll.Restore(opening, appearing);
                 var shown = 0;
                 foreach (var (title, unlocked) in titlePickerRows)
                 {
@@ -376,9 +395,12 @@ internal sealed partial class BasicProfileEditorWindow
                         if (ImGui.Selectable($"{text}##Title{title.Id}", title.Id == selectedId))
                         {
                             identity.SelectGameTitle(title);
+                            selection = title.Id.ToString(CultureInfo.InvariantCulture);
                             ImGui.CloseCurrentPopup();
                         }
                     }
+
+                    ChooserScroll.ScrollHereIfOpening(opening, title.Id == selectedId);
 
                     if (ImGui.IsItemHovered())
                     {
@@ -405,6 +427,8 @@ internal sealed partial class BasicProfileEditorWindow
                 {
                     ImGui.TextDisabled(titleCatalog.Titles.Count == 0 ? "No title data available." : "No titles match.");
                 }
+
+                ChooserScroll.End(memory, appearing, selection, layout);
             }
         }
     }

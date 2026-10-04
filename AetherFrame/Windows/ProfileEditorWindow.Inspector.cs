@@ -39,7 +39,7 @@ internal sealed partial class ProfileEditorWindow
 
     private void DrawInspectorPanel(ProfileDocument profile, Vector2 size)
     {
-        using var panel = ImRaii.Child("##AetherFrameInspectorPanel", size, true);
+        using var panel = AetherChild.Begin("##AetherFrameInspectorPanel", size, true);
         if (!panel.Success)
         {
             return;
@@ -57,6 +57,20 @@ internal sealed partial class ProfileEditorWindow
             }
         }
 
+        // A newly selected Component (from the canvas, Layers or the Basic editor) brings the Canvas
+        // tab forward with its Components section open and that Component's controls expanded.
+        if (editorSession.SelectedComponentId != lastInspectedComponentId)
+        {
+            lastInspectedComponentId = editorSession.SelectedComponentId;
+            if (lastInspectedComponentId is { } componentId)
+            {
+                selectCanvasTabPending = true;
+                expandedComponentId = componentId;
+                scrollToExpandedComponentPending = true;
+                EditorWidgets.OpenSection(ComponentsSectionLabel);
+            }
+        }
+
         using var tabBar = ImRaii.TabBar("##AetherFrameInspectorTabs");
         if (!tabBar.Success)
         {
@@ -65,15 +79,16 @@ internal sealed partial class ProfileEditorWindow
 
         // A tab the tutorial points into comes forward for as long as it does.
         var elementTabFlags = selectElementTabPending || TutorialWantsElementTab() ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
-        var canvasTabFlags = TutorialWantsCanvasTab() ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+        var canvasTabFlags = selectCanvasTabPending || TutorialWantsCanvasTab() ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
         selectElementTabPending = false;
+        selectCanvasTabPending = false;
 
         using (var elementTab = ImRaii.TabItem("Element", elementTabFlags))
         {
             TutorialAnchorMarks.Mark(TutorialTarget.AdvancedInspectorElementTab);
             if (elementTab.Success)
             {
-                using var scroll = ImRaii.Child("##ElementInspectorScroll", new Vector2(-1, -1), false);
+                using var scroll = AetherChild.Begin("##ElementInspectorScroll", new Vector2(-1, -1), false);
                 if (scroll.Success)
                 {
                     DrawSelectedElementInspector(profile);
@@ -86,7 +101,7 @@ internal sealed partial class ProfileEditorWindow
             TutorialAnchorMarks.Mark(TutorialTarget.AdvancedInspectorCanvasTab);
             if (canvasTab.Success)
             {
-                using var scroll = ImRaii.Child("##CanvasInspectorScroll", new Vector2(-1, -1), false);
+                using var scroll = AetherChild.Begin("##CanvasInspectorScroll", new Vector2(-1, -1), false);
                 if (scroll.Success)
                 {
                     DrawCanvasSettings(profile);
@@ -426,9 +441,12 @@ internal sealed partial class ProfileEditorWindow
         }
 
         var content = text.Text;
-        if (ImGui.InputTextMultiline("##TextContent", ref content, TextProfileElement.MaxTextLength, new Vector2(-1, 72f), contentFlags))
+        using (AetherChild.WhilePicking())
         {
-            ContinueTextEdit(text.Id, element => element.Text = content);
+            if (ImGui.InputTextMultiline("##TextContent", ref content, TextProfileElement.MaxTextLength, new Vector2(-1, 72f), contentFlags))
+            {
+                ContinueTextEdit(text.Id, element => element.Text = content);
+            }
         }
 
         TutorialAnchorMarks.Mark(TutorialTarget.AdvancedTextContent);
@@ -666,6 +684,7 @@ internal sealed partial class ProfileEditorWindow
         // outline, and shadow together.
         var color = text.Color;
         EditorWidgets.PropertyLabel("Color");
+        ScreenEyedropper.LeaveRoom();
         if (ImGui.ColorEdit4("##TextColor", ref color, ImGuiColorEditFlags.NoAlpha))
         {
             var rgb = color;
@@ -676,6 +695,11 @@ internal sealed partial class ProfileEditorWindow
         TutorialAnchorMarks.RevealIfWanted(TutorialTarget.AdvancedTextColor);
 
         CommitOnRelease();
+        if (ScreenEyedropper.Button("TextColor", ref color))
+        {
+            var rgb = color;
+            ApplyImmediateTextEdit(text.Id, element => element.Color = rgb with { W = element.Color.W });
+        }
 
         // A Basic Plate's character name follows its theme until given a custom color; this puts it
         // back under the theme (one undo step; opacity kept).
@@ -724,6 +748,11 @@ internal sealed partial class ProfileEditorWindow
             }
 
             CommitOnRelease();
+            if (ScreenEyedropper.Button("OutlineColor", ref outlineColor))
+            {
+                var rgb = outlineColor;
+                ApplyImmediateTextEdit(text.Id, element => element.OutlineColor = rgb with { W = 1f });
+            }
 
             var thickness = text.OutlineThickness;
             EditorWidgets.PropertyLabel("  Thickness");
@@ -765,6 +794,11 @@ internal sealed partial class ProfileEditorWindow
             }
 
             CommitOnRelease();
+            if (ScreenEyedropper.Button("ShadowColor", ref shadowColor))
+            {
+                var rgb = shadowColor;
+                ApplyImmediateTextEdit(text.Id, element => element.ShadowColor = rgb with { W = 1f });
+            }
 
             var shadowOpacity = text.ShadowOpacity * 100f;
             EditorWidgets.PropertyLabel("  Opacity");

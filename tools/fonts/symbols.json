@@ -1,0 +1,39 @@
+{
+  "blocks": [
+    [
+      "2190",
+      "2BFF"
+    ],
+    [
+      "4DC0",
+      "4DFF"
+    ]
+  ],
+  "fontTools": "4.66.1",
+  "faces": [
+    {
+      "name": "Noto Sans Symbols 2",
+      "file": "NotoSansSymbols2-Regular.ttf",
+      "source": "https://fonts.gstatic.com/s/notosanssymbols2/v25/I_uyMoGduATTei9eI8daxVHDyfisHr71ypM.ttf",
+      "sourceBytes": 1227692,
+      "sourceSha256": "f56f4b90e7653ee69d88593c337bd9bb3cad6e4c0d1b4ef55bf0424ec8cc7c95",
+      "bytes": 240972,
+      "sha256": "3ae3fa8554a65578e63c217c0f0ecc5d7a6bc312788e5d88cdcacd69342873b2",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/symbols)",
+      "license": "ofl",
+      "licenseSource": "https://github.com/notofonts/symbols/blob/main/OFL.txt"
+    },
+    {
+      "name": "Noto Sans Symbols",
+      "file": "NotoSansSymbols-Regular.ttf",
+      "source": "https://fonts.gstatic.com/s/notosanssymbols/v47/rP2up3q65FkAtHfwd-eIS2brbDN6gxP34F9jRRCe4W3gfQ8gag.ttf",
+      "sourceBytes": 183620,
+      "sourceSha256": "11096421f41ef548175a671cd2a29f1150fcc59845e82ab211d82fa3ec2e3482",
+      "bytes": 75740,
+      "sha256": "83d10204455303d8bc9a86434337336fa61db37c91ccca25ad16e504e1c76562",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/symbols)",
+      "license": "ofl",
+      "licenseSource": "https://github.com/notofonts/symbols/blob/main/OFL.txt"
+    }
+  ]
+}
