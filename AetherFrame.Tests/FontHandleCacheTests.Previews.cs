@@ -14,8 +14,8 @@ namespace AetherFrame.Tests;
 /// each family's preview is built once, in an atlas of its own, and never rebuilds another family's
 /// atlas or a Plate's font; at most two start a frame and four build at once, however fast the list
 /// scrolls; what was scrolled past is let go at once down to a bound, so however fast the list was
-/// dragged before it closed, a screen of rows and 32 others are held; reopening the list draws its
-/// previews at once; and a before/after measurement of scrolling the list with one atlas for every
+/// dragged before it closed, at most 32 are held, the rows on screen included; reopening the list
+/// draws its previews at once; and a before/after measurement of scrolling the list with one atlas for every
 /// preview.
 /// </summary>
 public partial class FontHandleCacheTests

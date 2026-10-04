@@ -621,11 +621,6 @@ public class FontTierPolicyTests
             return (above, below);
         }
 
-        /// <summary><paramref name="text"/>'s width, its glyphs' advances added up, as a multiple of the
-        /// font size (kerning aside); a character the face doesn't map adds nothing.</summary>
-        internal double AdvanceEms(string text) =>
-            text.Sum(c => codepointToGlyph.TryGetValue(c, out var glyph) ? advances[glyph] : 0) / (double)ascentMinusDescent;
-
         /// <summary><paramref name="text"/>'s width at <paramref name="sizePx"/>, as ImGui draws it with
         /// Dalamud's SafeFontConfig: each glyph's advance rounded to a whole pixel (PixelSnapH), kerning
         /// aside.</summary>
