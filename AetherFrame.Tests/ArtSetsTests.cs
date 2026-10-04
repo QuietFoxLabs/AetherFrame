@@ -39,15 +39,15 @@ public class ArtSetsTests
     // ---- Catalog --------------------------------------------------------------------------------
 
     [Fact]
-    public void ThirtyNineSets_OfSevenPieces_AndSakurasSectionHeader_WithIdsMadeFromTheirSlugs()
+    public void FortySets_OfSevenPieces_AndSakurasSectionHeader_WithIdsMadeFromTheirSlugs()
     {
         // The first 19 sets (October 1, 2026) and art sets 21 to 40 (the owner's second twenty),
-        // with Celestial Sakura the 40th style.
-        Assert.Equal(39, ArtSetData.Sets.Length);
-        Assert.Equal((39 * 7) + 1, ArtSets.Assets.Count);
+        // with Celestial Sakura the 40th style, and Honeybee Garden (October 4, 2026), the 41st.
+        Assert.Equal(40, ArtSetData.Sets.Length);
+        Assert.Equal((40 * 7) + 1, ArtSets.Assets.Count);
         Assert.Equal(ArtSets.Assets.Count, ArtSets.Definitions.Count);
-        Assert.Equal(40, ArtSets.Styles.Count);
-        Assert.Equal(39, ArtSetData.Sets.Select(s => s.Slug).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(41, ArtSets.Styles.Count);
+        Assert.Equal(40, ArtSetData.Sets.Select(s => s.Slug).Distinct(StringComparer.Ordinal).Count());
 
         foreach (var set in ArtSetData.Sets)
         {
@@ -400,7 +400,7 @@ public class ArtSetsTests
     {
         var groups = ThemeBrowser.Group(ProfileThemePresets.All, string.Empty, null);
         Assert.Equal(ThemeFamily.ArtStyle, groups[0].Family);
-        Assert.Equal(40, groups[0].Themes.Count);
+        Assert.Equal(41, groups[0].Themes.Count);
         Assert.All(groups.Skip(1), g => Assert.All(g.Themes, t => Assert.False(t.IsArtStyle)));
 
         Assert.Equal("Art Styles", ThemeBrowser.FamilyLabel(ThemeFamily.ArtStyle));

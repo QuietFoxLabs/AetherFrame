@@ -98,7 +98,10 @@ rows, and its drawing's bounds), October 2, 2026, at the owner's request:
   drawing starts and ends across those fills (their median). Embroidered Tapestry's woven Plate
   Frame passes only its texture test; Celestial Sakura's frames are ornamented all along, so
   theirs are set by hand where least busy, and their few hand-cut pixels stretch visibly further
-  than plain rail, more so on a canvas of another shape.
+  than plain rail, more so on a canvas of another shape. Honeybee Garden's Plate Frame has plain rod
+  on its side rails, but only in runs shorter than the script accepts (between its beads and the
+  mid-edge honey drop), so its rows are set by hand on those runs, 16 px inside, with the drop as
+  the center piece; only plain rod stretches.
 
 ## Celestial Dream / Corner Ornaments / AstrolabePivot.png — 512 x 512
 
@@ -196,10 +199,12 @@ the thread pool (`BuiltInArtLoader`), not inside Draw. The piece appears a frame
 If that ever matters, the Celestial Dream route is available: approved, reduced runtime copies
 made from the full-size sources.
 
-## The art sets: 39 sets of seven pieces, and Celestial Sakura's Section Header
+## The art sets: 40 sets of seven pieces, and Celestial Sakura's Section Header
 
 The first 19 came on October 1, 2026; art sets 21 to 40 (the owner's second twenty, `expansion-*`
-in the source folder) the next day, with Celestial Sakura the 40th style. Where neither ink reads at
+in the source folder) the next day, with Celestial Sakura the 40th style; Honeybee Garden, the 41st,
+on October 4, 2026, from a package the owner approved (its pieces copied unchanged into a
+`HoneybeeGarden` folder beside the others for the generator). Where neither ink reads at
 4.6:1 on a style's background (Alchemist's Workshop's details), the generator picks a deeper one, and
 it stops if any style still falls short.
 

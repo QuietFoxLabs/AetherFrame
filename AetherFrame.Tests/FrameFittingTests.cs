@@ -45,7 +45,7 @@ public class FrameFittingTests
         }
 
         Assert.All(BuiltInArtCatalog.All.Where(a => a.Frame is not null), a => Assert.True(a.Kind is PlateComponentKind.PlateFrame or PlateComponentKind.PortraitFrame, a.Id));
-        Assert.Equal(80, BuiltInArtCatalog.All.Count(ComponentPaintPlan.IsFramed));
+        Assert.Equal(82, BuiltInArtCatalog.All.Count(ComponentPaintPlan.IsFramed));
     }
 
     /// <summary>The drawing is the frame's opaque bounds (alpha over 16); its rails' outer edges (the

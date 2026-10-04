@@ -69,6 +69,9 @@ internal static class ArtFrameData
             ["HighFantasyRoyal"] = (
                 new ArtFrameSlices(new ArtSlices(32, 247, 719, 954, 1426, 1641), new ArtSlices(49, 272, 470, 470, 673, 894), new ArtBounds(13, 0, 1660, 921)),
                 new ArtFrameSlices(new ArtSlices(36, 314, 496, 496, 678, 957), new ArtSlices(56, 306, 793, 793, 1241, 1532), new ArtBounds(16, 22, 977, 1556))),
+            ["HoneybeeGarden"] = (
+                new ArtFrameSlices(new ArtSlices(38, 338, 629, 1045, 1334, 1635), new ArtSlices(65, 357, 372, 566, 587, 883), new ArtBounds(4, 9, 1669, 927)),
+                new ArtFrameSlices(new ArtSlices(40, 277, 362, 630, 714, 953), new ArtSlices(75, 376, 793, 793, 1188, 1508), new ArtBounds(21, 19, 971, 1547))),
             ["IndustrialSalvage"] = (
                 new ArtFrameSlices(new ArtSlices(37, 302, 836, 836, 1374, 1636), new ArtSlices(31, 241, 470, 470, 663, 889), new ArtBounds(19, 17, 1654, 902)),
                 new ArtFrameSlices(new ArtSlices(49, 312, 496, 496, 681, 943), new ArtSlices(41, 259, 793, 793, 1296, 1526), new ArtBounds(33, 29, 960, 1538))),
