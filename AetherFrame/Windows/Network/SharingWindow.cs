@@ -206,6 +206,11 @@ internal sealed class SharingWindow : Window
             DrawConnectionNotice(view);
         }
 
+        if (view.OnlineNotice)
+        {
+            DrawOnlineNotice(view);
+        }
+
         DrawOtherSending(view, character);
 
         if (character is not { } current)
@@ -448,6 +453,26 @@ internal sealed class SharingWindow : Window
             if (!view.Busy && AetherControls.SecondaryButton("Got it##AetherFrameSharingConnectionNotice"))
             {
                 sharing.TryDismissConnectionNotice();
+            }
+        }
+
+        AetherControls.Divider();
+    }
+
+    /// <summary>The one-time notice for players who shared before the online count: nothing of it is sent until they dismiss it.</summary>
+    private void DrawOnlineNotice(CharacterSharingView view)
+    {
+        using (ImRaii.Group())
+        {
+            AetherControls.SectionHeader(SharingText.OnlineNoticeTitle);
+            foreach (var line in SharingText.OnlineNotice)
+            {
+                Wrapped(line);
+            }
+
+            if (!view.Busy && AetherControls.SecondaryButton("Got it##AetherFrameSharingOnlineNotice"))
+            {
+                sharing.TryDismissOnlineNotice();
             }
         }
 

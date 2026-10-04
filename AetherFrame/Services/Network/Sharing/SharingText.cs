@@ -30,6 +30,7 @@ internal static class SharingText
         "To prove the character is yours, you'll paste a short code into its Lodestone profile. While the code is there, anyone reading the profile can see that you use AetherFrame, so delete it once the check passes.",
         ReadsThroughYourConnection,
         ThirtyDays,
+        OnlineCountSends,
     ];
 
     /// <summary>What reading the Lodestone page through the player's own connection means: in the consent, and in the one-time notice.</summary>
@@ -39,6 +40,19 @@ internal static class SharingText
     /// <summary>The 30 days after which a character not read again stops showing its Plate.</summary>
     internal const string ThirtyDays =
         "If this character's Lodestone page isn't read for 30 days, other players stop seeing its Plate until you next use sharing with it. Nothing is deleted.";
+
+    /// <summary>What the online count sends and keeps ("The online count"): in the consent, and in the one-time notice.</summary>
+    internal const string OnlineCountSends =
+        "While this character is logged in with sharing on, AetherFrame tells the sharing server about once a minute that it is online, so My Plates can show how many sharing characters are online. The server holds this in memory only, for 3 minutes after the last signal, counts each character once, and only ever gives out the total. It keeps no record of when anyone was online. Logging out, pausing or turning off sharing, or closing the game stops it, and the server then forgets the character within 3 minutes at most. Characters that don't share send nothing.";
+
+    internal const string OnlineNoticeTitle = "My Plates now shows how many are online";
+
+    /// <summary>The one-time notice for players who shared before the online count: nothing of it is sent until they dismiss it.</summary>
+    internal static readonly string[] OnlineNotice =
+    [
+        OnlineCountSends,
+        "Each signal shows the server your network address, which it doesn't store. Nothing is sent until you choose Got it.",
+    ];
 
     internal const string ConnectionNoticeTitle = "Checks now use your own connection";
 

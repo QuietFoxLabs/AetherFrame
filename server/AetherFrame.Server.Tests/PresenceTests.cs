@@ -1,0 +1,369 @@
+using System;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using AetherFrame.Protocol;
+using AetherFrame.Protocol.Identity;
+using AetherFrame.Protocol.Requests;
+using AetherFrame.Protocol.Signing;
+using AetherFrame.Server.Limits;
+using AetherFrame.Server.Presence;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace AetherFrame.Server.Tests;
+
+/// <summary>
+/// The online count ("The online count" in the decision register; ServerApi-v1.md, section 2.4):
+/// a signed start for a bound character, heartbeats and a leave that carry only the token, the
+/// count of distinct characters, the expiry, and the limits that keep it apart from everything else.
+/// </summary>
+public class PresenceTests
+{
+    private const long Aria = 12345678;
+    private const long Bram = 23456789;
+
+    [Fact]
+    public async Task Status_IsByteForByteWhatOlderPluginsRead()
+    {
+        using var server = new TestServer();
+        using var client = server.CreateClient();
+        using var response = await client.GetAsync("/v1/status");
+        Assert.Equal($"{{\"protocolVersion\":{ProtocolConstants.ProtocolVersion},\"api\":1,\"minimumPlugin\":\"0.1.9\"}}", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task OnlyABoundCharacter_StartsASession_AndItCountsAsOne()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using (var unbound = await StartAsync(aria))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, unbound.StatusCode);
+            Assert.Empty(await unbound.Content.ReadAsByteArrayAsync());
+        }
+
+        await aria.BindAsync(Aria);
+        var (token, online) = await StartedAsync(aria);
+        Assert.Equal(PresenceStore.TokenLength, token.Length);
+        Assert.Equal(1, online);
+    }
+
+    [Fact]
+    public async Task TheStart_IsItsOwnKind_WithAnEmptyBody()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        using (var asLookup = await aria.SendAsync("/v1/presence", RequestProofKind.Lookup, "{}"))
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, asLookup.StatusCode);
+        }
+
+        using (var withBody = await aria.SendAsync("/v1/presence", RequestProofKind.Presence, "{\"name\":\"Aria Starfall\"}"))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, withBody.StatusCode);
+        }
+
+        // And the presence kind authorizes nothing else.
+        using var asOptOut = await aria.SendAsync("/v1/opt-out", RequestProofKind.Presence, "{}");
+        Assert.Equal(HttpStatusCode.Forbidden, asOptOut.StatusCode);
+    }
+
+    [Fact]
+    public async Task TheCount_IsDistinctCharacters_AndANewStartReplacesTheKeysSession()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using var bram = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        await bram.BindAsync(Bram, "Bram Oakes");
+        var (first, _) = await StartedAsync(aria);
+        var (_, both) = await StartedAsync(bram);
+        Assert.Equal(2, both);
+
+        // A reload of Aria's plugin starts again: still one Aria, and her first token is gone.
+        var (second, again) = await StartedAsync(aria);
+        Assert.Equal(2, again);
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        using (var old = await BeatAsync(aria, first))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, old.StatusCode);
+        }
+
+        Assert.Equal(2, await BeatOnlineAsync(aria, second));
+    }
+
+    [Fact]
+    public async Task AHeartbeat_KeepsTheSession_AndASessionWithoutOne_ExpiresAfter180Seconds()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using var bram = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        await bram.BindAsync(Bram, "Bram Oakes");
+        var (ariaToken, _) = await StartedAsync(aria);
+        var (bramToken, _) = await StartedAsync(bram);
+
+        // Too soon after the start: refused, and the session left as it was.
+        using (var early = await BeatAsync(aria, ariaToken))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, early.StatusCode);
+        }
+
+        // Aria beats each minute; Bram stops.
+        for (var minute = 0; minute < 3; minute++)
+        {
+            server.Time.Advance(TimeSpan.FromSeconds(60));
+            await BeatOnlineAsync(aria, ariaToken);
+        }
+
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        Assert.Equal(1, await BeatOnlineAsync(aria, ariaToken));
+        using var expired = await BeatAsync(bram, bramToken);
+        Assert.Equal(HttpStatusCode.NotFound, expired.StatusCode);
+    }
+
+    [Fact]
+    public async Task ASession_LastsAnHourAtMost_ThenTheBindingIsCheckedAgain()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        var (token, _) = await StartedAsync(aria);
+        for (var minute = 1; minute < 60; minute++)
+        {
+            server.Time.Advance(TimeSpan.FromSeconds(60));
+            await BeatOnlineAsync(aria, token);
+        }
+
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        using var over = await BeatAsync(aria, token);
+        Assert.Equal(HttpStatusCode.NotFound, over.StatusCode);
+    }
+
+    [Fact]
+    public async Task Leaving_EndsTheSessionAtOnce_AndAnswersTheSameForAnyToken()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        using var bram = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        await bram.BindAsync(Bram, "Bram Oakes");
+        var (ariaToken, _) = await StartedAsync(aria);
+        await StartedAsync(bram);
+
+        using (var left = await aria.PostRawAsync("/v1/presence/leave", ariaToken))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
+        }
+
+        using (var unknown = await aria.PostRawAsync("/v1/presence/leave", new byte[PresenceStore.TokenLength]))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, unknown.StatusCode);
+        }
+
+        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        using var after = await BeatAsync(aria, ariaToken);
+        Assert.Equal(HttpStatusCode.NotFound, after.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("{\"mode\":\"pause\"}")]
+    [InlineData("{}")]
+    public async Task PausingOrTurningOff_StopsCountingTheCharacterAtOnce(string body)
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        var (token, _) = await StartedAsync(aria);
+        using (var off = await aria.SendAsync("/v1/opt-out", RequestProofKind.OptOut, body))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, off.StatusCode);
+        }
+
+        Assert.Equal(0, server.Services.GetRequiredService<PresenceStore>().Online());
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        using var beat = await BeatAsync(aria, token);
+        Assert.Equal(HttpStatusCode.NotFound, beat.StatusCode);
+    }
+
+    [Fact]
+    public async Task ATakeover_EndsTheOldKeysSession_AndTheOldKeyCantStartAnother()
+    {
+        using var server = new TestServer();
+        using var oldPc = server.NewPlayer();
+        using var newPc = server.NewPlayer();
+        await oldPc.BindAsync(Aria);
+        var (oldToken, _) = await StartedAsync(oldPc);
+        await newPc.BindAsync(Aria);
+        Assert.Equal(0, server.Services.GetRequiredService<PresenceStore>().Online());
+
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        using (var beat = await BeatAsync(oldPc, oldToken))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, beat.StatusCode);
+        }
+
+        using (var start = await StartAsync(oldPc))
+        {
+            Assert.Equal(HttpStatusCode.Gone, start.StatusCode);
+        }
+
+        var (_, online) = await StartedAsync(newPc);
+        Assert.Equal(1, online);
+    }
+
+    [Fact]
+    public async Task ACharacterOffTheAllowlist_StartsNothing()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        server.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ServerOptions>>().CurrentValue.AllowedLodestoneIds.Clear();
+        using var start = await StartAsync(aria);
+        Assert.Equal(HttpStatusCode.NotFound, start.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(31)]
+    [InlineData(33)]
+    public async Task AHeartbeat_IsExactlyTheToken(int length)
+    {
+        using var server = new TestServer();
+        using var player = server.NewPlayer();
+        using var beat = await player.PostRawAsync("/v1/presence/beat", new byte[length]);
+        Assert.Equal(length > PresenceStore.TokenLength ? HttpStatusCode.RequestEntityTooLarge : HttpStatusCode.BadRequest, beat.StatusCode);
+    }
+
+    [Fact]
+    public async Task Heartbeats_HaveTheirOwnAddressLimit_AndTakeNothingFromAnyOther()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        for (var beat = 0; beat < ServerLimits.PresenceBeatsPerAddress.Count; beat++)
+        {
+            using var response = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength]);
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+
+        using (var over = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength]))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, over.StatusCode);
+        }
+
+        // Signed requests from the same address go on: a challenge, and a presence start with it.
+        var (token, online) = await StartedAsync(aria);
+        Assert.Equal(1, online);
+
+        // A minute later there is room again.
+        server.Time.Advance(TimeSpan.FromSeconds(61));
+        Assert.Equal(1, await BeatOnlineAsync(aria, token));
+    }
+
+    [Fact]
+    public async Task Starts_AreLimitedPerKey()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        for (var start = 0; start < ServerLimits.PresenceStartsPerKey.Count; start++)
+        {
+            await StartedAsync(aria);
+        }
+
+        using var over = await StartAsync(aria);
+        Assert.Equal(HttpStatusCode.TooManyRequests, over.StatusCode);
+    }
+
+    [Fact]
+    public async Task NothingLogged_HoldsTheTokenOrTheCharacter()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        var (token, _) = await StartedAsync(aria);
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        await BeatOnlineAsync(aria, token);
+        using (await aria.PostRawAsync("/v1/presence/leave", token))
+        {
+        }
+
+        var log = server.Log.All;
+        Assert.DoesNotContain(Convert.ToBase64String(token), log, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToHexString(token), log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Aria.ToString(System.Globalization.CultureInfo.InvariantCulture), log, StringComparison.Ordinal);
+        Assert.DoesNotContain(aria.Key.PublicKey.Id.ToString(), log, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheStore_IsBounded_AndSweepsExpiredSessionsToMakeRoom()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 4, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        var keys = Enumerable.Range(0, PresenceStore.MaxSessions + 1).Select(KeyOf).ToArray();
+        for (var index = 0; index < PresenceStore.MaxSessions; index++)
+        {
+            Assert.NotNull(store.Start(keys[index], index + 1));
+        }
+
+        Assert.Null(store.Start(keys[^1], PresenceStore.MaxSessions + 1));
+        Assert.Equal(PresenceStore.MaxSessions, store.Online());
+
+        time.Advance(PresenceStore.Expiry);
+        Assert.NotNull(store.Start(keys[^1], PresenceStore.MaxSessions + 1));
+        Assert.Equal(1, store.Sessions);
+        Assert.Equal(1, store.Online());
+    }
+
+    [Fact]
+    public void TheStore_CountsACharacterOnce_WhateverNamesIt()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 4, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        var first = store.Start(KeyOf(1), Aria)!.Value;
+        var second = store.Start(KeyOf(2), Aria)!.Value;
+        Assert.Equal(1, second.Online);
+        store.Leave(first.Token);
+        Assert.Equal(1, store.Online());
+        store.Leave(second.Token);
+        Assert.Equal(0, store.Online());
+    }
+
+    private static PersonaId KeyOf(int index)
+    {
+        var bytes = new byte[32];
+        BitConverter.TryWriteBytes(bytes, index + 1);
+        return PersonaId.Parse("psn_" + Convert.ToHexString(bytes).ToLowerInvariant());
+    }
+
+    private static Task<HttpResponseMessage> StartAsync(Player player) =>
+        player.SendAsync("/v1/presence", RequestProofKind.Presence, "{}");
+
+    private static async Task<(byte[] Token, int Online)> StartedAsync(Player player)
+    {
+        using var response = await StartAsync(player);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var answer = await response.Content.ReadFromJsonElementAsync();
+        Assert.Equal(["session", "online"], answer.EnumerateObject().Select(property => property.Name));
+        return (Convert.FromBase64String(answer.GetProperty("session").GetString()!), answer.GetProperty("online").GetInt32());
+    }
+
+    private static Task<HttpResponseMessage> BeatAsync(Player player, byte[] token) =>
+        player.PostRawAsync("/v1/presence/beat", token);
+
+    private static async Task<int> BeatOnlineAsync(Player player, byte[] token)
+    {
+        using var response = await BeatAsync(player, token);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var answer = await response.Content.ReadFromJsonElementAsync();
+        Assert.Equal(["online"], answer.EnumerateObject().Select(property => property.Name));
+        return answer.GetProperty("online").GetInt32();
+    }
+}

@@ -135,6 +135,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // drawing, the Sharing window that shows it, and the small window that follows each share.
     private readonly LivePublisher livePublisher;
     private readonly SharingWindow sharingWindow;
+
+    // The online count ("The online count" in the decision register): while the logged-in
+    // character shares, a heartbeat in the background keeps it counted, and My Plates shows the
+    // count. Each frame only says whose presence is wanted; every request runs off the frame.
+    private readonly OnlineCount onlineCount;
+    private readonly Func<PresenceTarget?> presenceTarget;
     private readonly SharingProgressWindow sharingProgressWindow;
 
     // Viewing other players' Plates (N2-10): looked up only while one of the player's characters
@@ -421,6 +427,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // time, and hands it to the sharing service.
             livePublisher = new LivePublisher(characterSharing, NewShareCheck(), () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, () => plateLibrary.IsLoaded);
             plateLibrary.PlateSaved += livePublisher.PlateSaved;
+            onlineCount = new OnlineCount(sharingConnection.Client, personaSession.TryRun, () => DateTimeOffset.UtcNow, ownedOperations.Stopping, log.Information);
+            presenceTarget = () => OnlineCount.TargetOf(characterSharing.View, characterIdentityService.CurrentCharacter?.ContentId);
             sharingWindow = new SharingWindow(characterSharing, livePublisher, personaSession, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
@@ -645,6 +653,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 #if AETHERFRAME_NETWORK_PREVIEW
             livePublisher.OnFrame();
             plateViewing.OnFrame();
+            onlineCount.Update(presenceTarget());
 #endif
             WindowSystem.Draw();
             ScreenEyedropper.Draw();
@@ -698,6 +707,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // or as soon as its own work in flight ends: never tied to the plugin's other operations,
         // so a reloaded AetherFrame finds the lock free as early as possible (P3).
         personaSession.Close();
+
+        // The online count stops sending and ends its session on the server (a leave, within a few
+        // seconds), before anything it uses is disposed.
+        await onlineCount.StopAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 #endif
 
         // First, nothing new can start: no drawing, menus, commands, login events or shortcuts.

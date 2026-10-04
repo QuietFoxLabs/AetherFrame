@@ -58,6 +58,27 @@ internal static class ServerLimits
     public static readonly Limit ReportsPerKey = new("report/key", 20, TimeSpan.FromDays(1));
 
     public static readonly Limit ReportsPerAddress = new("report/address", 60, TimeSpan.FromDays(1));
+
+    /// <summary>
+    /// Signed starts of a presence session for one key ("The online count"): one at login and one
+    /// an hour after (the session's lifetime) is the plugin's normal pace, so 12 leaves room for
+    /// restarts of the server or the game without letting a key churn sessions.
+    /// </summary>
+    public static readonly Limit PresenceStartsPerKey = new("presence-start/key", 12, TimeSpan.FromHours(1));
+
+    /// <summary>
+    /// Signed starts of a presence session from one address group: a tenth of
+    /// <see cref="ChallengesPerAddress"/>, so presence never takes more than that share of the
+    /// challenges that publishing, looking up and checking from the same network also need.
+    /// </summary>
+    public static readonly Limit PresenceStartsPerAddress = new("presence-start/address", 60, TimeSpan.FromHours(1));
+
+    /// <summary>
+    /// Heartbeats and leaves from one address group, counted in a minute so the counter holds few
+    /// events: some 100 players behind one IPv4 address at the plugin's pace. Its own counter, so a
+    /// busy network's heartbeats never take from any other limit.
+    /// </summary>
+    public static readonly Limit PresenceBeatsPerAddress = new("presence/address", 120, TimeSpan.FromMinutes(1));
 }
 
 /// <summary>
