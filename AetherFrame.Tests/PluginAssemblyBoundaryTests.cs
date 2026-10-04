@@ -649,14 +649,37 @@ public partial class PluginAssemblyBoundaryTests
     private static bool Within(string ns, string[] roots) =>
         roots.Any(root => ns == root || ns.StartsWith(root + ".", StringComparison.Ordinal));
 
+    /// <summary>
+    /// The screen eyedropper's read-only Win32 calls (issue #120), in its one class, in both flavours:
+    /// where the pointer is and which buttons are down, which window shows at a pixel and where the
+    /// game's client area is, the desktop's color at a pixel, and physical pixels for those calls.
+    /// </summary>
+    private static readonly string[] EyedropperNativeCalls =
+    [
+        "AetherFrame.Services.ScreenPixels: gdi32.dll!GetPixel",
+        "AetherFrame.Services.ScreenPixels: user32.dll!ClientToScreen",
+        "AetherFrame.Services.ScreenPixels: user32.dll!GetAncestor",
+        "AetherFrame.Services.ScreenPixels: user32.dll!GetAsyncKeyState",
+        "AetherFrame.Services.ScreenPixels: user32.dll!GetClientRect",
+        "AetherFrame.Services.ScreenPixels: user32.dll!GetCursorPos",
+        "AetherFrame.Services.ScreenPixels: user32.dll!GetDC",
+        "AetherFrame.Services.ScreenPixels: user32.dll!GetSystemMetrics",
+        "AetherFrame.Services.ScreenPixels: user32.dll!ReleaseDC",
+        "AetherFrame.Services.ScreenPixels: user32.dll!SetThreadDpiAwarenessContext",
+        "AetherFrame.Services.ScreenPixels: user32.dll!WindowFromPoint",
+    ];
+
     [Fact]
-    public void DeclaredNativeCalls_AreDpapisAndTheWrittenThroughMove_AndOnlyInThePreviewFlavour()
+    public void DeclaredNativeCalls_AreTheEyedroppersReads_PlusDpapiAndTheWrittenThroughMoveInThePreviewFlavour()
     {
-        // The player build declares no P/Invoke of its own (it reaches native code only through
-        // Dalamud and ImGui, like every plugin). The preview flavour declares exactly the three DPAPI
-        // needs, all in the DPAPI protector (docs/networking/DecisionRegister.md, K2), and the
-        // written-through move the persona files need, in its own class (P3). This reads the
-        // P/Invoke declarations, which LibraryImport's generated stubs also make.
+        // Both flavours declare the screen eyedropper's read-only Win32 calls, all in ScreenPixels
+        // (ROADMAP.md section 5, the screen eyedropper's decision): Dalamud and ImGui read neither the
+        // desktop outside the game's picture nor the mouse outside the game's window. Otherwise the
+        // player build reaches native code only through Dalamud and ImGui, like every plugin. The
+        // preview flavour also declares exactly the three DPAPI needs, all in the DPAPI protector
+        // (docs/networking/DecisionRegister.md, K2), and the written-through move the persona files
+        // need, in its own class (P3). This reads the P/Invoke declarations, which LibraryImport's
+        // generated stubs also make.
         var path = RepositoryPaths.PluginAssembly();
         if (path is null)
         {
@@ -688,18 +711,20 @@ public partial class PluginAssemblyBoundaryTests
         imports.Sort(StringComparer.Ordinal);
         if (PreviewFlavour)
         {
-            Assert.Equal(
-                [
-                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptProtectData",
-                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptUnprotectData",
-                    "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: kernel32.dll!LocalFree",
-                    "AetherFrame.Services.Network.Personas.WrittenThroughMove: kernel32.dll!MoveFileExW",
-                ],
-                imports);
+            string[] expected =
+            [
+                .. EyedropperNativeCalls,
+                "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptProtectData",
+                "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: crypt32.dll!CryptUnprotectData",
+                "AetherFrame.Services.Network.Personas.DpapiPersonaKeyProtector: kernel32.dll!LocalFree",
+                "AetherFrame.Services.Network.Personas.WrittenThroughMove: kernel32.dll!MoveFileExW",
+            ];
+            Array.Sort(expected, StringComparer.Ordinal);
+            Assert.Equal(expected, imports);
         }
         else
         {
-            Assert.True(imports.Count == 0, "The player build calls: " + string.Join(", ", imports));
+            Assert.Equal(EyedropperNativeCalls, imports);
         }
     }
 

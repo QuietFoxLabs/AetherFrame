@@ -28,6 +28,8 @@ public sealed class BasicPlateSettings
     private List<string> playstyles = new();
     private List<uint> favoriteJobIds = new();
     private string themeId = string.Empty;
+    private string? artStyleId;
+    private string? simpleThemeId;
 
     public AdventurePlateOrientation Orientation { get; set; } = AdventurePlateOrientation.Normal;
 
@@ -83,18 +85,44 @@ public sealed class BasicPlateSettings
     public int Level { get; set; }
 
     /// <summary>
-    /// Stable <see cref="ProfileThemePreset.Id"/> of the theme last applied in Basic mode ("" for
-    /// none). Only a soft default for Reset Section's colors: nothing references the preset, and
-    /// every color stays editable. The JSON property name (<c>ThemeName</c>) predates the Id/Name
-    /// split and is kept as-is so no existing Plate needs rewriting; every value already stored
-    /// there is a theme's Id (Id was defined equal to Name for every theme that shipped before the
-    /// split existed).
+    /// Stable <see cref="ProfileThemePreset.Id"/> of the style the Plate uses ("" for none): the Art
+    /// Style in use, else the Simple Theme (issue #118; see <c>PlateStyle</c>). The colors of
+    /// Components without their own follow it, and Reset Section's colors default to it; nothing
+    /// references the preset otherwise, and every color stays editable. The JSON property name
+    /// (<c>ThemeName</c>) predates the Id/Name split and is kept as-is so no existing Plate needs
+    /// rewriting; every value already stored there is a theme's Id (Id was defined equal to Name for
+    /// every theme that shipped before the split existed). Earlier builds read it unchanged.
     /// </summary>
     [JsonPropertyName("ThemeName")]
     public string ThemeId
     {
         get => themeId;
         set => themeId = value ?? string.Empty;
+    }
+
+    /// <summary>
+    /// The Art Style the player last chose (null for none; an empty value reads as none), kept while
+    /// a Simple Theme is in use so it can be chosen again (issue #118). Written only by a choice; a
+    /// Plate saved before it existed reads its Art Style from <see cref="ThemeId"/> (see
+    /// <c>PlateStyle</c>). Not written while null, so every Plate saved before it stays byte for byte
+    /// as it was; earlier builds keep it unread (<see cref="ExtensionData"/>).
+    /// </summary>
+    [JsonPropertyName("ArtStyle")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ArtStyleId
+    {
+        get => artStyleId;
+        set => artStyleId = string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    /// <summary>The Simple Theme the player last chose (null for none), kept while an Art Style is in
+    /// use, as <see cref="ArtStyleId"/> is the other way round.</summary>
+    [JsonPropertyName("SimpleTheme")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SimpleThemeId
+    {
+        get => simpleThemeId;
+        set => simpleThemeId = string.IsNullOrEmpty(value) ? null : value;
     }
 
     /// <summary>Properties this build doesn't know, kept through clone and save unchanged.</summary>
@@ -142,6 +170,8 @@ public sealed class BasicPlateSettings
             FavoriteJobIds = new List<uint>(FavoriteJobIds),
             Level = Level,
             ThemeId = ThemeId,
+            ArtStyleId = ArtStyleId,
+            SimpleThemeId = SimpleThemeId,
             ExtensionData = ProfileElement.CopyExtensionData(ExtensionData),
         };
 
@@ -161,6 +191,8 @@ public sealed class BasicPlateSettings
             || FavoriteJobId != other.FavoriteJobId
             || Level != other.Level
             || ThemeId != other.ThemeId
+            || ArtStyleId != other.ArtStyleId
+            || SimpleThemeId != other.SimpleThemeId
             || (ActiveHours is null ? other.ActiveHours is not null : !ActiveHours.ContentEquals(other.ActiveHours))
             || Placements.Count != other.Placements.Count
             || Playstyles.Count != other.Playstyles.Count
