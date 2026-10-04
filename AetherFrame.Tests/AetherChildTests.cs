@@ -18,7 +18,7 @@ public sealed class AetherChildTests
     {
         var offenders = Sources()
             .Where(source => !source.Path.EndsWith("AetherChild.cs", System.StringComparison.Ordinal))
-            .SelectMany(source => Regex.Matches(source.Text, @"ImRaii\.Child\(|ChildDisposable\(|ImGui\.BeginChild|ChildFrame\(|BeginListBox|ImRaii\.ListBox\(")
+            .SelectMany(source => Regex.Matches(source.Text, @"ImRaii\.Child\(|ChildDisposable\(|BeginChild|ChildFrame\(|BeginListBox|ListBox\(")
                 .Select(match => $"{source.Path}: {match.Value}"))
             .ToList();
         Assert.Empty(offenders);

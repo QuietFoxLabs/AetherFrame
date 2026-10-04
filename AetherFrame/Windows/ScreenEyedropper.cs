@@ -125,10 +125,8 @@ internal static class ScreenEyedropper
             CancelButtonDown: ScreenPixels.ButtonDown(primary: false) || ImGui.IsMouseDown(ImGuiMouseButton.Right),
             PickKeyPressed: ImGui.IsKeyPressed(ImGuiKey.Enter, false) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, false) || ImGui.IsKeyPressed(ImGuiKey.Space, false),
             CancelKeyPressed: ImGui.IsKeyPressed(ImGuiKey.Escape, false),
-            // Windows' own key state too, as the pick started with (Start's keysHeld): a key held
-            // since before ImGui saw it go down never reads as down to ImGui, and its key repeat
-            // would then count as a fresh press.
-            KeysDown: ScreenPixels.KeysDown() || ImGui.IsKeyDown(ImGuiKey.Escape) || ImGui.IsKeyDown(ImGuiKey.Enter) || ImGui.IsKeyDown(ImGuiKey.KeypadEnter) || ImGui.IsKeyDown(ImGuiKey.Space)));
+            KeysDown: ImGui.IsKeyDown(ImGuiKey.Escape) || ImGui.IsKeyDown(ImGuiKey.Enter) || ImGui.IsKeyDown(ImGuiKey.KeypadEnter) || ImGui.IsKeyDown(ImGuiKey.Space),
+            KeysHeldAnywhere: ScreenPixels.KeysDown()));
 
         if (!current.ClaimsInput)
         {

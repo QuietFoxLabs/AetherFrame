@@ -40,7 +40,9 @@ internal interface IScreenColorReader
 /// <param name="CancelButtonDown">The secondary mouse button is down.</param>
 /// <param name="PickKeyPressed">Enter or Space went down this frame.</param>
 /// <param name="CancelKeyPressed">Escape went down this frame.</param>
-/// <param name="KeysDown">Escape, Enter or Space is down.</param>
+/// <param name="KeysDown">Escape, Enter or Space is down, as the game's window saw it.</param>
+/// <param name="KeysHeldAnywhere">Escape, Enter or Space is down by Windows' own reckoning, whichever
+/// program had it: a key held since before the game's window saw it go down counts here only.</param>
 internal readonly record struct EyedropperInput(
     int Frame,
     long Milliseconds,
@@ -49,7 +51,8 @@ internal readonly record struct EyedropperInput(
     bool CancelButtonDown,
     bool PickKeyPressed,
     bool CancelKeyPressed,
-    bool KeysDown);
+    bool KeysDown,
+    bool KeysHeldAnywhere = false);
 
 /// <summary>Where a pick is (see <see cref="Eyedropper"/>).</summary>
 internal enum EyedropperPhase
@@ -221,9 +224,10 @@ internal sealed class Eyedropper
         pickWasDown = input.PickButtonDown;
         cancelWasDown = input.CancelButtonDown;
 
-        // A key held since before the pick counts once it has been let go.
+        // A key held since before the pick counts once it has been let go, wherever it was held: one
+        // the game's window never saw go down would otherwise count through its key repeat.
         var keys = keysArmed ? input : input with { PickKeyPressed = false, CancelKeyPressed = false };
-        keysArmed |= !input.KeysDown;
+        keysArmed |= !input.KeysDown && !input.KeysHeldAnywhere;
 
         if (pickPressed && startedMs != long.MinValue && input.Milliseconds - startedMs < StartGraceMs)
         {

@@ -257,7 +257,12 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         plateMenu.DrawPopups(characterIdentity.CurrentCharacter);
         DrawBasicGuidancePopup();
 
-        fileDialogManager.Draw();
+        // Hidden while the eyedropper picks (issue #120), and back as it was once the pick ends: it
+        // is Dalamud's window, not AetherFrame's, so on another monitor a pick's click would reach it.
+        if (!ScreenEyedropper.ClaimsInput)
+        {
+            fileDialogManager.Draw();
+        }
     }
 
     private void DrawMyPlatesView()

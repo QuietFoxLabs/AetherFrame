@@ -89,11 +89,11 @@ public class EyedropperTests
 
         internal long Milliseconds => milliseconds;
 
-        internal void Frames(int count, ScreenPixel? pointer = null, bool button = false, bool secondary = false, bool keysDown = false)
+        internal void Frames(int count, ScreenPixel? pointer = null, bool button = false, bool secondary = false, bool keysDown = false, bool heldAnywhere = false)
         {
             for (var i = 0; i < count; i++)
             {
-                Step(new EyedropperInput(frame, milliseconds, pointer ?? Red, button, secondary, false, false, keysDown));
+                Step(new EyedropperInput(frame, milliseconds, pointer ?? Red, button, secondary, false, false, keysDown, heldAnywhere));
             }
         }
 
@@ -106,8 +106,8 @@ public class EyedropperTests
         internal void Escape(ScreenPixel? at = null) =>
             Step(new EyedropperInput(frame, milliseconds, at ?? Red, false, false, PickKeyPressed: false, CancelKeyPressed: true, KeysDown: true));
 
-        internal void Enter(ScreenPixel? at) =>
-            Step(new EyedropperInput(frame, milliseconds, at, false, false, PickKeyPressed: true, CancelKeyPressed: false, KeysDown: true));
+        internal void Enter(ScreenPixel? at, bool keysDown = true, bool heldAnywhere = false) =>
+            Step(new EyedropperInput(frame, milliseconds, at, false, false, PickKeyPressed: true, CancelKeyPressed: false, KeysDown: keysDown, KeysHeldAnywhere: heldAnywhere));
 
         internal void Wait(long ms) => milliseconds += ms;
 
@@ -262,6 +262,30 @@ public class EyedropperTests
         player.Frames(1, Red); // let go
         player.Enter(Red);
         Assert.Equal(EyedropperPhase.Picking, eyedropper.Phase);
+    }
+
+    [Fact]
+    public void AKeyHeldElsewhere_KeepsTheKeysUnarmed_UntilLetGo_ButNeverHoldsTheEnd()
+    {
+        var screen = new FakeScreen();
+        var eyedropper = new Eyedropper(screen);
+        var player = new Player(eyedropper);
+        Assert.True(eyedropper.Start(Owner, keysHeld: true));
+
+        // Held since before the game's window saw it: ImGui reads it as up, Windows as down, and
+        // its key repeat reaches the game's window as a press.
+        player.Frames(1, Red, heldAnywhere: true);
+        player.Enter(Red, keysDown: true, heldAnywhere: true);
+        Assert.Equal(EyedropperPhase.Sampling, eyedropper.Phase);
+
+        player.Frames(1, Red); // let go
+        player.Enter(Red);
+        Assert.Equal(EyedropperPhase.Picking, eyedropper.Phase);
+
+        // A key held in another program (push-to-talk, say) doesn't keep the input claimed.
+        player.Frames(Eyedropper.PickDelayFrames + 4, Red, heldAnywhere: true);
+        Assert.Equal(EyedropperPhase.Idle, eyedropper.Phase);
+        Assert.True(eyedropper.TryTakePick(Owner, out _));
     }
 
     [Fact]
