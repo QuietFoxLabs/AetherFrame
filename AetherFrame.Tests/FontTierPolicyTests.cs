@@ -593,13 +593,14 @@ public class FontTierPolicyTests
 
         /// <summary>
         /// The box ImGui draws the face in at <paramref name="sizePx"/>: its ascent above the baseline
-        /// and its descent below it (positive), in whole pixels as ImGui's builder rounds them (the
-        /// ascent up, the descent down), which its ImFont.Ascent and ImFont.Descent hold.
+        /// and its descent below it (positive), in whole pixels as the builder in Dalamud's ImGui (1.88)
+        /// rounds them, a pixel outward: floor(ascent + 1) and floor(descent - 1), the descent being
+        /// negative there. Its ImFont.Ascent and ImFont.Descent hold them.
         /// </summary>
         internal (float Ascent, float Descent) LineBox(float sizePx)
         {
             var scale = sizePx / ascentMinusDescent;
-            return ((float)Math.Ceiling(ascent * scale), (float)-Math.Floor((ascent - ascentMinusDescent) * scale));
+            return ((float)Math.Floor((ascent * scale) + 1), (float)-Math.Floor(((ascent - ascentMinusDescent) * scale) - 1));
         }
 
         /// <summary>How far <paramref name="text"/>'s glyphs reach above and below the baseline at
@@ -624,6 +625,15 @@ public class FontTierPolicyTests
         /// font size (kerning aside); a character the face doesn't map adds nothing.</summary>
         internal double AdvanceEms(string text) =>
             text.Sum(c => codepointToGlyph.TryGetValue(c, out var glyph) ? advances[glyph] : 0) / (double)ascentMinusDescent;
+
+        /// <summary><paramref name="text"/>'s width at <paramref name="sizePx"/>, as ImGui draws it with
+        /// Dalamud's SafeFontConfig: each glyph's advance rounded to a whole pixel (PixelSnapH), kerning
+        /// aside.</summary>
+        internal float Width(string text, float sizePx)
+        {
+            var scale = sizePx / ascentMinusDescent;
+            return text.Sum(c => codepointToGlyph.TryGetValue(c, out var glyph) ? (float)Math.Floor((advances[glyph] * scale) + 0.5) : 0f);
+        }
 
         /// <summary>
         /// The middle of the capitals, from the top of the box ImGui draws the face in (ascent to

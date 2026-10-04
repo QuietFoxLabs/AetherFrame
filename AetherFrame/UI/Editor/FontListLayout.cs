@@ -24,16 +24,19 @@ internal readonly record struct FontListRow(float SampleSize, float Height, floa
 internal static class FontListLayout
 {
     /// <summary>
-    /// The room above the baseline, as a share of the sample's size. Every bundled face's ascent
-    /// fits (at most 0.858 of its size once ImGui rounds it up, Lato's), and so does the ink of its
-    /// sample, which reaches up to 0.04 above the box (Josefin Sans), with one exception: Press
-    /// Start 2P's capitals fill its whole box, so it is drawn a little smaller.
+    /// The room above the baseline, as a share of the sample's size. Every bundled face's ascent, as
+    /// ImGui 1.88's builder rounds it (Dalamud's: floor(ascent + 1)), fits with a pixel to spare at
+    /// every preview tier (the most is 0.857 of the size, Lato's, Exo 2's and Bangers' at 28 px), and
+    /// so does the ink of its sample, which reaches a pixel above the box at most (Special Elite), with
+    /// one exception: Press Start 2P's capitals fill its whole box, so it is drawn a little smaller.
     /// </summary>
     internal const float AboveBaseline = 0.88f;
 
-    /// <summary>The room below the baseline, as a share of the sample's size: the deepest descent,
-    /// Homemade Apple's (at most 0.429 once rounded), fits.</summary>
-    internal const float BelowBaseline = 0.44f;
+    /// <summary>The room below the baseline, as a share of the sample's size: every bundled face's
+    /// descent, as ImGui 1.88 rounds it (floor(descent - 1), a pixel deeper than the face's own), fits
+    /// with a pixel to spare at every preview tier; the deepest is Homemade Apple's, 0.464 of the size
+    /// at 28 px.</summary>
+    internal const float BelowBaseline = 0.48f;
 
     /// <summary>
     /// The sample column's width, in multiples of the sample's size. Every bundled face's sample fits
@@ -60,10 +63,19 @@ internal static class FontListLayout
     /// reaches past the row above or below the baseline, or the sample is wider than its column;
     /// then just small enough to fit, never cut off.
     /// </summary>
+    /// <remarks>
+    /// Every length is in screen pixels at the size the face is drawn at, its own: the tier it was
+    /// built at, since a preview's atlas is not under Dalamud's global scale. ImGui's own measure,
+    /// CalcTextSize, is not: it measures at ImGui's current font size, which is the face's size times
+    /// io.FontGlobalScale, the interface's scale in Dalamud, so it would be half as wide again at
+    /// 150%. The width is the face's own measure at its own size (ImFont.CalcTextSizeA), which
+    /// nothing global scales.
+    /// </remarks>
     /// <param name="row">The row.</param>
     /// <param name="ascent">The face's ascent above the baseline, in pixels at its size (ImGui's ImFont.Ascent).</param>
-    /// <param name="descent">Its descent below the baseline, positive (minus ImFont.Descent).</param>
-    /// <param name="width">The sample's width at the face's size.</param>
+    /// <param name="descent">Its descent below the baseline, positive (the size of ImFont.Descent, which
+    /// ImGui's builder stores negative and Dalamud's own default font positive).</param>
+    /// <param name="width">The sample's width at the face's own size.</param>
     /// <param name="column">The width the sample has.</param>
     internal static float SampleScale(in FontListRow row, float ascent, float descent, float width, float column)
     {

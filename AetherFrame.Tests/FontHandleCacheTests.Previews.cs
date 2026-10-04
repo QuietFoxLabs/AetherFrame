@@ -13,8 +13,10 @@ namespace AetherFrame.Tests;
 /// The font list's previews (issue #116), against the same fake font system as the Plate's fonts:
 /// each family's preview is built once, in an atlas of its own, and never rebuilds another family's
 /// atlas or a Plate's font; at most two start a frame and four build at once, however fast the list
-/// scrolls; what was scrolled past is let go down to a bound; reopening the list draws its previews
-/// at once; and a before/after measurement of scrolling the list with one atlas for every preview.
+/// scrolls; what was scrolled past is let go at once down to a bound, so however fast the list was
+/// dragged before it closed, a screen of rows and 32 others are held; reopening the list draws its
+/// previews at once; and a before/after measurement of scrolling the list with one atlas for every
+/// preview.
 /// </summary>
 public partial class FontHandleCacheTests
 {
@@ -30,6 +32,8 @@ public partial class FontHandleCacheTests
     private const int MaxStartsPerFrame = FontPreviews<FakeAtlas, FakeHandle>.MaxStartsPerFrame;
 
     private const int MaxBuilding = FontPreviews<FakeAtlas, FakeHandle>.MaxBuilding;
+
+    private const int MaxKept = FontPreviews<FakeAtlas, FakeHandle>.MaxKept;
 
     /// <summary>The font list, drawn a frame at a time over the fake font system.</summary>
     private sealed class PreviewList
@@ -55,6 +59,9 @@ public partial class FontHandleCacheTests
         /// <summary>The most previews building at once so far.</summary>
         public int MostBuildingAtOnce { get; private set; }
 
+        /// <summary>The most previews held at the end of a frame so far.</summary>
+        public int MostHeld { get; private set; }
+
         /// <summary>
         /// One frame of the list with <paramref name="rows"/> rows on screen from <paramref name="first"/>:
         /// each asks for its preview; the builds started finish before the next frame unless
@@ -74,6 +81,7 @@ public partial class FontHandleCacheTests
 
             MostStartedInAFrame = Math.Max(MostStartedInAFrame, Fonts.HandlesCreated - created);
             MostBuildingAtOnce = Math.Max(MostBuildingAtOnce, Previews.Building);
+            MostHeld = Math.Max(MostHeld, Previews.Count);
             if (finish)
             {
                 Fonts.CompleteBuilds();
@@ -124,17 +132,21 @@ public partial class FontHandleCacheTests
             list.Show(Catalog.Length - Screen);
         }
 
-        // Each family's preview: one atlas, made once, built once, holding its one face.
+        // Each family's preview: one atlas, made once, built once, holding its one face until it was
+        // scrolled far enough past to be let go.
         var previewAtlases = fonts.Atlases.Except(plateAtlases).ToList();
         Assert.Equal(Catalog.Select(id => FontTierPolicy.ResolveFamilyId(id)).Order(StringComparer.Ordinal), previewAtlases.Select(a => a.Name).Order(StringComparer.Ordinal));
         Assert.All(previewAtlases, a => Assert.Equal(1, a.Rebuilds));
-        Assert.All(previewAtlases, a => Assert.Equal(Key(a.Name, PreviewSize), Assert.Single(a.Handles).Key));
+        Assert.All(previewAtlases.Where(a => !a.Disposed), a => Assert.Equal(Key(a.Name, PreviewSize), Assert.Single(a.Handles).Key));
+        Assert.All(previewAtlases.Where(a => a.Disposed), a => Assert.Empty(a.Handles));
+        Assert.Equal(MaxKept, previewAtlases.Count(a => !a.Disposed));
 
         // The Plate's fonts were never rebuilt, and nothing else was built.
         Assert.All(plateAtlases, a => Assert.Equal(1, a.Rebuilds));
         Assert.Equal(plateAtlases.Count + Catalog.Length, fonts.Rebuilt.Count);
         Assert.Equal(Screen, list.Show(Catalog.Length - Screen));
         Assert.True(list.MostStartedInAFrame <= MaxStartsPerFrame);
+        Assert.Equal(MaxKept, list.MostHeld);
     }
 
     [Fact]
@@ -187,17 +199,51 @@ public partial class FontHandleCacheTests
 
         Assert.True(list.MostStartedInAFrame <= MaxStartsPerFrame, $"{list.MostStartedInAFrame}");
         Assert.True(list.MostBuildingAtOnce <= MaxBuilding, $"{list.MostBuildingAtOnce}");
+        Assert.True(list.MostHeld <= MaxKept, $"{list.MostHeld} held");
 
-        // Then left on one screen: the rest goes, down to the bound, and the screen is drawn in full.
-        for (var frame = 0; frame < 200; frame++)
+        // Then left on one screen: the screen is drawn in full, and nothing past the bound was kept.
+        for (var frame = 0; frame < 20; frame++)
         {
             list.Show(40);
         }
 
         Assert.Equal(Screen, list.Show(40));
-        Assert.True(list.Previews.Count <= FontPreviews<FakeAtlas, FakeHandle>.MaxKept, $"{list.Previews.Count} kept");
+        Assert.True(list.Previews.Count <= MaxKept, $"{list.Previews.Count} kept");
         Assert.All(list.Fonts.Atlases.Where(a => a.Disposed), a => Assert.Empty(a.Handles));
         Assert.All(list.Fonts.Atlases.Where(a => !a.Disposed), a => Assert.Single(a.Handles));
+    }
+
+    /// <summary>
+    /// The list dragged from top to bottom in under two seconds, a screen a frame, and a font chosen
+    /// at the bottom, which closes it: what it holds while closed is the bound, not every family it
+    /// passed, and reopening it there draws that screen at once.
+    /// </summary>
+    [Fact]
+    public void AFastDragJustBeforeChoosing_LeavesOnlyTheBoundHeld_WhileTheListIsClosed()
+    {
+        var list = new PreviewList();
+        var bottom = Catalog.Length - Screen;
+        for (var pass = 0; pass < 8; pass++)
+        {
+            for (var first = 0; first < bottom; first += Screen)
+            {
+                list.Show(first);
+            }
+        }
+
+        for (var frame = 0; frame < 10; frame++)
+        {
+            list.Show(bottom);
+        }
+
+        Assert.True(list.Fonts.Atlases.Count > 2 * MaxKept, $"{list.Fonts.Atlases.Count} built");
+        Assert.True(list.MostHeld <= MaxKept, $"{list.MostHeld} held");
+
+        list.Closed(10 * 60_000);
+        Assert.True(list.Previews.Count <= MaxKept, $"{list.Previews.Count} held");
+        var built = list.Fonts.Rebuilt.Count;
+        Assert.Equal(Screen, list.Show(bottom));
+        Assert.Equal(built, list.Fonts.Rebuilt.Count);
     }
 
     [Fact]
@@ -277,8 +323,9 @@ public partial class FontHandleCacheTests
 
     /// <summary>
     /// Scrolling the font list from top to bottom, a row a frame. Before (the model of putting the
-    /// previews in one atlas, as the Plate's fonts were before #117): every new preview rebuilds every
-    /// preview before it. After (an atlas each): every new preview rasterizes its own face only. The
+    /// previews in one atlas, as the Plate's fonts were before #117): every preview started or let go
+    /// rebuilds every preview the atlas holds, up to the bound. After (an atlas each): every new
+    /// preview rasterizes its own face only, and letting one go rebuilds nothing. The
     /// glyph surface is the fake's estimate for a Plate tier of the whole face; a preview holds Basic
     /// Latin only, a fraction of that (FontListLayoutTests measures it).
     /// </summary>
@@ -302,9 +349,8 @@ public partial class FontHandleCacheTests
         Assert.Equal(oneFaceEach, after.Sum());
         Assert.All(after, cost => Assert.True(cost <= MaxStartsPerFrame * heaviestFace));
 
-        // Before: the frame that adds the last preview rebuilds every one before it.
-        Assert.Equal(oneFaceEach, before.Max());
-        Assert.True(before.Sum() > 20 * after.Sum());
+        // Before: every preview started or let go rebuilds all those held; in all, many times the faces themselves.
+        Assert.True(before.Sum() > 10 * after.Sum(), $"{before.Sum()} against {after.Sum()}");
     }
 
     /// <summary>The glyph surface rebuilt in each frame of scrolling the whole list.</summary>

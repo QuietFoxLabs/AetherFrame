@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Domain.Rendering;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.FontIdentifier;
+using Dalamud.Interface.GameFonts;
 using Dalamud.Interface.ManagedFontAtlas;
 
 namespace AetherFrame.Services.Fonts;
@@ -153,6 +155,22 @@ internal sealed class ProfileFontService : IDisposable
     internal IFontHandle? GetPreview(string familyId, float sizePx) => previews.Get(familyId, sizePx);
 
     /// <summary>
+    /// Dalamud Default's preview face: Dalamud's default font, as Dalamud builds it, with only
+    /// <paramref name="glyphs"/>. The toolkit's AddDalamudDefaultFont keeps to the glyph ranges it is
+    /// given only when it falls back to AXIS. The default font is a SingleFontSpec, whether the player
+    /// chose a font in Dalamud's settings or not, which it builds with the spec's own ranges, every
+    /// glyph of the font, then adds the game's symbols to a font other than AXIS and, for a player
+    /// using Chinese or Korean (or once they type it), those languages' glyphs. So the spec is built
+    /// here with the preview's ranges instead. A default of another kind, or one naming Dalamud's
+    /// default itself, is AXIS, as Dalamud falls back to. Called on the atlas's build thread, where
+    /// Dalamud reads the default font too.
+    /// </summary>
+    private static ImFontPtr AddDalamudDefaultPreview(IFontAtlasBuildToolkitPreBuild toolkit, float sizePx, ushort[] glyphs) =>
+        DalamudServices.PluginInterface.UiBuilder.DefaultFontSpec is SingleFontSpec { FontId: not DalamudDefaultFontAndFamilyId } spec
+            ? (spec with { SizePx = sizePx, GlyphRanges = glyphs }).AddToBuildToolkit(toolkit)
+            : toolkit.AddGameGlyphs(new GameFontStyle(GameFontFamily.Axis, sizePx), glyphs, default);
+
+    /// <summary>
     /// Ensures every distinct (family, bold, italic) combination actually used by
     /// <paramref name="profile"/>'s text elements has at least its own nominal size (and the
     /// common-size baseline) warmed. Safe (and cheap — a single weak-table lookup) to call
@@ -230,13 +248,13 @@ internal sealed class ProfileFontService : IDisposable
         {
             // The bundled faces keep every glyph their TTF maps, as 0.1.5 built them (see
             // FontTierPolicy.GlyphRanges); what bounds a tier is its size cap, not its glyphs. A
-            // preview holds only its sample's, and Dalamud Default's too where its font allows.
+            // preview holds only its sample's, Dalamud Default's included.
             var config = new SafeFontConfig { SizePx = sizePx, GlyphRanges = previewGlyphs ?? FontTierPolicy.GlyphRanges(descriptor.Id) };
             var resourceName = GetEmbeddedResourceName(descriptor.Id, bold, italic);
 
             toolkit.Font = resourceName is not null
                 ? toolkit.AddFontFromMemory(GetEmbeddedFontBytes(resourceName), config, resourceName)
-                : toolkit.AddDalamudDefaultFont(sizePx, previewGlyphs);
+                : previewGlyphs is null ? toolkit.AddDalamudDefaultFont(sizePx) : AddDalamudDefaultPreview(toolkit, sizePx, previewGlyphs);
 
             // A library family draws a character it lacks (an accented letter in a display face,
             // say) in AetherFrame Sans of the same style, rather than as "?": ImGui merges only the

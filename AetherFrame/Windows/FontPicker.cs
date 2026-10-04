@@ -153,9 +153,12 @@ internal static class FontPicker
         var drawList = ImGui.GetWindowDrawList();
         if (selected)
         {
+            // From the row's own left edge, as tall as its highlight. The selectable's rect reaches half
+            // the item spacing further left than that, beyond the list's left edge, where the list (a
+            // child without padding) clips everything.
             var min = ImGui.GetItemRectMin();
             var max = ImGui.GetItemRectMax();
-            drawList.AddRectFilled(min, new Vector2(min.X + EditorWidgets.Scaled(AetherMetrics.AccentBarWidth), max.Y), ImGui.GetColorU32(AetherPalette.Aether));
+            drawList.AddRectFilled(new Vector2(top.X, min.Y), new Vector2(top.X + EditorWidgets.Scaled(AetherMetrics.AccentBarWidth), max.Y), ImGui.GetColorU32(AetherPalette.Aether));
         }
 
         // The name, in the interface font, on the baseline.
@@ -172,10 +175,15 @@ internal static class FontPicker
             return chosen;
         }
 
+        // Pushed for its texture: AddText draws only with the pushed font's.
         using (face.Push())
         {
+            // Measured at the face's own size, the size it is drawn at. ImGui.CalcTextSize would measure
+            // at ImGui's font size, which Dalamud multiplies by the interface's scale even for a face
+            // built unscaled, as a preview's is (see FontListLayout.SampleScale).
             var font = ImGui.GetFont();
-            var scale = FontListLayout.SampleScale(row, font.Ascent, -font.Descent, ImGui.CalcTextSize(FontPreview.Sample).X, rowEnd - sampleX);
+            var width = ImGui.CalcTextSizeA(font, font.FontSize, float.MaxValue, 0f, FontPreview.Sample, out _).X;
+            var scale = FontListLayout.SampleScale(row, font.Ascent, MathF.Abs(font.Descent), width, rowEnd - sampleX);
             var y = baseline - (font.Ascent * scale);
             drawList.AddText(font, font.FontSize * scale, new Vector2(sampleX, scale < 1f ? y : MathF.Round(y)), ImGui.GetColorU32(ImGuiCol.Text), FontPreview.Sample);
         }
@@ -183,13 +191,14 @@ internal static class FontPicker
         return chosen;
     }
 
-    /// <summary>The rows for the interface font now: samples at its preview tier, names beside them.</summary>
+    /// <summary>The rows for the interface font now: samples at its preview tier, names beside them.
+    /// The interface font is drawn at ImGui's font size, its scale included.</summary>
     private static FontListRow Row()
     {
         var font = ImGui.GetFont();
         var size = ImGui.GetFontSize();
         var scale = font.FontSize > 0f ? size / font.FontSize : 1f;
-        return FontListLayout.Row(FontPreview.Size(size), font.Ascent * scale, -font.Descent * scale);
+        return FontListLayout.Row(FontPreview.Size(size), font.Ascent * scale, MathF.Abs(font.Descent) * scale);
     }
 
     /// <summary>The interface font's ascent at its current size: where a name sits above the baseline.</summary>
@@ -216,7 +225,8 @@ internal static class FontPicker
             widestOther = MathF.Max(widestOther, ImGui.CalcTextSize(GroupOf(family)).X);
         }
 
-        var nameX = EditorWidgets.Scaled(AetherMetrics.SpaceXs);
+        // The names start clear of the chosen row's accent bar.
+        var nameX = EditorWidgets.Scaled(AetherMetrics.AccentBarWidth + AetherMetrics.SpaceXs);
         var sampleX = nameX + widestName + EditorWidgets.Scaled(AetherMetrics.SpaceLg);
         return new ListColumns(nameX, sampleX, MathF.Max(widestOther, sampleX + FontListLayout.SampleColumn(row.SampleSize)));
     }
