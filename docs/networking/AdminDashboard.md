@@ -1,6 +1,6 @@
 # AetherFrame Community Desk
 
-Rebuilt October 4, 2026, at the owner's request, on `codex/admin-dashboard-rebuild`. Implementation is saved in small GitHub checkpoints and remains disabled by default. Independent reviews, CI and live browser acceptance are still required. Nothing is deployed or activated by this PR.
+Rebuilt October 4, 2026, at the owner's request, on `codex/admin-dashboard-rebuild` (PR #133). Disabled by default. Independent reviews, browser acceptance and CI passed, and GPT approved the design for merge and a controlled deployment. Nothing is deployed or activated by the PR; live checks follow the owner's activation.
 
 ## Hosting
 
@@ -30,7 +30,7 @@ No checkpoint is considered saved until its remote file or commit has been read 
 
 ## Design status
 
-The owner authorized building the dashboard. The detailed authentication, moderation persistence, audit retention and rollout design is proposed by GPT pending independent review. Existing confirmed privacy requirements and the plugin's release gates remain in force. A browser rendering of a Plate must clearly state any differences from the in-game renderer.
+The owner authorized building the dashboard. The detailed authentication, moderation persistence, audit retention and rollout design is APPROVED by GPT (October 4, 2026), with its accepted limitations recorded in the [decision register](DecisionRegister.md#community-desk-owner-and-moderator-dashboard-october-4-2026). Existing confirmed privacy requirements and the plugin's release gates remain in force. A browser rendering of a Plate must clearly state any differences from the in-game renderer.
 
 ## Implementation
 
