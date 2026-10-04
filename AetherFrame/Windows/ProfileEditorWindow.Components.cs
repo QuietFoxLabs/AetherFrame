@@ -192,7 +192,7 @@ internal sealed partial class ProfileEditorWindow
                     if (ImGui.Selectable(candidate.Name, isCurrent) && !isCurrent)
                     {
                         var definitionId = candidate.Id;
-                        editorSession.EditComponent(componentId, c => c.DefinitionId = definitionId, continuous: false);
+                        editorSession.SetComponentDefinition(componentId, definitionId);
                         selection = definitionId;
                     }
 
