@@ -156,7 +156,8 @@ internal sealed class SharingProgress
                     workingShare = publish.Share;
                 }
 
-                if (publish.Build != 0 && publish.Build == operationShare)
+                // A build already seen goes on as its publish: no operation begins.
+                if (publish.Build != 0 && publish.Build <= operationShare && publish.Share > operationShare)
                 {
                     operationShare = publish.Share;
                 }
