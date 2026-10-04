@@ -122,7 +122,7 @@ internal sealed partial class ProfileEditorWindow
             selectedPlacementIndex = 0;
         }
 
-        var selectionGesture = editorSession.PreviewSelectionGesture(canvasPlanBuffer, selectedPlacementIndex);
+        var selectionGesture = editorSession.PreviewSelectionGesture(canvasPlanBuffer, selectedPlacementIndex) is { HasHandles: true } previewGesture ? previewGesture : null;
         var selectionMovable = selectionGesture is not null && editorSession.SelectionTransformBlockedReason is null;
         Vector2[]? gestureScreenCorners = null;
 
@@ -444,9 +444,13 @@ internal sealed partial class ProfileEditorWindow
                 // Double-click text: jump straight to editing its content.
                 selectElementTabPending = true;
                 focusTextContentPending = true;
+                return;
             }
 
-            return;
+            if (editorSession.GroupOf(item) is not null)
+            {
+                return;
+            }
         }
 
         editorSession.SelectOnCanvas(item, additive: false);

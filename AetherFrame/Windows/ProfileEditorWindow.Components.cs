@@ -423,7 +423,8 @@ internal sealed partial class ProfileEditorWindow
 
                 foreach (var element in profile.Elements)
                 {
-                    if (element is not ImageProfileElement)
+                    // The Basic portrait is "The portrait" above.
+                    if (element is not ImageProfileElement || element.Role == ProfileElementRole.BasicPortrait)
                     {
                         continue;
                     }

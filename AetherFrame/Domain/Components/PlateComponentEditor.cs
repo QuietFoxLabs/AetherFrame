@@ -73,9 +73,23 @@ public static class PlateComponentEditor
             return false;
         }
 
-        if (elementId is { } id && profile.Elements.Find(e => e.Id == id) is not ImageProfileElement)
+        if (elementId is { } id)
         {
-            return false;
+            if (profile.Elements.Find(e => e.Id == id) is not ImageProfileElement picture)
+            {
+                return false;
+            }
+
+            // The Basic portrait is attached as "the portrait" (no id), so the frame keeps following it
+            // when Basic replaces the picture with a new one.
+            if (picture.Role == ProfileElementRole.BasicPortrait)
+            {
+                elementId = null;
+                if (component.TargetElementId is null)
+                {
+                    return false;
+                }
+            }
         }
 
         return Update(profile, componentId, c => c.TargetElementId = elementId);
@@ -95,14 +109,15 @@ public static class PlateComponentEditor
     };
 
     /// <summary>The Component a Basic slot shows and edits: the first of that kind (consistently
-    /// everywhere, like Basic sections), or null when the slot is empty.</summary>
+    /// everywhere, like Basic sections), or null when the slot is empty. A Portrait Frame or Overlay
+    /// attached to another picture belongs to that picture, not to Basic's portrait slot.</summary>
     public static PlateComponent? FindSlot(ProfileDocument profile, PlateComponentKind kind)
     {
         if (profile.Components is { } components)
         {
             foreach (var component in components)
             {
-                if (component.Kind == kind)
+                if (component.Kind == kind && ComponentPaintPlan.TargetOf(component) is null)
                 {
                     return component;
                 }

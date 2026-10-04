@@ -29,6 +29,10 @@ internal sealed class CanvasGesture
     /// (and turned) placement, or the box around everything that moves.</summary>
     internal Vector2[] Corners { get; private set; } = new Vector2[4];
 
+    /// <summary>False when the one Component selected isn't drawn now (hidden, or its picture gone), so
+    /// there is nowhere to put handles; it still moves by a nudge.</summary>
+    internal bool HasHandles { get; private set; } = true;
+
     /// <summary>The axis-aligned box around everything that moves, as it was when the gesture began.</summary>
     internal (Vector2 Min, Vector2 Max) Bounds { get; private set; }
 
@@ -109,9 +113,25 @@ internal sealed class CanvasGesture
             var center = primary is { } drawn ? drawn.Rect.Position + (drawn.Rect.Size / 2f) : Vector2.Zero;
             gesture.components.Add(new ComponentStart(component.Id, component.Offset, PlateComponentLimits.ClampScale(component.Scale), center, flipX, flipY, dependent, primary is not null));
 
-            if (singleComponent && primary is { } handles)
+            if (singleComponent)
             {
-                gesture.Corners = RotationGeometry.GetRotatedCorners(handles.Rect.Position, handles.Rect.Size, handles.RotationDegrees);
+                if (primary is { } handles)
+                {
+                    gesture.Corners = RotationGeometry.GetRotatedCorners(handles.Rect.Position, handles.Rect.Size, handles.RotationDegrees);
+
+                    // Snapping measures the placement being dragged, not every corner's together.
+                    min = new Vector2(float.MaxValue);
+                    max = new Vector2(float.MinValue);
+                    foreach (var corner in gesture.Corners)
+                    {
+                        min = Vector2.Min(min, corner);
+                        max = Vector2.Max(max, corner);
+                    }
+                }
+                else
+                {
+                    gesture.HasHandles = false;
+                }
             }
         }
 

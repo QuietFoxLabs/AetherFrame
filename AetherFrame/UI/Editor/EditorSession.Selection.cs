@@ -14,9 +14,10 @@ namespace AetherFrame.UI.Editor;
 /// Components (Ctrl+click, Layers), linked groups (<see cref="LinkedGroups"/>), and moving or resizing a
 /// selection of several things, or one Component, from the canvas (<see cref="CanvasGesture"/>).
 ///
-/// <para><b>Groups.</b> A click on the canvas on a linked member selects its whole group; a second
-/// click on a member of the selected group (or a double-click, or picking it in Layers) selects just
-/// that member, to edit it on its own, crop and image included. Moving or resizing the group moves all
+/// <para><b>Groups.</b> A click on the canvas on a linked member selects its whole group; a double-click
+/// on a member (or picking it in Layers, the Inspector's member list or the context menu) selects just
+/// that member, to edit it on its own, crop and image included, and while one member is selected a click
+/// on another member of its group selects that one. Moving or resizing the group moves all
 /// of it. Linking, unlinking and every completed gesture are one undo step each, recorded through whole
 /// document snapshots (<see cref="ApplyDocumentEdit"/>), and only change what they say: linking never
 /// moves anything.</para>
@@ -28,6 +29,11 @@ internal sealed partial class EditorSession
 
     // A move or resize of a selection of several things, or of one Component, in progress; runtime only.
     private CanvasGesture? itemsGesture;
+
+    // The Plate the gesture began on (its undo snapshot belongs to it alone), and whether the mouse has
+    // moved since: a click that doesn't move changes nothing, not even an out-of-range stored value.
+    private ProfileDocument? itemsGestureProfile;
+    private bool itemsGestureMoved;
     private ProfileService.DocumentState? itemsGestureBefore;
     private int itemsGestureCorner;
 
@@ -188,6 +194,11 @@ internal sealed partial class EditorSession
     /// <summary>Links the selection into one group, keeping everything where it is. One undo step.</summary>
     internal void LinkSelection()
     {
+        if (ActiveInteraction != ElementInteractionKind.None)
+        {
+            return;
+        }
+
         if (LinkSelectionBlockedReason is { } reason)
         {
             ErrorMessage = reason;
@@ -219,6 +230,11 @@ internal sealed partial class EditorSession
     /// selected, now on their own). One undo step.</summary>
     internal void UnlinkSelection()
     {
+        if (ActiveInteraction != ElementInteractionKind.None)
+        {
+            return;
+        }
+
         var groups = new HashSet<Guid>();
         foreach (var item in selection)
         {
@@ -248,6 +264,12 @@ internal sealed partial class EditorSession
     /// <summary>Deletes everything selected. One undo step.</summary>
     internal void DeleteSelection()
     {
+        // Not mid-gesture: the gesture's own undo step would record over it.
+        if (ActiveInteraction != ElementInteractionKind.None)
+        {
+            return;
+        }
+
         if (SelectedElementId is { } elementId)
         {
             RemoveElement(elementId);
@@ -284,6 +306,11 @@ internal sealed partial class EditorSession
     /// </summary>
     internal void DuplicateSelection()
     {
+        if (ActiveInteraction != ElementInteractionKind.None)
+        {
+            return;
+        }
+
         if (SelectedElementId is { } elementId && GroupOf(CanvasItemRef.Element(elementId)) is null)
         {
             DuplicateElement(elementId);
@@ -411,7 +438,8 @@ internal sealed partial class EditorSession
         }
 
         CommitPendingEdits();
-        if (CanvasGesture.Create(profile, selection, plan, placementIndex) is not { } gesture)
+        if (CanvasGesture.Create(profile, selection, plan, placementIndex) is not { } gesture
+            || (kind == ElementInteractionKind.Resizing && !gesture.HasHandles))
         {
             return;
         }
@@ -427,6 +455,8 @@ internal sealed partial class EditorSession
         }
 
         itemsGesture = gesture;
+        itemsGestureProfile = profile;
+        itemsGestureMoved = false;
         itemsGestureCorner = corner;
         ActiveInteraction = kind;
         ActiveResizeHandle = ResizeHandle.None;
@@ -438,6 +468,16 @@ internal sealed partial class EditorSession
 
     private void UpdateSelectionGesture(CanvasGesture gesture, Vector2 mouseCanvasPosition, bool snap, float snapThreshold)
     {
+        if (!itemsGestureMoved)
+        {
+            if (mouseCanvasPosition == dragStartMousePosition)
+            {
+                return;
+            }
+
+            itemsGestureMoved = true;
+        }
+
         var profile = RequireProfileForComponents();
         var canvas = CurrentCanvasSize;
         void UpdateElement(Guid id, Action<ProfileElement> update) => profileService.UpdateElement(id, update);
@@ -499,7 +539,7 @@ internal sealed partial class EditorSession
 
     private void EndSelectionGesture()
     {
-        if (itemsGestureBefore is { } before)
+        if (itemsGestureMoved && itemsGestureBefore is { } before && ReferenceEquals(profileService.CurrentProfile, itemsGestureProfile))
         {
             try
             {
@@ -513,12 +553,14 @@ internal sealed partial class EditorSession
 
         itemsGesture = null;
         itemsGestureBefore = null;
+        itemsGestureProfile = null;
         DropSelectionIfMissing();
     }
 
     private void CancelSelectionGesture()
     {
-        if (itemsGestureBefore is { } before)
+        // Only ever onto the Plate it was taken from: another Plate opened mid-gesture keeps its own content.
+        if (itemsGestureMoved && itemsGestureBefore is { } before && ReferenceEquals(profileService.CurrentProfile, itemsGestureProfile))
         {
             try
             {
@@ -534,6 +576,7 @@ internal sealed partial class EditorSession
 
         itemsGesture = null;
         itemsGestureBefore = null;
+        itemsGestureProfile = null;
         DropSelectionIfMissing();
     }
 

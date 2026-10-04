@@ -364,6 +364,11 @@ internal sealed partial class EditorSession
     /// </summary>
     internal void NudgeSelected(Vector2 delta)
     {
+        if (ActiveInteraction != ElementInteractionKind.None)
+        {
+            return;
+        }
+
         if (SelectionUsesGestures)
         {
             ErrorMessage = null;
@@ -517,6 +522,8 @@ internal sealed partial class EditorSession
         interactionBeforeSnapshot = null;
         itemsGesture = null;
         itemsGestureBefore = null;
+        itemsGestureProfile = null;
+        itemsGestureMoved = false;
         ActiveInteraction = ElementInteractionKind.None;
         ActiveResizeHandle = ResizeHandle.None;
         snapEngine.Clear();

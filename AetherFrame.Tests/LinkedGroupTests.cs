@@ -122,6 +122,40 @@ public class PortraitFrameTargetTests
     }
 
     [Fact]
+    public void BasicPortraitSlot_IgnoresFramesAttachedToOtherPictures()
+    {
+        var document = ComponentDocuments.WithAnchors();
+        var (_, _, frame1, frame2) = LinkedGroupDocuments.AddTwoFramedPictures(document);
+        var catalog = BuiltInComponentCatalog.Instance;
+
+        Assert.Null(PlateComponentEditor.FindSlot(document, PlateComponentKind.PortraitFrame));
+        Assert.False(PlateComponentEditor.SetSlot(document, PlateComponentKind.PortraitFrame, null, catalog));
+        Assert.Contains(frame1, document.Components!);
+        Assert.Contains(frame2, document.Components!);
+
+        // Picking a portrait frame in Basic adds one for the portrait and leaves both attached frames alone.
+        Assert.True(PlateComponentEditor.SetSlot(document, PlateComponentKind.PortraitFrame, BuiltInComponentCatalog.PortraitFrameBrackets, catalog));
+        var slot = PlateComponentEditor.FindSlot(document, PlateComponentKind.PortraitFrame);
+        Assert.NotNull(slot);
+        Assert.NotSame(frame1, slot);
+        Assert.NotSame(frame2, slot);
+        Assert.Null(slot!.TargetElementId);
+    }
+
+    [Fact]
+    public void AttachingAFrameToTheBasicPortrait_KeepsItFollowingThePortraitRatherThanItsId()
+    {
+        var document = ComponentDocuments.WithAnchors();
+        var portrait = BasicSections.Find(document, ProfileElementRole.BasicPortrait)!;
+        var (_, _, frame1, _) = LinkedGroupDocuments.AddTwoFramedPictures(document);
+
+        Assert.True(PlateComponentEditor.SetTarget(document, frame1.Id, portrait.Id));
+        Assert.Null(frame1.TargetElementId);
+        Assert.False(PlateComponentEditor.SetTarget(document, frame1.Id, portrait.Id));
+        Assert.Equal(new ElementRect(portrait.Position, portrait.Size), LinkedGroupDocuments.PlacementOf(document, frame1).Rect);
+    }
+
+    [Fact]
     public void ADeletedOrHiddenTarget_DrawsNoFrame_AndBringingThePictureBackDrawsItAgain()
     {
         var (document, image1, _, frame1, frame2) = LinkedGroupDocuments.TwoFramedPictures();
@@ -261,6 +295,106 @@ public class LinkedGroupEditorTests
         session.UpdateInteraction(Vector2.Lerp(from, to, 0.5f), snap: false, snapThreshold: 0f);
         session.UpdateInteraction(to, snap: false, snapThreshold: 0f);
         session.EndInteraction();
+    }
+
+    [Fact]
+    public async Task OpeningAnotherPlate_MidGesture_LeavesThatPlateItsOwnContent()
+    {
+        var (harness, image1, image2, _, _) = await TwoFramedPicturesAsync();
+        using var _h = harness;
+        harness.Session.SetSelection([CanvasItemRef.Element(image1.Id), CanvasItemRef.Element(image2.Id)]);
+        harness.Session.BeginSelectionDrag(Plan(harness), image1.Position);
+        harness.Session.UpdateInteraction(image1.Position + new Vector2(30f), snap: false, snapThreshold: 0f);
+
+        var created = await harness.Library.CreatePlateAsync(PlateStartingLayout.AdventurePlateClassic, null, starter: new PlateStarterContent(null));
+        harness.Profiles.OpenPlate(created.PlateId);
+        var other = harness.Profiles.CurrentProfile!;
+        var idsBefore = other.Elements.Select(e => e.Id).ToList();
+        var componentsBefore = other.Components?.Count ?? 0;
+        harness.Session.SyncWithCurrentProfile();
+
+        Assert.Equal(idsBefore, other.Elements.Select(e => e.Id).ToList());
+        Assert.Equal(componentsBefore, other.Components?.Count ?? 0);
+        Assert.DoesNotContain(other.Elements, e => e.Id == image1.Id || e.Id == image2.Id);
+        Assert.Equal(ElementInteractionKind.None, harness.Session.ActiveInteraction);
+    }
+
+    [Fact]
+    public async Task AClickWithoutMoving_ChangesNothing_EvenAnOutOfRangeComponent()
+    {
+        var (harness, _, _, frame1, _) = await TwoFramedPicturesAsync();
+        using var _h = harness;
+        frame1.Scale = 6f;
+        frame1.Opacity = 1.5f;
+        harness.Session.SelectComponent(frame1.Id);
+        var center = LinkedGroupDocuments.PlacementOf(harness.Document, frame1).Rect.Position;
+
+        harness.Session.BeginSelectionDrag(Plan(harness), center);
+        harness.Session.UpdateInteraction(center, snap: false, snapThreshold: 0f);
+        harness.Session.EndInteraction();
+
+        Assert.Equal(6f, frame1.Scale);
+        Assert.Equal(1.5f, frame1.Opacity);
+        Assert.False(harness.Session.CanUndo);
+    }
+
+    [Fact]
+    public async Task DeleteDuplicateNudgeAndLink_WaitUntilTheGestureEnds()
+    {
+        var (harness, image1, image2, _, _) = await TwoFramedPicturesAsync();
+        using var _h = harness;
+        harness.Session.SetSelection([CanvasItemRef.Element(image1.Id), CanvasItemRef.Element(image2.Id)]);
+        var count = harness.Document.Elements.Count;
+        harness.Session.BeginSelectionDrag(Plan(harness), image1.Position);
+        harness.Session.UpdateInteraction(image1.Position + new Vector2(20f), snap: false, snapThreshold: 0f);
+
+        harness.Session.DeleteSelection();
+        harness.Session.DuplicateSelection();
+        harness.Session.NudgeSelected(new Vector2(5f, 0f));
+        harness.Session.LinkSelection();
+        harness.Session.EndInteraction();
+
+        Assert.Equal(count, harness.Document.Elements.Count);
+        Assert.Null(image1.LinkGroupId);
+        LinkedGroupDocuments.AssertNear(LinkedGroupDocuments.Image1Position + new Vector2(20f), image1.Position);
+        Assert.Equal(1, UndoDepth(harness.Session));
+    }
+
+    [Fact]
+    public async Task AComponentThatIsNotDrawn_HasNoHandles_ButStillNudges()
+    {
+        var (harness, image1, _, frame1, _) = await TwoFramedPicturesAsync();
+        using var _h = harness;
+        image1.Visible = false;
+        harness.Session.SelectComponent(frame1.Id);
+
+        var gesture = harness.Session.PreviewSelectionGesture(Plan(harness))!;
+        Assert.False(gesture.HasHandles);
+        harness.Session.BeginSelectionResize(Plan(harness), 2, Vector2.Zero);
+        Assert.Equal(ElementInteractionKind.None, harness.Session.ActiveInteraction);
+
+        var offset = frame1.Offset;
+        harness.Session.NudgeSelected(new Vector2(1f, 0f));
+        Assert.Equal(offset + new Vector2(1f, 0f), harness.Document.Components!.Single(c => c.Id == frame1.Id).Offset);
+    }
+
+    [Fact]
+    public async Task OneSelectedCornerOrnament_SnapsByTheCornerBeingDragged()
+    {
+        using var harness = await BasicHarness.NewClassicAsync();
+        var ornament = ComponentDocuments.Of(BuiltInComponentCatalog.CornerOrnamentBracket);
+        ornament.Corners = CornerMask.All;
+        harness.Document.Components ??= [];
+        harness.Document.Components.Add(ornament);
+        harness.Session.SelectComponent(ornament.Id);
+
+        var plan = Plan(harness);
+        var placements = LinkedGroupDocuments.StepsOf(plan, ornament);
+        Assert.True(placements.Count > 1);
+        var gesture = harness.Session.PreviewSelectionGesture(plan, 1)!;
+        var expected = placements[1].Placement.Rect;
+        LinkedGroupDocuments.AssertNear(expected.Position, gesture.Bounds.Min);
+        LinkedGroupDocuments.AssertNear(expected.Position + expected.Size, gesture.Bounds.Max);
     }
 
     [Fact]

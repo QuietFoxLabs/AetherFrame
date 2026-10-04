@@ -850,6 +850,9 @@ internal sealed partial class EditorSession
         pendingDocumentBefore = null;
         lastDocumentEdit = null;
         selection.Clear();
+
+        // The Plate may already be another one: a gesture's snapshot is dropped, never restored onto it.
+        itemsGestureBefore = null;
         CancelInteraction();
         ErrorMessage = null;
         InvalidateDirtyMemo();

@@ -225,9 +225,10 @@ public sealed class ProfileDocument
     /// Gives every element a usable, unique id: a missing (empty) or repeated id — only possible in
     /// a hand-edited file — gets a fresh one, in memory, like the other load repairs, so the
     /// editors' id-keyed selection, removal and undo can never act on two elements at once. Only
-    /// ids change; every other value, and the order, is left exactly as loaded. Nothing persistent
-    /// refers to an element by id (Basic keys its bookkeeping by role), so a new id is invisible
-    /// until the user saves.
+    /// ids change; every other value, and the order, is left exactly as loaded. Basic keys its
+    /// bookkeeping by role; a Portrait Frame attached to a picture by id
+    /// (<see cref="PlateComponent.TargetElementId"/>) keeps the first element with a
+    /// repeated id, which keeps that id, so a new id is invisible until the user saves.
     /// </summary>
     /// <returns>True if a repair was applied.</returns>
     internal bool NormalizeElementIds()
