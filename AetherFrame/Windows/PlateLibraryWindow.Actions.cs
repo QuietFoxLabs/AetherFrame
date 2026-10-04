@@ -41,7 +41,10 @@ internal sealed partial class PlateLibraryWindow
     private static readonly MyPlatesFooterItem VersionItem = MyPlatesFooterText.VersionItem(AetherFrameBuildInfo.Current);
 
     /// <summary>The footer's right-hand items, left to right: a new item goes before the version, which stays at the bottom right.</summary>
-    private static IReadOnlyList<MyPlatesFooterItem> FooterItems() => [VersionItem];
+    private static readonly MyPlatesFooterItem[] StaticFooterItems = [VersionItem];
+
+    /// <summary>The footer's right-hand items this frame, left to right.</summary>
+    private static IReadOnlyList<MyPlatesFooterItem> FooterItems() => StaticFooterItems;
 
     /// <summary>
     /// The footer as this frame draws it, measured before the grid so the grid leaves it exactly the
@@ -55,7 +58,7 @@ internal sealed partial class PlateLibraryWindow
         var items = FooterItems();
         var width = ImGui.GetContentRegionAvail().X;
         var style = ImGui.GetStyle();
-        var widths = new float[items.Count];
+        Span<float> widths = stackalloc float[items.Count];
         for (var i = 0; i < items.Count; i++)
         {
             widths[i] = ImGui.CalcTextSize(items[i].Text).X;

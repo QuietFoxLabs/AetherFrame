@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using AetherFrame.Services.Diagnostics;
 
 namespace AetherFrame.UI.Library;
@@ -34,11 +33,10 @@ internal readonly record struct MyPlatesFooterLayout(bool ItemsOnOwnRow, float I
     }
 
     /// <summary>The items' total width: each one's width, with <paramref name="separator"/> between each two.</summary>
-    internal static float ItemsWidth(IReadOnlyList<float> widths, float separator)
+    internal static float ItemsWidth(ReadOnlySpan<float> widths, float separator)
     {
-        ArgumentNullException.ThrowIfNull(widths);
         var total = 0f;
-        for (var i = 0; i < widths.Count; i++)
+        for (var i = 0; i < widths.Length; i++)
         {
             total += widths[i] + (i > 0 ? separator : 0f);
         }
