@@ -122,6 +122,39 @@ public static class ArtSets
         }
     }
 
+    // Each style's artwork, by art id: built on first use, since the catalog is built from these sets.
+    private static Dictionary<string, ProfileThemePreset>? stylesByArt;
+
+    private static Dictionary<string, ProfileThemePreset> BuildStylesByArt()
+    {
+        var byArt = new Dictionary<string, ProfileThemePreset>(StringComparer.Ordinal);
+        foreach (var style in Styles)
+        {
+            foreach (var id in style.Components)
+            {
+                if (BuiltInComponentCatalog.Find(id)?.Art is { } art)
+                {
+                    byArt.TryAdd(art.Id, style);
+                }
+            }
+        }
+
+        return byArt;
+    }
+
+    /// <summary>The style whose piece <paramref name="art"/> is, or null (Celestial Dream's Astrolabe is in none).</summary>
+    public static ProfileThemePreset? StyleOfArt(BuiltInArtAsset art) =>
+        System.Threading.LazyInitializer.EnsureInitialized(ref stylesByArt, BuildStylesByArt).TryGetValue(art.Id, out var style) ? style : null;
+
+    /// <summary>
+    /// What stands in for a style's Background artwork while it loads or downloads, or wherever it
+    /// can't be drawn: the style's own plain background color (issue #118), so the text over it reads
+    /// as the style meant. An Art Style leaves the Plate's own background, which used to be set to that
+    /// color, for its Simple Theme. Null for any other artwork, which draws nothing until it is ready.
+    /// </summary>
+    public static Vector4? BackgroundStandIn(BuiltInArtAsset art) =>
+        art.Kind == PlateComponentKind.Background && StyleOfArt(art) is { } style ? style.PrimaryColor : null;
+
     /// <summary>The style placing <paramref name="definitionId"/>, or null (exact ids).</summary>
     public static ProfileThemePreset? StyleOf(string? definitionId)
     {

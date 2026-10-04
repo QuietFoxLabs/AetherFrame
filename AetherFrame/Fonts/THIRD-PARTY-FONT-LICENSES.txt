@@ -6,6 +6,14 @@ Full license text: https://openfontlicense.org
 with Reserved Font Names "PT Sans" and "ParaType".
 
 
+=== Noto Sans Symbols / Noto Sans Symbols 2 ===
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/symbols)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1 (full text below).
+AetherFrame carries both cut down to their symbol blocks (U+2190 to U+2BFF and U+4DC0 to U+4DFF),
+every glyph kept unchanged (tools/fonts/build_symbol_fonts.py), to draw symbols a Plate's font lacks.
+
+
 === Cousine ===
 Copyright 2026 The Cousine Project Authors (https://github.com/googlefonts/cousine)
 

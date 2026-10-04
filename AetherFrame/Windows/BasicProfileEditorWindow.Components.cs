@@ -1,3 +1,4 @@
+using System.Numerics;
 using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.UI.Editor;
@@ -8,8 +9,10 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// Basic mode's Component slots: one style picker per slot ("None" or a built-in style), placed by
-/// the Adventure Plate Classic layout and colored by the theme. No transforms here — those are the
-/// Advanced editor's refinements of the very same Components.
+/// the Adventure Plate Classic layout and colored by the theme (Art Style artwork keeps its own
+/// colors). The only transforms here are a Corner Ornament's size and distance from the edge
+/// (<see cref="CornerOrnamentPlacement"/>); the rest are the Advanced editor's refinements of the
+/// very same Components.
 /// </summary>
 internal sealed partial class BasicProfileEditorWindow
 {
@@ -25,7 +28,10 @@ internal sealed partial class BasicProfileEditorWindow
             DrawComponentSlot(profile, kind);
         }
 
-        Hint("Colors follow your theme. Fine-tune placement and color in the Advanced Editor (Canvas tab, Components).");
+        // Art Style artwork keeps its own colors (issue #119, AppearanceControls.ColorApplies); every
+        // other style these slots offer, Celestial Dream's tintable corner included, takes the Look's
+        // colors (tested against the catalog).
+        Hint(AppearanceControls.SlotColorsHint);
     }
 
     /// <summary>The <see cref="ChooserMemories"/> key of a Component kind's style list, shared by both editors.</summary>
@@ -49,7 +55,31 @@ internal sealed partial class BasicProfileEditorWindow
             ? "None"
             : status is ComponentStatus.Ready or ComponentStatus.MissingImage && currentDefinition is not null ? currentDefinition.Name : "Unavailable";
 
-        EditorWidgets.PropertyLabel(PlateComponentEditor.KindLabel(kind));
+        // The slot's label is its Component's entry: clicking it selects the Component (outlined on
+        // the live view) or lets go of it, as clicking the Component on the live view does (issue #115).
+        if (current is null)
+        {
+            EditorWidgets.PropertyLabel(PlateComponentEditor.KindLabel(kind));
+        }
+        else
+        {
+            var selected = editorSession.SelectedComponentId == current.Id;
+            if (revealComponentSlot == kind)
+            {
+                ImGui.SetScrollHereY(0.3f);
+                revealComponentSlot = null;
+            }
+
+            if (EditorWidgets.SelectablePropertyLabel($"{PlateComponentEditor.KindLabel(kind)}##Select", selected))
+            {
+                editorSession.SelectComponent(selected ? null : current.Id);
+            }
+
+            ToolTip(selected ? "Selected: outlined on the live view. Click to let go." : "Click to outline it on the live view.");
+            ImGui.SameLine(EditorWidgets.LabelColumnWidth);
+            ImGui.SetNextItemWidth(-1f);
+        }
+
         using (var combo = ImRaii.Combo("##Style", preview))
         {
             if (combo.Success)
@@ -105,6 +135,60 @@ internal sealed partial class BasicProfileEditorWindow
             {
                 editorSession.SetComponentCorner(current.Id, corner, enabled);
             }
+
+            if (status == ComponentStatus.Ready && currentDefinition is not null)
+            {
+                DrawCornerOrnamentPlacement(profile, current, currentDefinition);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A Corner Ornament's size and distance from the Plate's edge (<see cref="CornerOrnamentPlacement"/>):
+    /// the same Scale and Offset the Advanced editor shows, so either editor sees the other's changes.
+    /// Each drag is one undo step; Reset puts both back at the defaults a new ornament gets.
+    /// </summary>
+    private void DrawCornerOrnamentPlacement(ProfileDocument profile, PlateComponent ornament, ComponentDefinition definition)
+    {
+        var ornamentId = ornament.Id;
+
+        var size = ornament.Scale * 100f;
+        EditorWidgets.PropertyLabel("Size");
+        if (ImGui.SliderFloat("##OrnamentSize", ref size, CornerOrnamentPlacement.MinBasicScale * 100f, CornerOrnamentPlacement.MaxBasicScale * 100f, "%.0f%%", ImGuiSliderFlags.AlwaysClamp))
+        {
+            editorSession.SetCornerOrnamentScale(ornamentId, size / 100f, continuous: true);
+        }
+
+        CommitOrnamentOnRelease();
+        ToolTip("Larger or smaller. The ornament grows from its corner, so its distance from the edge stays the same.");
+
+        var distance = CornerOrnamentPlacement.EdgeDistance(profile, ornament, definition);
+        EditorWidgets.PropertyLabel("Edge distance");
+        if (ImGui.SliderFloat("##OrnamentEdgeDistance", ref distance, CornerOrnamentPlacement.MinEdgeDistance, CornerOrnamentPlacement.MaxEdgeDistance, "%.0f", ImGuiSliderFlags.AlwaysClamp))
+        {
+            editorSession.SetCornerOrnamentEdgeDistance(ornamentId, distance, continuous: true);
+        }
+
+        CommitOrnamentOnRelease();
+        ToolTip("How far each ornament sits from the Plate's edge. Lower moves it into the corner; below 0 lets it run past the edge.");
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + EditorWidgets.LabelColumnWidth);
+        using (ImRaii.Disabled(CornerOrnamentPlacement.IsDefault(profile, ornament, definition)))
+        {
+            if (ImGui.Button("Reset Size & Distance", new Vector2(-1, 0f)))
+            {
+                editorSession.ResetCornerOrnamentPlacement(ornamentId);
+            }
+        }
+
+        ToolTip("Back to the default size and distance from the edge. Color, corners and style are kept.");
+    }
+
+    private void CommitOrnamentOnRelease()
+    {
+        if (ImGui.IsItemDeactivatedAfterEdit())
+        {
+            editorSession.CommitPendingDocumentEdit();
         }
     }
 }

@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
+using AetherFrame.Domain.Basic;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 
 namespace AetherFrame.UI.Editor;
 
 /// <summary>
-/// What the Basic editor's Theme browser shows: one collection of every theme, narrowed by a search
-/// and an optional family filter (from the catalog's own <see cref="ThemeFamily"/> metadata — the
-/// families that actually have themes, in <see cref="ProfileThemePresets.FamilyOrder"/>). Pure: it
-/// only picks and orders themes; applying one is unchanged (by its stable <see cref="ProfileThemePreset.Id"/>),
-/// and nothing here reads or writes a Plate beyond telling which theme it uses.
+/// What the Basic editor's style browser shows: one system's catalog at a time, Art Styles or Simple
+/// Themes (<see cref="Catalog"/>, issue #118), narrowed by a search and, for Simple Themes, an optional
+/// family filter (from the catalog's own <see cref="ThemeFamily"/> metadata — the families that
+/// actually have themes, in <see cref="ProfileThemePresets.FamilyOrder"/>). Pure: it only picks and
+/// orders themes; applying one is unchanged (by its stable <see cref="ProfileThemePreset.Id"/>), and
+/// nothing here reads or writes a Plate beyond telling which style it uses.
 /// </summary>
 internal static class ThemeBrowser
 {
@@ -93,18 +96,45 @@ internal static class ThemeBrowser
         return families;
     }
 
-    /// <summary>The theme the Plate uses (its stored Basic theme id), or null — whatever the browser is showing.</summary>
-    internal static ProfileThemePreset? Current(ProfileDocument profile) => ProfileThemePresets.Find(profile.BasicPlate?.ThemeId);
+    /// <summary>The style the Plate uses (its stored Basic theme id), or null — whatever the browser is showing.</summary>
+    internal static ProfileThemePreset? Current(ProfileDocument profile) => PlateStyle.InUse(profile);
+
+    /// <summary>One system's catalog, in catalog order: the Art Styles, or every Simple Theme.</summary>
+    internal static IReadOnlyList<ProfileThemePreset> Catalog(StyleSystem system) =>
+        system == StyleSystem.ArtStyle ? ArtSets.Styles : ProfileThemePresets.SimpleThemes;
+
+    /// <summary>A system's name on its tab.</summary>
+    internal static string SystemLabel(StyleSystem system) => system == StyleSystem.ArtStyle ? "Art Styles" : SimpleThemesLabel;
+
+    /// <summary>
+    /// While <paramref name="showing"/> isn't the system in use: what choosing from it does, naming
+    /// the style in use, which is kept for later, and the system's own last choice (the marked card).
+    /// Null while the system in use is shown, or with no style in use.
+    /// </summary>
+    internal static string? SwitchHint(ProfileDocument profile, StyleSystem showing)
+    {
+        if (PlateStyle.InUse(profile) is not { } inUse || PlateStyle.SystemInUse(profile) == showing)
+        {
+            return null;
+        }
+
+        var last = PlateStyle.Chosen(profile, showing);
+        return showing == StyleSystem.ArtStyle
+            ? $"Your Plate uses the Simple Theme {inUse.Name}. Choosing an Art Style switches to it; {inUse.Name} and your background are kept for later."
+                + (last is null ? string.Empty : $" Your last Art Style, {last.Name}, is marked.")
+            : $"Your Plate uses the Art Style {inUse.Name}. Choosing a Simple Theme takes its pieces away; {inUse.Name} is kept for later."
+                + (last is null ? string.Empty : $" Your last Simple Theme, {last.Name}, is marked, and comes back with your background as you left it.");
+    }
 
     /// <summary>How many theme cards fit side by side in <paramref name="width"/> (always at least one).</summary>
     internal static int Columns(float width, float cardWidth, float spacing) =>
         Math.Max(1, (int)((width + spacing) / Math.Max(1f, cardWidth + spacing)));
 
-    /// <summary>A family's name as the browser shows it: "Art Styles" for the art styles, the family's
+    /// <summary>A family's name as the browser shows it: "Art Styles" for the Art Styles, the family's
     /// own name for each family of Simple Themes.</summary>
     internal static string FamilyLabel(ThemeFamily family) => family == ThemeFamily.ArtStyle ? "Art Styles" : family.ToString();
 
-    /// <summary>The heading over every family but the art styles: their themes set colors only.</summary>
+    /// <summary>The name of every family but the Art Styles: their themes set colors only.</summary>
     internal const string SimpleThemesLabel = "Simple Themes";
 
     private static bool Matches(ProfileThemePreset theme, string word) =>
@@ -114,14 +144,17 @@ internal static class ThemeBrowser
         || (!theme.IsArtStyle && SimpleThemesLabel.Contains(word, StringComparison.OrdinalIgnoreCase));
 }
 
-/// <summary>The Theme browser's view state (search text and family filter): editor-only, never part of a Plate.</summary>
+/// <summary>The style browser's view state (system shown, search text and family filter): editor-only, never part of a Plate.</summary>
 internal sealed class ThemeBrowserState
 {
     internal const int MaxSearchLength = 64;
 
+    /// <summary>The system browsed (Art Styles first); set from <see cref="PlateStyle.OpensOn"/> as each Plate is shown.</summary>
+    internal StyleSystem Showing { get; set; }
+
     internal string Search { get; set; } = string.Empty;
 
-    /// <summary>The family filter; null is All (the default).</summary>
+    /// <summary>The Simple Themes' family filter; null is All (the default).</summary>
     internal ThemeFamily? Family { get; set; }
 
     /// <summary>The Plate the browser last showed, and whether its current theme still needs scrolling into view.</summary>
@@ -135,5 +168,29 @@ internal sealed class ThemeBrowserState
     {
         Search = string.Empty;
         Family = null;
+    }
+
+    /// <summary>
+    /// Called each frame with the Plate shown. Another Plate than last time opens on its own system
+    /// (<see cref="PlateStyle.OpensOn"/>), unfiltered, search included, so a search left from the
+    /// last Plate can't hide this one's choice, which is scrolled into view when it has one.
+    /// </summary>
+    internal void ShowPlate(ProfileDocument profile)
+    {
+        if (PlateId == profile.ProfileId)
+        {
+            return;
+        }
+
+        PlateId = profile.ProfileId;
+        ShowSystem(profile, PlateStyle.OpensOn(profile));
+    }
+
+    /// <summary>Shows <paramref name="system"/>'s tab, unfiltered, on the Plate's choice there when it has one.</summary>
+    internal void ShowSystem(ProfileDocument profile, StyleSystem system)
+    {
+        Showing = system;
+        Clear();
+        ScrollToCurrent = PlateStyle.Chosen(profile, system) is not null;
     }
 }

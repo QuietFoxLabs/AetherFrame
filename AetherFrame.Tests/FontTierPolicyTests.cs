@@ -487,8 +487,9 @@ public class FontTierPolicyTests
     [Fact]
     public void NoBundledFace_CarriesTheDingbatDecoration()
     {
-        // IdentityHeaderRules.IsDrawableDecoration rejects "✦" because the fonts lack it: the
-        // ranges cover every codepoint, but a glyph no face maps still falls back.
+        // IdentityHeaderRules.IsDrawableDecoration rejects "✦" on its own because the fonts lack it
+        // (the symbol fallback draws it, issue #121): the ranges cover every codepoint, but a glyph
+        // no face maps still falls back.
         foreach (var (_, prefix) in FamilyFiles)
         {
             foreach (var suffix in FaceSuffixes)

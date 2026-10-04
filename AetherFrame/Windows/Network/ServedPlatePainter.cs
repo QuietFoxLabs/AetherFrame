@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using AetherFrame.Domain.Components;
 using AetherFrame.Services.Network.Sharing;
 using AetherFrame.UI.Rendering;
 using Dalamud.Bindings.ImGui;
@@ -126,6 +127,11 @@ internal static class ServedPlatePainter
                 {
                     var (u0, v0, u1, v1) = shape.Art.Window2D(shape.Piece);
                     drawList.AddImageQuad(artWrap.Handle, a, b, c, d, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), color);
+                }
+                else if (ArtSets.BackgroundStandIn(shape.Art) is { } standIn)
+                {
+                    // As ComponentRenderer: a style's background stands in with its plain color until it is drawn.
+                    drawList.AddQuadFilled(a, b, c, d, ImGui.GetColorU32(standIn with { W = shape.Color.W }));
                 }
 
                 break;

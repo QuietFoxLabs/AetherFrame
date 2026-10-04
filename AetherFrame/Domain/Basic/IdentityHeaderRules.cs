@@ -241,14 +241,15 @@ internal static class IdentityHeaderRules
 
     /// <summary>
     /// True when the Plate's fonts can draw every character of a decoration: Basic Latin and
-    /// Latin-1 printable characters. False for symbols an earlier build offered (or wrote for
-    /// Accent) such as "✦", which render as "?".
+    /// Latin-1 printable characters, and any other character <paramref name="drawsSymbol"/> says the
+    /// symbol fallback draws (issue #121), such as the "✦" an earlier build offered (or wrote for
+    /// Accent). False for anything else, which renders as "?".
     /// </summary>
-    internal static bool IsDrawableDecoration(string decoration)
+    internal static bool IsDrawableDecoration(string decoration, Func<int, bool>? drawsSymbol = null)
     {
         foreach (var c in decoration)
         {
-            if (c is < ' ' or (> '~' and < ' ') or > 'ÿ')
+            if ((c is < ' ' or (> '~' and < ' ') or > 'ÿ') && drawsSymbol?.Invoke(c) != true)
             {
                 return false;
             }

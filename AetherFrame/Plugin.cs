@@ -57,8 +57,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     [PluginService] internal static IUnlockState UnlockState { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
-#if AETHERFRAME_NETWORK_PREVIEW
     [PluginService] internal static ITextureReadbackProvider TextureReadback { get; private set; } = null!;
+#if AETHERFRAME_NETWORK_PREVIEW
     [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
 #endif
 
@@ -151,6 +151,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // Every message and exception passes LogPrivacy first: no character binding file (named by
         // the character's Content ID) is ever named in the log.
         log = new RedactingAetherFrameLog(new DalamudAetherFrameLog(Log));
+        ScreenEyedropper.Initialize(TextureProvider, TextureReadback, log);
 
         // A damaged configuration file never stops AetherFrame from loading: it starts from the
         // defaults instead (the file holds only the guidance flag below, and is rewritten readable).
@@ -646,6 +647,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             plateViewing.OnFrame();
 #endif
             WindowSystem.Draw();
+            ScreenEyedropper.Draw();
             editorPlateMenu.EndFrame();
         }
         finally
@@ -741,6 +743,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         viewPlateMenu.Dispose();
 #endif
         WindowSystem.RemoveAllWindows();
+        ScreenEyedropper.Shutdown();
         keyboardShortcutService.Dispose();
     }
 
@@ -793,7 +796,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private static void ShowVersion() => ChatGui.Print(AetherFrameBuildInfo.Current.Describe());
 
     /// <summary><c>/aetherframe fonts</c> (or <c>/af fonts</c>): the Plate font cache, in chat.</summary>
-    private void ShowFontStats() => ChatGui.Print(fontService.Stats.Describe());
+    private void ShowFontStats() => ChatGui.Print(fontService.Describe());
 
     /// <summary>The main entry point is My Plates.</summary>
     public void ToggleMainUi() => plateLibraryWindow.Toggle();

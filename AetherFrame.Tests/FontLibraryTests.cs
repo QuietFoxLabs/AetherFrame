@@ -294,7 +294,7 @@ public partial class FontLibraryTests
         }
     }
 
-    private static IEnumerable<string> Styles(LibraryFontFamily family)
+    internal static IEnumerable<string> Styles(LibraryFontFamily family)
     {
         yield return "Regular";
         if (family.HasBold)
@@ -313,7 +313,7 @@ public partial class FontLibraryTests
         }
     }
 
-    private static (FontTierPolicyTests.TrueTypeFace Face, FontTierPolicyTests.TrueTypeFace Fallback, HashSet<int> Added) Load(LibraryFontFamily family, string style)
+    internal static (FontTierPolicyTests.TrueTypeFace Face, FontTierPolicyTests.TrueTypeFace Fallback, HashSet<int> Added) Load(LibraryFontFamily family, string style)
     {
         var face = FontTierPolicyTests.TrueTypeFace.Load(Path.Combine(LibraryDirectory, $"{family.FilePrefix}-{style}.ttf"));
         var fallback = FontTierPolicyTests.TrueTypeFace.Load(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Fonts", $"PTSans-{style}.ttf"));

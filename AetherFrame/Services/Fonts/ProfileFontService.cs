@@ -65,6 +65,10 @@ namespace AetherFrame.Services.Fonts;
 /// one slower to appear. Each family only builds tiers up to the size its glyph set can afford
 /// (<see cref="FontTierPolicy"/>; a request above that uses the largest allowed tier, as a request
 /// above the ladder's top always has). The bundled families keep every glyph their TTFs map.
+///
+/// A symbol a font has no glyph for (a ♥ in AetherFrame Sans, say) is drawn from the bundled symbol
+/// faces instead of as "?" (issue #121, <see cref="SymbolFallback"/>): the symbols the session's
+/// Plates use are merged into every font, and taking a new one builds the fonts again with it.
 /// </summary>
 internal sealed class ProfileFontService : IDisposable
 {
@@ -77,7 +81,9 @@ internal sealed class ProfileFontService : IDisposable
 
     // Read on the atlases' build threads, several of which can run at once (one per family).
     private readonly Dictionary<string, byte[]> embeddedFontBytesCache = new();
+    private readonly Dictionary<string, FontVerticalMetrics> faceMetricsCache = new();
     private readonly object embeddedFontBytesLock = new();
+    private readonly SymbolFallback symbols;
 
     private static readonly object PrewarmedMarker = new();
 
@@ -90,6 +96,7 @@ internal sealed class ProfileFontService : IDisposable
     internal ProfileFontService()
     {
         cache = new FontHandleCache<IFontAtlas, IFontHandle>(new DalamudFontBackend(this), static () => Environment.TickCount64);
+        symbols = new SymbolFallback(GetEmbeddedFontBytes);
 
         // "A sensible set of common editor sizes", and only for the family new text actually
         // uses. Dalamud Default is deliberately NOT warmed here — it can carry a much larger
@@ -107,6 +114,27 @@ internal sealed class ProfileFontService : IDisposable
 
     /// <summary>What the cache holds and how long new fonts took to appear (<c>/af fonts</c>).</summary>
     internal FontCacheStats Stats => cache.Stats;
+
+    /// <summary>What <c>/af fonts</c> prints: <see cref="Stats"/>, and the symbols drawn from the fallback.</summary>
+    internal string Describe() => cache.Stats.Describe() + " " + symbols.Describe();
+
+    /// <summary>
+    /// For characters a built font has no glyph for: takes those the symbol fallback draws, so every
+    /// font is built with them (issue #121), building the fonts again when any is new. Render thread.
+    /// </summary>
+    internal void TakeSymbols(ReadOnlySpan<char> missing)
+    {
+        if (symbols.Take(missing))
+        {
+            cache.RebuildAll();
+        }
+    }
+
+    /// <summary>Whether fonts are built (or being built) with <paramref name="codepoint"/> from the symbol fallback.</summary>
+    internal bool HoldsSymbol(int codepoint) => symbols.Holds(codepoint);
+
+    /// <summary>Whether a font without <paramref name="codepoint"/> draws it all the same, from the symbol fallback.</summary>
+    internal bool CanDrawSymbol(int codepoint) => symbols.CanStillDraw(codepoint);
 
     /// <summary>
     /// Gets (building and caching on first use) a font handle for the given family at
@@ -185,6 +213,17 @@ internal sealed class ProfileFontService : IDisposable
 
         prewarmedProfiles.AddOrUpdate(profile, PrewarmedMarker);
 
+        // The symbols the Plate's text uses, taken before its fonts are built so they are built with
+        // them once (issue #121); whatever else a font turns out to lack is taken as it is drawn.
+        var tookSymbols = false;
+        foreach (var element in profile.Elements)
+        {
+            if (element is TextProfileElement symbolText)
+            {
+                tookSymbols |= symbols.Take(symbolText.GetDisplayText());
+            }
+        }
+
         // One rebuild per atlas for the whole profile's worth of newly-needed handles, not one per handle.
         using var batch = cache.Batch();
 
@@ -214,6 +253,13 @@ internal sealed class ProfileFontService : IDisposable
             var ownTier = FontTierPolicy.SizeLadder[FontTierPolicy.FindTierIndex(descriptor.Id, text.FontSize)];
             cache.GetOrCreate(new FontCacheKey(descriptor.Id, ownTier, effectiveBold, effectiveItalic));
         }
+
+        if (tookSymbols)
+        {
+            // Every other loaded font, with the new symbols; the batch's own atlases rebuild with them
+            // as it ends, so none builds twice.
+            cache.RebuildAll();
+        }
     }
 
     public void Dispose()
@@ -223,6 +269,7 @@ internal sealed class ProfileFontService : IDisposable
         lock (embeddedFontBytesLock)
         {
             embeddedFontBytesCache.Clear();
+            faceMetricsCache.Clear();
         }
     }
 
@@ -265,7 +312,47 @@ internal sealed class ProfileFontService : IDisposable
                 var fallback = new SafeFontConfig { SizePx = sizePx, GlyphRanges = previewGlyphs ?? FontTierPolicy.FallbackGlyphRanges, MergeFont = toolkit.Font };
                 toolkit.AddFontFromMemory(GetEmbeddedFontBytes(fallbackName), fallback, fallbackName);
             }
+
+            // The session's symbols (issue #121), from the symbol faces, for those the font lacks:
+            // ImGui merges only what it doesn't map, each face sized so its em is the font's and
+            // drawn on the font's baseline. Read on every build, so a rebuild adds the new ones;
+            // none at all while no Plate uses a symbol, and the font builds exactly as before.
+            var merges = symbols.Merges;
+            if (merges.Count > 0)
+            {
+                var em = FaceMetrics(resourceName ?? FaceResourceName("PTSans", false, false)).EmPixels(sizePx);
+                foreach (var merge in merges)
+                {
+                    var symbolConfig = new SafeFontConfig { SizePx = merge.Metrics.SizeForEm(em), GlyphRanges = merge.GlyphRanges, MergeFont = toolkit.Font };
+                    toolkit.AddFontFromMemory(GetEmbeddedFontBytes(merge.Resource), symbolConfig, merge.Resource);
+                }
+            }
         }));
+
+    /// <summary>
+    /// An embedded face's vertical metrics, read once. Dalamud Default's real face is unknowable
+    /// here (see <see cref="FontTierPolicy"/>), so the symbols merged into it are sized against
+    /// AetherFrame Sans's: about right for any text face. Called on the atlases' build threads.
+    /// </summary>
+    private FontVerticalMetrics FaceMetrics(string resourceName)
+    {
+        lock (embeddedFontBytesLock)
+        {
+            if (faceMetricsCache.TryGetValue(resourceName, out var cached))
+            {
+                return cached;
+            }
+        }
+
+        // An embedded face always has them; a unit em of a unit box would size symbols as the font size.
+        var metrics = TrueTypeTables.TryReadVerticalMetrics(GetEmbeddedFontBytes(resourceName), out var read) ? read : new FontVerticalMetrics(1, 1, 0);
+        lock (embeddedFontBytesLock)
+        {
+            faceMetricsCache[resourceName] = metrics;
+        }
+
+        return metrics;
+    }
 
     /// <summary>Maps a curated family id + real style to its embedded TTF's logical resource
     /// name (see the AetherFrame.csproj Fonts glob), or null for <see cref="ProfileFontFamilies.DalamudDefault"/>
@@ -348,6 +435,12 @@ internal sealed class ProfileFontService : IDisposable
                 TaskScheduler.Default);
 
         public IDisposable SuppressRebuild(IFontAtlas atlas) => atlas.SuppressAutoRebuild();
+
+        public void Rebuild(IFontAtlas atlas) => _ = atlas.BuildFontsAsync().ContinueWith(
+            task => _ = task.Exception, // disposed or failed: observed; its faces keep what they were last built with
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
         public void DisposeHandle(IFontHandle handle) => handle.Dispose();
 
