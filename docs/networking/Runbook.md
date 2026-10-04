@@ -173,7 +173,7 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
 
 ## Community Desk (disabled until separately approved)
 
-The dashboard implementation and its remaining review gates are described in [AdminDashboard.md](AdminDashboard.md). It runs on this same server at `https://plates.aetherframe.dev/admin/`; no new DNS record or hosting service is required. The PR's security/correctness reviews, exact-head CI and browser acceptance are complete, and GPT approved a controlled deployment (October 4, 2026). Activation remains the owner's step.
+The dashboard implementation, its limitations and the checks still due after activation are described in [AdminDashboard.md](AdminDashboard.md). It runs on this same server at `https://plates.aetherframe.dev/admin/`; no new DNS record or hosting service is required. The PR's security/correctness reviews, exact-head CI and browser acceptance are complete, and GPT approved a controlled deployment (October 4, 2026). Activation remains the owner's step.
 
 For activation, the owner:
 
