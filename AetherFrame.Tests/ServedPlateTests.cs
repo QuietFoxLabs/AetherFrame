@@ -107,6 +107,22 @@ public sealed class ServedPlateTests
     }
 
     [Fact]
+    public void ASymbol_ReachesTheViewer_AsTheCharacterThePublisherWrote()
+    {
+        // Issue #121: a shared ♥ arrives as U+2665, not as the "?" a font without it draws, so the
+        // viewer's renderer can draw it through the symbol fallback.
+        var plate = Blank();
+        plate.Elements.Add(new TextProfileElement { Text = "Kim ♥ ☆ ☾", Prefix = "♥", FontFamily = ProfileFontFamilies.AetherFrameSans });
+
+        var served = Serve(plate);
+        var text = Assert.Single(served.Steps.OfType<ServedText>());
+        Assert.Equal("♥ Kim ♥ ☆ ☾", text.Text);
+        Assert.Equal("♥ Kim ♥ ☆ ☾", text.Element.Text);
+        Assert.DoesNotContain('?', text.Text);
+        Assert.Same(text.Element, Assert.Single(served.FontWarmup.Elements));
+    }
+
+    [Fact]
     public void AnImage_AndTheBackground_AreDrawnWithThePublishersOwnValues()
     {
         var plate = Blank();

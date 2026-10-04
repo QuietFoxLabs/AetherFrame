@@ -32,6 +32,9 @@ internal interface IFontAtlasBackend<TAtlas, THandle>
     /// <summary>Holds back <paramref name="atlas"/>'s rebuilds until disposed, then rebuilds once if needed.</summary>
     IDisposable SuppressRebuild(TAtlas atlas);
 
+    /// <summary>Builds every face in <paramref name="atlas"/> again, each still drawn as it was until then.</summary>
+    void Rebuild(TAtlas atlas);
+
     void DisposeHandle(THandle handle);
 
     void DisposeAtlas(TAtlas atlas);
@@ -153,6 +156,26 @@ internal sealed class FontHandleCache<TAtlas, THandle> : IDisposable
     {
         batchDepth++;
         return new BatchScope(this);
+    }
+
+    /// <summary>
+    /// Builds every face held again (issue #121: a symbol the fonts are now built with turned up).
+    /// An atlas a batch is holding is left to the rebuild that batch's end makes.
+    /// </summary>
+    internal void RebuildAll()
+    {
+        if (disposed)
+        {
+            return;
+        }
+
+        foreach (var family in families.Values)
+        {
+            if (family.Suppression is null)
+            {
+                backend.Rebuild(family.Atlas);
+            }
+        }
     }
 
     internal FontCacheStats Stats

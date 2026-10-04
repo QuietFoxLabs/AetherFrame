@@ -34,6 +34,9 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         public bool Dirty { get; set; }
 
         public int Rebuilds { get; set; }
+
+        /// <summary>Rebuilds asked for by <see cref="IFontAtlasBackend{TAtlas, THandle}.Rebuild"/>.</summary>
+        public int RebuildsAskedFor { get; set; }
     }
 
     private sealed class FakeHandle(FontCacheKey key, FakeAtlas atlas)
@@ -108,6 +111,13 @@ public class FontHandleCacheTests(ITestOutputHelper output)
                     RequestRebuild(atlas);
                 }
             });
+        }
+
+        public void Rebuild(FakeAtlas atlas)
+        {
+            Assert.False(atlas.Disposed);
+            atlas.RebuildsAskedFor++;
+            atlas.Dirty = true;
         }
 
         public void DisposeHandle(FakeHandle handle)
@@ -486,6 +496,41 @@ public class FontHandleCacheTests(ITestOutputHelper output)
         Assert.All(fonts.Atlases, a => Assert.True(a.Disposed));
         Assert.Equal(0, cache.HandleCount);
         Assert.Throws<ObjectDisposedException>(() => cache.GetOrCreate(Key(Library[0], 32f)));
+    }
+
+    [Fact]
+    public void RebuildAll_BuildsEveryHeldAtlasAgain_AndLeavesABatchsAtlasToTheBatchsRebuild()
+    {
+        // Issue #121: a symbol turned up that the fonts are now built with.
+        var (cache, fonts, _) = NewCache();
+        cache.Get(ProfileFontFamilies.AetherFrameSans, Tier(16f), false, false);
+        cache.Get(ProfileFontFamilies.AetherFrameMono, Tier(16f), false, false);
+        fonts.CompleteBuilds();
+        var sans = fonts.AtlasOf(ProfileFontFamilies.AetherFrameSans);
+        var mono = fonts.AtlasOf(ProfileFontFamilies.AetherFrameMono);
+
+        cache.RebuildAll();
+        Assert.Equal(1, sans.RebuildsAskedFor);
+        Assert.Equal(1, mono.RebuildsAskedFor);
+        Assert.All(sans.Handles, handle => Assert.True(handle.Available)); // drawn as they were meanwhile
+        fonts.CompleteBuilds();
+        Assert.Equal(2, sans.Rebuilds);
+        Assert.Equal(2, mono.Rebuilds);
+
+        using (cache.Batch())
+        {
+            cache.GetOrCreate(Key(ProfileFontFamilies.AetherFrameSans, 24f)); // the batch now holds Sans's rebuild
+            cache.RebuildAll();
+            Assert.Equal(1, sans.RebuildsAskedFor);
+            Assert.Equal(2, mono.RebuildsAskedFor);
+            Assert.False(sans.Dirty);
+        }
+
+        Assert.True(sans.Dirty); // the batch's end rebuilds Sans, with whatever it is built with now
+
+        cache.Dispose();
+        cache.RebuildAll();
+        Assert.Equal(2, mono.RebuildsAskedFor);
     }
 
     /// <summary>
