@@ -514,9 +514,12 @@ internal sealed partial class BasicProfileEditorWindow
         }
 
         var height = Math.Max(110f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().Y * 0.4f);
-        if (ImGui.InputTextMultiline("##BasicMessage", ref buffer, TextProfileElement.MaxTextLength, new Vector2(-1, height)))
+        using (AetherChild.WhilePicking())
         {
-            basicEditorSession.SetText(ProfileElementRole.BasicMessage, buffer);
+            if (ImGui.InputTextMultiline("##BasicMessage", ref buffer, TextProfileElement.MaxTextLength, new Vector2(-1, height)))
+            {
+                basicEditorSession.SetText(ProfileElementRole.BasicMessage, buffer);
+            }
         }
 
         if (ImGui.IsItemDeactivatedAfterEdit())

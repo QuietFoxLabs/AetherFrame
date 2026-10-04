@@ -275,6 +275,12 @@ internal sealed class AetherWindowChrome : IOutstandingStyle
     /// window stays behind the dimming (it no longer jumps in front when clicked), so a click
     /// inside the spotlight reaches the control without letting the rest of the window out from
     /// under the dim; keyboard focus still moves to it as usual.
+    ///
+    /// While the screen eyedropper picks (issue #120), an AetherFrame window takes no mouse input:
+    /// one on another monitor (Dalamud's multi-monitor windows) is a window of its own, out from
+    /// under the eyedropper's cover, and a click there would select or drag instead of picking.
+    /// Its child windows need the same of their own (<c>AetherChild</c>). Mouse input only, so
+    /// ImGui still gives the focus back to the window the pick started from once it ends.
     /// </summary>
     internal static void ApplyPolicy(Window window)
     {
@@ -285,6 +291,15 @@ internal sealed class AetherWindowChrome : IOutstandingStyle
         else
         {
             window.Flags &= ~ImGuiWindowFlags.NoBringToFrontOnFocus;
+        }
+
+        if (ScreenEyedropper.ClaimsInput)
+        {
+            window.Flags |= ImGuiWindowFlags.NoMouseInputs;
+        }
+        else
+        {
+            window.Flags &= ~ImGuiWindowFlags.NoMouseInputs;
         }
     }
 }
