@@ -429,6 +429,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             plateLibrary.PlateSaved += livePublisher.PlateSaved;
             onlineCount = new OnlineCount(sharingConnection.Client, personaSession.TryRun, () => DateTimeOffset.UtcNow, ownedOperations.Stopping, log.Information);
             presenceTarget = () => OnlineCount.TargetOf(characterSharing.View, characterIdentityService.CurrentCharacter?.ContentId);
+            var onlineCountFooter = new OnlineCountFooter(
+                onlineCount, () => OnlineCountFooter.WaitsForNotice(characterSharing.View, characterIdentityService.CurrentCharacter?.ContentId), () => DateTimeOffset.UtcNow);
+            plateLibraryWindow.OnlineCountItem = onlineCountFooter.Item;
             sharingWindow = new SharingWindow(characterSharing, livePublisher, personaSession, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;

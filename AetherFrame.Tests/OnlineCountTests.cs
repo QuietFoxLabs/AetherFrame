@@ -219,6 +219,38 @@ public class OnlineCountTests
         Assert.Contains("Characters that don't share send nothing", SharingText.OnlineCountSends, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheFooter_ShowsTheCount_OrConnectingOrUnavailable_NeverAZeroForAFailure()
+    {
+        var now = DateTimeOffset.FromUnixTimeSeconds(1_790_000_000);
+        Assert.Null(OnlineCountFooter.ItemFor(OnlineCountView.Off, now, noticeDue: false));
+        Assert.Equal(OnlineCountFooter.NoticeDue, OnlineCountFooter.ItemFor(OnlineCountView.Off, now, noticeDue: true));
+        Assert.Equal(OnlineCountFooter.Connecting, OnlineCountFooter.ItemFor(OnlineCountView.Connecting, now, noticeDue: false));
+        Assert.Equal(OnlineCountFooter.Unavailable, OnlineCountFooter.ItemFor(OnlineCountView.Unavailable, now, noticeDue: false));
+
+        var counted = new OnlineCountView(OnlineCountState.Online, 1234, now);
+        Assert.Equal(new MyPlatesFooterItemProbe("1,234 online", OnlineCountFooter.Scope), Probe(OnlineCountFooter.ItemFor(counted, now + TimeSpan.FromSeconds(179), noticeDue: false)));
+        Assert.Equal(OnlineCountFooter.Unavailable, OnlineCountFooter.ItemFor(counted, now + OnlineCount.Fresh, noticeDue: false));
+        Assert.Equal("0 online", OnlineCountFooter.Text(0));
+        Assert.Contains("counted once each", OnlineCountFooter.Scope, StringComparison.Ordinal);
+        Assert.All(new[] { OnlineCountFooter.Connecting, OnlineCountFooter.Unavailable, OnlineCountFooter.NoticeDue }, item => Assert.DoesNotContain("0", item.Text, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheFooter_SaysWhereToTurnItOn_OnlyForASharingCharacterWhoseNoticeIsDue()
+    {
+        var shared = new SharingCharacter(7, PersonaSlotId.NewId(), PersonaId.Parse("psn_" + new string('1', 64)), SharingStage.Shared, "12345678", ProfileId.Parse("prf_" + new string('2', 32)), "Aria Starfall", "Gilgamesh");
+        CharacterSharingView View(SharingCharacter character, bool notice) => new(true, false, false, [character], null, null, null, onlineNotice: notice);
+        Assert.True(OnlineCountFooter.WaitsForNotice(View(shared, notice: true), 7));
+        Assert.False(OnlineCountFooter.WaitsForNotice(View(shared, notice: false), 7));
+        Assert.False(OnlineCountFooter.WaitsForNotice(View(shared, notice: true), null));
+        Assert.False(OnlineCountFooter.WaitsForNotice(View(shared with { Stage = SharingStage.Paused }, notice: true), 7));
+    }
+
+    private sealed record MyPlatesFooterItemProbe(string Text, string Tooltip);
+
+    private static MyPlatesFooterItemProbe? Probe(AetherFrame.UI.Library.MyPlatesFooterItem? item) => item is null ? null : new(item.Text, item.Tooltip);
+
     /// <summary>A persona manager over memory with one character key, a presence server answered in memory, and the count over them.</summary>
     private sealed class Harness : IDisposable
     {

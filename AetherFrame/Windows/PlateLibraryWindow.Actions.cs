@@ -43,8 +43,29 @@ internal sealed partial class PlateLibraryWindow
     /// <summary>The footer's right-hand items, left to right: a new item goes before the version, which stays at the bottom right.</summary>
     private static readonly MyPlatesFooterItem[] StaticFooterItems = [VersionItem];
 
-    /// <summary>The footer's right-hand items this frame, left to right.</summary>
-    private static IReadOnlyList<MyPlatesFooterItem> FooterItems() => StaticFooterItems;
+    /// <summary>The online count's item, before the version (the sharing build sets it): none to show when it gives null.</summary>
+    internal Func<MyPlatesFooterItem?>? OnlineCountItem { get; set; }
+
+    // The footer's items with the online count's, made again only when its item changes.
+    private MyPlatesFooterItem? footerOnlineItem;
+    private MyPlatesFooterItem[] footerItemsWithOnline = StaticFooterItems;
+
+    /// <summary>The footer's right-hand items this frame, left to right: the online count's, when there is one, then the version.</summary>
+    private IReadOnlyList<MyPlatesFooterItem> FooterItems()
+    {
+        if (OnlineCountItem?.Invoke() is not { } online)
+        {
+            return StaticFooterItems;
+        }
+
+        if (!ReferenceEquals(online, footerOnlineItem))
+        {
+            footerOnlineItem = online;
+            footerItemsWithOnline = [online, VersionItem];
+        }
+
+        return footerItemsWithOnline;
+    }
 
     /// <summary>
     /// The footer as this frame draws it, measured before the grid so the grid leaves it exactly the
