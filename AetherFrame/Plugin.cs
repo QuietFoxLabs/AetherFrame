@@ -522,6 +522,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
 #if AETHERFRAME_NETWORK_PREVIEW
                 Framework.Update -= OnFrameworkTick;
+
+                // A tick may have started a run already: it stops and leaves, in the background.
+                _ = onlineCount.StopAsync(TimeSpan.FromSeconds(5));
 #endif
             });
 

@@ -472,9 +472,12 @@ internal sealed class PresenceStore(TimeProvider time)
         }
     }
 
-    /// <summary>Whether a revocation can go: no challenge issued before it is accepted any more.</summary>
+    /// <summary>
+    /// Whether a revocation can go: no challenge issued before it is accepted any more. A clock that
+    /// went back keeps it, the safe way round; the memory stays bounded by <see cref="MaxRevocations"/>.
+    /// </summary>
     private static bool Forgettable(Revocation revocation, DateTimeOffset now) =>
-        now - revocation.At >= RevocationMemory || now < revocation.At;
+        now - revocation.At >= RevocationMemory;
 
     /// <summary>
     /// Remembers that a key, or a character, stopped sharing now, and which challenges were issued

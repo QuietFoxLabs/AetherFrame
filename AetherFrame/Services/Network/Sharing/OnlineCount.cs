@@ -147,9 +147,9 @@ internal sealed class OnlineCount
     }
 
     /// <summary>
-    /// The framework thread, each frame: when <paramref name="target"/> differs from the run's, the
-    /// run stops (and leaves) and, for a target, a new one starts in the background. No request is
-    /// made here.
+    /// The framework thread, each tick of the game (<see cref="PresenceDriver"/>): when
+    /// <paramref name="target"/> differs from the run's, the run stops (and leaves) and, for a
+    /// target, a new one starts in the background. No request is made here.
     /// </summary>
     internal void Update(PresenceTarget? target)
     {
@@ -162,7 +162,7 @@ internal sealed class OnlineCount
 
             Stop(current);
             current = null;
-            running.RemoveAll(task => task.IsCompleted);
+            running.RemoveAll(Done);
             if (target is null)
             {
                 view = OnlineCountView.Off;
@@ -197,10 +197,27 @@ internal sealed class OnlineCount
         {
             await Task.WhenAll(pending).WaitAsync(budget).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
+        catch (Exception exception)
         {
-            log($"Online count: a run didn't end within the unload's budget ({exception.GetType().Name}).");
+            // Unloading goes on whatever a run came to: a run that faulted, or one still going.
+            log($"Online count: a run didn't end cleanly within the unload's budget ({exception.GetType().Name}).");
         }
+    }
+
+    /// <summary>Whether a run's task, or a cancellation's, is over; a fault is logged by its type, so none goes unobserved.</summary>
+    private bool Done(Task task)
+    {
+        if (!task.IsCompleted)
+        {
+            return false;
+        }
+
+        if (task.Exception is { } fault)
+        {
+            log($"Online count: a run ended with {fault.GetBaseException().GetType().Name}.");
+        }
+
+        return true;
     }
 
     /// <summary>

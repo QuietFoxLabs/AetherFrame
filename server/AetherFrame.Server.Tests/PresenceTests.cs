@@ -499,13 +499,43 @@ public class PresenceTests
         Assert.Equal(StartResult.Stale, store.Start(KeyOf(3), Aria, beforeTakeover).Result);
         Assert.Equal(StartResult.Started, store.Start(other, Aria, Issued(store)).Result);
 
-        // A start with no challenge of its own is stale while anything is remembered, and the
-        // memory itself is kept no longer than a challenge can be.
+        // A start with no challenge of its own is stale while anything is remembered.
+        var signedBefore = Issued(store);
         store.ForgetKey(key);
         Assert.Equal(StartResult.Stale, store.Start(key, Aria, 0).Result);
-        var kept = Issued(store);
+        Assert.Equal(StartResult.Stale, store.Start(key, Aria, signedBefore).Result);
+
+        // The memory is kept no longer than a challenge can be: just before, a start signed before
+        // the revocation is still refused; from then on the revocation is forgotten, and the sweep
+        // drops it whether or not anything starts.
+        time.Advance(PresenceStore.RevocationMemory - TimeSpan.FromSeconds(1));
+        Assert.Equal(StartResult.Stale, store.Start(key, Aria, signedBefore).Result);
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(StartResult.Started, store.Start(key, Aria, signedBefore).Result);
+    }
+
+    [Fact]
+    public void PastItsBound_OneRevocationStandsForAll_AndRefusesOnlyWhatCameBeforeIt()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        var signedBefore = Issued(store);
+        for (var index = 0; index < PresenceStore.MaxRevocations; index++)
+        {
+            store.ForgetKey(KeyOf(index + 10));
+        }
+
+        // The memory is full, so the next revocation is remembered as one for every key and
+        // character: a start signed before it is refused, whoever signed it, and one signed after
+        // it is not.
+        store.ForgetKey(KeyOf(1));
+        Assert.Equal(StartResult.Stale, store.Start(KeyOf(2), Bram, signedBefore).Result);
+        Assert.Equal(StartResult.Started, store.Start(KeyOf(2), Bram, Issued(store)).Result);
+
+        // And it goes with the rest once no challenge from before it can be accepted.
         time.Advance(PresenceStore.RevocationMemory);
-        Assert.Equal(StartResult.Started, store.Start(key, Aria, kept).Result);
+        store.SweepExpired();
+        Assert.Equal(StartResult.Started, store.Start(KeyOf(3), Aria, signedBefore).Result);
     }
 
     [Fact]
