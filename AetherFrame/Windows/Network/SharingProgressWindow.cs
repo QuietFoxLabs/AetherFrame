@@ -17,10 +17,12 @@ namespace AetherFrame.Windows.Network;
 /// resuming, it says which step it is at, and for how long once that takes a while; then that the
 /// Plate is shared, closing by itself, or why it isn't, in the Sharing window's words, with Try
 /// again and Close. It follows <see cref="SharingProgress"/>, which reads only what the Sharing
-/// window reads, and appears only for a character that shares. It takes no keyboard focus when it
-/// appears, is never reached by keyboard or gamepad navigation, makes no sound, is never modal, and
-/// sits at the screen's right edge until the player moves it. Compiled only in the networking
-/// preview flavour.
+/// window reads, and appears only for a character that shares. It comes in front of AetherFrame's
+/// other windows once when a new sharing operation begins (a save's share, or Try again here or in
+/// the Sharing window), and never again for that operation (<see cref="SharingProgressFront"/>). It
+/// takes no keyboard focus when it appears or comes to the front, is never reached by keyboard or
+/// gamepad navigation, makes no sound, is never modal, and sits at the screen's right edge until
+/// the player moves it. Compiled only in the networking preview flavour.
 /// </summary>
 internal sealed class SharingProgressWindow : Window
 {
@@ -38,9 +40,11 @@ internal sealed class SharingProgressWindow : Window
     private readonly Func<CharacterContext?> currentCharacter;
     private readonly Func<ulong, Guid?> activePlateOf;
     private readonly SharingProgress progress = new();
+    private readonly SharingProgressFront front = new();
     private readonly AetherWindowChrome chrome = new();
     private SharingProgressView view = SharingProgressView.Hidden;
     private bool shown;
+    private bool raise;
 
     internal SharingProgressWindow(CharacterSharing sharing, LivePublisher live, Func<CharacterContext?> currentCharacter, Func<ulong, Guid?> activePlateOf)
         : base("Sharing progress##AetherFrameSharingProgress", ToastFlags)
@@ -76,6 +80,7 @@ internal sealed class SharingProgressWindow : Window
         view = progress.Update(character, sharing.View, live.View, TimeSpan.FromMilliseconds(Environment.TickCount64), character is { } id ? activePlateOf(id) : null);
         shown = view.Visible;
         IsOpen = shown;
+        raise = shown && (raise || front.ShouldRaise(view));
     }
 
     public override void PreDraw()
@@ -93,6 +98,14 @@ internal sealed class SharingProgressWindow : Window
 
     public override void Draw()
     {
+        if (raise)
+        {
+            // In front of the other windows, without the focus Dalamud's BringToFront would take
+            // from wherever the player is typing.
+            raise = false;
+            ImGuiP.BringWindowToDisplayFront(ImGuiP.GetCurrentWindow());
+        }
+
         AetherControls.SectionHeader(SharingText.ProgressTitle, 0f);
         switch (view.Stage)
         {
