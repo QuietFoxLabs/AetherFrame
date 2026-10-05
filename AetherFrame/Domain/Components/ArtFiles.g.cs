@@ -9,6 +9,7 @@ public static partial class ArtFiles
 {
     private const string Commit2c25408d02ee = "2c25408d02ee6d4cb79e0f5648864e0ee87d44dc";
     private const string Commitd6f82bbb0d28 = "d6f82bbb0d28f8fda81834ab376cb80213a403c7";
+    private const string Commit9cd647861bc4 = "9cd647861bc48c100e436d8bd152af15e8d54321";
 
     /// <summary>Every hosted file, by path.</summary>
     private static readonly ArtFile[] Table =
@@ -140,6 +141,13 @@ public static partial class ArtFiles
         new("Components/HighFantasyRoyal/HighFantasyRoyal_PlateFrame.png", 641739, "044282b1a2e460fff4a5ebbc04e69f4a4c5898201c8eafc9752a49fc57870db7", Commitd6f82bbb0d28),
         new("Components/HighFantasyRoyal/HighFantasyRoyal_PortraitFrame.png", 745769, "11b5e86dd8c7d6d6f6f372ee461a9b46a9fd7348b352837869ad1299583f63b7", Commitd6f82bbb0d28),
         new("Components/HighFantasyRoyal/HighFantasyRoyal_SectionHeader.png", 181346, "e6a291fddd17fbdb5e104a6ab1c4ee391e869316d5d2f05cde4eddc8c22dc0bd", Commitd6f82bbb0d28),
+        new("Components/HoneybeeGarden/HoneybeeGarden_Background.png", 1953071, "a71996fc9bca95b00e4b56eb36c72e46bafa98db2d3623682521a6abece0a033", Commit9cd647861bc4),
+        new("Components/HoneybeeGarden/HoneybeeGarden_CornerOrnament.png", 210378, "15a195319d8471dfca161c8e5a868230338dd7aebb8190ad7ff29d246baabe6f", Commit9cd647861bc4),
+        new("Components/HoneybeeGarden/HoneybeeGarden_Divider.png", 103721, "71e2ab186a117758c7785af1138cdb8976a901fe30f6b70338a66222cdf8281f", Commit9cd647861bc4),
+        new("Components/HoneybeeGarden/HoneybeeGarden_NameBacking.png", 293300, "f24aabe8432875be3bfc1754dd2e948f782de2fb3cdf0c2ca3e6923511c1ce58", Commit9cd647861bc4),
+        new("Components/HoneybeeGarden/HoneybeeGarden_PlateFrame.png", 738150, "5b675824a8c89882992039ac60449a4d4333da17be7b833482c1d58281d14f6f", Commit9cd647861bc4),
+        new("Components/HoneybeeGarden/HoneybeeGarden_PortraitFrame.png", 584648, "82aa2c074fd3510021c58328421bc03d4cf0b2d55fa16e15cef8f8baf2b95586", Commit9cd647861bc4),
+        new("Components/HoneybeeGarden/HoneybeeGarden_SectionHeader.png", 217635, "80f29fe7b49a901fa2453d858ddbcd13ab3fd7a028db27fbb196fb5c8664bc77", Commit9cd647861bc4),
         new("Components/IndustrialSalvage/IndustrialSalvage_Background.png", 1870400, "e08fc40a05a7408d6d68cc21437568cd2ca5f03010ecdcb883040e2b97bb4ece", Commit2c25408d02ee),
         new("Components/IndustrialSalvage/IndustrialSalvage_CornerOrnament.png", 194549, "e930374ab29b94c6d31c98bef7f240120276662e11f3f791fd018a867a5e4ed2", Commit2c25408d02ee),
         new("Components/IndustrialSalvage/IndustrialSalvage_Divider.png", 103382, "4bae692e02256f7e832726865e506eb1db82d2442b40224951b04783a291ff5f", Commit2c25408d02ee),

@@ -45,7 +45,7 @@ public class FrameFittingTests
         }
 
         Assert.All(BuiltInArtCatalog.All.Where(a => a.Frame is not null), a => Assert.True(a.Kind is PlateComponentKind.PlateFrame or PlateComponentKind.PortraitFrame, a.Id));
-        Assert.Equal(80, BuiltInArtCatalog.All.Count(ComponentPaintPlan.IsFramed));
+        Assert.Equal(82, BuiltInArtCatalog.All.Count(ComponentPaintPlan.IsFramed));
     }
 
     /// <summary>The drawing is the frame's opaque bounds (alpha over 16); its rails' outer edges (the
@@ -166,7 +166,9 @@ public class FrameFittingTests
     }
 
     /// <summary>On the shape it was drawn for, a frame's plain fills stretch by at most a quarter (by
-    /// under two and a half times for Celestial Sakura's few hand-cut pixels), and never shrink.</summary>
+    /// under two and a half times for Celestial Sakura's few hand-cut pixels, and under 3.3 times for
+    /// Honeybee Garden's Plate Frame, whose side rails have only short runs of plain rod; the owner
+    /// passed it in game on October 4, 2026), and never shrink.</summary>
     [Theory]
     [MemberData(nameof(FrameIds))]
     public void OnItsOwnShape_AFrame_LooksAsDrawn(string artId)
@@ -175,7 +177,9 @@ public class FrameFittingTests
         var frame = art.Frame!;
         var box = art.Kind == PlateComponentKind.PlateFrame ? new Vector2(1280f, 720f) : new Vector2(400f, 640f);
         var scale = frame.ScaleFor(box);
-        var limit = artId.StartsWith("af.asset.celestial-sakura.", StringComparison.Ordinal) ? 2.3f : 1.25f;
+        var limit = artId.StartsWith("af.asset.celestial-sakura.", StringComparison.Ordinal) ? 2.3f
+            : artId == "af.asset.honeybee-garden.plate-frame.standard" ? 3.3f
+            : 1.25f;
 
         Span<float> edges = stackalloc float[ArtFrameSlices.Bands + 1];
         foreach (var (rows, length) in new[] { (false, box.X), (true, box.Y) })
