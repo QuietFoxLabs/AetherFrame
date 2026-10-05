@@ -257,12 +257,17 @@ internal sealed class CharacterSharing
     {
         var characters = file.Read();
         var noticeDue = false;
+        var checking = false;
         foreach (var character in characters)
         {
             noticeDue |= character.IsBound;
+
+            // A check a build before the online count started counts too: its consent never said
+            // what the count sends, so the notice is due before that check can pass (K4).
+            checking |= character.Checking;
         }
 
-        var onlineDue = noticeDue && !File.Exists(OnlineNoticePath);
+        var onlineDue = (noticeDue || checking) && !File.Exists(OnlineNoticePath);
         noticeDue &= !File.Exists(ConnectionNoticePath);
         Update(v => v.With(characters: characters, loaded: true, unreadable: false, connectionNotice: noticeDue, onlineNotice: onlineDue));
 
@@ -356,6 +361,11 @@ internal sealed class CharacterSharing
             : new SharingCharacter(contentId, persona.Slot, persona.PublicKey.Id, SharingStage.Checking);
         if (Save(Replaced(entry), contentId))
         {
+            // The consent the player just agreed to says what the online count sends, so the
+            // one-time notice about it is seen. It is dismissed here and not when the check passes:
+            // a check already under way when this build arrived agreed to a consent that never
+            // mentioned the count, and its player still has to choose Got it (K4).
+            DismissOnlineNotice();
             RequestCode(manager, entry);
         }
     });
@@ -426,9 +436,10 @@ internal sealed class CharacterSharing
         {
             Read(contentId, response);
 
-            // The consent the player just gave says what the one-time notices say.
+            // The check just read the Lodestone page through the player's own connection, which is
+            // what that notice is about. The online count's notice is dismissed by the consent in
+            // TryStart instead, since a check started before this build never saw it.
             DismissConnectionNotice();
-            DismissOnlineNotice();
             Update(v => v.With(clearCode: true, notice: new SharingNotice(contentId, SharingNoticeKind.CheckPassed)));
         }
     });

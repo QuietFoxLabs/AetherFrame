@@ -191,10 +191,17 @@ internal sealed class RateLimiter(TimeProvider time)
     /// <summary>How many counters are held: for tests of the memory bound.</summary>
     internal int Count => counters.Count;
 
+    /// <summary>
+    /// Drops every counter whose events have all left its window, now rather than when the next
+    /// request happens to come in: so a server nobody is asking holds no counter, and none of the
+    /// times it counted events at, past the window the limit itself needs them for.
+    /// </summary>
+    public void SweepNow() => Sweep(time.GetUtcNow(), always: true);
+
     /// <summary>Drops every counter whose events have all left its window, at most once a minute.</summary>
-    private void Sweep(DateTimeOffset now)
+    private void Sweep(DateTimeOffset now, bool always = false)
     {
-        if (now - lastSweep < TimeSpan.FromMinutes(1))
+        if (!always && now - lastSweep < TimeSpan.FromMinutes(1))
         {
             return;
         }

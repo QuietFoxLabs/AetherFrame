@@ -49,17 +49,19 @@ internal sealed record OnlineCountView(OnlineCountState State, int Count = 0, Da
 internal sealed record PresenceTarget(PersonaSlotId Slot, PersonaId Key);
 
 /// <summary>How often presence requests go, and how they back off: <see cref="Default"/> in the plugin, shorter in tests.</summary>
-internal sealed record OnlineCountPace(TimeSpan Beat, TimeSpan Jitter, TimeSpan LongestBackoff, TimeSpan BusyRetry, TimeSpan RestartSpread, TimeSpan LeaveTimeout)
+internal sealed record OnlineCountPace(TimeSpan Beat, TimeSpan Jitter, TimeSpan LongestBackoff, TimeSpan BusyRetry, TimeSpan RestartSpread, TimeSpan LeaveTimeout, TimeSpan StartGrace)
 {
     /// <summary>
     /// A heartbeat every 50 to 70 seconds, well inside the server's 180-second expiry; after a
     /// failure, a minute, then twice as long each time, to 15 minutes at most; a key the persona
     /// session is too busy to sign with is asked again after 5 seconds; a session the server no
     /// longer knows is started again within 10 seconds, so a restarted server isn't met by every
-    /// plugin at once; and a leave gets 3 seconds.
+    /// plugin at once; a leave gets 3 seconds; and a start already sent gets 1.5 seconds more after
+    /// the run stops, so a session the server has made is read and then left (the two together stay
+    /// inside the unload's 5 seconds).
     /// </summary>
     internal static readonly OnlineCountPace Default = new(
-        TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(15), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(3));
+        TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(15), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(1.5));
 }
 
 /// <summary>
@@ -158,7 +160,7 @@ internal sealed class OnlineCount
                 return;
             }
 
-            current?.Stop.Cancel();
+            Stop(current);
             current = null;
             running.RemoveAll(task => task.IsCompleted);
             if (target is null)
@@ -184,7 +186,7 @@ internal sealed class OnlineCount
         lock (gate)
         {
             closed = true;
-            current?.Stop.Cancel();
+            Stop(current);
             current = null;
             view = OnlineCountView.Off;
             pending = running.ToArray();
@@ -198,6 +200,45 @@ internal sealed class OnlineCount
         catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
         {
             log($"Online count: a run didn't end within the unload's budget ({exception.GetType().Name}).");
+        }
+    }
+
+    /// <summary>
+    /// Stops a run, doing none of its work here: cancelling it inline would run the run's own
+    /// continuation, and so its leave's request, on the thread that called this, which is the game's
+    /// own (requirement 8). The cancellation's task is kept, so the unload waits for it and nothing
+    /// of it goes unobserved. A run already over is only disposed, which drops its registration on
+    /// the plugin's stopping token. Under the lock.
+    /// </summary>
+    private void Stop(Run? run)
+    {
+        if (run is null)
+        {
+            return;
+        }
+
+        if (run.Finished)
+        {
+            run.Stop.Dispose();
+            return;
+        }
+
+        running.Add(run.Stop.CancelAsync());
+    }
+
+    /// <summary>
+    /// A run is over: its token source goes, unless it is still the current one and
+    /// <see cref="Update"/> may yet cancel it, which then disposes it instead.
+    /// </summary>
+    private void Finished(Run run)
+    {
+        lock (gate)
+        {
+            run.Finished = true;
+            if (!ReferenceEquals(current, run))
+            {
+                run.Stop.Dispose();
+            }
         }
     }
 
@@ -285,11 +326,14 @@ internal sealed class OnlineCount
         }
         finally
         {
-            // The run's token source is left to the collector: Update may still cancel it.
             if (token is { } held)
             {
-                await LeaveAsync(held).ConfigureAwait(false);
+                // Never on the thread that stopped the run: whatever cancelled it, the game's own
+                // thread makes no request (requirement 8).
+                await Task.Run(() => LeaveAsync(held)).ConfigureAwait(false);
             }
+
+            Finished(run);
         }
     }
 
@@ -321,7 +365,12 @@ internal sealed class OnlineCount
                 return (signed, null);
             }
 
-            var response = await client.SignedActionAsync(RequestProofKind.Presence, envelope!, run.Stop.Token).ConfigureAwait(false);
+            // The start alone is sent with a short grace after the run stops: a session the server
+            // has already made is read, so the leave below it can end it, instead of being thrown
+            // away with the answer and left counted until the server's expiry.
+            using var grace = new CancellationTokenSource();
+            using var armed = run.Stop.Token.UnsafeRegister(_ => grace.CancelAfter(pace.StartGrace), null);
+            var response = await client.SignedActionAsync(RequestProofKind.Presence, envelope!, grace.Token).ConfigureAwait(false);
             if (response.Status != HttpStatusCode.OK)
             {
                 log($"Online count: the start answered {(int)response.Status}.");
@@ -329,6 +378,10 @@ internal sealed class OnlineCount
                 {
                     HttpStatusCode.Gone => Outcome.Ended,
                     HttpStatusCode.TooManyRequests => Outcome.Limited,
+
+                    // The challenge was refused, or the server saw this start as older than the
+                    // character's last change: a fresh challenge and a new signature, shortly.
+                    HttpStatusCode.Conflict => Outcome.Busy,
                     _ => Outcome.Failed,
                 }, null);
             }
@@ -544,6 +597,9 @@ internal sealed class OnlineCount
         internal PresenceTarget Target { get; } = target;
 
         internal CancellationTokenSource Stop { get; } = stop;
+
+        /// <summary>Whether the run's task is past its leave: only inside the lock.</summary>
+        internal bool Finished { get; set; }
 
         /// <summary>A presence challenge not yet signed under, kept across a busy session; only the run's own task touches it.</summary>
         internal RequestChallenge? Challenge { get; set; }

@@ -397,14 +397,14 @@ public class PresenceTests
         var keys = Enumerable.Range(0, PresenceStore.MaxSessions + 1).Select(KeyOf).ToArray();
         for (var index = 0; index < PresenceStore.MaxSessions; index++)
         {
-            Assert.NotNull(store.Start(keys[index], index + 1));
+            Assert.Equal(StartResult.Started, store.Start(keys[index], index + 1, Issued(store)).Result);
         }
 
-        Assert.Null(store.Start(keys[^1], PresenceStore.MaxSessions + 1));
+        Assert.Equal(StartResult.Full, store.Start(keys[^1], PresenceStore.MaxSessions + 1, Issued(store)).Result);
         Assert.Equal(PresenceStore.MaxSessions, store.Online());
 
         time.Advance(PresenceStore.Expiry);
-        Assert.NotNull(store.Start(keys[^1], PresenceStore.MaxSessions + 1));
+        Assert.Equal(StartResult.Started, store.Start(keys[^1], PresenceStore.MaxSessions + 1, Issued(store)).Result);
         Assert.Equal(1, store.Sessions);
         Assert.Equal(1, store.Online());
     }
@@ -414,13 +414,145 @@ public class PresenceTests
     {
         var time = new ManualTime(new DateTimeOffset(2026, 10, 4, 12, 0, 0, TimeSpan.Zero));
         var store = new PresenceStore(time);
-        var first = store.Start(KeyOf(1), Aria)!.Value;
-        var second = store.Start(KeyOf(2), Aria)!.Value;
+        var first = store.Start(KeyOf(1), Aria, Issued(store));
+        var second = store.Start(KeyOf(2), Aria, Issued(store));
         Assert.Equal(1, second.Online);
-        store.Leave(first.Token);
+        store.Leave(first.Token!);
         Assert.Equal(1, store.Online());
-        store.Leave(second.Token);
+        store.Leave(second.Token!);
         Assert.Equal(0, store.Online());
+    }
+
+    [Fact]
+    public void AnExpiredSession_IsForgotten_WithNoRequestComingIn()
+    {
+        // GPT's regression test, October 5, 2026: nothing asks for the count, so only the background
+        // sweep can keep "the server then forgets the character within about 3 minutes" true.
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        Assert.Equal(StartResult.Started, store.Start(KeyOf(1), Aria, Issued(store)).Result);
+        Assert.Equal(1, store.Sessions);
+
+        // A challenge nobody signed under, and a session whose plugin crashed.
+        Assert.NotNull(store.IssueChallenge());
+        Assert.Equal(1, store.Challenges);
+        time.Advance(PresenceStore.Expiry - TimeSpan.FromSeconds(1));
+        store.SweepExpired();
+        Assert.Equal(1, store.Sessions);
+
+        time.Advance(TimeSpan.FromSeconds(1) + PresenceSweep.Interval);
+        store.SweepExpired();
+        Assert.Equal(0, store.Sessions);
+
+        // The bound the disclosures name: the expiry and one sweep's interval, nothing longer.
+        Assert.True(PresenceStore.Expiry + PresenceSweep.Interval <= TimeSpan.FromSeconds(195));
+
+        // The challenge nobody used goes with its own lifetime, which is longer than the expiry.
+        Assert.Equal(1, store.Challenges);
+        time.Advance(AetherFrame.Server.Storage.ChallengeStore.Lifetime);
+        store.SweepExpired();
+        Assert.Equal(0, store.Challenges);
+    }
+
+    [Fact]
+    public void TheSweep_RunsInTheBackground_AndClearsTheLimitersCountersToo()
+    {
+        // The sweep is a hosted service, so it runs on a server nobody is asking; the registration
+        // is what makes that true, and the limiter drops the times it counted events at with it.
+        var program = System.IO.File.ReadAllText(System.IO.Path.Combine(RepositoryRoot(), "server", "AetherFrame.Server", "Program.cs"));
+        Assert.Contains("AddHostedService<PresenceSweep>()", program, StringComparison.Ordinal);
+
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+        var limiter = new RateLimiter(time);
+        Assert.True(limiter.TryTake(ServerLimits.PresenceStartsPerKey, KeyOf(1).ToString()));
+        Assert.Equal(1, limiter.Count);
+        time.Advance(ServerLimits.PresenceStartsPerKey.Window);
+        limiter.SweepNow();
+        Assert.Equal(0, limiter.Count);
+    }
+
+    [Fact]
+    public void AStartSignedBeforeASharingChange_StartsNothing_AndAFreshOneDoes()
+    {
+        // GPT's regression test, October 5, 2026: a delayed start racing a revocation. The start was
+        // signed while the character shared and arrives after it stopped, so it must start nothing:
+        // its session would otherwise be counted for the whole expiry with no sharing behind it.
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        var key = KeyOf(1);
+
+        var inFlight = Issued(store);
+        store.ForgetKey(key);
+        Assert.Equal(StartResult.Stale, store.Start(key, Aria, inFlight).Result);
+        Assert.Equal(0, store.Sessions);
+        Assert.Equal(0, store.Online());
+
+        // A challenge issued after the change is the plugin's way back in, and the endpoint's
+        // binding check is what then decides whether it still shares.
+        Assert.Equal(StartResult.Started, store.Start(key, Aria, Issued(store)).Result);
+        Assert.Equal(1, store.Online());
+
+        // A takeover does the same for the character, whichever key signed the start in flight.
+        var other = KeyOf(2);
+        var beforeTakeover = Issued(store);
+        store.ForgetOtherKeys(Aria, other);
+        Assert.Equal(StartResult.Stale, store.Start(KeyOf(3), Aria, beforeTakeover).Result);
+        Assert.Equal(StartResult.Started, store.Start(other, Aria, Issued(store)).Result);
+
+        // A start with no challenge of its own is stale while anything is remembered, and the
+        // memory itself is kept no longer than a challenge can be.
+        store.ForgetKey(key);
+        Assert.Equal(StartResult.Stale, store.Start(key, Aria, 0).Result);
+        var kept = Issued(store);
+        time.Advance(PresenceStore.RevocationMemory);
+        Assert.Equal(StartResult.Started, store.Start(key, Aria, kept).Result);
+    }
+
+    [Fact]
+    public async Task AStartInFlightWhenSharingStopped_IsRefused_AndSaysSo()
+    {
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+
+        // The challenge and the signature come first, as the plugin's do, and the pause lands
+        // between them and the start: the start arrives on a binding that is already paused.
+        var challenge = await PresenceChallengeAsync(aria);
+        using (var off = await aria.SendAsync("/v1/opt-out", RequestProofKind.OptOut, "{\"mode\":\"pause\"}"))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, off.StatusCode);
+        }
+
+        using (var late = await aria.SendAsync("/v1/presence", RequestProofKind.Presence, "{}", challenge: challenge))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, late.StatusCode);
+            Assert.Empty(await late.Content.ReadAsByteArrayAsync());
+        }
+
+        Assert.Equal(0, server.Services.GetRequiredService<PresenceStore>().Online());
+        Assert.Equal(0, server.Services.GetRequiredService<PresenceStore>().Sessions);
+    }
+
+    /// <summary>The repository's root, for the few assertions about how the server is put together.</summary>
+    private static string RepositoryRoot()
+    {
+        var directory = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !System.IO.File.Exists(System.IO.Path.Combine(directory.FullName, "AetherFrame.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        return directory!.FullName;
+    }
+
+    /// <summary>A challenge issued and consumed, as a start's own is: its number, for <see cref="PresenceStore.Start"/>.</summary>
+    private static long Issued(PresenceStore store)
+    {
+        var challenge = store.IssueChallenge();
+        Assert.NotNull(challenge);
+        Assert.True(store.TryConsumeChallenge(challenge, out var issuedAs));
+        return issuedAs;
     }
 
     private static PersonaId KeyOf(int index)

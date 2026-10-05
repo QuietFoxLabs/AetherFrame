@@ -136,6 +136,7 @@ builder.Services.AddSingleton<IImageProcessor>(services =>
 builder.Services.AddHostedService<DatabaseStartup>();
 builder.Services.AddHostedService<CheckpointRetries>();
 builder.Services.AddHostedService<Housekeeping>();
+builder.Services.AddHostedService<PresenceSweep>();
 builder.Services.AddHostedService<Backups>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Rereads>());
 builder.Services.AddSingleton<ImageCanary>();

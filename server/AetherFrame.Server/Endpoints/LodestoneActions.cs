@@ -213,6 +213,9 @@ internal sealed class LodestoneActions(RateLimiter limiter, BindingStore binding
 
         if (applied.Result is RereadResult.Removed or RereadResult.NotBound)
         {
+            // A character with no binding any more stops counting as online at once, instead of
+            // being counted while its heartbeats keep a session the start's binding check passed.
+            presence.ForgetKey(persona);
             return ActionAnswer.Fail(StatusCodes.Status404NotFound, "reread:" + applied.Result);
         }
 

@@ -45,7 +45,12 @@ internal static class PresenceEndpoints
         });
 
         app.MapPost("/v1/presence", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings, Allowlist allowlist, PresenceStore presence) =>
-            requests.RunActionAsync(http, RequestProofKind.Presence, ServerLimits.PresenceStartsPerAddress, presence.TryConsumeChallenge, async call =>
+        {
+            // Which challenge the start signed, taken as it is consumed and weighed by the store
+            // against the revocations it remembers: a start signed before a pause, an opt-out or a
+            // takeover, and arriving after it, starts nothing (StartResult.Stale).
+            var issuedAs = 0L;
+            return requests.RunActionAsync(http, RequestProofKind.Presence, ServerLimits.PresenceStartsPerAddress, challenge => presence.TryConsumeChallenge(challenge, out issuedAs), async call =>
             {
                 if (ActionBody.Read(call.Action.Body, []) is null)
                 {
@@ -70,13 +75,18 @@ internal static class PresenceEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status404NotFound, "presence:not-bound");
                 }
 
-                if (presence.Start(call.Persona, binding.LodestoneId) is not { } started)
+                var started = presence.Start(call.Persona, binding.LodestoneId, issuedAs);
+                return started switch
                 {
-                    return SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "presence:full");
-                }
+                    { Result: StartResult.Started, Token: { } token } => Results.Json(new StartAnswer(Convert.ToBase64String(token), PresenceStore.Reported(started.Online)), ServerJson.Options),
 
-                return Results.Json(new StartAnswer(Convert.ToBase64String(started.Token), PresenceStore.Reported(started.Online)), ServerJson.Options);
-            }));
+                    // The plugin asks for a fresh challenge and signs again: while the character
+                    // still shares that passes, and otherwise the binding check refuses it.
+                    { Result: StartResult.Stale } => SignedRequests.Fail(http, StatusCodes.Status409Conflict, "presence:stale"),
+                    _ => SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "presence:full"),
+                };
+            });
+        });
 
         app.MapPost("/v1/presence/beat", async (HttpContext http, RateLimiter limiter, PresenceStore presence) =>
         {

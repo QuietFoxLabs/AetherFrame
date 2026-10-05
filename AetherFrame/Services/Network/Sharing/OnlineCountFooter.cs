@@ -14,11 +14,14 @@ namespace AetherFrame.Services.Network.Sharing;
 internal sealed class OnlineCountFooter
 {
     internal const string Scope =
-        "Characters logged in right now with AetherFrame sharing turned on, counted once each across every player. Characters that don't share aren't counted. Below 5, the server says only that there are fewer than 5. Updated about once a minute.";
+        "Sharing characters whose AetherFrame says they are logged in right now, counted once each across every player. Characters that don't share aren't counted. Below 5, the server says only that there are fewer than 5. Updated about once a minute.";
 
     /// <summary>
-    /// The smallest count the server answers as itself; below it, it answers 0, "fewer than this",
-    /// so a handful of players can't watch one another log in and out.
+    /// The smallest count the server answers as itself; below it, it answers 0, "fewer than this".
+    /// It hides who comes and goes only while fewer than this many sharing characters are online in
+    /// all, and only from a player who adds none of their own ("What the floor doesn't hide" in the
+    /// decision register). It must match the server's floor: a higher floor on the server alone
+    /// would make this text understate the count.
     /// </summary>
     internal const int Floor = 5;
 

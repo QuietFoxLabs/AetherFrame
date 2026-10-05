@@ -31,7 +31,7 @@ public class OnlineCountTests
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
     private static readonly OnlineCountPace Quick = new(
-        TimeSpan.FromMilliseconds(60), TimeSpan.Zero, TimeSpan.FromMilliseconds(240), TimeSpan.FromMilliseconds(20), TimeSpan.Zero, TimeSpan.FromSeconds(1));
+        TimeSpan.FromMilliseconds(60), TimeSpan.Zero, TimeSpan.FromMilliseconds(240), TimeSpan.FromMilliseconds(20), TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
 
     [Fact]
     public void ATarget_IsOnlyTheLoggedInCharacterThatShares_OnceTheNoticeIsSeen()
@@ -199,20 +199,93 @@ public class OnlineCountTests
     }
 
     [Fact]
-    public async Task AnAnswerAfterTheRunStopped_ChangesNothing_AndItsSessionIsLeft()
+    public async Task AStartStoppedBeforeTheServerActed_LeavesNothingBehind()
     {
-        using var harness = new Harness();
+        // A grace shorter than the hold, so the start is cancelled before the server makes anything.
+        using var harness = new Harness(Quick with { StartGrace = TimeSpan.FromMilliseconds(50) });
         var release = new TaskCompletionSource();
         harness.Server.StartGate = release.Task;
         harness.Count.Update(harness.Target);
         await harness.WaitFor(() => harness.Server.Paths.Contains("/v1/presence"));
         harness.Count.Update(null);
+        await Task.Delay(200);
         release.SetResult();
 
-        // The request was stopped while it was sent; had the server answered, its session is left.
         await Task.Delay(200);
         Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+        Assert.Empty(harness.Server.Tokens);
+        Assert.Empty(harness.Server.Leaves);
         Assert.Empty(harness.Server.Beats);
+    }
+
+    [Fact]
+    public async Task AStartTheServerAnswered_IsLeft_EvenWhenItsRunStoppedWhileItWasInFlight()
+    {
+        // GPT's regression test, October 5, 2026: the answer comes back after the run stopped, and
+        // the session the server already made would otherwise stay counted until its expiry.
+        using var harness = new Harness();
+        var answer = new TaskCompletionSource();
+        harness.Server.StartAnswerGate = answer.Task;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.StartAnswerHeld);
+
+        harness.Count.Update(null);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+        answer.SetResult();
+
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        var token = Assert.Single(harness.Server.Tokens);
+        Assert.Equal(token, harness.Server.Leaves.Single());
+        Assert.False(harness.Server.IsLive(token));
+        await Task.Delay(150);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+        Assert.Empty(harness.Server.Beats);
+    }
+
+    [Fact]
+    public async Task ALogout_StopsTheRun_WithNoFrameDrawn()
+    {
+        // GPT's regression test, October 5, 2026: Dalamud draws no plugin window while it hides them
+        // (a hidden interface, a cutscene, group pose), so the count follows the game's tick instead.
+        using var harness = new Harness();
+        var loggedIn = true;
+        var driver = new PresenceDriver(harness.Count, () => loggedIn, () => harness.Target);
+        driver.Tick();
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Online);
+
+        loggedIn = false;
+        driver.Tick();
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        Assert.Equal(harness.Server.Tokens.Single(), harness.Server.Leaves.Single());
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+
+        // And nothing starts again while nobody is logged in, however many ticks come.
+        var sent = harness.Server.Paths.Count;
+        driver.Tick();
+        driver.Tick();
+        await Task.Delay(150);
+        Assert.Equal(sent, harness.Server.Paths.Count);
+    }
+
+    [Fact]
+    public async Task StoppingARun_SendsItsLeaveOffTheCallersThread_AndNeverWaitsForIt()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Online && harness.Server.Tokens.Count == 1);
+        await Task.Delay(150);
+
+        // The leave is held before its first await: a leave sent on the frame's own thread would
+        // hold that thread here, and a network request from the frame is what R2's rule 8 forbids.
+        using var held = new ManualResetEventSlim(false);
+        harness.Server.LeaveHold = held;
+        var frame = new Thread(() => harness.Count.Update(null)) { IsBackground = true };
+        frame.Start();
+        Assert.True(frame.Join(TimeSpan.FromSeconds(5)), "Update waited on the leave.");
+
+        held.Set();
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        Assert.NotSame(frame, harness.Server.LeaveThread);
     }
 
     [Fact]
@@ -383,7 +456,28 @@ public class OnlineCountTests
 
         internal Task? StartGate { get; set; }
 
+        /// <summary>Held after the session is made and before the answer goes out: a start the server has already acted on.</summary>
+        internal Task? StartAnswerGate { get; set; }
+
+        /// <summary>Whether a start is waiting on <see cref="StartAnswerGate"/> with its session already made.</summary>
+        internal volatile bool StartAnswerHeld;
+
         internal Task? ChallengeGate { get; set; }
+
+        /// <summary>Blocks each leave before its first await, so a leave sent on the caller's own thread would hold that thread.</summary>
+        internal ManualResetEventSlim? LeaveHold { get; set; }
+
+        /// <summary>The thread the last leave was handled on.</summary>
+        internal Thread? LeaveThread { get; set; }
+
+        /// <summary>Whether the server still counts the session with <paramref name="token"/>.</summary>
+        internal bool IsLive(byte[] token)
+        {
+            lock (this)
+            {
+                return live.Contains(Convert.ToHexString(token));
+            }
+        }
 
         private readonly List<string> paths = new();
 
@@ -536,6 +630,15 @@ public class OnlineCountTests
                         live.Add(Convert.ToHexString(token));
                     }
 
+                    // The session is made: from here the server counts the character whatever becomes
+                    // of the answer, which is what the client's grace is for.
+                    if (StartAnswerGate is { } answerGate)
+                    {
+                        StartAnswerHeld = true;
+                        await answerGate.WaitAsync(cancellationToken);
+                        StartAnswerHeld = false;
+                    }
+
                     return Json($"{{\"session\":\"{Convert.ToBase64String(token)}\",\"online\":{Online}}}");
 
                 case "/v1/presence/beat":
@@ -552,6 +655,8 @@ public class OnlineCountTests
                     return BeatStatus == HttpStatusCode.OK ? Json($"{{\"online\":{Online}}}") : new HttpResponseMessage(BeatStatus);
 
                 case "/v1/presence/leave":
+                    LeaveThread = Thread.CurrentThread;
+                    LeaveHold?.Wait(cancellationToken);
                     Assert.Equal(32, body.Length);
                     lock (this)
                     {
