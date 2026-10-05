@@ -82,6 +82,18 @@ public class KeptChangesOfferTests
             "AetherFrame.Tests/KeptChangesReadTests.cs",
             "AetherFrame.Tests/KeptChangesTestSupport.cs",
             "AetherFrame.Tests/KeptChangesWriteTests.cs",
+            "AetherFrame/Services/Plates/RecoveryFiles.cs",
+            "AetherFrame/Services/Plates/RecoveryCheckpointStore.cs",
+            "AetherFrame/Services/Plates/RecoveryCheckpointWriter.cs",
+            "AetherFrame/UI/Editor/ContinuousRecovery.cs",
+            "AetherFrame/UI/Editor/EditorSession.Recovery.cs",
+            "AetherFrame.Tests/ContinuousRecoveryTests.cs",
+            "AetherFrame.Tests/RecoveryCrashHost.cs",
+            "AetherFrame.Tests/RecoveryLifecycleTests.cs",
+            "AetherFrame.Tests/RecoveryOfferTests.cs",
+            "AetherFrame.Tests/RecoveryProcessTests.cs",
+            "AetherFrame.Tests/RecoveryStorageTests.cs",
+            "AetherFrame.Tests/RecoveryTestSupport.cs",
         };
         var changed = new[]
         {
@@ -95,6 +107,9 @@ public class KeptChangesOfferTests
             "AetherFrame/UI/Library/PlateOpenGuard.cs",
             "AetherFrame/UI/Tutorial/TutorialScript.cs",
             "AetherFrame/Windows/PlateLibraryWindow.cs",
+            "AetherFrame/UI/Editor/EditorDocumentCommands.cs",
+            "AetherFrame/UI/Library/PlateActions.cs",
+            "AetherFrame/Windows/EditorActionBar.cs",
         };
 
         static bool Plain(char c) => c is '\r' or '\n' or (>= ' ' and <= '~');
