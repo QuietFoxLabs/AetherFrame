@@ -62,8 +62,8 @@ internal sealed record KeptDraft(string Path, PlateDraft Draft, string DocumentJ
     internal IReadOnlyList<string> OtherFiles { get; init; } = [];
 
     /// <summary>
-    /// The editing's checkpoints that couldn't be read: moved to the Drafts trash with the answer,
-    /// never deleted, so what is left of them can still be salvaged there.
+    /// The editing's checkpoints that couldn't be read: moved to the Drafts trash with the answer
+    /// rather than deleted, so what is left of them can be salvaged there while the trash keeps them.
     /// </summary>
     internal IReadOnlyList<string> DamagedFiles { get; init; } = [];
 
@@ -205,7 +205,7 @@ internal static class KeptChangesReview
     /// Ended runs' checkpoints, grouped by editing (a running client's are never listed). Each group
     /// reads its checkpoints newest first until <see cref="RecoveryCheckpointStore.KeptPerEdit"/> read
     /// intact: a damaged or interrupted newest one leaves the earlier ones on offer. Damaged ones are
-    /// logged and go to the Drafts trash with an answer, never deleted; a newer version's are never
+    /// logged and go to the Drafts trash with an answer rather than being deleted; a newer version's are never
     /// offered or removed. One that can't be opened (held open, or gone because another game window is
     /// answering its editing) holds the whole editing back, untouched, for a later load.
     /// </summary>
@@ -257,7 +257,7 @@ internal static class KeptChangesReview
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException and not Lifecycle.OperationAbandonedException)
                 {
-                    // Never deleted: it goes to the Drafts trash with an answer, where what is left of it can be salvaged.
+                    // Not deleted: it goes to the Drafts trash with an answer, where what is left of it can be salvaged.
                     log.Error(ex, $"AetherFrame could not read recovery checkpoint {LogPrivacy.FileName(file.Path)}; an earlier one is offered.");
                     group.Damaged.Add(file.Path);
                 }

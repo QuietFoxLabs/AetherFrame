@@ -650,6 +650,7 @@ internal sealed partial class EditorSession
                 profileService.RestoreDocumentState(baseline);
                 DropSelectionIfMissing();
             });
+        NoteWholeDocumentEntryForRecovery(undoStack[^1]);
         return true;
     }
 
@@ -715,7 +716,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
-        NoteHistoryStepForRecovery();
+        NoteHistoryStepForRecovery(entry);
     }
 
     /// <summary>Re-applies the most recently undone action, if any.</summary>
@@ -745,7 +746,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
-        NoteHistoryStepForRecovery();
+        NoteHistoryStepForRecovery(entry);
     }
 
     internal void ClearHistory()
@@ -998,6 +999,7 @@ internal sealed partial class EditorSession
                 profileService.RestoreDocumentState(state);
                 DropSelectionIfMissing();
             });
+        NoteWholeDocumentEntryForRecovery(undoStack[^1]);
         return true;
     }
 

@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Plates;
@@ -10,8 +12,9 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// The independent rechecks of continuous recovery at <c>03e969c</c>: each case failed there, by
-/// losing kept work or by keeping saved, deleted or discarded work, and passes with the fixes.
+/// The independent rechecks of continuous recovery at <c>03e969c</c> and <c>efd4da6</c>: each case
+/// failed at one of them, by losing kept work or by keeping saved, deleted or discarded work, and
+/// passes with the fixes.
 /// </summary>
 public class RecoveryRecheckFixesTests
 {
@@ -127,29 +130,99 @@ public class RecoveryRecheckFixesTests
     }
 
     [Fact]
-    public async Task UndoHeldDown_AsksForACheckpointAtMostOncePerSample()
+    public async Task RevertEditAndUndoBoth_CheckpointsTheWorkAtOnce_WhenTheRevertIsUndone()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        game.Open(await game.CreatePlateAsync(name: "Revert"));
+        await game.Recovery.FrameAsync();
+        game.Edit("hours of work");
+        fixture.Clock.Tick();
+        await game.Recovery.RunAsync(6);
+
+        // After the revert, an edit of its own is checkpointed, so the editing has a checkpoint when the revert is undone.
+        Assert.True(game.Session.RevertToSaved(undoable: true));
+        await game.Recovery.FrameAsync(0.1);
+        game.Edit("tried something");
+        await game.Recovery.RunAsync(6);
+        Assert.Single(game.Recovery.OwnCheckpoints());
+
+        game.Session.Undo();
+        await game.Recovery.FrameAsync(0.05);
+        game.Session.Undo();
+        await game.Recovery.FrameAsync(0.05);
+        var newest = RecoveryRig.Read(game.Recovery.OwnCheckpoints()[0]);
+        Assert.Contains(newest.Document.Elements, e => e is TextProfileElement { Text: "hours of work" });
+    }
+
+    [Fact]
+    public async Task UndoHeldBackToTheSavedState_ThenACrash_StillOffersTheFullWork()
     {
         using var fixture = new LibraryFixture();
         var game = await GameSession.StartAsync(fixture);
         game.Open(await game.CreatePlateAsync(name: "Held"));
         await game.Recovery.FrameAsync();
-        for (var i = 0; i < 14; i++)
+        const int Edits = 40;
+        for (var i = 0; i < Edits; i++)
         {
             game.Edit($"edit {i}");
         }
 
+        fixture.Clock.Tick();
+        await game.Recovery.RunAsync(6);
+        Assert.Equal(Edits, Texts(RecoveryRig.Read(Assert.Single(game.Recovery.OwnCheckpoints()))));
+
+        // Ctrl+Z held down at 60 frames a second, one Undo every other frame, until nothing is left to undo.
+        var frame = 0;
+        while (game.Session.CanUndo)
+        {
+            if (frame++ % 2 == 0)
+            {
+                game.Session.Undo();
+            }
+
+            await game.Recovery.FrameAsync(1.0 / 60);
+        }
+
+        Assert.False(game.Session.IsDirty);
+        Assert.True(game.Session.CanRedo);
+        await game.Recovery.RunAsync(1);
+        game.Recovery.Files.Crash();
+
+        var offered = await (await GameSession.StartAsync(fixture)).LoadKeptChangesAsync();
+        Assert.Contains(AllPoints(offered), d => Texts(d) == Edits);
+    }
+
+    [Fact]
+    public async Task UndoClickedFiveStepsToCompare_ThenACrash_StillOffersTheFullWork()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        game.Open(await game.CreatePlateAsync(name: "Compare"));
+        await game.Recovery.FrameAsync();
+        const int Edits = 10;
+        for (var i = 0; i < Edits; i++)
+        {
+            game.Edit($"edit {i}");
+        }
+
+        fixture.Clock.Tick();
         await game.Recovery.RunAsync(6);
         var before = game.Recovery.Files.Written.Count;
 
-        // Key repeat: one Undo a frame for ten frames (about 170 ms).
-        await game.Recovery.RunAsync(10.0 / 60, 1.0 / 60, () => game.Session.Undo());
-        Assert.Equal(before + 1, game.Recovery.Files.Written.Count);
+        for (var i = 0; i < 5; i++)
+        {
+            game.Session.Undo();
+            await game.Recovery.RunAsync(0.3);
+        }
 
-        // The next sample writes where the Undo stopped.
-        await game.Recovery.RunAsync(0.25, 1.0 / 60);
-        Assert.Equal(before + 2, game.Recovery.Files.Written.Count);
-        var newest = RecoveryRig.Read(game.Recovery.OwnCheckpoints()[0]);
-        Assert.Equal(4, newest.Document.Elements.OfType<TextProfileElement>().Count());
+        // Undo waits for the pause as edits do: nothing written yet, and the full work is the newest point.
+        Assert.True(game.Session.IsDirty);
+        Assert.Equal(before, game.Recovery.Files.Written.Count);
+        game.Recovery.Files.Crash();
+
+        var offered = Assert.Single(await (await GameSession.StartAsync(fixture)).LoadKeptChangesAsync());
+        Assert.Equal(Edits, Texts(offered.Draft));
     }
 
     [Fact]
@@ -343,6 +416,11 @@ public class RecoveryRecheckFixesTests
         Assert.Single(await next.LoadKeptChangesAsync());
         Assert.Contains(fixture.Log.Messages, m => m.Contains("couldn't list its recovery folders", StringComparison.Ordinal));
     }
+
+    private static int Texts(PlateDraft draft) => draft.Document.Elements.OfType<TextProfileElement>().Count();
+
+    private static IEnumerable<PlateDraft> AllPoints(IReadOnlyList<KeptDraft> offered) =>
+        offered.SelectMany(o => new[] { o.Draft }.Concat(o.Older.Select(p => p.Draft)));
 
     private static async Task UnloadAsync(GameSession game)
     {

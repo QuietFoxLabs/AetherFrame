@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Threading;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
@@ -20,6 +21,11 @@ internal sealed partial class EditorSession
     // Counts every Undo and Redo applied.
     private int recoveryHistorySteps;
 
+    // History entries that replaced the whole document (an undoable Revert to Saved, kept changes put
+    // back), and how many Undo and Redo steps have gone over one.
+    private readonly ConditionalWeakTable<HistoryEntry, object> wholeDocumentEntries = new();
+    private int recoveryWholeDocumentSteps;
+
     /// <summary>
     /// Changes whenever the open document's content was replaced or saved as a whole: a save that
     /// completed, Revert to Saved, Discard, or kept changes put back (<see cref="ApplyRecoveredState"/>).
@@ -27,11 +33,15 @@ internal sealed partial class EditorSession
     /// </summary>
     internal int RecoveryEpoch => Volatile.Read(ref recoveryEpoch);
 
-    /// <summary>
-    /// Changes with every Undo and Redo: one step can bring back a whole editing's work (Undo of an
-    /// undoable Revert to Saved), so recovery checkpoints it at once. Framework thread only.
-    /// </summary>
+    /// <summary>Changes with every Undo and Redo, so recovery samples the document at once. Framework thread only.</summary>
     internal int RecoveryHistorySteps => recoveryHistorySteps;
+
+    /// <summary>
+    /// Changes with every Undo or Redo of a step that replaced the whole document (an undoable Revert
+    /// to Saved, kept changes put back): it can bring back a whole editing's work, so recovery
+    /// checkpoints it at once. Framework thread only.
+    /// </summary>
+    internal int RecoveryWholeDocumentSteps => recoveryWholeDocumentSteps;
 
     /// <summary>
     /// Whether this session has taken <paramref name="document"/>'s saved state yet (a frame has seen
@@ -70,5 +80,14 @@ internal sealed partial class EditorSession
 
     private void NoteReplacedForRecovery() => Interlocked.Increment(ref recoveryEpoch);
 
-    private void NoteHistoryStepForRecovery() => recoveryHistorySteps++;
+    private void NoteWholeDocumentEntryForRecovery(HistoryEntry entry) => wholeDocumentEntries.AddOrUpdate(entry, entry);
+
+    private void NoteHistoryStepForRecovery(HistoryEntry entry)
+    {
+        recoveryHistorySteps++;
+        if (wholeDocumentEntries.TryGetValue(entry, out _))
+        {
+            recoveryWholeDocumentSteps++;
+        }
+    }
 }

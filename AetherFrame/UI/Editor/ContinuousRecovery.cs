@@ -48,8 +48,11 @@ internal readonly record struct RecoveryIndicator(RecoveryIndicatorKind Kind, Da
 /// last one that finished (and from one being written). A failed write leaves it due, retried after
 /// a growing pause (<see cref="RetryDelays"/>), or at once through <see cref="RetryNow"/>. An editing
 /// that starts with unsaved changes (kept changes resumed, a save that left later edits) is written
-/// at once, and so is an Undo or Redo that leaves unsaved changes: one step can bring back a whole
-/// editing's work (Undo of Revert to Saved). A checkpoint is never written of the saved content.</para>
+/// at once, and so is an Undo or Redo over a step that replaced the whole document (an undoable
+/// Revert to Saved, kept changes put back), or any Undo or Redo of an editing with no checkpoint
+/// yet: one such step can bring back a whole editing's work. Other steps wait for the pause as
+/// edits do, so Undo never crowds the newest checkpoints with its own states and the work one Redo
+/// away stays kept. A checkpoint is never written of the saved content.</para>
 ///
 /// <para><b>Lifecycle.</b> An editing is one document from when it is opened, saved, reverted,
 /// discarded or given kept changes back (<see cref="EditorSession.RecoveryEpoch"/>) until the next of
@@ -260,6 +263,7 @@ internal sealed class ContinuousRecovery
             if (current is not null)
             {
                 current.HistorySteps = session.RecoveryHistorySteps;
+                current.WholeDocumentSteps = session.RecoveryWholeDocumentSteps;
                 editings[current.EditId] = current;
             }
 
@@ -272,13 +276,19 @@ internal sealed class ContinuousRecovery
 
     private void Follow(Editing editing, TimeSpan now)
     {
-        // An Undo or Redo since: one step can bring back a whole editing's work (Undo of Revert to
-        // Saved), so the document is sampled now and, while unsaved, checkpointed at once.
+        // An Undo or Redo since: the document is sampled now. One over a step that replaced the whole
+        // document (Undo of Revert to Saved), or of an editing with no checkpoint yet, can bring back
+        // a whole editing's work: while unsaved, it is checkpointed at once.
         var stepped = session.RecoveryHistorySteps != editing.HistorySteps;
         if (stepped)
         {
             editing.HistorySteps = session.RecoveryHistorySteps;
-            editing.StepPending = true;
+            if (session.RecoveryWholeDocumentSteps != editing.WholeDocumentSteps || (editing.LastSuccess is null && editing.Requested is null))
+            {
+                editing.StepPending = true;
+            }
+
+            editing.WholeDocumentSteps = session.RecoveryWholeDocumentSteps;
         }
 
         if (stepped || now - editing.SampledAt >= SampleInterval)
@@ -339,7 +349,7 @@ internal sealed class ContinuousRecovery
         var changedAt = editing.ChangedAt ?? (editing.OpenedAt - IdleDelay);
         var pendingSince = editing.PendingSince ?? changedAt;
 
-        // An Undo or Redo is due at once, though no more often than the document is sampled (Ctrl+Z held down).
+        // Such a step is due at once, though no more often than the document is sampled.
         var stepDue = editing.StepPending && (editing.RequestedAt is not { } asked || now - asked >= SampleInterval);
         if (editing.Failures == 0 && !stepDue && now - changedAt < IdleDelay && now - pendingSince < MaxDelay)
         {
@@ -647,7 +657,10 @@ internal sealed class ContinuousRecovery
         /// <summary>The session's Undo and Redo count when this editing last looked (see <see cref="EditorSession.RecoveryHistorySteps"/>).</summary>
         internal int HistorySteps { get; set; }
 
-        /// <summary>An Undo or Redo since the last checkpoint: due at once while unsaved.</summary>
+        /// <summary>The session's count of steps over whole-document entries when this editing last looked (see <see cref="EditorSession.RecoveryWholeDocumentSteps"/>).</summary>
+        internal int WholeDocumentSteps { get; set; }
+
+        /// <summary>An Undo or Redo that can bring back a whole editing's work since the last checkpoint: due at once while unsaved.</summary>
         internal bool StepPending { get; set; }
 
         /// <summary>When the open editing last asked for a checkpoint.</summary>
