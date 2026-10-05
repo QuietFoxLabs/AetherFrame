@@ -349,9 +349,8 @@ internal sealed class ContinuousRecovery
         var changedAt = editing.ChangedAt ?? (editing.OpenedAt - IdleDelay);
         var pendingSince = editing.PendingSince ?? changedAt;
 
-        // Such a step is due at once, though no more often than the document is sampled.
-        var stepDue = editing.StepPending && (editing.RequestedAt is not { } asked || now - asked >= SampleInterval);
-        if (editing.Failures == 0 && !stepDue && now - changedAt < IdleDelay && now - pendingSince < MaxDelay)
+        // Such a step is due at once, even right after another checkpoint was asked for.
+        if (editing.Failures == 0 && !editing.StepPending && now - changedAt < IdleDelay && now - pendingSince < MaxDelay)
         {
             return;
         }
@@ -374,7 +373,6 @@ internal sealed class ContinuousRecovery
         RequestWrite(editing, copy, state);
         editing.PendingSince = null;
         editing.StepPending = false;
-        editing.RequestedAt = now;
     }
 
     private void RequestWrite(Editing editing, ProfileService.OpenDocumentCopy copy, ProfileService.DocumentState? captured = null)
@@ -662,9 +660,6 @@ internal sealed class ContinuousRecovery
 
         /// <summary>An Undo or Redo that can bring back a whole editing's work since the last checkpoint: due at once while unsaved.</summary>
         internal bool StepPending { get; set; }
-
-        /// <summary>When the open editing last asked for a checkpoint.</summary>
-        internal TimeSpan? RequestedAt { get; set; }
 
         /// <summary>Ended with unsaved changes: the copy its final checkpoint is written from, until written.</summary>
         internal ProfileService.OpenDocumentCopy? Final { get; set; }

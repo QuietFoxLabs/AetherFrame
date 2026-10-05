@@ -12,7 +12,7 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// The independent rechecks of continuous recovery at <c>03e969c</c> and <c>efd4da6</c>: each case
+/// The independent rechecks of continuous recovery at <c>03e969c</c>, <c>efd4da6</c> and <c>b9a610d</c>: each case
 /// failed at one of them, by losing kept work or by keeping saved, deleted or discarded work, and
 /// passes with the fixes.
 /// </summary>
@@ -156,11 +156,52 @@ public class RecoveryRecheckFixesTests
     }
 
     [Fact]
-    public async Task UndoHeldBackToTheSavedState_ThenACrash_StillOffersTheFullWork()
+    public async Task UndoOfARevert_RightAfterAnotherCheckpointWasAskedFor_StillCheckpointsTheWork()
     {
         using var fixture = new LibraryFixture();
         var game = await GameSession.StartAsync(fixture);
-        game.Open(await game.CreatePlateAsync(name: "Held"));
+        game.Open(await game.CreatePlateAsync(name: "Revert"));
+        await game.Recovery.FrameAsync();
+        const int Edits = 20;
+        for (var i = 0; i < Edits; i++)
+        {
+            game.Edit($"edit {i}");
+        }
+
+        fixture.Clock.Tick();
+        await game.Recovery.RunAsync(6);
+        Assert.True(game.Session.RevertToSaved(undoable: true));
+        await game.Recovery.FrameAsync(0.1);
+        game.Edit("after 1");
+        await game.Recovery.FrameAsync(1.0 / 60);
+        game.Edit("after 2");
+        await game.Recovery.FrameAsync(1.0 / 60);
+
+        // Undo pressed every fourth frame: the first is the editing's first checkpoint, the third undoes
+        // the revert eight frames later, and the steps after it come before any pause.
+        for (var frame = 0; frame < 4 * 7; frame++)
+        {
+            if (frame % 4 == 0)
+            {
+                game.Session.Undo();
+            }
+
+            await game.Recovery.FrameAsync(1.0 / 60);
+        }
+
+        await game.Recovery.RunAsync(6);
+        game.Recovery.Files.Crash();
+
+        var offered = await (await GameSession.StartAsync(fixture)).LoadKeptChangesAsync();
+        Assert.Contains(AllPoints(offered), d => Texts(d) == Edits);
+    }
+
+    [Fact]
+    public async Task UndoPressedBackToTheSavedState_ThenACrash_StillOffersTheFullWork()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        game.Open(await game.CreatePlateAsync(name: "Pressed"));
         await game.Recovery.FrameAsync();
         const int Edits = 40;
         for (var i = 0; i < Edits; i++)
@@ -172,7 +213,7 @@ public class RecoveryRecheckFixesTests
         await game.Recovery.RunAsync(6);
         Assert.Equal(Edits, Texts(RecoveryRig.Read(Assert.Single(game.Recovery.OwnCheckpoints()))));
 
-        // Ctrl+Z held down at 60 frames a second, one Undo every other frame, until nothing is left to undo.
+        // Undo pressed every other frame at 60 frames a second, until nothing is left to undo.
         var frame = 0;
         while (game.Session.CanUndo)
         {
