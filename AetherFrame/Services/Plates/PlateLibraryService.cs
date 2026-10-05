@@ -1381,11 +1381,15 @@ internal sealed class PlateLibraryService
             // backup copy, so what it would restore may name images this text doesn't), or that a
             // newer version wrote, leaves the scan incomplete.
             // Recovery checkpoints (see RecoveryCheckpointStore) count the same way, a running game
-            // client's included: every run's folder under Drafts/Sessions.
+            // client's included: every run's folder under Drafts/Sessions. Listed first, then Drafts,
+            // then the trash, in the direction an answer moves a file, so one moved meanwhile is
+            // always in a later listing (a listed file gone before it is read leaves the scan incomplete).
             var checkpointFiles = Directory.Exists(paths.RecoverySessionsDirectory)
-                ? Directory.GetDirectories(paths.RecoverySessionsDirectory).SelectMany(d => store.ListFiles(d, "*.json"))
-                : Enumerable.Empty<string>();
-            foreach (var path in store.ListFiles(paths.DraftsDirectory, "*.json").Concat(store.ListFiles(paths.DraftTrashDirectory, "*.json")).Concat(checkpointFiles))
+                ? Directory.GetDirectories(paths.RecoverySessionsDirectory).SelectMany(d => store.ListFiles(d, "*.json")).ToList()
+                : new List<string>();
+            var draftFiles = store.ListFiles(paths.DraftsDirectory, "*.json");
+            var trashedFiles = store.ListFiles(paths.DraftTrashDirectory, "*.json");
+            foreach (var path in checkpointFiles.Concat(draftFiles).Concat(trashedFiles))
             {
                 try
                 {

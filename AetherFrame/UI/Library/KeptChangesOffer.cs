@@ -766,7 +766,16 @@ internal sealed class KeptChangesOffer
     {
         entry.State = EntryState.Done;
         Changed();
-        KeptChangesReview.RemoveFiles(checkpoints, entry.Kept.OtherFiles, log);
+
+        // The older point acted on goes to the trash beside the token, as the token does: until the
+        // resumed editing is checkpointed again, that is the only copy of what was chosen.
+        var chosen = entry.Selected > 0 ? entry.Point.Path : null;
+        if (chosen is not null && files.MoveToTrash(chosen) is null)
+        {
+            log.Warning($"AetherFrame left the recovery point it acted on for Plate {entry.PlateId} where it was.");
+        }
+
+        KeptChangesReview.RemoveFiles(checkpoints, entry.Kept.OtherFiles.Where(f => !string.Equals(f, chosen, StringComparison.OrdinalIgnoreCase)).ToList(), log);
     }
 
     /// <summary>Claims the draft (see <see cref="DraftStore.Claim"/>); says so when it can't.</summary>

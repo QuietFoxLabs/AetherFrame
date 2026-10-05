@@ -131,7 +131,7 @@ internal sealed class SystemRecoveryFiles : IRecoveryFiles
 
         try
         {
-            using var probe = new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            using var probe = new FileStream(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
             return false;
         }
         catch (FileNotFoundException)

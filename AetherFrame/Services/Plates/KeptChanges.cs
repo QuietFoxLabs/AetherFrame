@@ -119,7 +119,7 @@ internal static class KeptChangesReview
         }
 
         var ordered = groups
-            .Where(g => g.Points.Count > 0)
+            .Where(g => g.Points.Count > 0 && !g.Unavailable)
             .OrderByDescending(g => g.Points[0].Draft.WrittenAtUtc)
             .ToList();
         if (ordered.Count > DraftStore.MaxDraftsRead)
@@ -136,8 +136,10 @@ internal static class KeptChangesReview
             var others = group.Files.Where(f => !string.Equals(f, newest.Path, StringComparison.OrdinalIgnoreCase)).ToList();
             if (choice != KeptChangesChoice.Identical)
             {
+                // An older point the Plate is saved as holds nothing to recover: it goes with the answer, unoffered.
                 var older = group.Points.Skip(1)
                     .Select(p => new KeptDraft(p.Path, p.Draft, p.DocumentJson, Classify(p.Draft, library)))
+                    .Where(p => p.Choice != KeptChangesChoice.Identical)
                     .ToList();
                 offers.Add(new KeptDraft(newest.Path, newest.Draft, newest.DocumentJson, choice) { Older = older, OtherFiles = others });
                 continue;
@@ -187,7 +189,9 @@ internal static class KeptChangesReview
     /// Ended runs' checkpoints, grouped by editing (a running client's are never listed). Each group
     /// reads its checkpoints newest first until <see cref="RecoveryCheckpointStore.KeptPerEdit"/> read
     /// intact: a damaged or interrupted newest one leaves the earlier ones on offer. Damaged ones are
-    /// logged and left as they are; a newer version's are never offered or removed.
+    /// logged and left as they are, never removed with an answer; a newer version's are never offered
+    /// or removed. One that can't be opened (held open, or gone because another game window is
+    /// answering its editing) holds the whole editing back, untouched, for a later load.
     /// </summary>
     private static void ReadCheckpoints(RecoveryCheckpointStore checkpoints, List<Group> groups, Dictionary<(Guid Session, Guid Edit), Group> byEdit, IAetherFrameLog log)
     {
@@ -228,10 +232,17 @@ internal static class KeptChangesReview
                         log.Warning($"AetherFrame found a recovery checkpoint saved by a newer version ({LogPrivacy.FileName(file.Path)}); it is left as it is.");
                     }
                 }
+                catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+                {
+                    // Gone (another game window is answering it) or held open: this editing waits for a later load, untouched.
+                    log.Warning($"AetherFrame couldn't open recovery checkpoint {LogPrivacy.FileName(file.Path)} ({ex.GetType().Name}); its editing is offered at a later start.");
+                    group.Unavailable = true;
+                    break;
+                }
                 catch (Exception ex) when (ex is not OperationCanceledException and not Lifecycle.OperationAbandonedException)
                 {
+                    // Never removed with an answer: what is left of it stays for the player to salvage.
                     log.Error(ex, $"AetherFrame could not read recovery checkpoint {LogPrivacy.FileName(file.Path)}; it is left as it is, and an earlier one is offered.");
-                    group.Files.Add(file.Path);
                 }
             }
 
@@ -253,8 +264,11 @@ internal static class KeptChangesReview
         /// <summary>Recovery points read intact, newest first.</summary>
         internal List<(string Path, PlateDraft Draft, string DocumentJson)> Points { get; init; } = new();
 
-        /// <summary>Its checkpoint files, read or not (never a draft kept at unload).</summary>
+        /// <summary>Its checkpoint files that go with an answer: those read intact, and those beyond the newest intact ones (never a damaged one, or a draft kept at unload).</summary>
         internal List<string> Files { get; } = new();
+
+        /// <summary>A checkpoint couldn't be opened: nothing of this editing is offered or retired this load.</summary>
+        internal bool Unavailable { get; set; }
     }
 
     /// <summary>

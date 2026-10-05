@@ -99,6 +99,9 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
     /// <summary>Deletes whose path matches fail.</summary>
     internal Func<string, bool>? FailDelete { get; set; }
 
+    /// <summary>Taking a run's lock fails (no permission on the folder, say).</summary>
+    internal bool FailLock { get; set; }
+
     /// <summary>Signalled when a held write has started.</summary>
     internal ManualResetEventSlim WriteStarted { get; } = new();
 
@@ -185,6 +188,11 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
 
     public IDisposable HoldLock(string lockPath)
     {
+        if (FailLock)
+        {
+            throw new UnauthorizedAccessException($"Injected lock failure: '{lockPath}'");
+        }
+
         var held = files.HoldLock(lockPath);
         lock (gate)
         {

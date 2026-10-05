@@ -582,6 +582,7 @@ internal sealed partial class EditorSession
         {
             await profileService.SaveCurrentProfileAsync().ConfigureAwait(false);
             completedSave = new CompletedSave(profile, savedState);
+            NoteSavedForRecovery(completedSave);
             return true;
         }
         catch (Exception ex)
@@ -629,6 +630,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
+        NoteReplacedForRecovery();
 
         if (!undoable)
         {
@@ -979,6 +981,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
+        NoteReplacedForRecovery();
 
         // Its assets join AssetsInUse here, as every recorded edit's do.
         RecordHistory(

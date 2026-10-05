@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using AetherFrame.Domain.Plates;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Persistence;
@@ -38,23 +39,28 @@ internal readonly record struct RecoveryIndicator(RecoveryIndicatorKind Kind, Da
 /// <para><b>On the framework thread.</b> <see cref="Tick"/> runs once a frame where the editors draw,
 /// so the document it reads is the one they edit, never half changed. It compares the document with
 /// its last sample at most every <see cref="SampleInterval"/> (the structural comparison dirty state
-/// uses), and every frame once it may have checkpoints, so a Discard or Revert retires them in the
-/// frame it happens; only when it changed takes a new sample. A checkpoint is a copy made as a save makes
+/// uses), and only when it changed takes a new sample. A checkpoint is a copy made as a save makes
 /// its snapshot; the writer serializes and writes it on its own thread (<see cref="RecoveryCheckpointWriter"/>).
 /// Nothing here commits an edit in progress, ends a drag, touches the undo history or the saved
 /// baseline, saves, changes which Plate is Active or shares anything.</para>
 ///
 /// <para><b>Only what changed.</b> A checkpoint is written only when the content differs from the
 /// last one that finished (and from one being written). A failed write leaves it due, retried after
-/// a growing pause (<see cref="RetryDelays"/>), or at once through <see cref="RetryNow"/>.</para>
+/// a growing pause (<see cref="RetryDelays"/>), or at once through <see cref="RetryNow"/>. An editing
+/// that starts with unsaved changes (kept changes resumed, a save that left later edits) is written
+/// at once.</para>
 ///
-/// <para><b>Lifecycle.</b> Each document opened is one editing, with its own id. Its checkpoints are
-/// retired (deleted) once it has nothing unsaved: after Save, Discard and Revert to Saved, and when
-/// undo brings it back to its saved state. Save as New Plate that opens the copy retires them too: the
-/// changes are in the copy. Another Plate opened, or this one closed or deleted, while it still has
-/// unsaved changes leaves its last state as a final checkpoint, kept for the next load to offer. A
-/// failed save changes nothing: the checkpoints stay. Unloading stops new checkpoints, lets
-/// retirements finish, and the draft kept at unload joins this editing's checkpoints in one offer.</para>
+/// <para><b>Lifecycle.</b> An editing is one document from when it is opened, saved, reverted,
+/// discarded or given kept changes back (<see cref="EditorSession.RecoveryEpoch"/>) until the next of
+/// those, with its own id. When one ends that way, its checkpoints are superseded: they are retired
+/// (deleted) once the editing after it is clean or has a checkpoint of its own, so a late write never
+/// brings back saved or discarded work, and nothing is left unprotected meanwhile. Undo back to the
+/// saved state retires them only once nothing can be redone. Another Plate opened in its place: an
+/// editing that has nothing unsaved (or whose last state the last save wrote), whose changes Save as
+/// New Plate handed to the copy, or whose Plate the player deleted, is retired; one with unsaved
+/// changes keeps its last state as a final checkpoint, retried until written, for the next load to
+/// offer. A failed save changes nothing. Unloading settles what it can, stops new checkpoints, and
+/// the draft kept at unload joins the open editing's checkpoints in one offer.</para>
 /// </summary>
 internal sealed class ContinuousRecovery
 {
@@ -80,8 +86,8 @@ internal sealed class ContinuousRecovery
     private readonly IAetherFrameLog log;
     private readonly ConcurrentQueue<RecoveryWriteResult> results = new();
 
-    // Editings left behind with unsaved changes: their final checkpoint's outcome is only logged.
-    private readonly Dictionary<long, Guid> leftBehind = new();
+    // Every editing with work still to do: the open one, and ended ones still to retire or write.
+    private readonly Dictionary<Guid, Editing> editings = new();
 
     private Editing? current;
     private long sequence;
@@ -109,7 +115,7 @@ internal sealed class ContinuousRecovery
 
     internal Guid SessionId => writer.Store.SessionId;
 
-    /// <summary>The open document's editing id, once a frame has seen it; null otherwise.</summary>
+    /// <summary>The open document's editing id; null when none is open.</summary>
     internal Guid? CurrentEditId => current?.EditId;
 
     /// <summary>What the editors show now (see <see cref="RecoveryIndicator"/>).</summary>
@@ -117,12 +123,12 @@ internal sealed class ContinuousRecovery
     {
         get
         {
-            if (current is not { Unsaved: true } editing)
+            if (current is not { Seen: true, Unsaved: true } editing)
             {
                 return new RecoveryIndicator(RecoveryIndicatorKind.None, null, null);
             }
 
-            if (editing.LastSuccess is { } done && done.ContentEquals(editing.Sample))
+            if (editing.Holds(editing.Sample))
             {
                 return new RecoveryIndicator(RecoveryIndicatorKind.Protected, editing.LastSuccessUtc, null);
             }
@@ -139,7 +145,7 @@ internal sealed class ContinuousRecovery
 
     /// <summary>
     /// The editing <paramref name="document"/> belongs to, for the draft kept at unload, so it joins
-    /// that editing's checkpoints: this run's session id and the editing's id, or null when no frame has seen it.
+    /// that editing's checkpoints: this run's session id and the editing's id, or null when it isn't the open one.
     /// </summary>
     internal (Guid SessionId, Guid EditId)? EditingOf(ProfileDocument document) =>
         current is { } editing && ReferenceEquals(editing.Document, document) ? (SessionId, editing.EditId) : null;
@@ -147,7 +153,7 @@ internal sealed class ContinuousRecovery
     /// <summary>A failed checkpoint or retirement is tried again at the next frame.</summary>
     internal void RetryNow()
     {
-        if (current is { } editing)
+        foreach (var editing in editings.Values)
         {
             editing.RetryAt = TimeSpan.Zero;
             editing.RetireRetryAt = TimeSpan.Zero;
@@ -179,9 +185,45 @@ internal sealed class ContinuousRecovery
         }
     }
 
-    /// <summary>Unloading: no more checkpoints (the draft kept at unload takes over); retirements already asked for still run.</summary>
+    /// <summary>
+    /// Unloading: what can be settled now is (a clean or superseded editing retired, a final checkpoint
+    /// still owed asked for), then no more checkpoints; the draft kept at unload takes over the open
+    /// editing. What was asked for still runs (see <see cref="RecoveryCheckpointWriter.Stop"/>).
+    /// </summary>
     internal void Stop()
     {
+        if (stopped)
+        {
+            return;
+        }
+
+        try
+        {
+            ApplyResults(elapsed());
+            foreach (var editing in editings.Values.ToList())
+            {
+                if (ReferenceEquals(editing, current))
+                {
+                    if (editing is { Seen: true, Unsaved: false, MayHaveFiles: true } && editing.RetireRequest is null)
+                    {
+                        editing.RetireRequest = writer.Retire(editing.Document.ProfileId, editing.EditId);
+                    }
+                }
+                else if (editing.RetireWanted)
+                {
+                    editing.RetireRequest ??= writer.Retire(editing.Document.ProfileId, editing.EditId);
+                }
+                else if (editing.Final is { } final && editing.Requested is null && !editing.Holds(editing.Sample))
+                {
+                    RequestWrite(editing, final);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Error(ex, "AetherFrame couldn't settle its recovery checkpoints as it unloaded.");
+        }
+
         stopped = true;
         writer.Stop();
     }
@@ -192,22 +234,33 @@ internal sealed class ContinuousRecovery
         ApplyResults(now);
 
         var document = profiles.CurrentProfile;
-        if (!ReferenceEquals(document, current?.Document))
+        var epoch = session.RecoveryEpoch;
+        if (!ReferenceEquals(document, current?.Document) || current!.Epoch != epoch)
         {
-            if (current is { } left)
+            var ended = current;
+            current = document is null ? null : new Editing(document, Guid.NewGuid(), epoch, ProfileService.DocumentState.Capture(document), now);
+            if (current is not null)
             {
-                Leave(left);
+                editings[current.EditId] = current;
             }
 
-            current = document is null ? null : new Editing(document, Guid.NewGuid(), ProfileService.DocumentState.Capture(document), now);
+            if (ended is not null)
+            {
+                End(ended, current);
+            }
         }
 
-        if (current is not { } editing)
+        if (current is { } editing)
         {
-            return;
+            Follow(editing, now);
         }
 
-        if (editing.MayHaveFiles || now - editing.SampledAt >= SampleInterval)
+        FinishEnded(now);
+    }
+
+    private void Follow(Editing editing, TimeSpan now)
+    {
+        if (now - editing.SampledAt >= SampleInterval)
         {
             editing.SampledAt = now;
             if (!Matches(editing.Sample, editing.Document))
@@ -225,23 +278,27 @@ internal sealed class ContinuousRecovery
             return;
         }
 
-        editing.Baseline = baseline;
         editing.Seen = true;
-        editing.Unsaved = baseline is null || !baseline.ContentEquals(editing.Sample);
+        editing.Baseline = baseline;
+        editing.Unsaved = baseline is null || !editing.SavedMatch.Equal(baseline, editing.Sample);
         if (editing.Unsaved)
         {
             RequestCheckpointIfDue(editing, now);
         }
-        else
+        else if (!session.CanRedo)
         {
             RetireIfNeeded(editing, now);
+        }
+        else
+        {
+            // Undone back to the saved state, with the changes one Redo away: they stay kept.
+            editing.PendingSince = null;
         }
     }
 
     private void RequestCheckpointIfDue(Editing editing, TimeSpan now)
     {
-        if ((editing.LastSuccess is { } done && done.ContentEquals(editing.Sample))
-            || (editing.Requested is { } asked && asked.State.ContentEquals(editing.Sample)))
+        if (editing.Holds(editing.Sample) || editing.Asked(editing.Sample))
         {
             editing.PendingSince = null;
             return;
@@ -252,7 +309,8 @@ internal sealed class ContinuousRecovery
             return;
         }
 
-        var changedAt = editing.ChangedAt ?? editing.OpenedAt;
+        // No change since the editing began, yet unsaved: it began so (kept changes resumed), so it is due now.
+        var changedAt = editing.ChangedAt ?? (editing.OpenedAt - IdleDelay);
         var pendingSince = editing.PendingSince ?? changedAt;
         if (editing.Failures == 0 && now - changedAt < IdleDelay && now - pendingSince < MaxDelay)
         {
@@ -304,43 +362,95 @@ internal sealed class ContinuousRecovery
     }
 
     /// <summary>
-    /// The document is no longer the open one. Nothing unsaved (saved, discarded or reverted before it
-    /// went), or its changes handed to a new Plate: its checkpoints are retired. Otherwise its last state
-    /// is kept as a final checkpoint, when the last one doesn't hold it, for the next load to offer.
+    /// <paramref name="ended"/> is no longer the open editing. The same document under a new epoch
+    /// (saved, reverted, discarded, kept changes put back): superseded, retired once
+    /// <paramref name="next"/> is settled. Another document in its place: retired when it has nothing
+    /// unsaved, its last save wrote it, its changes went to a new Plate or its Plate was deleted here;
+    /// otherwise its last state is kept as a final checkpoint for the next load to offer.
     /// </summary>
-    private void Leave(Editing editing)
+    private void End(Editing ended, Editing? next)
     {
-        if (!editing.Seen)
+        ended.Ended = true;
+        if (next is not null && ReferenceEquals(next.Document, ended.Document))
         {
+            WantRetire(ended, next);
             return;
         }
 
-        var state = ProfileService.DocumentState.Capture(editing.Document);
-        var unsaved = editing.Baseline is not { } baseline || !baseline.ContentEquals(state);
-        if (!unsaved || session.WereUnsavedChangesHandedOff(editing.Document))
+        if (!ended.Seen)
         {
-            if (editing.MayHaveFiles)
+            WantRetire(ended, null);
+            return;
+        }
+
+        var state = ProfileService.DocumentState.Capture(ended.Document);
+        var unsaved = (ended.Baseline is not { } baseline || !baseline.ContentEquals(state)) && !session.WasSavedAs(ended.Document, state);
+        if (!unsaved || session.WereUnsavedChangesHandedOff(ended.Document) || profiles.WasDeletedWhileOpen(ended.Document))
+        {
+            WantRetire(ended, null);
+            return;
+        }
+
+        ended.Sample = state;
+        if (ended.Holds(state) || profiles.CopyClosedDocument(ended.Document) is not { } copy)
+        {
+            Forget(ended);
+            return;
+        }
+
+        ended.Final = copy;
+        ended.Failures = 0;
+        ended.RetryAt = TimeSpan.Zero;
+        RequestWrite(ended, copy);
+        log.Information($"AetherFrame keeps the unsaved changes of Plate {ended.Document.ProfileId} as a recovery checkpoint: another Plate was opened in its place.");
+    }
+
+    private void WantRetire(Editing ended, Editing? next)
+    {
+        if (!ended.MayHaveFiles)
+        {
+            Forget(ended);
+            return;
+        }
+
+        ended.RetireWanted = true;
+        ended.Successor = next;
+    }
+
+    /// <summary>Ended editings' remaining work: retirements once what replaced them is settled, and final checkpoints until written.</summary>
+    private void FinishEnded(TimeSpan now)
+    {
+        foreach (var editing in editings.Values.ToList())
+        {
+            if (ReferenceEquals(editing, current))
             {
-                writer.Retire(editing.Document.ProfileId, editing.EditId);
+                continue;
             }
 
-            return;
-        }
-
-        if (editing.LastSuccess is { } done && done.ContentEquals(state))
-        {
-            return;
-        }
-
-        if (profiles.CopyClosedDocument(editing.Document) is { } copy)
-        {
-            RequestWrite(editing, copy);
-            if (editing.Requested is { } request)
+            if (editing.RetireWanted)
             {
-                leftBehind[request.Id] = editing.Document.ProfileId;
+                if ((editing.Successor is not { } next || Settled(next)) && editing.RetireRequest is null && now >= editing.RetireRetryAt)
+                {
+                    editing.RetireRequest = writer.Retire(editing.Document.ProfileId, editing.EditId);
+                }
             }
+            else if (editing.Final is { } final && editing.Requested is null && !editing.Holds(editing.Sample) && now >= editing.RetryAt)
+            {
+                RequestWrite(editing, final);
+            }
+        }
+    }
 
-            log.Information($"AetherFrame kept the unsaved changes of Plate {editing.Document.ProfileId} as a recovery checkpoint: another Plate was opened in its place.");
+    // What replaced a superseded editing no longer needs it: clean, written at least once, or done with.
+    private bool Settled(Editing next) =>
+        !editings.ContainsKey(next.EditId) || next.RetireWanted || next.LastSuccess is not null
+        || (next.Seen && !next.Unsaved && next.Final is null);
+
+    private void Forget(Editing editing)
+    {
+        if (!ReferenceEquals(editing, current))
+        {
+            editings.Remove(editing.EditId);
         }
     }
 
@@ -348,7 +458,7 @@ internal sealed class ContinuousRecovery
     {
         while (results.TryDequeue(out var result))
         {
-            if (leftBehind.Remove(result.RequestId) || current is not { } editing || result.EditId != editing.EditId)
+            if (!editings.TryGetValue(result.EditId, out var editing))
             {
                 continue;
             }
@@ -366,6 +476,10 @@ internal sealed class ContinuousRecovery
                     // A checkpoint asked for after this retirement may still be on its way.
                     editing.MayHaveFiles = editing.LastWriteRequest > result.RequestId;
                     editing.RetireFailures = 0;
+                    if (editing.RetireWanted && !editing.MayHaveFiles)
+                    {
+                        Forget(editing);
+                    }
                 }
                 else
                 {
@@ -388,6 +502,10 @@ internal sealed class ContinuousRecovery
                 editing.LastSuccessUtc = request.WrittenUtc;
                 editing.Failures = 0;
                 editing.RetryAt = TimeSpan.Zero;
+                if (editing.Final is not null && !editing.RetireWanted && editing.Holds(editing.Sample))
+                {
+                    Forget(editing);
+                }
             }
             else
             {
@@ -410,12 +528,42 @@ internal sealed class ContinuousRecovery
 
     private sealed record Request(long Id, ProfileService.DocumentState State, DateTime WrittenUtc);
 
-    /// <summary>One open document: one editing, from opening it to another Plate taking its place.</summary>
-    private sealed class Editing(ProfileDocument document, Guid editId, ProfileService.DocumentState sample, TimeSpan openedAt)
+    /// <summary>One structural comparison, remembered until either side is another state.</summary>
+    private sealed class ContentMatch
     {
+        private ProfileService.DocumentState? left;
+        private ProfileService.DocumentState? right;
+        private bool equal;
+
+        internal bool Equal(ProfileService.DocumentState? a, ProfileService.DocumentState b)
+        {
+            if (a is null)
+            {
+                return false;
+            }
+
+            if (!ReferenceEquals(a, left) || !ReferenceEquals(b, right))
+            {
+                left = a;
+                right = b;
+                equal = a.ContentEquals(b);
+            }
+
+            return equal;
+        }
+    }
+
+    /// <summary>One document from when it was opened, saved, reverted, discarded or given kept changes back, until the next of those.</summary>
+    private sealed class Editing(ProfileDocument document, Guid editId, int epoch, ProfileService.DocumentState sample, TimeSpan openedAt)
+    {
+        private readonly ContentMatch heldMatch = new();
+        private readonly ContentMatch askedMatch = new();
+
         internal ProfileDocument Document { get; } = document;
 
         internal Guid EditId { get; } = editId;
+
+        internal int Epoch { get; } = epoch;
 
         internal TimeSpan OpenedAt { get; } = openedAt;
 
@@ -432,6 +580,8 @@ internal sealed class ContinuousRecovery
         internal bool Unsaved { get; set; }
 
         internal ProfileService.DocumentState? Baseline { get; set; }
+
+        internal ContentMatch SavedMatch { get; } = new();
 
         internal Request? Requested { get; set; }
 
@@ -452,5 +602,23 @@ internal sealed class ContinuousRecovery
         internal int RetireFailures { get; set; }
 
         internal TimeSpan RetireRetryAt { get; set; }
+
+        /// <summary>No longer the open editing.</summary>
+        internal bool Ended { get; set; }
+
+        /// <summary>Ended with nothing to keep: its checkpoints are to be retired (once <see cref="Successor"/> is settled).</summary>
+        internal bool RetireWanted { get; set; }
+
+        /// <summary>The editing that superseded it on the same document, if any.</summary>
+        internal Editing? Successor { get; set; }
+
+        /// <summary>Ended with unsaved changes: the copy its final checkpoint is written from, until written.</summary>
+        internal ProfileService.OpenDocumentCopy? Final { get; set; }
+
+        /// <summary>Whether the last checkpoint that finished holds <paramref name="state"/>.</summary>
+        internal bool Holds(ProfileService.DocumentState state) => heldMatch.Equal(LastSuccess, state);
+
+        /// <summary>Whether the checkpoint being written holds <paramref name="state"/>.</summary>
+        internal bool Asked(ProfileService.DocumentState state) => askedMatch.Equal(Requested?.State, state);
     }
 }

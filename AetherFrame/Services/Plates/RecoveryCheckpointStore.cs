@@ -172,13 +172,21 @@ internal sealed class RecoveryCheckpointStore
                 continue;
             }
 
-            if (files.IsLockHeld(PlateStoragePaths.GetRecoverySessionLockPath(directory)))
+            try
             {
-                running++;
-                continue;
-            }
+                if (files.IsLockHeld(PlateStoragePaths.GetRecoverySessionLockPath(directory)))
+                {
+                    running++;
+                    continue;
+                }
 
-            found.AddRange(ListCheckpoints(directory, sessionId));
+                found.AddRange(ListCheckpoints(directory, sessionId));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Another game client removed it as it unloaded, or it can't be listed now: a later load looks again.
+                log.Warning($"AetherFrame couldn't list a recovery folder: {ex.GetType().Name}.");
+            }
         }
 
         return (found, running);
@@ -281,7 +289,7 @@ internal sealed class RecoveryCheckpointStore
         }
     }
 
-    /// <summary>This run's folder and lock, made with its first checkpoint. A lock that can't be taken is logged, and checkpoints are still written.</summary>
+    /// <summary>This run's folder and lock, made with its first checkpoint. A lock that can't be taken fails the write, which is retried.</summary>
     private void OpenSession()
     {
         lock (gate)
@@ -310,8 +318,8 @@ internal sealed class RecoveryCheckpointStore
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    log.Error(ex, "AetherFrame couldn't lock its recovery folder; another game client may offer these checkpoints while this one runs.");
-                    return;
+                    // Unlocked, another game client would take this run's checkpoints for a crashed one's: none are written.
+                    throw new IOException("AetherFrame couldn't lock its recovery folder, so it writes no recovery checkpoint until it can.", ex);
                 }
             }
         }

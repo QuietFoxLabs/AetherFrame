@@ -100,6 +100,7 @@ internal sealed class DraftStore
         {
             var destination = FreeTrashPath(path);
             store.MoveFile(path, destination);
+            MarkTrashed(destination);
             return destination;
         }
         catch (Exception ex) when (!IsInterruption(ex))
@@ -287,6 +288,7 @@ internal sealed class DraftStore
 
             var destination = FreeTrashPath(draftPath);
             store.MoveFile(draftPath, destination);
+            MarkTrashed(destination);
             trashPath = destination;
             return DraftClaim.Claimed;
         }
@@ -318,6 +320,23 @@ internal sealed class DraftStore
         {
             log.Error(ex, $"AetherFrame could not put kept changes {LogPrivacy.FileName(draftPath)} back; they stay in its Trash folder.");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Dates a file just moved into the trash now, which a move doesn't do: the trash keeps its newest
+    /// files by that date (see <see cref="RecoveryCheckpointStore.Sweep"/>), so a draft answered today is
+    /// never the first to go because it was written long ago. A failure is logged and changes nothing else.
+    /// </summary>
+    private void MarkTrashed(string trashPath)
+    {
+        try
+        {
+            File.SetLastWriteTimeUtc(trashPath, DateTime.UtcNow);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            log.Warning($"AetherFrame couldn't date kept changes it moved to its Trash folder ({ex.GetType().Name}).");
         }
     }
 

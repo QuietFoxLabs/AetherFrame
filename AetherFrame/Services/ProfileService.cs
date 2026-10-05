@@ -27,6 +27,9 @@ internal sealed class ProfileService
     private readonly PlateLibraryService library;
 
     private ProfileDocument? currentProfile;
+
+    // The document closed because its Plate was deleted here (see WasDeletedWhileOpen).
+    private ProfileDocument? deletedWhileOpen;
     private bool isBusy;
 
     internal ProfileService(PlateLibraryService library)
@@ -776,8 +779,21 @@ internal sealed class ProfileService
         {
             if (currentProfile?.ProfileId == plateId)
             {
+                deletedWhileOpen = currentProfile;
                 currentProfile = null;
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="document"/> was closed because its Plate was deleted in this game client,
+    /// where the player confirmed that its unsaved changes are lost: recovery retires its checkpoints.
+    /// </summary>
+    internal bool WasDeletedWhileOpen(ProfileDocument document)
+    {
+        lock (gate)
+        {
+            return ReferenceEquals(deletedWhileOpen, document);
         }
     }
 

@@ -92,6 +92,7 @@ public class KeptChangesOfferTests
             "AetherFrame.Tests/RecoveryLifecycleTests.cs",
             "AetherFrame.Tests/RecoveryOfferTests.cs",
             "AetherFrame.Tests/RecoveryProcessTests.cs",
+            "AetherFrame.Tests/RecoveryReviewFixesTests.cs",
             "AetherFrame.Tests/RecoveryStorageTests.cs",
             "AetherFrame.Tests/RecoveryTestSupport.cs",
         };

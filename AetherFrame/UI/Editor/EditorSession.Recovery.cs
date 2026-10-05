@@ -1,3 +1,4 @@
+using System.Threading;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 
@@ -8,6 +9,20 @@ internal sealed partial class EditorSession
 {
     // The document whose unsaved changes now live in another Plate (Save as New Plate opened the copy).
     private ProfileDocument? handedOffDocument;
+
+    // The last save that completed, kept when another Plate opens (unlike completedSave): a save and
+    // the open that follows it can land between two of recovery's frames.
+    private volatile CompletedSave? lastSaveForRecovery;
+
+    // Counts every save, revert, discard and recovered state: each ends the editing recovery follows.
+    private int recoveryEpoch;
+
+    /// <summary>
+    /// Changes whenever the open document's content was replaced or saved as a whole: a save that
+    /// completed, Revert to Saved, Discard, or kept changes put back (<see cref="ApplyRecoveredState"/>).
+    /// Recovery starts a new editing then, and retires the one before it. Safe from any thread.
+    /// </summary>
+    internal int RecoveryEpoch => Volatile.Read(ref recoveryEpoch);
 
     /// <summary>
     /// Whether this session has taken <paramref name="document"/>'s saved state yet (a frame has seen
@@ -25,6 +40,10 @@ internal sealed partial class EditorSession
         return (true, completedSave is { } save && ReferenceEquals(save.Profile, document) ? save.State : savedBaseline);
     }
 
+    /// <summary>Whether the last save that completed wrote <paramref name="document"/> exactly as <paramref name="state"/>, even once another Plate is open.</summary>
+    internal bool WasSavedAs(ProfileDocument document, ProfileService.DocumentState state) =>
+        lastSaveForRecovery is { } save && ReferenceEquals(save.Profile, document) && save.State.ContentEquals(state);
+
     /// <summary>
     /// Save as New Plate is about to open the copy in place of <paramref name="document"/>: its unsaved
     /// changes are saved in the copy, so its recovery checkpoints are retired rather than offered.
@@ -33,4 +52,12 @@ internal sealed partial class EditorSession
 
     /// <summary>Whether <paramref name="document"/>'s unsaved changes were handed to a new Plate (see <see cref="NoteUnsavedChangesHandedOff"/>).</summary>
     internal bool WereUnsavedChangesHandedOff(ProfileDocument document) => ReferenceEquals(handedOffDocument, document);
+
+    private void NoteSavedForRecovery(CompletedSave save)
+    {
+        lastSaveForRecovery = save;
+        Interlocked.Increment(ref recoveryEpoch);
+    }
+
+    private void NoteReplacedForRecovery() => Interlocked.Increment(ref recoveryEpoch);
 }

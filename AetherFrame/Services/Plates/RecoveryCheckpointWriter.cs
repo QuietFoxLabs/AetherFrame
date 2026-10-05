@@ -92,16 +92,15 @@ internal sealed class RecoveryCheckpointWriter
         }
     }
 
-    /// <summary>No more checkpoints: those still waiting are dropped; retirements still run.</summary>
+    /// <summary>
+    /// No new checkpoints. What was asked for still runs, at most one waiting write per editing (a
+    /// final checkpoint of unsaved changes left behind among them), and retirements.
+    /// </summary>
     internal void Stop()
     {
         lock (gate)
         {
             stopped = true;
-            foreach (var node in Nodes().Where(n => n.Value.Checkpoint is not null).ToList())
-            {
-                waiting.Remove(node);
-            }
         }
     }
 

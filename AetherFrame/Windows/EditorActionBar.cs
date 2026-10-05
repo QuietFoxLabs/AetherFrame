@@ -294,9 +294,11 @@ internal sealed class EditorActionBar
         }
 
         ImGui.SameLine();
+        var start = ImGui.GetCursorPosX();
+        var room = ImGui.GetFrameHeight();
         if (recovery.Kind == RecoveryIndicatorKind.None)
         {
-            ImGui.Dummy(new Vector2(ImGui.GetFontSize(), ImGui.GetFontSize()));
+            ImGui.Dummy(new Vector2(room, ImGui.GetFontSize()));
             return;
         }
 
@@ -308,6 +310,10 @@ internal sealed class EditorActionBar
         };
         EditorWidgets.IconText(FontAwesomeIcon.ShieldAlt, color);
         EditorWidgets.Tooltip(EditorDocumentCommands.RecoveryText(recovery));
+
+        // The same room shown or hidden (the frame height the bar measured for it), so nothing after it moves.
+        ImGui.SameLine(start + room, 0f);
+        ImGui.Dummy(Vector2.Zero);
     }
 
     /// <summary>While recovery checkpoints fail: one restrained line under the bar, with Retry now.</summary>
