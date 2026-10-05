@@ -100,6 +100,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly DraftStore keptChangesFiles;
     private readonly KeptChangesOffer keptChanges;
     private readonly KeptChangesWindow keptChangesWindow;
+
+    // Continuous crash recovery (October 5, 2026): checkpoints of the open Plate's unsaved changes,
+    // written while editing to this run's folder under Drafts/Sessions and offered with the drafts.
+    private readonly RecoveryCheckpointStore recoveryCheckpoints;
+    private readonly ContinuousRecovery continuousRecovery;
     private readonly IAetherFrameLog log;
 
     // The interface's typography, the tutorial (its state, and the overlay windows that show it),
@@ -244,8 +249,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 editorSession.CommitPendingEdits();
                 editorSession.EndInteraction();
             });
+            recoveryCheckpoints = new RecoveryCheckpointStore(paths, SystemRecoveryFiles.Instance, Guid.NewGuid(), log);
+            var recoveryClock = System.Diagnostics.Stopwatch.StartNew();
+            continuousRecovery = new ContinuousRecovery(
+                profileService, editorSession, () => editorSurfaces.ActiveSurface, recoveryCheckpoints, AetherFrameBuildInfo.Current.Describe(), log, () => recoveryClock.Elapsed);
             unsavedChangesKeeper = new UnsavedChangesKeeper(
-                editorSession, () => editorSurfaces.ActiveSurface, paths, stores, AetherFrameBuildInfo.Current.Describe(), log);
+                editorSession, () => editorSurfaces.ActiveSurface, paths, stores, AetherFrameBuildInfo.Current.Describe(), log, editingOf: continuousRecovery.EditingOf);
             var gameTitleCatalog = new GameTitleCatalog();
             var textMeasurer = new ProfileTextMeasurer(fontService);
             editorSession.IdentityMeasurer = textMeasurer;
@@ -262,7 +271,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 operations: ownedOperations);
 
             // Undo, Redo, Save and Revert as both editors' shared action bar offers them.
-            var documentCommands = new EditorDocumentCommands(profileService, editorSession);
+            var documentCommands = new EditorDocumentCommands(profileService, editorSession) { Recovery = continuousRecovery };
 
             // The Plate menu both editors' action bar shares (interface task 1): My Plates' card menu's
             // actions, run and reported where the Plate is being edited, with its own Export dialog.
@@ -303,7 +312,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // Libraries' own store, offered once both Libraries have loaded and a character is logged
             // in (see LoadAsync), and restored into the editor that had them.
             keptChangesFiles = new DraftStore(paths, fileStore, log);
-            keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowEditor, log);
+            keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowEditor, log, recoveryCheckpoints);
             keptChangesWindow = new KeptChangesWindow(keptChanges);
             plateLibraryWindow.KeptChanges = keptChanges;
 
@@ -599,7 +608,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         IReadOnlyList<KeptDraft> found;
         using (operation)
         {
-            found = await Task.Run(() => KeptChangesReview.LoadAsync(keptChangesFiles, plateLibrary, log), cancellationToken).ConfigureAwait(false);
+            found = await Task.Run(() =>
+            {
+                recoveryCheckpoints.Sweep();
+                return KeptChangesReview.LoadAsync(keptChangesFiles, plateLibrary, log, recoveryCheckpoints);
+            }, cancellationToken).ConfigureAwait(false);
         }
 
         if (found.Count > 0)
@@ -647,6 +660,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             plateViewing.OnFrame();
 #endif
             WindowSystem.Draw();
+
+            // After the windows drew, so this frame's edits are in what it samples.
+            continuousRecovery.Tick();
             ScreenEyedropper.Draw();
             editorPlateMenu.EndFrame();
         }
@@ -706,7 +722,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // Then the open editor's unsaved changes, read as the UI stopped, are kept beside the Library
         // for the next load to offer back: written before anything waits on running operations, for
         // a few seconds at most, and never failing the unload.
-        await unsavedChangesKeeper.WriteAsync(UnsavedChangesKeeper.WriteTimeout).ConfigureAwait(false);
+        // Recovery retirements already asked for (a save or discard just before unloading) finish
+        // alongside, so no checkpoint of saved or discarded work is left to be offered; then this
+        // run's recovery folder is unlocked, and what is left in it is offered next time.
+        await Task.WhenAll(
+            unsavedChangesKeeper.WriteAsync(UnsavedChangesKeeper.WriteTimeout),
+            continuousRecovery.Writer.WaitIdleAsync(UnsavedChangesKeeper.WriteTimeout)).ConfigureAwait(false);
+        recoveryCheckpoints.CloseSession();
 
         // Then any save, rename, import, export, … already running finishes before anything it uses
         // is disposed (see PluginShutdown for what happens if one outlasts the timeout).
@@ -729,6 +751,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // Nothing draws any more, and the windows are still there: the open Plate's unsaved changes,
         // and the editor showing them, are read now, for DisposeAsync to keep.
         unsavedChangesKeeper.Capture();
+        continuousRecovery.Stop();
 
         // A running tutorial is remembered where it stopped; nothing else of it needs the game.
         onboarding.Suspend();

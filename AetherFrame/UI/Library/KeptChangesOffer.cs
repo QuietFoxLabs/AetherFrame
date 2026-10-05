@@ -62,10 +62,13 @@ internal sealed class KeptChangesOffer
 {
     internal const string Title = "Unsaved changes kept";
     internal const string Consequence = "Your saved Plate is unchanged.";
-    internal const string RestoreLabel = "Restore";
-    internal const string RestoreTooltip = "Open the Plate with these changes. Nothing is saved until you choose Save.";
-    internal const string RestoreAsNewLabel = "Restore as New Plate";
+    internal const string RestoreLabel = "Resume Editing";
+    internal const string RestoreTooltip = "Open the Plate with these changes. Nothing is saved or shared until you choose Save.";
+    internal const string RestoreAsNewLabel = "Recover as New Plate";
     internal const string RestoreAsNewTooltip = "The saved Plate stays as it is.";
+    internal const string RecoverAsNewSecondaryTooltip = "Add these changes to My Plates as a new Plate. The saved Plate stays as it is.";
+    internal const string CheckpointLabel = "Recovery point";
+    internal const string CheckpointTooltip = "AetherFrame keeps the last few recovery checkpoints of this editing. Choose an earlier one to recover that instead.";
     internal const string RestoreAsNewDeletedTooltip = "Add these changes to My Plates as a new Plate.";
     internal const string DiscardLabel = "Discard";
     internal const string DiscardTooltip = "Keep the saved Plate as it is. The kept changes move to AetherFrame's Trash folder.";
@@ -92,6 +95,7 @@ internal sealed class KeptChangesOffer
     private readonly Action<EditorSurfaceKind> showEditor;
     private readonly IAetherFrameLog log;
     private readonly PlateOpenGuard guard;
+    private readonly RecoveryCheckpointStore? checkpoints;
 
     private readonly List<Entry> entries = new();
     private List<Entry> round = new();
@@ -120,9 +124,12 @@ internal sealed class KeptChangesOffer
 
     /// <param name="files">Where the drafts are, for claiming them.</param>
     /// <param name="showEditor">Shows the open Plate in the Basic or Advanced editor.</param>
+    /// <param name="checkpoints">Where recovery checkpoints are, for removing an answered editing's older ones; null where there are none.</param>
     internal KeptChangesOffer(
-        DraftStore files, PlateLibraryService library, ProfileService profiles, EditorSession session, Action<EditorSurfaceKind> showEditor, IAetherFrameLog log)
+        DraftStore files, PlateLibraryService library, ProfileService profiles, EditorSession session, Action<EditorSurfaceKind> showEditor, IAetherFrameLog log,
+        RecoveryCheckpointStore? checkpoints = null)
     {
+        this.checkpoints = checkpoints;
         this.files = files;
         this.library = library;
         this.profiles = profiles;
@@ -292,7 +299,43 @@ internal sealed class KeptChangesOffer
     /// The primary choice: Restore over the Plate, or Restore as New Plate. Asks first when the open
     /// Plate has unsaved changes of its own (<see cref="Question"/>), then claims the draft and acts.
     /// </summary>
-    internal void Choose()
+    internal void Choose() => Choose(asNewPlate: false);
+
+    /// <summary>Recover as New Plate where Resume Editing is the primary choice: the saved Plate stays as it is.</summary>
+    internal void ChooseNewPlate()
+    {
+        if (OffersNewPlateToo)
+        {
+            Choose(asNewPlate: true);
+        }
+    }
+
+    /// <summary>Whether Recover as New Plate is offered beside Resume Editing.</summary>
+    internal bool OffersNewPlateToo => CurrentVariant == KeptChangesVariant.Restore;
+
+    /// <summary>
+    /// The recovery points of the draft on offer, newest first, for the window's list: null when
+    /// there is only one. The newest is chosen unless the player picks an older one.
+    /// </summary>
+    internal IReadOnlyList<string>? CheckpointOptions => View()?.Checkpoints;
+
+    /// <summary>Which of <see cref="CheckpointOptions"/> an answer acts on.</summary>
+    internal int SelectedCheckpoint => Current?.Selected ?? 0;
+
+    /// <summary>Chooses which recovery point an answer acts on; not while one is being acted on.</summary>
+    internal void SelectCheckpoint(int index)
+    {
+        if (Current is not { State: EntryState.Pending } entry || asking is not null || IsBusy || index < 0 || index >= entry.Points.Count || index == entry.Selected)
+        {
+            return;
+        }
+
+        ClearMessages();
+        entry.Selected = index;
+        Changed();
+    }
+
+    private void Choose(bool asNewPlate)
     {
         if (Current is not { } entry || IsBusy || asking is not null)
         {
@@ -305,8 +348,8 @@ internal sealed class KeptChangesOffer
             return;
         }
 
-        var restoreHere = entry.Choice == KeptChangesChoice.Restore;
-        var basic = EditorFor(entry.Kept) == EditorSurfaceKind.Basic;
+        var restoreHere = entry.Choice == KeptChangesChoice.Restore && !asNewPlate;
+        var basic = EditorFor(entry.Point) == EditorSurfaceKind.Basic;
         if (guard.Request(entry.PlateId, basic, askEvenIfOpen: true) == PlateOpenDecision.Ask)
         {
             // What the question is about: the document open now (it asks only when one is), with its
@@ -331,9 +374,8 @@ internal sealed class KeptChangesOffer
         ClearMessages();
         if (TryClaim(entry))
         {
-            entry.State = EntryState.Done;
+            Answered(entry);
             log.Information($"AetherFrame discarded kept unsaved changes of Plate {entry.PlateId}; they are in its Trash folder.");
-            Changed();
         }
     }
 
@@ -550,6 +592,27 @@ internal sealed class KeptChangesOffer
         return $"AetherFrame closed while {Quoted(plateName)} had unsaved changes ({where}). They were kept beside your Plates.";
     }
 
+    /// <summary>The opening sentence for a recovery checkpoint: which Plate, which editor, and the checkpoint's time.</summary>
+    internal static string CheckpointBodyText(string plateName, DraftEditor editor, DateTime writtenUtc)
+    {
+        var when = writtenUtc.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
+        var where = editor switch
+        {
+            DraftEditor.Basic => "Basic editor, recovery checkpoint " + when,
+            DraftEditor.Advanced => "Advanced editor, recovery checkpoint " + when,
+            _ => "recovery checkpoint " + when,
+        };
+        return $"{Quoted(plateName)} had unsaved changes when AetherFrame last stopped ({where}). They were kept beside your Plates.";
+    }
+
+    /// <summary>One recovery point in the window's list: its time, and what it is.</summary>
+    internal static string CheckpointOption(KeptDraft point, bool newest)
+    {
+        var when = point.Draft.WrittenAtUtc.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
+        var what = point.IsCheckpoint ? "checkpoint" : "kept when AetherFrame closed";
+        return newest ? $"{when} ({what}, newest)" : $"{when} ({what})";
+    }
+
     /// <summary>The saved-again variant's sentence.</summary>
     internal static string SavedAgainNote(string plateName) =>
         $"{Quoted(plateName)} was saved again after these changes were made, so restoring them over it would undo that save.";
@@ -620,7 +683,7 @@ internal sealed class KeptChangesOffer
             // Before the changes go in: a Plate just opened takes its saved state as the baseline and
             // starts its history afresh. Afterwards would make the changes the baseline, read as saved.
             session.SyncWithCurrentProfile();
-            if (!session.ApplyRecoveredState(entry.Kept.State))
+            if (!session.ApplyRecoveredState(entry.Point.State))
             {
                 throw new InvalidOperationException(session.ErrorMessage ?? EditorSession.EditFailedMessage);
             }
@@ -631,10 +694,9 @@ internal sealed class KeptChangesOffer
             return;
         }
 
-        entry.State = EntryState.Done;
-        Changed();
+        Answered(entry);
         log.Information($"AetherFrame restored kept unsaved changes into Plate {entry.PlateId}; nothing is saved until the player saves.");
-        showEditor(EditorFor(entry.Kept));
+        showEditor(EditorFor(entry.Point));
     }
 
     /// <summary>Restore as New Plate: checked again and claimed first, then <see cref="RestoreAsNewClaimed"/>.</summary>
@@ -651,7 +713,7 @@ internal sealed class KeptChangesOffer
     {
         entry.State = EntryState.Acting;
         creatingEntry = entry;
-        creating = CreateAsync(entry.Kept);
+        creating = CreateAsync(entry.Point);
         Changed();
     }
 
@@ -674,8 +736,7 @@ internal sealed class KeptChangesOffer
     /// </summary>
     private void OpenNewPlate(Entry entry, Guid plateId)
     {
-        entry.State = EntryState.Done;
-        Changed();
+        Answered(entry);
         var name = library.FindPlate(plateId)?.DisplayName ?? PlateNaming.DefaultName;
         if (profiles.OpenPlateId != plateId && profiles.CurrentProfile is not null && session.IsDirty)
         {
@@ -694,7 +755,18 @@ internal sealed class KeptChangesOffer
             return;
         }
 
-        showEditor(EditorFor(entry.Kept));
+        showEditor(EditorFor(entry.Point));
+    }
+
+    /// <summary>
+    /// The editing is answered (restored, recovered as a new Plate or discarded), its token in the
+    /// trash: its other checkpoint files go too, so nothing of it is offered again.
+    /// </summary>
+    private void Answered(Entry entry)
+    {
+        entry.State = EntryState.Done;
+        Changed();
+        KeptChangesReview.RemoveFiles(checkpoints, entry.Kept.OtherFiles, log);
     }
 
     /// <summary>Claims the draft (see <see cref="DraftStore.Claim"/>); says so when it can't.</summary>
@@ -744,7 +816,7 @@ internal sealed class KeptChangesOffer
     /// </summary>
     private bool Recheck(Entry entry)
     {
-        var now = KeptChangesReview.Recheck(entry.Choice, entry.Kept.Draft, library);
+        var now = KeptChangesReview.Recheck(entry.Choice, entry.Point.Draft, library);
         if (now == entry.Choice)
         {
             return true;
@@ -847,7 +919,9 @@ internal sealed class KeptChangesOffer
         var name = DisplayName(entry);
         var variant = VariantOf(entry.Choice);
         view = new ViewText(
-            Body: BodyText(name, entry.Kept.Draft.Editor, entry.Kept.Draft.WrittenAtUtc),
+            Body: entry.Point.IsCheckpoint
+                ? CheckpointBodyText(name, entry.Point.Draft.Editor, entry.Point.Draft.WrittenAtUtc)
+                : BodyText(name, entry.Point.Draft.Editor, entry.Point.Draft.WrittenAtUtc),
             Note: variant switch
             {
                 KeptChangesVariant.SavedAgain => SavedAgainNote(name),
@@ -871,7 +945,8 @@ internal sealed class KeptChangesOffer
                 KeptChangesVariant.Deleted => DiscardDeletedTooltip,
                 _ => DiscardTooltip,
             },
-            Position: round.Count > 1 ? $"{round.IndexOf(entry) + 1} of {round.Count}" : null);
+            Position: round.Count > 1 ? $"{round.IndexOf(entry) + 1} of {round.Count}" : null,
+            Checkpoints: entry.Points.Count > 1 ? entry.Points.Select((p, i) => CheckpointOption(p, i == 0)).ToList() : null);
         return view;
     }
 
@@ -883,14 +958,29 @@ internal sealed class KeptChangesOffer
             return plate.DisplayName;
         }
 
-        return string.IsNullOrWhiteSpace(entry.Kept.Draft.PlateName) ? PlateNaming.DefaultName : entry.Kept.Draft.PlateName;
+        return string.IsNullOrWhiteSpace(entry.Point.Draft.PlateName) ? PlateNaming.DefaultName : entry.Point.Draft.PlateName;
     }
 
     private sealed class Entry(KeptDraft kept)
     {
+        private readonly KeptChangesChoice[] choices = [kept.Choice, .. kept.Older.Select(o => o.Choice)];
+
+        /// <summary>The editing's newest point: its token, the file every answer claims first.</summary>
         internal KeptDraft Kept { get; } = kept;
 
-        internal KeptChangesChoice Choice { get; set; } = kept.Choice;
+        /// <summary>Every point on offer, newest first: the token, then the older checkpoints.</summary>
+        internal IReadOnlyList<KeptDraft> Points { get; } = [kept, .. kept.Older];
+
+        internal int Selected { get; set; }
+
+        /// <summary>The point an answer acts on: the newest unless an older one was chosen.</summary>
+        internal KeptDraft Point => Points[Selected];
+
+        internal KeptChangesChoice Choice
+        {
+            get => choices[Selected];
+            set => choices[Selected] = value;
+        }
 
         internal EntryState State { get; set; } = EntryState.Pending;
 
@@ -926,5 +1016,6 @@ internal sealed class KeptChangesOffer
         string PrimaryTooltip,
         bool OffersDiscard,
         string? DiscardTooltip,
-        string? Position);
+        string? Position,
+        IReadOnlyList<string>? Checkpoints);
 }

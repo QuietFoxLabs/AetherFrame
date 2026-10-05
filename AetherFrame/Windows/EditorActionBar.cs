@@ -120,7 +120,11 @@ internal sealed class EditorActionBar
         var centerWidth = (frame * 2f) + historyGap;
 
         var (stateText, stateColor) = SaveState();
-        var buttonsWidth = ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
+        var recovery = commands.RecoveryIndicator;
+
+        // The recovery checkpoint's mark beside the save state: always measured, so the bar never shifts when it appears.
+        var recoveryMarkWidth = commands.Recovery is null ? 0f : ImGui.GetFrameHeight() + style.ItemSpacing.X;
+        var buttonsWidth = recoveryMarkWidth + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : HelpMenu.ButtonWidth + style.ItemSpacing.X);
         var widestState = Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
@@ -169,6 +173,7 @@ internal sealed class EditorActionBar
         ImGui.AlignTextToFramePadding();
         ImGui.TextColored(stateColor, stateText);
         TutorialAnchorMarks.Mark(TutorialTarget.EditorSaveState);
+        DrawRecoveryMark(recovery);
 
         ImGui.SameLine();
         if (ImGui.Button(PreviewLabel))
@@ -212,6 +217,7 @@ internal sealed class EditorActionBar
         }
 
         plateMenu.DrawResult(profile.ProfileId);
+        DrawRecoveryWarning(recovery);
 
         if (errorMessage is { } error)
         {
@@ -273,6 +279,54 @@ internal sealed class EditorActionBar
                 switchMode();
             }
         }
+    }
+
+    /// <summary>
+    /// A small shield after the save state while there are unsaved changes: muted once the last recovery
+    /// checkpoint holds them, dimmer while newer changes wait for one, the warning colour while writing
+    /// fails. Its tooltip names the last checkpoint that finished. Takes its room even when hidden.
+    /// </summary>
+    private void DrawRecoveryMark(RecoveryIndicator recovery)
+    {
+        if (commands.Recovery is null)
+        {
+            return;
+        }
+
+        ImGui.SameLine();
+        if (recovery.Kind == RecoveryIndicatorKind.None)
+        {
+            ImGui.Dummy(new Vector2(ImGui.GetFontSize(), ImGui.GetFontSize()));
+            return;
+        }
+
+        var color = recovery.Kind switch
+        {
+            RecoveryIndicatorKind.Protected => EditorWidgets.DimTextColor,
+            RecoveryIndicatorKind.Failing => EditorWidgets.WarningColor,
+            _ => EditorWidgets.DimTextColor with { W = 0.45f },
+        };
+        EditorWidgets.IconText(FontAwesomeIcon.ShieldAlt, color);
+        EditorWidgets.Tooltip(EditorDocumentCommands.RecoveryText(recovery));
+    }
+
+    /// <summary>While recovery checkpoints fail: one restrained line under the bar, with Retry now.</summary>
+    private void DrawRecoveryWarning(RecoveryIndicator recovery)
+    {
+        if (EditorDocumentCommands.RecoveryWarning(recovery) is not { } warning)
+        {
+            return;
+        }
+
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextColored(EditorWidgets.WarningColor, warning);
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Retry now##RecoveryRetry"))
+        {
+            commands.Recovery?.RetryNow();
+        }
+
+        EditorWidgets.Tooltip("Write a recovery checkpoint of the unsaved changes again now. Save still keeps them in the Plate.");
     }
 
     private (string Text, Vector4 Color) SaveState() =>

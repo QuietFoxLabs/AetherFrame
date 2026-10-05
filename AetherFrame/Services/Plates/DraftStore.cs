@@ -93,6 +93,22 @@ internal sealed class DraftStore
     internal PlateDraft Create(ProfileService.OpenDocumentCopy copy, DraftEditor editor, string build) =>
         DraftDocuments.Create(copy.Document, copy.BaseRevision, copy.BaseUpdatedAtUtc, editor, build, newId(), utcNow());
 
+    /// <summary>Moves a file into the trash as a claim does, for files claimed some other way; null, logged, when it stays.</summary>
+    internal string? MoveToTrash(string path)
+    {
+        try
+        {
+            var destination = FreeTrashPath(path);
+            store.MoveFile(path, destination);
+            return destination;
+        }
+        catch (Exception ex) when (!IsInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame could not move kept changes {LogPrivacy.FileName(path)} to its Trash folder.");
+            return null;
+        }
+    }
+
     /// <summary>
     /// Writes <paramref name="draft"/> to a file of its own and returns its path, or null, with
     /// nothing written and the reason logged, when its text fails the proof every Plate write passes
@@ -129,7 +145,13 @@ internal sealed class DraftStore
     /// (<see cref="VersionedJson.RequireFaithfulReadBack"/>), and parsed both layers deep. Text that
     /// wouldn't load is refused (null), logged, and never written.
     /// </summary>
-    private string? Prove(PlateDraft draft)
+    private string? Prove(PlateDraft draft) => Prove(draft, log);
+
+    /// <summary>
+    /// <see cref="Prove(PlateDraft)"/> for any writer of drafts: recovery checkpoints pass the same
+    /// proof (see <see cref="RecoveryCheckpointStore"/>).
+    /// </summary>
+    internal static string? Prove(PlateDraft draft, IAetherFrameLog log)
     {
         try
         {

@@ -188,6 +188,21 @@ internal sealed class ProfileService
     }
 
     /// <summary>
+    /// <see cref="CopyOpenDocument"/> for a document that may no longer be the open one (another Plate
+    /// was opened in its place): what recovery keeps of unsaved changes left behind that way. Null when
+    /// <paramref name="document"/> is still open (copy it with <see cref="CopyOpenDocument"/>).
+    /// </summary>
+    internal OpenDocumentCopy? CopyClosedDocument(ProfileDocument document)
+    {
+        lock (gate)
+        {
+            return ReferenceEquals(currentProfile, document)
+                ? null
+                : new OpenDocumentCopy(document, CloneForSave(document, document.Revision, document.UpdatedAtUtc), document.Revision, document.UpdatedAtUtc);
+        }
+    }
+
+    /// <summary>
     /// Adds a text element to the currently loaded profile. Synchronous UI mutation; safe to
     /// call directly from ImGui Draw. Returns the new element's id.
     /// </summary>

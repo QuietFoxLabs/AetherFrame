@@ -152,7 +152,11 @@ public class KeptChangesOfferTests
         Assert.Equal("Keep the saved Plate as it is. The kept changes move to AetherFrame's Trash folder.", KeptChangesOffer.DiscardTooltip);
         Assert.Equal("The kept changes move to AetherFrame's Trash folder.", KeptChangesOffer.DiscardDeletedTooltip);
         Assert.Equal("Keep them. My Plates reminds you, and AetherFrame asks again next time.", KeptChangesOffer.DecideLaterTooltip);
-        Assert.Equal("Open the Plate with these changes. Nothing is saved until you choose Save.", KeptChangesOffer.RestoreTooltip);
+        Assert.Equal("Open the Plate with these changes. Nothing is saved or shared until you choose Save.", KeptChangesOffer.RestoreTooltip);
+        Assert.Equal("Resume Editing", KeptChangesOffer.RestoreLabel);
+        Assert.Equal("Recover as New Plate", KeptChangesOffer.RestoreAsNewLabel);
+        Assert.Equal(variant == KeptChangesVariant.Restore, game.Offer.OffersNewPlateToo);
+        Assert.Null(game.Offer.CheckpointOptions);
         Assert.Equal("The saved Plate stays as it is.", KeptChangesOffer.RestoreAsNewTooltip);
     }
 

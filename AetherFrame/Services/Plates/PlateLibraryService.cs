@@ -1373,14 +1373,19 @@ internal sealed class PlateLibraryService
                 }
             }
 
-            // Unsaved changes kept when AetherFrame unloaded (see DraftStore), waiting to be offered
-            // or answered and in the trash: an image added while editing may be used by nothing else.
+            // Unsaved changes kept when AetherFrame unloaded (see DraftStore) or as recovery
+            // checkpoints, waiting to be offered or answered and in the trash: an image added while editing may be used by nothing else.
             // Every GUID string in one counts, as for a stray file in the Plates folder (a draft is
             // named for its Plate and holds its own id, which only ever protects more). One that
             // can't be read, whose bytes aren't all valid text (the offer reads such a draft from its
             // backup copy, so what it would restore may name images this text doesn't), or that a
             // newer version wrote, leaves the scan incomplete.
-            foreach (var path in store.ListFiles(paths.DraftsDirectory, "*.json").Concat(store.ListFiles(paths.DraftTrashDirectory, "*.json")))
+            // Recovery checkpoints (see RecoveryCheckpointStore) count the same way, a running game
+            // client's included: every run's folder under Drafts/Sessions.
+            var checkpointFiles = Directory.Exists(paths.RecoverySessionsDirectory)
+                ? Directory.GetDirectories(paths.RecoverySessionsDirectory).SelectMany(d => store.ListFiles(d, "*.json"))
+                : Enumerable.Empty<string>();
+            foreach (var path in store.ListFiles(paths.DraftsDirectory, "*.json").Concat(store.ListFiles(paths.DraftTrashDirectory, "*.json")).Concat(checkpointFiles))
             {
                 try
                 {
