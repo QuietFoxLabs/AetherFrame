@@ -68,9 +68,13 @@ CLEAR_ALPHA = 8
 # are the least busy windows (about 2% of the axis each). On the Plate's and the Classic portrait's
 # own shapes they stretch by about 2.2 times, over a few pixels (the rails' rectangle is not quite
 # the box's shape); on other shapes, more.
+# Honeybee Garden's Plate Frame has plain rod on its side rails, but only in short runs between its
+# beads and the mid-edge honey drop (rows 341 to 388 and 550 to 603, under ACCEPT): its rows are those
+# runs cut MARGIN px inside, the drop the center piece; its columns are as measured (strict).
 FRAME_OVERRIDES = {
     ("CelestialSakura", "PlateFrame"): {"x": (513, 552, 1120, 1159), "y": (294, 318, 526, 550)},
     ("CelestialSakura", "PortraitFrame"): {"x": (344, 369, 629, 654), "y": (415, 452, 1025, 1062)},
+    ("HoneybeeGarden", "PlateFrame"): {"x": (338, 629, 1045, 1334), "y": (357, 372, 566, 587)},
 }
 
 

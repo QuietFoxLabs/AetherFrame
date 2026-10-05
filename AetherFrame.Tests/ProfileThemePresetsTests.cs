@@ -70,7 +70,7 @@ public class ProfileThemePresetsTests
     {
         Assert.InRange(ProfileThemePresets.SimpleThemes.Length, 28, 34);
         Assert.Equal(30, ProfileThemePresets.SimpleThemes.Length);
-        Assert.Equal(40, ProfileThemePresets.All.Count(p => p.IsArtStyle)); // ArtSetsTests
+        Assert.Equal(41, ProfileThemePresets.All.Count(p => p.IsArtStyle)); // ArtSetsTests
     }
 
     // ---------------------------------------------------------------- stable ids (task: verify/test)

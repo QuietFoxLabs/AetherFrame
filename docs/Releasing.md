@@ -140,7 +140,7 @@ The AI Usage Policy asks for two separate disclosures:
 
 | Asset | Origin | Disclosure |
 |---|---|---|
-| Art Styles (39 sets of seven pieces, and every style's preview card) | Created with AI assistance. The pieces are hosted on GitHub and downloaded on first use (`AetherFrame/Assets/ArtFiles.txt`); the preview cards are inside the plugin | Description and README |
+| Art Styles (40 sets of seven pieces, and every style's preview card) | Created with AI assistance. The pieces are hosted on GitHub and downloaded on first use (`AetherFrame/Assets/ArtFiles.txt`); the preview cards are inside the plugin | Description and README |
 | Celestial Sakura (7 approved pieces and a Section Header) | Created with AI assistance. The 7 approved pieces are served byte for byte from GitHub, each with embedded C2PA Content Credentials; the Section Header is a half-size runtime copy | Description and README. Credentials verified present in the seven approved files |
 | Celestial Dream *Astrolabe Pivot* | Created with AI assistance. The runtime copy is resampled, so it carries no credentials | Description and README |
 | Plugin icon | Generated with ChatGPT, then refined. The file carries no provenance metadata | Description and README. **A hand-made replacement is recommended before the D17 submission.** When it lands, drop the icon from the description and from `ReleaseMetadataTests` |

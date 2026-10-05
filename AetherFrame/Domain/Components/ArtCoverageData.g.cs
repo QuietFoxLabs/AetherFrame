@@ -147,6 +147,13 @@ internal static class ArtCoverageData
                 0x000000FEu, 0x0000007Eu, 0x0000007Eu, 0x0000007Eu, 0x0000007Eu, 0x0000007Eu, 0x0000007Fu, 0x0000007Fu,
                 0x0000007Fu, 0x0000007Fu, 0x0000007Fu, 0x0000007Fu, 0x0000007Fu, 0x0000007Fu, 0x0000007Eu, 0x0000007Eu,
             ]),
+            ["Components/HoneybeeGarden/HoneybeeGarden_CornerOrnament.png"] = new(
+            [
+                0x00000000u, 0x001FFFBCu, 0x7FFFFFFEu, 0x7FFFFFFEu, 0x7FFFFFFEu, 0x7FFFFFFEu, 0x3FFFFFFEu, 0x07FFFFFEu,
+                0x003FFFFEu, 0x000FFFFEu, 0x000FBFFEu, 0x00003FFEu, 0x00003FFEu, 0x00000FFEu, 0x000007FEu, 0x000003FEu,
+                0x000003FEu, 0x000000FEu, 0x000000FCu, 0x000000FCu, 0x000000FCu, 0x000001FCu, 0x000001FCu, 0x000001FCu,
+                0x000001FCu, 0x000000FCu, 0x000000FCu, 0x000000FCu, 0x000000FCu, 0x0000007Cu, 0x0000007Cu, 0x00000000u,
+            ]),
             ["Components/IndustrialSalvage/IndustrialSalvage_CornerOrnament.png"] = new(
             [
                 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x3FFFFFFFu, 0x00001FFFu,
