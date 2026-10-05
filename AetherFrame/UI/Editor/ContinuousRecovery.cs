@@ -51,8 +51,10 @@ internal readonly record struct RecoveryIndicator(RecoveryIndicatorKind Kind, Da
 /// at once, and so is an Undo or Redo over a step that replaced the whole document (an undoable
 /// Revert to Saved, kept changes put back), or any Undo or Redo of an editing with no checkpoint
 /// yet: one such step can bring back a whole editing's work. Other steps wait for the pause as
-/// edits do, so Undo never crowds the newest checkpoints with its own states and the work one Redo
-/// away stays kept. A checkpoint is never written of the saved content.</para>
+/// edits do, so Undo over ordinary edits doesn't crowd the newest checkpoints with its own states
+/// and the work one Redo away stays kept. Each step over a whole-document entry is a checkpoint of
+/// its own, so five of them in a row can move older work out. A checkpoint is never written of the
+/// saved content.</para>
 ///
 /// <para><b>Lifecycle.</b> An editing is one document from when it is opened, saved, reverted,
 /// discarded or given kept changes back (<see cref="EditorSession.RecoveryEpoch"/>) until the next of
