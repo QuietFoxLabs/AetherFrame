@@ -165,7 +165,7 @@ internal sealed class RecoveryCheckpointStore
     {
         var found = new List<CheckpointFile>();
         var running = 0;
-        foreach (var directory in files.ListDirectories(paths.RecoverySessionsDirectory))
+        foreach (var directory in ListRunFolders())
         {
             if (!PlateStoragePaths.TryParseRecoverySessionDirectoryName(directory, out var sessionId) || sessionId == SessionId)
             {
@@ -225,7 +225,7 @@ internal sealed class RecoveryCheckpointStore
     internal void Sweep()
     {
         var now = utcNow();
-        foreach (var directory in files.ListDirectories(paths.RecoverySessionsDirectory))
+        foreach (var directory in ListRunFolders())
         {
             try
             {
@@ -286,6 +286,20 @@ internal sealed class RecoveryCheckpointStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.Warning($"AetherFrame couldn't trim its Drafts trash: {ex.GetType().Name}.");
+        }
+    }
+
+    // Every run's folder; none, logged, when the Sessions folder can't be listed now (a later load looks again).
+    private IReadOnlyList<string> ListRunFolders()
+    {
+        try
+        {
+            return files.ListDirectories(paths.RecoverySessionsDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Warning($"AetherFrame couldn't list its recovery folders: {ex.GetType().Name}.");
+            return [];
         }
     }
 

@@ -56,10 +56,16 @@ internal sealed record KeptDraft(string Path, PlateDraft Draft, string DocumentJ
     internal IReadOnlyList<KeptDraft> Older { get; init; } = [];
 
     /// <summary>
-    /// The editing's other checkpoint files (older ones, damaged ones, ones beyond what was read),
-    /// removed once the editing is answered, so nothing of it is offered again.
+    /// The editing's other checkpoint files (older ones, ones beyond what was read), removed once the
+    /// editing is answered, so nothing of it is offered again.
     /// </summary>
     internal IReadOnlyList<string> OtherFiles { get; init; } = [];
+
+    /// <summary>
+    /// The editing's checkpoints that couldn't be read: moved to the Drafts trash with the answer,
+    /// never deleted, so what is left of them can still be salvaged there.
+    /// </summary>
+    internal IReadOnlyList<string> DamagedFiles { get; init; } = [];
 
     /// <summary>A recovery checkpoint taken while editing, rather than a draft kept at unload.</summary>
     internal bool IsCheckpoint => Draft.Sequence is not null;
@@ -141,7 +147,7 @@ internal static class KeptChangesReview
                     .Select(p => new KeptDraft(p.Path, p.Draft, p.DocumentJson, Classify(p.Draft, library)))
                     .Where(p => p.Choice != KeptChangesChoice.Identical)
                     .ToList();
-                offers.Add(new KeptDraft(newest.Path, newest.Draft, newest.DocumentJson, choice) { Older = older, OtherFiles = others });
+                offers.Add(new KeptDraft(newest.Path, newest.Draft, newest.DocumentJson, choice) { Older = older, OtherFiles = others, DamagedFiles = group.Damaged });
                 continue;
             }
 
@@ -150,6 +156,7 @@ internal static class KeptChangesReview
             {
                 log.Information($"AetherFrame retired kept unsaved changes of Plate {newest.Draft.PlateId}: they are its saved version.");
                 RemoveFiles(checkpoints, others, log);
+                TrashDamaged(files, group.Damaged);
             }
         }
 
@@ -185,12 +192,21 @@ internal static class KeptChangesReview
         }
     }
 
+    /// <summary>An answered editing's damaged checkpoints (see <see cref="KeptDraft.DamagedFiles"/>) go to the Drafts trash; one that can't stays, logged.</summary>
+    internal static void TrashDamaged(DraftStore files, IReadOnlyList<string> paths)
+    {
+        foreach (var path in paths)
+        {
+            files.MoveToTrash(path);
+        }
+    }
+
     /// <summary>
     /// Ended runs' checkpoints, grouped by editing (a running client's are never listed). Each group
     /// reads its checkpoints newest first until <see cref="RecoveryCheckpointStore.KeptPerEdit"/> read
     /// intact: a damaged or interrupted newest one leaves the earlier ones on offer. Damaged ones are
-    /// logged and left as they are, never removed with an answer; a newer version's are never offered
-    /// or removed. One that can't be opened (held open, or gone because another game window is
+    /// logged and go to the Drafts trash with an answer, never deleted; a newer version's are never
+    /// offered or removed. One that can't be opened (held open, or gone because another game window is
     /// answering its editing) holds the whole editing back, untouched, for a later load.
     /// </summary>
     private static void ReadCheckpoints(RecoveryCheckpointStore checkpoints, List<Group> groups, Dictionary<(Guid Session, Guid Edit), Group> byEdit, IAetherFrameLog log)
@@ -241,8 +257,9 @@ internal static class KeptChangesReview
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException and not Lifecycle.OperationAbandonedException)
                 {
-                    // Never removed with an answer: what is left of it stays for the player to salvage.
-                    log.Error(ex, $"AetherFrame could not read recovery checkpoint {LogPrivacy.FileName(file.Path)}; it is left as it is, and an earlier one is offered.");
+                    // Never deleted: it goes to the Drafts trash with an answer, where what is left of it can be salvaged.
+                    log.Error(ex, $"AetherFrame could not read recovery checkpoint {LogPrivacy.FileName(file.Path)}; an earlier one is offered.");
+                    group.Damaged.Add(file.Path);
                 }
             }
 
@@ -266,6 +283,9 @@ internal static class KeptChangesReview
 
         /// <summary>Its checkpoint files that go with an answer: those read intact, and those beyond the newest intact ones (never a damaged one, or a draft kept at unload).</summary>
         internal List<string> Files { get; } = new();
+
+        /// <summary>Its checkpoints that couldn't be read: moved to the Drafts trash with an answer.</summary>
+        internal List<string> Damaged { get; } = new();
 
         /// <summary>A checkpoint couldn't be opened: nothing of this editing is offered or retired this load.</summary>
         internal bool Unavailable { get; set; }

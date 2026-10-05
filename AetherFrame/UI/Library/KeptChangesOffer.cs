@@ -760,7 +760,8 @@ internal sealed class KeptChangesOffer
 
     /// <summary>
     /// The editing is answered (restored, recovered as a new Plate or discarded), its token in the
-    /// trash: its other checkpoint files go too, so nothing of it is offered again.
+    /// trash: its other checkpoint files go too, so nothing of it is offered again, its damaged ones
+    /// to the trash as well.
     /// </summary>
     private void Answered(Entry entry)
     {
@@ -776,6 +777,7 @@ internal sealed class KeptChangesOffer
         }
 
         KeptChangesReview.RemoveFiles(checkpoints, entry.Kept.OtherFiles.Where(f => !string.Equals(f, chosen, StringComparison.OrdinalIgnoreCase)).ToList(), log);
+        KeptChangesReview.TrashDamaged(files, entry.Kept.DamagedFiles);
     }
 
     /// <summary>Claims the draft (see <see cref="DraftStore.Claim"/>); says so when it can't.</summary>

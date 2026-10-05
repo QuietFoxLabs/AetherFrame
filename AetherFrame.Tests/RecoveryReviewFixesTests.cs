@@ -273,7 +273,7 @@ public class RecoveryReviewFixesTests
     }
 
     [Fact]
-    public async Task ADamagedNewestCheckpoint_IsLeftInPlace_WhenItsEditingIsAnswered()
+    public async Task ADamagedNewestCheckpoint_GoesToTheTrashIntact_WhenItsEditingIsAnswered()
     {
         using var fixture = new LibraryFixture();
         var files = await CrashWithEditsAsync(fixture, "one", "two");
@@ -283,11 +283,14 @@ public class RecoveryReviewFixesTests
         var next = await GameSession.StartAsync(fixture);
         var offered = Assert.Single(await next.LoadKeptChangesAsync());
         Assert.DoesNotContain(files[0], offered.OtherFiles);
+        Assert.Equal(new[] { files[0] }, offered.DamagedFiles);
         next.Offer.Choose();
         Assert.Null(next.Offer.Error);
 
-        Assert.True(File.Exists(files[0]));
-        Assert.Equal(bytes[..(bytes.Length - 3)], File.ReadAllBytes(files[0]));
+        // Never deleted: what is left of it is in the Drafts trash, byte for byte.
+        Assert.False(File.Exists(files[0]));
+        var trashed = Assert.Single(KeptFiles.Trashed(fixture.Paths), p => Path.GetFileName(p).StartsWith(Path.GetFileNameWithoutExtension(files[0]), StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(bytes[..(bytes.Length - 3)], File.ReadAllBytes(trashed));
     }
 
     [Fact]

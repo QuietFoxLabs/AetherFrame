@@ -17,12 +17,21 @@ internal sealed partial class EditorSession
     // Counts every save, revert, discard and recovered state: each ends the editing recovery follows.
     private int recoveryEpoch;
 
+    // Counts every Undo and Redo applied.
+    private int recoveryHistorySteps;
+
     /// <summary>
     /// Changes whenever the open document's content was replaced or saved as a whole: a save that
     /// completed, Revert to Saved, Discard, or kept changes put back (<see cref="ApplyRecoveredState"/>).
     /// Recovery starts a new editing then, and retires the one before it. Safe from any thread.
     /// </summary>
     internal int RecoveryEpoch => Volatile.Read(ref recoveryEpoch);
+
+    /// <summary>
+    /// Changes with every Undo and Redo: one step can bring back a whole editing's work (Undo of an
+    /// undoable Revert to Saved), so recovery checkpoints it at once. Framework thread only.
+    /// </summary>
+    internal int RecoveryHistorySteps => recoveryHistorySteps;
 
     /// <summary>
     /// Whether this session has taken <paramref name="document"/>'s saved state yet (a frame has seen
@@ -60,4 +69,6 @@ internal sealed partial class EditorSession
     }
 
     private void NoteReplacedForRecovery() => Interlocked.Increment(ref recoveryEpoch);
+
+    private void NoteHistoryStepForRecovery() => recoveryHistorySteps++;
 }

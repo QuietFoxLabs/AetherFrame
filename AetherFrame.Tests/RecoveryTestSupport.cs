@@ -102,6 +102,9 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
     /// <summary>Taking a run's lock fails (no permission on the folder, say).</summary>
     internal bool FailLock { get; set; }
 
+    /// <summary>Listing folders throws, as a Sessions folder that can't be listed would.</summary>
+    internal bool FailListDirectories { get; set; }
+
     /// <summary>Signalled when a held write has started.</summary>
     internal ManualResetEventSlim WriteStarted { get; } = new();
 
@@ -130,7 +133,8 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
 
     public IReadOnlyList<string> ListFiles(string directory, string pattern) => files.ListFiles(directory, pattern);
 
-    public IReadOnlyList<string> ListDirectories(string directory) => files.ListDirectories(directory);
+    public IReadOnlyList<string> ListDirectories(string directory) =>
+        FailListDirectories ? throw new IOException($"Injected listing failure: '{directory}'") : files.ListDirectories(directory);
 
     public void WriteNew(string path, byte[] contents)
     {

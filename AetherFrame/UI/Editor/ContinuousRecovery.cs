@@ -48,19 +48,21 @@ internal readonly record struct RecoveryIndicator(RecoveryIndicatorKind Kind, Da
 /// last one that finished (and from one being written). A failed write leaves it due, retried after
 /// a growing pause (<see cref="RetryDelays"/>), or at once through <see cref="RetryNow"/>. An editing
 /// that starts with unsaved changes (kept changes resumed, a save that left later edits) is written
-/// at once.</para>
+/// at once, and so is an Undo or Redo that leaves unsaved changes: one step can bring back a whole
+/// editing's work (Undo of Revert to Saved). A checkpoint is never written of the saved content.</para>
 ///
 /// <para><b>Lifecycle.</b> An editing is one document from when it is opened, saved, reverted,
 /// discarded or given kept changes back (<see cref="EditorSession.RecoveryEpoch"/>) until the next of
-/// those, with its own id. When one ends that way, its checkpoints are superseded: they are retired
-/// (deleted) once the editing after it is clean or has a checkpoint of its own, so a late write never
-/// brings back saved or discarded work, and nothing is left unprotected meanwhile. Undo back to the
-/// saved state retires them only once nothing can be redone. Another Plate opened in its place: an
-/// editing that has nothing unsaved (or whose last state the last save wrote), whose changes Save as
-/// New Plate handed to the copy, or whose Plate the player deleted, is retired; one with unsaved
-/// changes keeps its last state as a final checkpoint, retried until written, for the next load to
-/// offer. A failed save changes nothing. Unloading settles what it can, stops new checkpoints, and
-/// the draft kept at unload joins the open editing's checkpoints in one offer.</para>
+/// those, with its own id. When one ends that way, its checkpoints are superseded and retired
+/// (deleted) at once: they hold saved or discarded content, never the next editing's, and the
+/// writer's order means a late write never brings them back. Undo back to the saved state retires
+/// them only once nothing can be redone, judged on the live document, never a sample. Another
+/// Plate opened in its place: an editing that has nothing unsaved (or whose last state the last
+/// save wrote), whose changes Save as New Plate handed to the copy, or whose Plate the player
+/// deleted, is retired; one with unsaved changes keeps its last state as a final checkpoint,
+/// retried until written, for the next load to offer. A failed save changes nothing. Unloading first takes in a save, revert, delete or other
+/// Plate that landed since the last frame, then settles what it can on the live document, stops new
+/// checkpoints, and the draft kept at unload joins the open editing's checkpoints in one offer.</para>
 /// </summary>
 internal sealed class ContinuousRecovery
 {
@@ -186,9 +188,11 @@ internal sealed class ContinuousRecovery
     }
 
     /// <summary>
-    /// Unloading: what can be settled now is (a clean or superseded editing retired, a final checkpoint
-    /// still owed asked for), then no more checkpoints; the draft kept at unload takes over the open
-    /// editing. What was asked for still runs (see <see cref="RecoveryCheckpointWriter.Stop"/>).
+    /// Unloading: a save, revert, delete or other Plate since the last frame is taken in first (saves
+    /// and deletes finish off this thread), then what can be settled now is: a clean editing retired,
+    /// judged on the live document, a superseded or deleted one retired, a final checkpoint still owed
+    /// asked for. Then no more checkpoints; the draft kept at unload takes over the open editing. What
+    /// was asked for still runs (see <see cref="RecoveryCheckpointWriter.Stop"/>).
     /// </summary>
     internal void Stop()
     {
@@ -199,12 +203,14 @@ internal sealed class ContinuousRecovery
 
         try
         {
-            ApplyResults(elapsed());
+            var now = elapsed();
+            ApplyResults(now);
+            Reconcile(now);
             foreach (var editing in editings.Values.ToList())
             {
                 if (ReferenceEquals(editing, current))
                 {
-                    if (editing is { Seen: true, Unsaved: false, MayHaveFiles: true } && editing.RetireRequest is null)
+                    if (editing.MayHaveFiles && editing.RetireRequest is null && IsSavedNow(editing))
                     {
                         editing.RetireRequest = writer.Retire(editing.Document.ProfileId, editing.EditId);
                     }
@@ -232,23 +238,7 @@ internal sealed class ContinuousRecovery
     {
         var now = elapsed();
         ApplyResults(now);
-
-        var document = profiles.CurrentProfile;
-        var epoch = session.RecoveryEpoch;
-        if (!ReferenceEquals(document, current?.Document) || current!.Epoch != epoch)
-        {
-            var ended = current;
-            current = document is null ? null : new Editing(document, Guid.NewGuid(), epoch, ProfileService.DocumentState.Capture(document), now);
-            if (current is not null)
-            {
-                editings[current.EditId] = current;
-            }
-
-            if (ended is not null)
-            {
-                End(ended, current);
-            }
-        }
+        Reconcile(now);
 
         if (current is { } editing)
         {
@@ -258,9 +248,40 @@ internal sealed class ContinuousRecovery
         FinishEnded(now);
     }
 
+    /// <summary>A new editing when another document is open, or the open one was saved, reverted, discarded or given kept changes back; the one before it ends.</summary>
+    private void Reconcile(TimeSpan now)
+    {
+        var document = profiles.CurrentProfile;
+        var epoch = session.RecoveryEpoch;
+        if (!ReferenceEquals(document, current?.Document) || current!.Epoch != epoch)
+        {
+            var ended = current;
+            current = document is null ? null : new Editing(document, Guid.NewGuid(), epoch, ProfileService.DocumentState.Capture(document), now);
+            if (current is not null)
+            {
+                current.HistorySteps = session.RecoveryHistorySteps;
+                editings[current.EditId] = current;
+            }
+
+            if (ended is not null)
+            {
+                End(ended, current);
+            }
+        }
+    }
+
     private void Follow(Editing editing, TimeSpan now)
     {
-        if (now - editing.SampledAt >= SampleInterval)
+        // An Undo or Redo since: one step can bring back a whole editing's work (Undo of Revert to
+        // Saved), so the document is sampled now and, while unsaved, checkpointed at once.
+        var stepped = session.RecoveryHistorySteps != editing.HistorySteps;
+        if (stepped)
+        {
+            editing.HistorySteps = session.RecoveryHistorySteps;
+            editing.StepPending = true;
+        }
+
+        if (stepped || now - editing.SampledAt >= SampleInterval)
         {
             editing.SampledAt = now;
             if (!Matches(editing.Sample, editing.Document))
@@ -285,15 +306,19 @@ internal sealed class ContinuousRecovery
         {
             RequestCheckpointIfDue(editing, now);
         }
-        else if (!session.CanRedo)
-        {
-            RetireIfNeeded(editing, now);
-        }
-        else
+        else if (session.CanRedo)
         {
             // Undone back to the saved state, with the changes one Redo away: they stay kept.
             editing.PendingSince = null;
+            editing.StepPending = false;
         }
+        else if (!editing.MayHaveFiles || Matches(editing.Sample, editing.Document))
+        {
+            editing.StepPending = false;
+            RetireIfNeeded(editing, now);
+        }
+
+        // Otherwise the sample is behind the document: the next sample decides.
     }
 
     private void RequestCheckpointIfDue(Editing editing, TimeSpan now)
@@ -301,6 +326,7 @@ internal sealed class ContinuousRecovery
         if (editing.Holds(editing.Sample) || editing.Asked(editing.Sample))
         {
             editing.PendingSince = null;
+            editing.StepPending = false;
             return;
         }
 
@@ -312,7 +338,10 @@ internal sealed class ContinuousRecovery
         // No change since the editing began, yet unsaved: it began so (kept changes resumed), so it is due now.
         var changedAt = editing.ChangedAt ?? (editing.OpenedAt - IdleDelay);
         var pendingSince = editing.PendingSince ?? changedAt;
-        if (editing.Failures == 0 && now - changedAt < IdleDelay && now - pendingSince < MaxDelay)
+
+        // An Undo or Redo is due at once, though no more often than the document is sampled (Ctrl+Z held down).
+        var stepDue = editing.StepPending && (editing.RequestedAt is not { } asked || now - asked >= SampleInterval);
+        if (editing.Failures == 0 && !stepDue && now - changedAt < IdleDelay && now - pendingSince < MaxDelay)
         {
             return;
         }
@@ -323,13 +352,24 @@ internal sealed class ContinuousRecovery
             return;
         }
 
-        RequestWrite(editing, copy);
+        // The sample can be behind the document: an Undo back to the saved state since it was taken is
+        // never written. The next sample catches up; until then, no copy is made again.
+        var state = ProfileService.DocumentState.Capture(copy.Document);
+        if (editing.Baseline is { } saved && saved.ContentEquals(state))
+        {
+            editing.RetryAt = now + SampleInterval;
+            return;
+        }
+
+        RequestWrite(editing, copy, state);
         editing.PendingSince = null;
+        editing.StepPending = false;
+        editing.RequestedAt = now;
     }
 
-    private void RequestWrite(Editing editing, ProfileService.OpenDocumentCopy copy)
+    private void RequestWrite(Editing editing, ProfileService.OpenDocumentCopy copy, ProfileService.DocumentState? captured = null)
     {
-        var state = ProfileService.DocumentState.Capture(copy.Document);
+        var state = captured ?? ProfileService.DocumentState.Capture(copy.Document);
         var writtenUtc = utcNow();
         var checkpoint = DraftDocuments.Create(copy.Document, copy.BaseRevision, copy.BaseUpdatedAtUtc, EditorOf(activeSurface()), build, Guid.NewGuid(), writtenUtc);
         checkpoint.SessionId = SessionId;
@@ -363,23 +403,17 @@ internal sealed class ContinuousRecovery
 
     /// <summary>
     /// <paramref name="ended"/> is no longer the open editing. The same document under a new epoch
-    /// (saved, reverted, discarded, kept changes put back): superseded, retired once
-    /// <paramref name="next"/> is settled. Another document in its place: retired when it has nothing
-    /// unsaved, its last save wrote it, its changes went to a new Plate or its Plate was deleted here;
-    /// otherwise its last state is kept as a final checkpoint for the next load to offer.
+    /// (saved, reverted, discarded, kept changes put back): superseded, retired at once. Another
+    /// document in its place: retired when it has nothing unsaved, its last save wrote it, its changes
+    /// went to a new Plate or its Plate was deleted here; otherwise its last state is kept as a final
+    /// checkpoint for the next load to offer.
     /// </summary>
     private void End(Editing ended, Editing? next)
     {
         ended.Ended = true;
-        if (next is not null && ReferenceEquals(next.Document, ended.Document))
+        if ((next is not null && ReferenceEquals(next.Document, ended.Document)) || !ended.Seen)
         {
-            WantRetire(ended, next);
-            return;
-        }
-
-        if (!ended.Seen)
-        {
-            WantRetire(ended, null);
+            WantRetire(ended);
             return;
         }
 
@@ -387,7 +421,7 @@ internal sealed class ContinuousRecovery
         var unsaved = (ended.Baseline is not { } baseline || !baseline.ContentEquals(state)) && !session.WasSavedAs(ended.Document, state);
         if (!unsaved || session.WereUnsavedChangesHandedOff(ended.Document) || profiles.WasDeletedWhileOpen(ended.Document))
         {
-            WantRetire(ended, null);
+            WantRetire(ended);
             return;
         }
 
@@ -405,7 +439,7 @@ internal sealed class ContinuousRecovery
         log.Information($"AetherFrame keeps the unsaved changes of Plate {ended.Document.ProfileId} as a recovery checkpoint: another Plate was opened in its place.");
     }
 
-    private void WantRetire(Editing ended, Editing? next)
+    private void WantRetire(Editing ended)
     {
         if (!ended.MayHaveFiles)
         {
@@ -414,10 +448,9 @@ internal sealed class ContinuousRecovery
         }
 
         ended.RetireWanted = true;
-        ended.Successor = next;
     }
 
-    /// <summary>Ended editings' remaining work: retirements once what replaced them is settled, and final checkpoints until written.</summary>
+    /// <summary>Ended editings' remaining work: retirements, and final checkpoints, until done.</summary>
     private void FinishEnded(TimeSpan now)
     {
         foreach (var editing in editings.Values.ToList())
@@ -429,7 +462,7 @@ internal sealed class ContinuousRecovery
 
             if (editing.RetireWanted)
             {
-                if ((editing.Successor is not { } next || Settled(next)) && editing.RetireRequest is null && now >= editing.RetireRetryAt)
+                if (editing.RetireRequest is null && now >= editing.RetireRetryAt)
                 {
                     editing.RetireRequest = writer.Retire(editing.Document.ProfileId, editing.EditId);
                 }
@@ -441,10 +474,12 @@ internal sealed class ContinuousRecovery
         }
     }
 
-    // What replaced a superseded editing no longer needs it: clean, written at least once, or done with.
-    private bool Settled(Editing next) =>
-        !editings.ContainsKey(next.EditId) || next.RetireWanted || next.LastSuccess is not null
-        || (next.Seen && !next.Unsaved && next.Final is null);
+    // The open editing is exactly as saved now, on the live document (a sample can be behind it).
+    private bool IsSavedNow(Editing editing)
+    {
+        var (seen, baseline) = session.RecoveryBaseline(editing.Document);
+        return seen && baseline is not null && Matches(baseline, editing.Document);
+    }
 
     private void Forget(Editing editing)
     {
@@ -606,11 +641,17 @@ internal sealed class ContinuousRecovery
         /// <summary>No longer the open editing.</summary>
         internal bool Ended { get; set; }
 
-        /// <summary>Ended with nothing to keep: its checkpoints are to be retired (once <see cref="Successor"/> is settled).</summary>
+        /// <summary>Ended with nothing to keep: its checkpoints are to be retired.</summary>
         internal bool RetireWanted { get; set; }
 
-        /// <summary>The editing that superseded it on the same document, if any.</summary>
-        internal Editing? Successor { get; set; }
+        /// <summary>The session's Undo and Redo count when this editing last looked (see <see cref="EditorSession.RecoveryHistorySteps"/>).</summary>
+        internal int HistorySteps { get; set; }
+
+        /// <summary>An Undo or Redo since the last checkpoint: due at once while unsaved.</summary>
+        internal bool StepPending { get; set; }
+
+        /// <summary>When the open editing last asked for a checkpoint.</summary>
+        internal TimeSpan? RequestedAt { get; set; }
 
         /// <summary>Ended with unsaved changes: the copy its final checkpoint is written from, until written.</summary>
         internal ProfileService.OpenDocumentCopy? Final { get; set; }
