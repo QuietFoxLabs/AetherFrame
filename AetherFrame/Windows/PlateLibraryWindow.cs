@@ -287,9 +287,10 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
         Help?.DrawReminder();
 
-        // Two plain text lines now (status/info, then the right-click hint) — no button row.
-        var footerHeight = (ImGui.GetTextLineHeightWithSpacing() * 2f) + EditorWidgets.Scaled(4f);
-        using (var grid = AetherChild.Begin("##PlateGrid", new Vector2(-1, -footerHeight), false))
+        // Plain text lines (status/info, then the right-click hint with the version at the right,
+        // or under it in a narrow window) — no button row.
+        var footer = MeasureFooter();
+        using (var grid = AetherChild.Begin("##PlateGrid", new Vector2(-1, -footer.Height), false))
         {
             if (grid.Success)
             {
@@ -299,7 +300,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         }
 
         ImGui.Separator();
-        DrawStatusFooter();
+        DrawStatusFooter(footer);
     }
 
     // ---------------------------------------------------------------- header
