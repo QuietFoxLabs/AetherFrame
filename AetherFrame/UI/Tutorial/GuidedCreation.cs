@@ -121,12 +121,14 @@ internal sealed class GuidedCreation
     // ---------------------------------------------------------------- the welcome
 
     /// <summary>
-    /// Whether nothing about recovery stands in front of the welcome: the kept unsaved changes (and
-    /// recovery checkpoints) have been read, and none waits for an answer or is on screen. A recovery
-    /// offer always comes first; the welcome waits for it.
+    /// Whether the welcome may show now: a character is logged in (so the Plate it makes starts with
+    /// that character's details and becomes their Active Plate, as any first Plate does), and nothing
+    /// about recovery stands in front of it: the kept unsaved changes (and recovery checkpoints) have
+    /// been read, and none waits for an answer or is on screen. A recovery offer always comes first;
+    /// the welcome waits for it.
     /// </summary>
-    internal static bool WelcomeMayShow(bool recoveryRead, bool recoveryAwaitsAnswer, bool recoveryOnScreen) =>
-        recoveryRead && !recoveryAwaitsAnswer && !recoveryOnScreen;
+    internal static bool WelcomeMayShow(bool loggedIn, bool recoveryRead, bool recoveryAwaitsAnswer, bool recoveryOnScreen) =>
+        loggedIn && recoveryRead && !recoveryAwaitsAnswer && !recoveryOnScreen;
 
     /// <summary>
     /// At load, once the Libraries' state is known. A new player (<see cref="OnboardingCoordinator.IsNewPlayer"/>)

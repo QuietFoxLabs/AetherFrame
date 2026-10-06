@@ -3,7 +3,7 @@ namespace AetherFrame.UI.Tutorial;
 /// <summary>What to do about the tutorial when the plugin has loaded.</summary>
 internal enum FirstRunDecision
 {
-    /// <summary>A new player: offer the tutorial (Start / Maybe Later / Do Not Show Again).</summary>
+    /// <summary>A new player, whom guided creation may welcome (named when the tutorial was offered instead).</summary>
     OfferTutorial,
 
     /// <summary>An established player: never offer unasked; the tutorial waits under Help.</summary>
@@ -29,7 +29,7 @@ internal enum FirstRunDecision
 /// </summary>
 internal static class FirstRunDetector
 {
-    /// <summary>The offer stops after this many unanswered showings, as if Maybe Later were chosen.</summary>
+    /// <summary>A first-run offer stops after this many unanswered showings, as if it were put off (the welcome uses it too).</summary>
     internal const int MaxOffers = 3;
 
     /// <param name="preferences">The stored tutorial state.</param>

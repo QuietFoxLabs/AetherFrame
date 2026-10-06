@@ -13,7 +13,7 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// "Unsaved changes kept": the offer of an editor's unsaved changes AetherFrame kept when it last
-/// unloaded, one at a time, in a small centered window like the first-run offer. Everything it says
+/// unloaded, one at a time, in a small centered window like the welcome. Everything it says
 /// and does is <see cref="KeptChangesOffer"/>'s. It opens once both Libraries have loaded and a
 /// character is logged in; closing it without an answer keeps every change, and My Plates then
 /// shows <see cref="DrawReminder"/> until they are answered.

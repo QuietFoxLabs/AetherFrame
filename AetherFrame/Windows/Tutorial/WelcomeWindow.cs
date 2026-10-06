@@ -13,9 +13,9 @@ namespace AetherFrame.Windows.Tutorial;
 /// <summary>
 /// The welcome for a player new to AetherFrame: Create My First Plate (guided creation), Not Now, or
 /// Don't Show Again, in a small centered window. Shown once the Libraries have loaded, only for a
-/// new install with no Plate (see <see cref="GuidedCreation.ResolveWelcome"/>), and only once no
-/// recovery offer waits for an answer (<see cref="GuidedCreation.WelcomeMayShow"/>): kept unsaved
-/// changes always come first. Closing it without an answer asks again next time, a few times at
+/// new install with no Plate (see <see cref="GuidedCreation.ResolveWelcome"/>), and only once a
+/// character is logged in and no recovery offer waits for an answer
+/// (<see cref="GuidedCreation.WelcomeMayShow"/>): kept unsaved changes always come first. Closing it without an answer asks again next time, a few times at
 /// most. The full tutorial is mentioned, not offered: it waits under Help as reference.
 /// </summary>
 internal sealed class WelcomeWindow : Window
@@ -125,7 +125,7 @@ internal sealed class WelcomeWindow : Window
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceSm * scale));
         using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + width))
         {
-            AetherControls.Muted("Prefer a tour of every control? The full tutorial is under Help, in My Plates.");
+            AetherControls.Muted("Type /af any time to open My Plates. Prefer a tour of every control? The full tutorial is under Help there.");
         }
     }
 }

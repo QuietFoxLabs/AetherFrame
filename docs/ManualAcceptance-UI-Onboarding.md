@@ -4,7 +4,7 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 
 **Setup.** Windows, FFXIV with Dalamud (API 15), the Release build installed as a dev plugin (see [Testing.md](Testing.md)). Keep `/xllog` open. Two data folders are needed: a copy of a real v0.1.6 folder (`%AppData%\XIVLauncher\pluginConfigs\AetherFrame`, with Plates) and an empty one. Hash the real folder before starting and compare after section A: loading, the tutorial and the redesign must never change a Plate, Template, image or binding file.
 
-"Not offered" below means the Welcome to AetherFrame window never appears on its own during the session.
+"Not offered" below means the Welcome to AetherFrame window never appears on its own during the session. The tutorial is never offered on its own: it starts from Help in My Plates.
 
 ## A. Existing installs are never treated as new
 
@@ -14,13 +14,16 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 4. **Library failed to load.** In a copy with `AetherFrame.json` deleted (the pre-0.1.6 shape), make the `Profiles` folder unreadable (deny permissions) and load: My Plates reports the failure, the log shows `Undetermined`, not offered, and `AetherFrame.json` (written for the guidance flag) holds `"Install": 3`, the pending kind, which a later launch decides from the Library. Restore permissions and load again: `ExistingInstall`, because the copy has Plates.
 5. **Second launch of an existing install.** Load again: `AlreadyDecided`, nothing written.
 
-## B. A new install is offered the tutorial, once, politely
+## B. A new install is welcomed with guided creation, once, politely
 
-6. **Empty folder.** Load with the empty folder: the Welcome to AetherFrame window appears centered once the Library has loaded, with Start Tutorial (accent), Maybe Later and Do Not Show Again. The log shows `OfferTutorial`.
-7. **Close without answering** (X or Escape): it disappears; reload: offered again; after the third unanswered showing it is not offered again and My Plates shows the quiet "Take the tour" reminder instead.
-8. **Maybe Later.** Reload: not offered; the reminder is in My Plates; its dismiss removes it for good; Help still offers Start Tutorial.
-9. **Do Not Show Again.** Reload: not offered, no reminder; Help still offers Start Tutorial.
-10. **Start Tutorial**: the offer closes and the first card appears in the middle of the screen with the interface dimmed.
+Since guided creation became the introductory route, a new player is offered it, not the tutorial; the tutorial starts from Help (section C starts it there). The guided steps themselves have their own checklist in the onboarding pull request.
+
+6. **Empty folder.** Load with the empty folder and log in: the Welcome to AetherFrame window appears centered once the Library has loaded and a character is logged in, with Create My First Plate (accent), Not Now and Don't Show Again. The log shows `OfferTutorial` and `welcome waits`. Loaded at the title screen, it waits for the login.
+7. **Close without answering** (X or Escape): it disappears; reload: welcomed again; after the third unanswered showing it is not shown again and My Plates shows the quiet "Make your first Plate in three short steps" reminder instead.
+8. **Not Now.** Reload: not welcomed; the reminder is in My Plates; its Not now removes it for good; Help still offers "Create a Plate step by step" and the full tutorial.
+9. **Don't Show Again.** Reload: not welcomed, no reminder; Help still offers both.
+10. **Create My First Plate**: the welcome closes, an Adventure Plate Classic is made and opens in the Basic editor on step 1, Choose a Look.
+10b. **Recovery first.** With kept unsaved changes or a recovery checkpoint waiting, load a new install: the "Unsaved changes kept" window comes first, and the welcome appears only once it has been answered (Decide Later counts).
 
 ## C. The spotlight
 

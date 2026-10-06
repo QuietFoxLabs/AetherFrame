@@ -129,14 +129,15 @@ public class GuidedCreationTests
     // ---------------------------------------------------------------- recovery first
 
     [Theory]
-    [InlineData(false, false, false, false)] // kept changes not read yet: wait
-    [InlineData(true, true, false, false)] // a recovery offer waits for an answer
-    [InlineData(true, false, true, false)] // the recovery window is on screen
-    [InlineData(true, true, true, false)]
-    [InlineData(true, false, false, true)] // nothing about recovery stands in front
-    public void TheWelcome_WaitsForEveryRecoveryOffer(bool read, bool awaitsAnswer, bool onScreen, bool expected)
+    [InlineData(true, false, false, false, false)] // kept changes not read yet: wait
+    [InlineData(true, true, true, false, false)] // a recovery offer waits for an answer (before or after login)
+    [InlineData(true, true, false, true, false)] // the recovery window is on screen
+    [InlineData(true, true, true, true, false)]
+    [InlineData(false, true, false, false, false)] // no character logged in yet: wait
+    [InlineData(true, true, false, false, true)] // logged in, nothing about recovery stands in front
+    public void TheWelcome_WaitsForALogin_AndForEveryRecoveryOffer(bool loggedIn, bool read, bool awaitsAnswer, bool onScreen, bool expected)
     {
-        Assert.Equal(expected, GuidedCreation.WelcomeMayShow(read, awaitsAnswer, onScreen));
+        Assert.Equal(expected, GuidedCreation.WelcomeMayShow(loggedIn, read, awaitsAnswer, onScreen));
     }
 
     [Fact]

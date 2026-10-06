@@ -513,7 +513,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
             // The welcome: guided creation for a new player, once no recovery offer waits for an answer.
             var welcomeWindow = new WelcomeWindow(
-                guidedCreation, () => GuidedCreation.WelcomeMayShow(keptChangesRead, keptChanges.AwaitsAnswer, keptChangesWindow.IsOpen));
+                guidedCreation, () => GuidedCreation.WelcomeMayShow(ClientState.IsLoggedIn, keptChangesRead, keptChanges.AwaitsAnswer, keptChangesWindow.IsOpen));
             WindowSystem.AddWindow(welcomeWindow);
 
             // Drawing starts last: the plugin is created off the framework thread, so a frame can
@@ -577,8 +577,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not load the Template Library.");
         }
 
-        // Now that the Library's state is known: is this a new player (offer the tutorial) or an
-        // established install (never offer unasked)? Decided on the framework thread, where the
+        // Now that the Library's state is known: is this a new player (welcome them with guided
+        // creation) or an established install (never offer anything unasked)? Decided on the framework thread, where the
         // tutorial's state is read while drawing; reads the Library's counts only, changes nothing
         // in it, and can never fail the load.
         try
@@ -590,7 +590,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // A stopped load tears the plugin down here, like the Library loads above; any other
             // failure only means the offer isn't made this launch.
             await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
-            Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not decide whether to offer the tutorial.");
+            Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not decide whether to welcome a new player.");
         }
 
         // The unsaved changes an editor had when AetherFrame last unloaded: read and judged against
