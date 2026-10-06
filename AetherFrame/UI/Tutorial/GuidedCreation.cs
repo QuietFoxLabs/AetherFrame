@@ -298,10 +298,16 @@ internal sealed class GuidedCreation
             return;
         }
 
-        if (switcher.Open(plateId) == PlateOpenDecision.Refused)
+        // Opened now (a failure says why at once), or once the unsaved-changes question is answered:
+        // the start stays under way until then, so a failure after the answer is reported too (Advance).
+        var decision = switcher.Open(plateId);
+        if (decision == PlateOpenDecision.Ask)
         {
-            StartError = switcher.Runner.Error ?? PlateSwitcher.CannotOpenNote;
+            starting = true;
+            return;
         }
+
+        StartError = decision == PlateOpenDecision.Refused ? switcher.Runner.Error ?? PlateSwitcher.CannotOpenNote : switcher.Runner.Error;
     }
 
     /// <summary>

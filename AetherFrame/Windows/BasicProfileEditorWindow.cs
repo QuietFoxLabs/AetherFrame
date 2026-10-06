@@ -166,8 +166,12 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// <summary>Whether the full tutorial is running, set by the plugin: it points at the editor's bar and rail, so the steps step aside meanwhile.</summary>
     internal Func<bool>? TutorialRunning { get; set; }
 
-    /// <summary>Whether the Simple view shows: the everyday controls first, the detailed ones folded into labelled sections.</summary>
-    private bool Simple => Guided?.SimpleWorkspace ?? false;
+    /// <summary>
+    /// Whether the Simple view shows: the everyday controls first, the detailed ones folded into
+    /// labelled sections. Never while the full tutorial runs: it is a tour of every control, in the
+    /// words of the Detailed view, and the player's view comes back when it ends.
+    /// </summary>
+    private bool Simple => Guided?.SimpleWorkspace == true && TutorialRunning?.Invoke() != true;
 
     public void Dispose()
     {
@@ -955,13 +959,19 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         // After the zoom and any artwork status, on a row of its own when they leave no room.
         AetherControls.AlignRightAfterItem(width);
-        var simple = guided.SimpleWorkspace;
-        if (ImGui.Checkbox(label + "##BasicSimpleView", ref simple))
+        var touring = TutorialRunning?.Invoke() == true;
+        var simple = Simple;
+        using (ImRaii.Disabled(touring))
         {
-            guided.SetSimpleWorkspace(simple);
+            if (ImGui.Checkbox(label + "##BasicSimpleView", ref simple))
+            {
+                guided.SetSimpleWorkspace(simple);
+            }
         }
 
-        ToolTip("Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way.");
+        ToolTip(touring
+            ? "The tutorial shows every control while it runs.\nYour view comes back when it ends."
+            : "Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way.");
     }
 
     /// <summary>

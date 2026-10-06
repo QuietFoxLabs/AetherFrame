@@ -180,7 +180,7 @@ internal sealed partial class BasicProfileEditorWindow
             ImGui.SameLine();
             using (ImRaii.Disabled(!guided.CanEdit))
             {
-                if (AetherControls.GhostButton("Exit Guide", tooltip: "Leave the steps and edit this Plate with every Basic control.\nEverything you entered stays."))
+                if (AetherControls.GhostButton("Exit Guide", tooltip: "Leave the steps and edit this Plate with every Basic control.\nEverything you entered stays; the steps end for this Plate."))
                 {
                     guided.Leave();
                 }

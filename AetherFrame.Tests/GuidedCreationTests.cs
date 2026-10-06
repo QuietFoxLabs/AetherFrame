@@ -461,6 +461,36 @@ public class GuidedCreationTests
     }
 
     [Fact]
+    public async Task Continue_WithUnsavedChangesElsewhere_AsksFirst_AndWaitsForTheAnswer()
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Guided.Next();
+        harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+        await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+        harness.Switcher.Plates.Edit();
+
+        harness.Guided.Start();
+        Assert.NotNull(harness.Switcher.Guard.Pending);
+        Assert.True(harness.Guided.IsStarting); // Help and the reminder wait for the answer
+        Assert.False(harness.Guided.ShowsResumeReminder);
+
+        harness.Switcher.Guard.Cancel();
+        harness.Frame();
+        Assert.False(harness.Guided.IsStarting);
+        Assert.Null(harness.Guided.StartError);
+        Assert.Equal(harness.Switcher.OriginalId, harness.OpenId);
+        Assert.True(harness.Guided.CanContinue);
+
+        harness.Guided.Start();
+        harness.Switcher.Guard.Save();
+        await harness.FramesUntilAsync(() => !harness.Guided.IsStarting && harness.OpenId == made);
+        Assert.Null(harness.Guided.StartError);
+        Assert.True(harness.Guided.IsGuiding(made));
+        Assert.Equal(GuidedStage.MakeItYours, harness.Guided.Stage);
+    }
+
+    [Fact]
     public async Task TheResumeReminder_Shows_OnceTheEditorIsClosedMidGuide_AndContinueOpensItAgain()
     {
         using var harness = await GuidedHarness.CreateAsync();

@@ -120,7 +120,7 @@ internal sealed class WelcomeWindow : Window
         var half = (width - ImGui.GetStyle().ItemSpacing.X) / 2f;
         using (ImRaii.Disabled(busy))
         {
-            if (AetherControls.SecondaryButton("Not Now", new Vector2(half, 0f), "Asks again another time, while you have no Plate.\nMy Plates can start your first Plate whenever you like."))
+            if (AetherControls.SecondaryButton("Not Now", new Vector2(half, 0f), "Close this for now. It may ask again when AetherFrame next loads, while you have no Plate.\nMy Plates can start your first Plate whenever you like."))
             {
                 guided.AnswerWelcome(WelcomeAnswer.NotNow);
                 IsOpen = false;
