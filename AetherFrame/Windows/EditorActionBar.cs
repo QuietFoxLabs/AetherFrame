@@ -226,9 +226,13 @@ internal sealed class EditorActionBar
         plateMenu.DrawResult(profile.ProfileId);
         DrawRecoveryWarning(recovery);
 
+        // Wrapped at the window's edge, so a long reason (a save the system refused, say) stays readable in a narrow window.
         if (errorMessage is { } error)
         {
-            ImGui.TextColored(EditorWidgets.ErrorColor, error);
+            using (ImRaii.TextWrapPos(0f))
+            {
+                ImGui.TextColored(EditorWidgets.ErrorColor, error);
+            }
         }
     }
 

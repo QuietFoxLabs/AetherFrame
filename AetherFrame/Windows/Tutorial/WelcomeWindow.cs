@@ -46,9 +46,10 @@ internal sealed class WelcomeWindow : Window
     /// Opens when a welcome waits and nothing stands in front of it; closes once the Plate it started
     /// is made and open. A start that made nothing (the unsaved-changes question's Cancel, or a
     /// failure, which it shows) leaves the welcome open to answer again. Closes unanswered once a
-    /// Plate is made another way (My Plates, Help, Create Plate), and steps aside, to come back, when
-    /// the character logs out or a recovery offer comes up, whether or not it shows an error
-    /// (<see cref="GuidedCreation.WelcomeOnScreenNow"/>).
+    /// Plate is made another way (My Plates, Help, Create Plate), and steps aside, to come back while
+    /// My Plates is still empty, when the character logs out or a recovery offer comes up, whether or
+    /// not it shows an error (<see cref="GuidedCreation.WelcomeOnScreenNow"/>). The error it shows is
+    /// dropped once guided creation no longer reports it (<see cref="GuidedCreation.WelcomeErrorNow"/>).
     /// </summary>
     public override void PreOpenCheck()
     {
@@ -75,6 +76,10 @@ internal sealed class WelcomeWindow : Window
                 IsOpen = false;
                 return;
             }
+        }
+        else if (!creating)
+        {
+            startError = GuidedCreation.WelcomeErrorNow(startError, guided.StartError);
         }
 
         switch (GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue, mayShow()))

@@ -339,10 +339,11 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 // canvas' own aspect, then the inspector.
                 DrawCategoryStrip(profile);
                 var remaining = ImGui.GetContentRegionAvail().Y;
+                var inspectorMinimum = 120f * scale;
                 var previewHeight = BasicEditorView.StackedPreviewHeight(
-                    body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), remaining, BasicEditorView.StackedPreviewShare, 140f * scale);
+                    body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), remaining, BasicEditorView.StackedPreviewShare, 140f * scale, inspectorMinimum + style.ItemSpacing.Y);
                 DrawPreview(profile, new Vector2(-1f, previewHeight));
-                DrawInspector(profile, new Vector2(-1f, Math.Max(120f * scale, remaining - previewHeight - style.ItemSpacing.Y)), withCategoryStrip: false);
+                DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining - previewHeight - style.ItemSpacing.Y)), withCategoryStrip: false);
                 break;
             }
         }

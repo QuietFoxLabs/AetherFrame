@@ -573,10 +573,11 @@ public class GuidedCreationTests
         Assert.Equal(1, harness.Store.Preferences.OfferCount);
         Assert.False(harness.Guided.HasPlate);
 
-        // Logged out (or a recovery offer came up) while it was on screen: it waits, and isn't counted twice.
+        // Logged out (or a recovery offer came up) while it was on screen: it waits, still counted (a
+        // load that ends before it shows again has used that showing), and isn't counted twice.
         harness.Guided.WithdrawWelcome();
         Assert.True(harness.Guided.WelcomeRequested);
-        Assert.Equal(0, harness.Store.Preferences.OfferCount);
+        Assert.Equal(1, harness.Store.Preferences.OfferCount);
         Assert.False(harness.Guided.ConsumeWelcome(mayShow: false));
         Assert.True(harness.Guided.ConsumeWelcome(mayShow: true));
         Assert.Equal(1, harness.Store.Preferences.OfferCount);

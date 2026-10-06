@@ -379,14 +379,17 @@ internal static class BasicEditorView
     /// How tall the live view is where it sits above the controls (the Basic editor's stacked layout,
     /// and guided creation in a narrow window): the canvas' own shape at <paramref name="width"/> plus
     /// <paramref name="toolbarHeight"/>, never more than <paramref name="share"/> of the
-    /// <paramref name="available"/> height, so the controls below always keep the rest, and at least
-    /// <paramref name="preferredMinimum"/> while that share allows it. However little room a short
-    /// window leaves (an error line and a recovery warning above take some), the preferred minimum
-    /// gives way first: the result is never negative, never above the share, and never throws.
+    /// <paramref name="available"/> height nor so tall that the controls below get less than
+    /// <paramref name="keepBelow"/> (their own minimum and the spacing before them), and at least
+    /// <paramref name="preferredMinimum"/> while both allow it. However little room a short window
+    /// leaves (wrapped error and recovery warning lines above take some), the live view gives way
+    /// first: the result is never negative, never above the share, and never throws.
     /// </summary>
-    internal static float StackedPreviewHeight(float width, float canvasWidth, float canvasHeight, float toolbarHeight, float available, float share, float preferredMinimum)
+    internal static float StackedPreviewHeight(float width, float canvasWidth, float canvasHeight, float toolbarHeight, float available, float share, float preferredMinimum, float keepBelow)
     {
-        var ceiling = float.IsFinite(available) && float.IsFinite(share) ? Math.Max(0f, available * share) : 0f;
+        var ceiling = float.IsFinite(available) && float.IsFinite(share) && float.IsFinite(keepBelow)
+            ? Math.Max(0f, Math.Min(available * share, available - Math.Max(0f, keepBelow)))
+            : 0f;
         var floor = Math.Min(float.IsFinite(preferredMinimum) ? Math.Max(0f, preferredMinimum) : 0f, ceiling);
         var natural = (Math.Max(0f, width) * canvasHeight / Math.Max(1f, canvasWidth)) + toolbarHeight;
         return float.IsFinite(natural) ? Math.Clamp(natural, floor, ceiling) : floor;

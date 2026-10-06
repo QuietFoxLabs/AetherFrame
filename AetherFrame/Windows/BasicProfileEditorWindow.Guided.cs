@@ -107,10 +107,11 @@ internal sealed partial class BasicProfileEditorWindow
         {
             // Narrow: the live view first, at the canvas' own shape within its share of the height
             // (smaller than its usual minimum when a short window has little room), then the step's controls.
+            var panelMinimum = 100f * scale;
             var previewHeight = BasicEditorView.StackedPreviewHeight(
-                body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), body.Y, BasicEditorView.GuidedPreviewShare, 120f * scale);
+                body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), body.Y, BasicEditorView.GuidedPreviewShare, 120f * scale, panelMinimum + style.ItemSpacing.Y);
             DrawPreview(profile, new Vector2(-1f, previewHeight));
-            DrawGuidedPanel(profile, guided, success, new Vector2(-1f, Math.Max(100f * scale, body.Y - previewHeight - style.ItemSpacing.Y)));
+            DrawGuidedPanel(profile, guided, success, new Vector2(-1f, Math.Max(panelMinimum, body.Y - previewHeight - style.ItemSpacing.Y)));
         }
 
         if (!success)

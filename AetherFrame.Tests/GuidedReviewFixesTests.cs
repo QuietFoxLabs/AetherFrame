@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using AetherFrame.Persistence;
+using AetherFrame.Services;
 using AetherFrame.Services.Plates;
 using AetherFrame.UI.Editor;
 using AetherFrame.UI.Theme;
@@ -45,6 +47,8 @@ public class GuidedReviewFixesTests
         var check = welcome[welcome.IndexOf("public override void PreOpenCheck()", StringComparison.Ordinal)..welcome.IndexOf("public override void PreDraw()", StringComparison.Ordinal)];
 
         Assert.Contains("GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue, mayShow())", check, StringComparison.Ordinal);
+        var refresh = check.IndexOf("startError = GuidedCreation.WelcomeErrorNow(startError, guided.StartError);", StringComparison.Ordinal);
+        Assert.True(refresh > 0 && refresh < check.IndexOf("GuidedCreation.WelcomeOnScreenNow(", StringComparison.Ordinal));
         Assert.DoesNotContain("startError is null)", check.Replace("startError is null && guided.CanContinue", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("guided.WithdrawWelcome();", check, StringComparison.Ordinal);
     }
@@ -68,6 +72,103 @@ public class GuidedReviewFixesTests
         // With the error on screen it stays to be read and answered, until a logout or a recovery offer.
         Assert.Equal(WelcomeOnScreen.Stays, GuidedCreation.WelcomeOnScreenNow(false, true, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: true));
         Assert.Equal(WelcomeOnScreen.StepsAside, GuidedCreation.WelcomeOnScreenNow(false, true, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: false));
+    }
+
+    [Fact]
+    public async Task AWelcomeWhoseStartFailed_StepsAside_AndComesBackOnce_CountedOnce()
+    {
+        // The welcome shows (counted), its Create My First Plate fails without making a Plate, and the
+        // character logs out with the error on screen.
+        var store = new FaultInjectingStore();
+        using var harness = await GuidedHarness.CreateAsync(store);
+        await harness.EmptyLibraryAsync();
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
+        Assert.True(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.Equal(1, harness.Store.Preferences.OfferCount);
+        store.FailWrite = _ => true;
+        harness.Guided.AnswerWelcome(WelcomeAnswer.Create);
+        await harness.FramesUntilAsync(() => !harness.Guided.IsStarting);
+        store.FailWrite = null;
+        var shown = GuidedCreation.WelcomeErrorNow(harness.Guided.StartError, harness.Guided.StartError);
+        Assert.NotNull(shown);
+        Assert.False(harness.Guided.HasPlate);
+        Assert.False(harness.Guided.WelcomeRequested);
+        Assert.Equal(WelcomeOnScreen.Stays, GuidedCreation.WelcomeOnScreenNow(false, shown is not null, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: true));
+        Assert.Equal(WelcomeOnScreen.StepsAside, GuidedCreation.WelcomeOnScreenNow(false, shown is not null, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: false));
+        harness.Guided.WithdrawWelcome();
+
+        // It waits while logged out, comes back once on the next login, and that showing isn't counted
+        // again; a load that ended before it came back has still counted the first.
+        Assert.True(harness.Guided.WelcomeRequested);
+        Assert.Equal(1, harness.Store.Preferences.OfferCount);
+        Assert.False(harness.Guided.ConsumeWelcome(mayShow: false));
+        Assert.True(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.Equal(1, harness.Store.Preferences.OfferCount);
+        Assert.False(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.Equal(GuidedRunStatus.None, harness.Store.Preferences.Run);
+
+        // A later load counts its own showing.
+        harness.Reload();
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
+        Assert.True(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.Equal(2, harness.Store.Preferences.OfferCount);
+    }
+
+    [Fact]
+    public async Task AWelcomeSteppedAside_DoesntComeBack_OnceMyPlatesHoldsAPlate_TheReminderCarriesTheSteps()
+    {
+        // The welcome stepped aside (a logout) while its guided Plate exists, unopened: with a Plate in
+        // My Plates it has nothing to offer, so it doesn't come back; My Plates' reminder (and Help)
+        // continue that Plate instead.
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+        await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+
+        harness.Guided.WithdrawWelcome();
+        Assert.False(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.False(harness.Guided.WelcomeRequested);
+        Assert.True(harness.Guided.ShowsResumeReminder);
+        Assert.Equal(made, harness.Store.Preferences.PlateId);
+    }
+
+    [Fact]
+    public async Task AWelcomesOldError_GoesOnceAStartFromElsewhereRuns_SoTheOpenedStepsCloseIt()
+    {
+        // The welcome's start fails without making a Plate: the welcome keeps its error and stays.
+        var store = new FaultInjectingStore();
+        using var harness = await GuidedHarness.CreateAsync(store);
+        await harness.EmptyLibraryAsync();
+        store.FailWrite = _ => true;
+        harness.Guided.AnswerWelcome(WelcomeAnswer.Create);
+        await harness.FramesUntilAsync(() => !harness.Guided.IsStarting);
+        store.FailWrite = null;
+        var shown = GuidedCreation.WelcomeErrorNow(harness.Guided.StartError, harness.Guided.StartError);
+        Assert.NotNull(shown);
+        Assert.Equal(shown, GuidedCreation.WelcomeErrorNow(shown, harness.Guided.StartError));
+
+        // My Plates' Create My First Plate (or Help's Create Step by Step) makes and opens the guided
+        // Plate. Kept as it was, the old error would hold the welcome open over the steps with a second
+        // primary button; no longer reported, it is dropped, and the welcome closes.
+        harness.Guided.Start();
+        await harness.FramesUntilAsync(() => !harness.Guided.IsStarting);
+        Assert.Null(harness.Guided.StartError);
+        Assert.True(harness.Guided.CanContinue);
+        Assert.Equal(WelcomeOnScreen.Stays, GuidedCreation.WelcomeOnScreenNow(false, true, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: true));
+        shown = GuidedCreation.WelcomeErrorNow(shown, harness.Guided.StartError);
+        Assert.Null(shown);
+        Assert.Equal(WelcomeOnScreen.Closes, GuidedCreation.WelcomeOnScreenNow(false, shown is not null, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: true));
+    }
+
+    [Theory]
+    [InlineData(null, null, null)]
+    [InlineData(null, "Why", null)] // another route's error is that route's to show
+    [InlineData("Why", "Why", "Why")]
+    [InlineData("Why", null, null)] // a start since cleared it
+    [InlineData("Why", "Another reason", null)]
+    public void TheWelcomesError_IsKeptOnlyWhileGuidedCreationStillReportsIt(string? shown, string? current, string? expected)
+    {
+        Assert.Equal(expected, GuidedCreation.WelcomeErrorNow(shown, current));
     }
 
     // ---------------------------------------------------------------- 2. recovery read, or unknown
@@ -216,6 +317,84 @@ public class GuidedReviewFixesTests
     }
 
     [Fact]
+    public async Task ADraftASaveAlreadyHolds_WaitsWhileRecoveryFoldersCantBeListed_ThenGoesWithItsCheckpoints()
+    {
+        // An editing checkpointed once ("one"), edited again ("two") and kept at unload; the same
+        // changes then saved elsewhere, so the kept draft is the Plate's saved content.
+        using var fixture = new LibraryFixture();
+        var first = await GameSession.StartAsync(fixture);
+        var plateId = await first.CreatePlateAsync();
+        first.Open(plateId);
+        await first.Recovery.FrameAsync();
+        first.Edit("one");
+        fixture.Clock.Tick();
+        await first.Recovery.RunAsync(6);
+        Assert.Single(first.Recovery.OwnCheckpoints());
+        first.Edit("two");
+        await EndAsync(first, unload: true);
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        Assert.Single(KeptFiles.Checkpoints(fixture.Paths));
+
+        var drafted = DraftDocuments.Parse(File.ReadAllText(draft)).Draft!;
+        var other = await GameSession.StartAsync(fixture);
+        other.Open(plateId);
+        Assert.True(other.Session.ApplyRecoveredState(ProfileService.DocumentState.Capture(drafted.Document)));
+        Assert.True(await other.Session.SaveProfileAsync());
+        await EndAsync(other, unload: false);
+
+        // A load that can't list the recovery folders: the draft isn't retired without its checkpoint
+        // (which a later load would otherwise offer alone, behind the save); every file stays.
+        var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
+        var next = await GameSession.StartAsync(fixture);
+        next.Recovery.Files.FailListDirectories = true;
+        var scan = await Review(next);
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Equal(before, KeptFiles.Snapshot(fixture.Paths.DraftsDirectory));
+        Assert.Contains(fixture.Log.Messages, m => m.Contains("a save already holds as they are", StringComparison.Ordinal));
+
+        // A load that lists everything retires the editing whole, and offers nothing.
+        next.Recovery.Files.FailListDirectories = false;
+        scan = await Review(next);
+        Assert.True(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+        Assert.Empty(KeptFiles.Checkpoints(fixture.Paths));
+    }
+
+    [Fact]
+    public async Task ARunWhoseLockCantBeProbed_LeavesTheRead_Incomplete_AndItsCheckpointsForALaterLoad()
+    {
+        using var fixture = new LibraryFixture();
+        var crashed = await CrashAsync(fixture, "crashed");
+        var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
+
+        // Neither held nor free as far as this load can tell: unknown, never a running client's.
+        var next = await GameSession.StartAsync(fixture);
+        next.Recovery.Files.CantTellLock = path => path.EndsWith("session.lock", StringComparison.OrdinalIgnoreCase);
+        next.Recovery.Store.Sweep();
+        var scan = await Review(next);
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Equal(before, KeptFiles.Snapshot(fixture.Paths.DraftsDirectory));
+        Assert.DoesNotContain(fixture.Log.Messages, m => m.Contains("other running game client", StringComparison.Ordinal));
+
+        next.Recovery.Files.CantTellLock = null;
+        scan = await Review(next);
+        Assert.True(scan.Complete);
+        Assert.Equal(crashed[^1], Assert.Single(scan.Offers).Path);
+    }
+
+    [Fact]
+    public void TheLockProbe_NeverTakesCantTellForHeld()
+    {
+        var files = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Services", "Plates", "RecoveryFiles.cs"));
+        var probe = files[files.IndexOf("public bool IsLockHeld(string lockPath)", StringComparison.Ordinal)..];
+
+        Assert.DoesNotContain("catch (UnauthorizedAccessException)", probe, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThePlugin_RecordsRecoveryAsRead_OnlyFromACompleteRead()
     {
         var plugin = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Plugin.cs"));
@@ -253,7 +432,7 @@ public class GuidedReviewFixesTests
         // Before: Math.Clamp's minimum (120) was above its maximum (42% of this height), which throws.
         Assert.True(120f * scale > body * BasicEditorView.GuidedPreviewShare);
 
-        var preview = BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, m.Frame + m.Spacing, body, BasicEditorView.GuidedPreviewShare, 120f * scale);
+        var preview = BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, m.Frame + m.Spacing, body, BasicEditorView.GuidedPreviewShare, 120f * scale, (100f * scale) + m.Spacing);
         Assert.InRange(preview, 0f, body * BasicEditorView.GuidedPreviewShare);
         Assert.True(preview > m.Frame + m.Spacing, "the live view keeps room below its toolbar");
 
@@ -269,39 +448,47 @@ public class GuidedReviewFixesTests
     public void TheStackedBasicEditor_AtTheMinimumWindow_WithAnErrorAndARecoveryWarning_FitsWithoutAScrollbar(float scale)
     {
         // The ordinary Basic editor at its minimum size: the action bar on two rows, the recovery
-        // warning on two, the error line, the separator, then the categories on two rows above the live view.
+        // warning on two, the error line on two (a save the system refused says why at length), the
+        // separator, then the categories on two rows above the live view.
         var m = Metrics.At(scale);
         var width = (BasicEditorView.MinimumWindowSize.X * scale) - (m.WindowPadding * 2f);
         Assert.Equal(BasicEditorLayoutMode.Stacked, BasicEditorView.ChooseLayout(width, scale));
 
-        var remaining = m.Content - ((m.Frame + m.Spacing) * 2f) - m.WrappedLine - (m.Font + m.Spacing) - m.Separator - ((m.Frame + m.Spacing) * 2f);
+        var remaining = m.Content - ((m.Frame + m.Spacing) * 2f) - m.WrappedLine - ((m.Font * 2f) + m.Spacing) - m.Separator - ((m.Frame + m.Spacing) * 2f);
 
         // Before: Math.Clamp's minimum (140) was above its maximum (45% of this height), which throws.
         Assert.True(140f * scale > remaining * BasicEditorView.StackedPreviewShare);
 
-        var preview = BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, m.Frame + m.Spacing, remaining, BasicEditorView.StackedPreviewShare, 140f * scale);
+        // 45% of this height would leave the inspector short of its 120: the live view gives way.
+        Assert.True(remaining - (remaining * BasicEditorView.StackedPreviewShare) - m.Spacing < 120f * scale);
+        var preview = BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, m.Frame + m.Spacing, remaining, BasicEditorView.StackedPreviewShare, 140f * scale, (120f * scale) + m.Spacing);
         Assert.InRange(preview, 0f, remaining * BasicEditorView.StackedPreviewShare);
-        Assert.True(remaining - preview - m.Spacing >= 120f * scale, "the inspector keeps its minimum");
+        Assert.True(preview > m.Frame + m.Spacing, "the live view keeps room below its toolbar");
+        Assert.True(remaining - preview - m.Spacing >= (120f * scale) - 0.01f, "the inspector keeps its minimum");
     }
 
     [Theory]
-    [InlineData(400f, 300f, 0.42f, 120f, 126f)] // the share caps the canvas' shape
-    [InlineData(400f, 1000f, 0.42f, 120f, 255f)] // the canvas' shape (400 x 675/1200 = 225) plus its toolbar
-    [InlineData(400f, 200f, 0.42f, 120f, 84f)] // a short window: the share, below the usual minimum
-    [InlineData(400f, 0f, 0.42f, 120f, 0f)]
-    [InlineData(400f, -50f, 0.45f, 140f, 0f)] // content already past the window's edge
-    [InlineData(0f, 500f, 0.45f, 140f, 140f)]
-    public void TheStackedLiveView_NeverThrows_AndKeepsWithinItsShare(float width, float available, float share, float minimum, float expected)
+    [InlineData(400f, 300f, 0.42f, 120f, 0f, 126f)] // the share caps the canvas' shape
+    [InlineData(400f, 1000f, 0.42f, 120f, 106f, 255f)] // the canvas' shape (400 x 675/1200 = 225) plus its toolbar
+    [InlineData(400f, 200f, 0.42f, 120f, 0f, 84f)] // a short window: the share, below the usual minimum
+    [InlineData(400f, 225f, 0.45f, 140f, 126f, 99f)] // the controls below keep their minimum: the live view gives way
+    [InlineData(400f, 100f, 0.45f, 140f, 126f, 0f)] // not even that minimum fits: no live view rather than a negative one
+    [InlineData(400f, 0f, 0.42f, 120f, 0f, 0f)]
+    [InlineData(400f, -50f, 0.45f, 140f, 126f, 0f)] // content already past the window's edge
+    [InlineData(0f, 500f, 0.45f, 140f, 126f, 140f)]
+    public void TheStackedLiveView_NeverThrows_AndKeepsWithinItsShare(float width, float available, float share, float minimum, float keepBelow, float expected)
     {
-        Assert.Equal(expected, BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, 30f, available, share, minimum), 3);
+        Assert.Equal(expected, BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, 30f, available, share, minimum, keepBelow), 3);
     }
 
     [Fact]
     public void TheStackedLiveView_SurvivesNonsense()
     {
-        Assert.Equal(0f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, float.NaN, 0.42f, 120f));
-        Assert.Equal(120f, BasicEditorView.StackedPreviewHeight(400f, 0f, float.NaN, 30f, 1000f, 0.42f, 120f));
-        Assert.Equal(0f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, float.PositiveInfinity, 0.42f, 120f));
+        Assert.Equal(0f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, float.NaN, 0.42f, 120f, 106f));
+        Assert.Equal(120f, BasicEditorView.StackedPreviewHeight(400f, 0f, float.NaN, 30f, 1000f, 0.42f, 120f, 106f));
+        Assert.Equal(0f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, float.PositiveInfinity, 0.42f, 120f, 106f));
+        Assert.Equal(0f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, 1000f, 0.42f, 120f, float.NaN));
+        Assert.Equal(126f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, 300f, 0.42f, 120f, -50f), 3);
     }
 
     [Fact]
@@ -316,6 +503,23 @@ public class GuidedReviewFixesTests
             Assert.Contains("BasicEditorView.StackedPreviewHeight(", code, StringComparison.Ordinal);
             Assert.DoesNotMatch(@"Math\.Clamp\(\s*\(body\.X \* profile\.CanvasHeight", code);
         }
+
+        // Each keeps the room its controls below need: the minimum it then gives them, plus the spacing before them.
+        Assert.Contains("140f * scale, inspectorMinimum + style.ItemSpacing.Y);", basic, StringComparison.Ordinal);
+        Assert.Contains("DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining - previewHeight - style.ItemSpacing.Y))", basic, StringComparison.Ordinal);
+        Assert.Contains("120f * scale, panelMinimum + style.ItemSpacing.Y);", steps, StringComparison.Ordinal);
+        Assert.Contains("new Vector2(-1f, Math.Max(panelMinimum, body.Y - previewHeight - style.ItemSpacing.Y))", steps, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheEditorBarsError_WrapsAtTheWindowsEdge()
+    {
+        var bar = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "EditorActionBar.cs"));
+        var error = bar.IndexOf("ImGui.TextColored(EditorWidgets.ErrorColor, error);", StringComparison.Ordinal);
+
+        Assert.True(error > 0);
+        var wrap = bar.LastIndexOf("using (ImRaii.TextWrapPos(0f))", error, StringComparison.Ordinal);
+        Assert.True(wrap > 0 && bar.IndexOf("if (errorMessage is { } error)", StringComparison.Ordinal) < wrap);
     }
 
     // ---------------------------------------------------------------- 4. crash recovery in the guided header
@@ -375,6 +579,20 @@ public class GuidedReviewFixesTests
         Assert.True(await game.Recovery.Recovery.Writer.WaitIdleAsync(TimeSpan.FromSeconds(10)));
         game.Recovery.Store.CloseSession();
         fixture.Clock.Tick(60);
+    }
+
+    /// <summary>A game ends: as it unloads (keeping a draft of unsaved changes) or just its recovery settled, its folder closed.</summary>
+    private static async Task EndAsync(GameSession game, bool unload)
+    {
+        if (unload)
+        {
+            await game.UnloadAsync();
+        }
+
+        game.Recovery.Recovery.Stop();
+        Assert.True(await game.Recovery.Recovery.Writer.WaitIdleAsync(TimeSpan.FromSeconds(10)));
+        game.Recovery.Store.CloseSession();
+        game.Fixture.Clock.Tick(60);
     }
 
     /// <summary>A Plate edited with one checkpoint per edit, then the game crashes. Returns the checkpoints.</summary>

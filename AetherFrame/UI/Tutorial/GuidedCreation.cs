@@ -30,7 +30,10 @@ internal enum WelcomeOnScreen
     /// <summary>It closes: My Plates holds a Plate, so it has nothing left to offer.</summary>
     Closes,
 
-    /// <summary>It steps aside, to show again later without counting that showing twice: the character logged out, or a recovery offer came up.</summary>
+    /// <summary>
+    /// It steps aside: the character logged out, or a recovery offer came up. It shows again once
+    /// nothing stands in front of it while My Plates is still empty, and that showing isn't counted twice.
+    /// </summary>
     StepsAside,
 }
 
@@ -71,6 +74,7 @@ internal sealed class GuidedCreation
     private readonly Func<bool> basicEditorOpen;
 
     private bool offerRequested;
+    private bool welcomeWithdrawn;
     private bool starting;
     private Task<bool>? saving;
     private Guid? savingPlateId;
@@ -171,7 +175,7 @@ internal sealed class GuidedCreation
     /// For the welcome window, once a frame: true once, when a welcome waits,
     /// <paramref name="mayShow"/> (<see cref="WelcomeMayShow"/>) says nothing stands in front of it,
     /// and My Plates is still empty (a Plate made meanwhile, from Create Plate, ends the wait).
-    /// Counts the showing.
+    /// Counts the showing, unless it is the same showing back after stepping aside (<see cref="WithdrawWelcome"/>).
     /// </summary>
     internal bool ConsumeWelcome(bool mayShow)
     {
@@ -181,13 +185,19 @@ internal sealed class GuidedCreation
         }
 
         offerRequested = false;
+        var returning = welcomeWithdrawn;
+        welcomeWithdrawn = false;
         if (library.GetOrderedPlates().Count > 0)
         {
             return false;
         }
 
-        Preferences.OfferCount++;
-        store.Save();
+        if (!returning)
+        {
+            Preferences.OfferCount++;
+            store.Save();
+        }
+
         return true;
     }
 
@@ -200,7 +210,9 @@ internal sealed class GuidedCreation
     /// last start included, so it is never on screen without a character or over recovery. Otherwise
     /// it stays while its own start is under way (that start's outcome decides), and a Plate in My
     /// Plates closes it, except while it says why its start failed and the guided Plate that start
-    /// made still exists: Create My First Plate then opens that Plate again.
+    /// made still exists: Create My First Plate then opens that Plate again. The error is the one
+    /// guided creation still reports (<see cref="WelcomeErrorNow"/>): a start made since, from Help,
+    /// My Plates or Create Plate, ends it, so a Plate made or opened that way closes the welcome.
     /// </summary>
     /// <param name="starting">The welcome's own start is under way.</param>
     /// <param name="showsStartError">The welcome shows why its last start failed.</param>
@@ -223,18 +235,24 @@ internal sealed class GuidedCreation
     }
 
     /// <summary>
+    /// What the welcome still shows of its own last start's error, once a frame while no start of its
+    /// own is under way: <paramref name="shown"/> while guided creation still reports it
+    /// (<paramref name="current"/>, <see cref="StartError"/>), nothing once it doesn't. Every start
+    /// clears that report, so the welcome never holds a reason a later start, from anywhere, replaced.
+    /// </summary>
+    internal static string? WelcomeErrorNow(string? shown, string? current) =>
+        shown is not null && string.Equals(shown, current, StringComparison.Ordinal) ? shown : null;
+
+    /// <summary>
     /// The welcome on screen closed unanswered because something now stands in front of it (the
-    /// character logged out, or a recovery offer came up): it waits to show again, and that showing
-    /// isn't counted twice.
+    /// character logged out, or a recovery offer came up): it waits to show again in this load, while
+    /// My Plates is still empty. The showing stays counted, so a load that ends before it shows
+    /// again has still used one, and showing again isn't counted twice.
     /// </summary>
     internal void WithdrawWelcome()
     {
         offerRequested = true;
-        if (Preferences.OfferCount > 0)
-        {
-            Preferences.OfferCount--;
-            store.Save();
-        }
+        welcomeWithdrawn = true;
     }
 
     /// <summary>The player answered the welcome.</summary>

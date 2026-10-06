@@ -49,7 +49,11 @@ internal interface IRecoveryFiles
     /// </summary>
     IDisposable HoldLock(string lockPath);
 
-    /// <summary>Whether another open handle holds <paramref name="lockPath"/> now (a run still going); false when there is no such file.</summary>
+    /// <summary>
+    /// Whether another open handle holds <paramref name="lockPath"/> now (a run still going); false when
+    /// there is no such file. Throws <see cref="UnauthorizedAccessException"/> when it can't tell, so a
+    /// caller leaves that run alone and counts it as unknown, never as ended or as running.
+    /// </summary>
     bool IsLockHeld(string lockPath);
 }
 
@@ -147,10 +151,7 @@ internal sealed class SystemRecoveryFiles : IRecoveryFiles
             // A sharing violation: a running game client holds it.
             return true;
         }
-        catch (UnauthorizedAccessException)
-        {
-            // Can't tell: treated as held, so nothing of that run is offered or touched.
-            return true;
-        }
+
+        // UnauthorizedAccessException (can't tell) goes to the caller: that run is left alone, its state unknown.
     }
 }

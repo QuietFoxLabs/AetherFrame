@@ -127,6 +127,9 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
     /// <summary>Reads whose path matches fail as a file held open by another program does.</summary>
     internal Func<string, bool>? FailRead { get; set; }
 
+    /// <summary>Probing a lock whose path matches can't tell whether it is held (no permission on it, say).</summary>
+    internal Func<string, bool>? CantTellLock { get; set; }
+
     /// <summary>Signalled when a held write has started.</summary>
     internal ManualResetEventSlim WriteStarted { get; } = new();
 
@@ -229,7 +232,8 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
         return new LockRelease(this, held);
     }
 
-    public bool IsLockHeld(string lockPath) => files.IsLockHeld(lockPath);
+    public bool IsLockHeld(string lockPath) =>
+        CantTellLock?.Invoke(lockPath) == true ? throw new UnauthorizedAccessException($"Injected lock probe failure: '{lockPath}'") : files.IsLockHeld(lockPath);
 
     private sealed class LockRelease(TestRecoveryFiles owner, IDisposable held) : IDisposable
     {

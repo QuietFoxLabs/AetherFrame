@@ -160,8 +160,9 @@ internal sealed class RecoveryCheckpointStore
     /// <summary>
     /// Every checkpoint of runs that have ended (their lock not held), and, separately, how many runs
     /// are still going: their folders are left alone. This run's own folder is never listed.
-    /// <c>Complete</c> is false when the Sessions folder or an ended run's folder couldn't be listed:
-    /// what it holds is then unknown, and a later load looks again.
+    /// <c>Complete</c> is false when the Sessions folder or an ended run's folder couldn't be listed, or
+    /// whether a run's lock is held couldn't be told: what it holds is then unknown, and a later load
+    /// looks again.
     /// </summary>
     internal (IReadOnlyList<CheckpointFile> Files, int RunningSessions, bool Complete) ListEndedSessions()
     {
