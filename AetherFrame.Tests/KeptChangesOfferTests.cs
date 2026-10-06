@@ -82,6 +82,20 @@ public class KeptChangesOfferTests
             "AetherFrame.Tests/KeptChangesReadTests.cs",
             "AetherFrame.Tests/KeptChangesTestSupport.cs",
             "AetherFrame.Tests/KeptChangesWriteTests.cs",
+            "AetherFrame/Services/Plates/RecoveryFiles.cs",
+            "AetherFrame/Services/Plates/RecoveryCheckpointStore.cs",
+            "AetherFrame/Services/Plates/RecoveryCheckpointWriter.cs",
+            "AetherFrame/UI/Editor/ContinuousRecovery.cs",
+            "AetherFrame/UI/Editor/EditorSession.Recovery.cs",
+            "AetherFrame.Tests/ContinuousRecoveryTests.cs",
+            "AetherFrame.Tests/RecoveryCrashHost.cs",
+            "AetherFrame.Tests/RecoveryLifecycleTests.cs",
+            "AetherFrame.Tests/RecoveryOfferTests.cs",
+            "AetherFrame.Tests/RecoveryProcessTests.cs",
+            "AetherFrame.Tests/RecoveryRecheckFixesTests.cs",
+            "AetherFrame.Tests/RecoveryReviewFixesTests.cs",
+            "AetherFrame.Tests/RecoveryStorageTests.cs",
+            "AetherFrame.Tests/RecoveryTestSupport.cs",
         };
         var changed = new[]
         {
@@ -95,6 +109,9 @@ public class KeptChangesOfferTests
             "AetherFrame/UI/Library/PlateOpenGuard.cs",
             "AetherFrame/UI/Tutorial/TutorialScript.cs",
             "AetherFrame/Windows/PlateLibraryWindow.cs",
+            "AetherFrame/UI/Editor/EditorDocumentCommands.cs",
+            "AetherFrame/UI/Library/PlateActions.cs",
+            "AetherFrame/Windows/EditorActionBar.cs",
         };
 
         static bool Plain(char c) => c is '\r' or '\n' or (>= ' ' and <= '~');
@@ -152,7 +169,11 @@ public class KeptChangesOfferTests
         Assert.Equal("Keep the saved Plate as it is. The kept changes move to AetherFrame's Trash folder.", KeptChangesOffer.DiscardTooltip);
         Assert.Equal("The kept changes move to AetherFrame's Trash folder.", KeptChangesOffer.DiscardDeletedTooltip);
         Assert.Equal("Keep them. My Plates reminds you, and AetherFrame asks again next time.", KeptChangesOffer.DecideLaterTooltip);
-        Assert.Equal("Open the Plate with these changes. Nothing is saved until you choose Save.", KeptChangesOffer.RestoreTooltip);
+        Assert.Equal("Open the Plate with these changes. Nothing is saved or shared until you choose Save.", KeptChangesOffer.RestoreTooltip);
+        Assert.Equal("Resume Editing", KeptChangesOffer.RestoreLabel);
+        Assert.Equal("Recover as New Plate", KeptChangesOffer.RestoreAsNewLabel);
+        Assert.Equal(variant == KeptChangesVariant.Restore, game.Offer.OffersNewPlateToo);
+        Assert.Null(game.Offer.CheckpointOptions);
         Assert.Equal("The saved Plate stays as it is.", KeptChangesOffer.RestoreAsNewTooltip);
     }
 

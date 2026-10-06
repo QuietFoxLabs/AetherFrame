@@ -280,6 +280,7 @@ internal sealed class PlateActions
             return;
         }
 
+        var original = profileService.CurrentProfile;
         try
         {
             profileService.OpenPlate(copyId);
@@ -288,6 +289,12 @@ internal sealed class PlateActions
         {
             Runner.Error = $"Saved \"{copyName}\" as a new Plate in My Plates, but it couldn't be opened here. {UserFacingError.Describe(ex, string.Empty)}".TrimEnd();
             return;
+        }
+
+        // The original's unsaved changes are the copy's content now: its recovery checkpoints are retired, not offered.
+        if (original is not null)
+        {
+            editorSession.NoteUnsavedChangesHandedOff(original);
         }
 
         Runner.Status = hadChanges
