@@ -449,7 +449,10 @@ public class GuidedReviewFixesTests
     {
         // The ordinary Basic editor at its minimum size: the action bar on two rows, the recovery
         // warning on two, the error line on two (a save the system refused says why at length), the
-        // separator, then the categories on two rows above the live view.
+        // separator, then the categories, counted as two rows (they fit one at 496 px; the second
+        // stands for the strip's spacing and keeps the model conservative), above the live view.
+        // The live view's toolbar is one row here; while artwork downloads it can take two, which
+        // leaves the canvas smaller but changes none of the heights below.
         var m = Metrics.At(scale);
         var width = (BasicEditorView.MinimumWindowSize.X * scale) - (m.WindowPadding * 2f);
         Assert.Equal(BasicEditorLayoutMode.Stacked, BasicEditorView.ChooseLayout(width, scale));
@@ -472,7 +475,8 @@ public class GuidedReviewFixesTests
     [InlineData(400f, 1000f, 0.42f, 120f, 106f, 255f)] // the canvas' shape (400 x 675/1200 = 225) plus its toolbar
     [InlineData(400f, 200f, 0.42f, 120f, 0f, 84f)] // a short window: the share, below the usual minimum
     [InlineData(400f, 225f, 0.45f, 140f, 126f, 99f)] // the controls below keep their minimum: the live view gives way
-    [InlineData(400f, 100f, 0.45f, 140f, 126f, 0f)] // not even that minimum fits: no live view rather than a negative one
+    [InlineData(400f, 100f, 0.45f, 140f, 126f, 0f)] // not even that minimum fits: no live view (0, not drawn) rather than a negative one
+    [InlineData(400f, 150f, 0.45f, 140f, 126f, 0f)] // 24 px left, less than the 30 px toolbar: nothing of the Plate would show, so none
     [InlineData(400f, 0f, 0.42f, 120f, 0f, 0f)]
     [InlineData(400f, -50f, 0.45f, 140f, 126f, 0f)] // content already past the window's edge
     [InlineData(0f, 500f, 0.45f, 140f, 126f, 140f)]
@@ -504,11 +508,19 @@ public class GuidedReviewFixesTests
             Assert.DoesNotMatch(@"Math\.Clamp\(\s*\(body\.X \* profile\.CanvasHeight", code);
         }
 
-        // Each keeps the room its controls below need: the minimum it then gives them, plus the spacing before them.
+        // Each keeps the room its controls below need: the minimum it then gives them, plus the spacing
+        // before them. A live view of 0 isn't drawn (a child 0 tall takes all the height left), and the
+        // controls then take that height.
         Assert.Contains("140f * scale, inspectorMinimum + style.ItemSpacing.Y);", basic, StringComparison.Ordinal);
-        Assert.Contains("DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining - previewHeight - style.ItemSpacing.Y))", basic, StringComparison.Ordinal);
         Assert.Contains("120f * scale, panelMinimum + style.ItemSpacing.Y);", steps, StringComparison.Ordinal);
-        Assert.Contains("new Vector2(-1f, Math.Max(panelMinimum, body.Y - previewHeight - style.ItemSpacing.Y))", steps, StringComparison.Ordinal);
+        foreach (var code in new[] { basic, steps })
+        {
+            Assert.Matches(@"if \(previewHeight > 0f\)\s*\{\s*DrawPreview\(profile, new Vector2\(-1f, previewHeight\)\);", code);
+            Assert.Equal(1, Regex.Matches(code, @"DrawPreview\(profile, new Vector2\(-1f, previewHeight\)\)").Count);
+        }
+
+        Assert.Contains("DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining)), withCategoryStrip: false);", basic, StringComparison.Ordinal);
+        Assert.Contains("DrawGuidedPanel(profile, guided, success, new Vector2(-1f, Math.Max(panelMinimum, panelHeight)));", steps, StringComparison.Ordinal);
     }
 
     [Fact]

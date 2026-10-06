@@ -342,8 +342,13 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 var inspectorMinimum = 120f * scale;
                 var previewHeight = BasicEditorView.StackedPreviewHeight(
                     body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), remaining, BasicEditorView.StackedPreviewShare, 140f * scale, inspectorMinimum + style.ItemSpacing.Y);
-                DrawPreview(profile, new Vector2(-1f, previewHeight));
-                DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining - previewHeight - style.ItemSpacing.Y)), withCategoryStrip: false);
+                if (previewHeight > 0f)
+                {
+                    DrawPreview(profile, new Vector2(-1f, previewHeight));
+                    remaining -= previewHeight + style.ItemSpacing.Y;
+                }
+
+                DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining)), withCategoryStrip: false);
                 break;
             }
         }

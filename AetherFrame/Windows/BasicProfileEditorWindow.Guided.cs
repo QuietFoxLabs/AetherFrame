@@ -110,8 +110,14 @@ internal sealed partial class BasicProfileEditorWindow
             var panelMinimum = 100f * scale;
             var previewHeight = BasicEditorView.StackedPreviewHeight(
                 body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), body.Y, BasicEditorView.GuidedPreviewShare, 120f * scale, panelMinimum + style.ItemSpacing.Y);
-            DrawPreview(profile, new Vector2(-1f, previewHeight));
-            DrawGuidedPanel(profile, guided, success, new Vector2(-1f, Math.Max(panelMinimum, body.Y - previewHeight - style.ItemSpacing.Y)));
+            var panelHeight = body.Y;
+            if (previewHeight > 0f)
+            {
+                DrawPreview(profile, new Vector2(-1f, previewHeight));
+                panelHeight -= previewHeight + style.ItemSpacing.Y;
+            }
+
+            DrawGuidedPanel(profile, guided, success, new Vector2(-1f, Math.Max(panelMinimum, panelHeight)));
         }
 
         if (!success)

@@ -383,7 +383,9 @@ internal static class BasicEditorView
     /// <paramref name="keepBelow"/> (their own minimum and the spacing before them), and at least
     /// <paramref name="preferredMinimum"/> while both allow it. However little room a short window
     /// leaves (wrapped error and recovery warning lines above take some), the live view gives way
-    /// first: the result is never negative, never above the share, and never throws.
+    /// first: the result is never negative, never above the share, and never throws. Room no taller
+    /// than the toolbar would show nothing of the Plate, so it is 0 then: no live view, which the
+    /// caller doesn't draw (a child window 0 tall would take all the height left instead).
     /// </summary>
     internal static float StackedPreviewHeight(float width, float canvasWidth, float canvasHeight, float toolbarHeight, float available, float share, float preferredMinimum, float keepBelow)
     {
@@ -392,7 +394,8 @@ internal static class BasicEditorView
             : 0f;
         var floor = Math.Min(float.IsFinite(preferredMinimum) ? Math.Max(0f, preferredMinimum) : 0f, ceiling);
         var natural = (Math.Max(0f, width) * canvasHeight / Math.Max(1f, canvasWidth)) + toolbarHeight;
-        return float.IsFinite(natural) ? Math.Clamp(natural, floor, ceiling) : floor;
+        var height = float.IsFinite(natural) ? Math.Clamp(natural, floor, ceiling) : floor;
+        return height > Math.Max(0f, float.IsFinite(toolbarHeight) ? toolbarHeight : 0f) ? height : 0f;
     }
 
     /// <summary>
