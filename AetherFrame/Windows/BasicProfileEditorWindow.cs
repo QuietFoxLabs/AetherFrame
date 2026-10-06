@@ -827,7 +827,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         // The one editor overlay on the live view: the selected Component's outline, each place it
         // is drawn (every corner of a Corner Ornament), so it's clear what the slot's controls change.
-        if (editorSession.SelectedComponentId is { } selectedId && Domain.Components.PlateComponentEditor.Find(profile, selectedId) is { } selected)
+        // The guided steps have no slot controls and show the finished Plate, so no outline there
+        // (a selection made in Advanced or during the tutorial stays for those editors).
+        if (!drawingGuided && editorSession.SelectedComponentId is { } selectedId && Domain.Components.PlateComponentEditor.Find(profile, selectedId) is { } selected)
         {
             ProfileRenderer.BuildPaintPlan(profile, renderResources, ProfileRenderOptions.Finished, previewPlanBuffer);
             CanvasHitTest.Outlines(previewPlanBuffer, selected, previewOutlineBuffer);

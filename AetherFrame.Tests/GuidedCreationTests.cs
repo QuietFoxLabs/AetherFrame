@@ -1077,6 +1077,18 @@ public class GuidedCreationTests
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(welcome, @"AetherControls\.PrimaryButton\("));
     }
 
+    [Fact]
+    public void TheStepsLiveView_ShowsTheFinishedPlate_WithOneArtworkStatus()
+    {
+        // The live view in the steps is the Basic editor's own: no selection outline left over from
+        // Advanced or the tutorial, and on Choose a look the step's panel is the only artwork status.
+        var basic = System.IO.File.ReadAllText(System.IO.Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "BasicProfileEditorWindow.cs"));
+
+        Assert.Contains("if (!drawingGuided && editorSession.SelectedComponentId is { } selectedId", basic, StringComparison.Ordinal);
+        Assert.Matches(@"if \(!artStatusInSteps\)\s*\{\s*ArtDownloadStatus\.DrawInline\(", basic);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(basic, @"ArtDownloadStatus\.DrawInline\("));
+    }
+
     // ---------------------------------------------------------------- the curated looks
 
     [Fact]

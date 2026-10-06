@@ -299,7 +299,9 @@ internal sealed partial class BasicProfileEditorWindow
 
         ImGui.Spacing();
         var browse = ImGui.CollapsingHeader("Browse the full collection##GuidedAllStyles");
-        EditorWidgets.Tooltip("Every Art Style and Simple Theme. Only the style you choose is downloaded.");
+        EditorWidgets.Tooltip(renderResources.ArtStore.Downloader is null
+            ? "Every Art Style and Simple Theme."
+            : "Every Art Style and Simple Theme. Only the style you choose is downloaded.");
         if (browse)
         {
             using var id = ImRaii.PushId("AllLooks");
