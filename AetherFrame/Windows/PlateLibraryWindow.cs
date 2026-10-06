@@ -181,7 +181,7 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         set
         {
             guided = value;
-            plateMenu.Chooser.CreateStepByStep = value is null ? null : value.Start;
+            plateMenu.Chooser.CreateStepByStep = value is null ? null : value.StartNew;
         }
     }
 
@@ -293,12 +293,15 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         AetherBrand.Header("My Plates");
         DrawHeader(character, allPlates.Count);
         ImGui.Separator();
-        if (KeptChanges is { } keptChanges)
+        // One reminder at a time, kept unsaved changes first: they may belong to the Plate another reminder would open.
+        if (KeptChanges is { ReminderText: not null } keptChanges)
         {
             KeptChangesWindow.DrawReminder(keptChanges);
         }
-
-        Help?.DrawReminder();
+        else
+        {
+            Help?.DrawReminder();
+        }
 
         // Plain text lines (status/info, then the right-click hint with the version at the right,
         // or under it in a narrow window) — no button row.
@@ -437,12 +440,11 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     private void DrawEmptyLibrary()
     {
         var guided = Guided;
-        var continuing = guided is { CanContinue: true };
         if (AetherControls.EmptyState(
                 FontAwesomeIcon.IdCard,
                 "You don't have any Plates yet.",
                 "A Plate is a complete Adventure Plate style design. Make as many as you like; each character can choose one to be its Active Plate.",
-                guided is null ? "Create Your First Plate" : guided.IsStarting ? "Creating your Plate..." : continuing ? "Continue Your Plate" : "Create Your First Plate",
+                guided is null ? "Create Your First Plate" : guided.IsStarting ? "Creating your Plate..." : "Create My First Plate",
                 guided is null ? "Start a new Plate from a Template." : "Three short steps: choose a look, make it yours, save."))
         {
             if (guided is null)

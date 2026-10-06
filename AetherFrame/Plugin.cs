@@ -294,11 +294,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // asks first about unsaved changes), edited and saved in the Basic editor, which shows the
             // steps while the guided Plate is open. Its state lives in the configuration.
             guidedCreation = new GuidedCreation(
-                new ConfigurationGuidedStore(Configuration, log), plateLibrary, profileService, documentCommands, editorSession, plateSwitcher, ShowEditor);
+                new ConfigurationGuidedStore(Configuration, log), plateLibrary, profileService, documentCommands, editorSession, plateSwitcher, ShowEditor,
+                () => basicProfileEditorWindow.IsOpen);
             basicProfileEditorWindow.Guided = guidedCreation;
             basicProfileEditorWindow.SharingAvailable = AetherFrameBuildInfo.NetworkPreview;
             basicProfileEditorWindow.IsActivePlate = plateId => characterIdentityService.CurrentCharacter is { } who ? plateLibrary.GetActivePlateId(who.ContentId) == plateId : null;
-            editorPlates.Chooser.CreateStepByStep = guidedCreation.Start;
+            editorPlates.Chooser.CreateStepByStep = guidedCreation.StartNew;
             profileEditorWindow = new ProfileEditorWindow(
                 profileService, editorSession, keyboardShortcutService, renderResources, fileDialogManager, OpenBasicEditor, OpenMyPlates, editorSurfaces, documentCommands, editorPlateMenu);
             editorSurfaces.Attach(basicProfileEditorWindow, profileEditorWindow);
@@ -355,6 +356,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // A player taking the tour is being shown both editors: the one-time Basic suggestion
             // would only get in the way of a step, so it counts as handled once the tour starts.
             onboarding.Started += basicGuidance.MarkHandled;
+
+            // The tutorial points at the editor's real bar and rail: while it runs, the guided Plate shows them.
+            basicProfileEditorWindow.TutorialRunning = () => onboarding.IsTutorialActive;
             var helpMenu = new HelpMenu(onboarding, tutorialHost) { Guided = guidedCreation };
             var fontLicencesWindow = new FontLicencesWindow();
             WindowSystem.AddWindow(fontLicencesWindow);
@@ -578,9 +582,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         }
 
         // Now that the Library's state is known: is this a new player (welcome them with guided
-        // creation) or an established install (never offer anything unasked)? Decided on the framework thread, where the
-        // tutorial's state is read while drawing; reads the Library's counts only, changes nothing
-        // in it, and can never fail the load.
+        // creation) or an established install (never offer anything unasked)? Decided on the
+        // framework thread, where the tutorial's state is read while drawing; reads the Library's
+        // counts only, changes nothing in it, and can never fail the load.
         try
         {
             await Framework.RunOnTick(ResolveFirstRun, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -608,7 +612,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         finally
         {
             // Whatever was found is on offer now (or waits for a login): the welcome may follow it.
-            keptChangesRead = true;
+            // With the Plate Library not loaded nothing was read, so the welcome never shows.
+            keptChangesRead = plateLibrary.IsLoaded;
         }
     }
 
@@ -656,7 +661,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         }
 
         onboarding.ResolveFirstRun(configurationFound, configurationUnreadable, libraryLoaded, plateCount, userTemplateCount);
-        guidedCreation.ResolveWelcome(onboarding.IsNewPlayer, plateCount);
+        guidedCreation.ResolveWelcome(onboarding.IsNewPlayer, libraryLoaded, plateCount);
         Log.Information($"AetherFrame tutorial: {onboarding.LastDecision} (install {onboarding.Preferences.Install}, status {onboarding.Preferences.Status}); welcome {(guidedCreation.WelcomeRequested ? "waits" : "not offered")}.");
     }
 

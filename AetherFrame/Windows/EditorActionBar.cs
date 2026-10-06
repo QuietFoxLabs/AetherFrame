@@ -123,7 +123,7 @@ internal sealed class EditorActionBar
         var buttonsWidth = ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : HelpMenu.ButtonWidth + style.ItemSpacing.X);
-        var widestState = Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
+        var widestState = WidestSaveState();
 
         var rows = EditorActionBarLayout.ArrangeRows(
             ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart, controlMinimum, centerWidth,
@@ -274,6 +274,16 @@ internal sealed class EditorActionBar
             }
         }
     }
+
+    /// <summary>
+    /// The save state as the bar shows it (Saving..., Unsaved changes or Saved), for a view that draws
+    /// the commands its own way: guided creation's header.
+    /// </summary>
+    internal (string Text, Vector4 Color) CurrentSaveState => SaveState();
+
+    /// <summary>The widest the save state gets, so what follows it never shifts as it changes.</summary>
+    internal static float WidestSaveState() =>
+        Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
 
     private (string Text, Vector4 Color) SaveState() =>
         commands.IsSaving ? (SavingText, SavingColor)

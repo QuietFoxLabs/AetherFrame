@@ -15,8 +15,9 @@ namespace AetherFrame.Windows.Tutorial;
 /// Don't Show Again, in a small centered window. Shown once the Libraries have loaded, only for a
 /// new install with no Plate (see <see cref="GuidedCreation.ResolveWelcome"/>), and only once a
 /// character is logged in and no recovery offer waits for an answer
-/// (<see cref="GuidedCreation.WelcomeMayShow"/>): kept unsaved changes always come first. Closing it without an answer asks again next time, a few times at
-/// most. The full tutorial is mentioned, not offered: it waits under Help as reference.
+/// (<see cref="GuidedCreation.WelcomeMayShow"/>): kept unsaved changes always come first. Not Now,
+/// or closing it, asks again on a later load while there is still no Plate, a few times at most.
+/// The full tutorial is mentioned, not offered: it waits under Help as reference.
 /// </summary>
 internal sealed class WelcomeWindow : Window
 {
@@ -27,6 +28,7 @@ internal sealed class WelcomeWindow : Window
     private readonly Func<bool> mayShow;
     private readonly AetherWindowChrome chrome = new();
     private bool creating;
+    private string? startError;
 
     /// <param name="guided">Guided creation, which decides whether to welcome and starts it.</param>
     /// <param name="mayShow">Whether nothing about recovery stands in front of the welcome (<see cref="GuidedCreation.WelcomeMayShow"/>).</param>
@@ -39,21 +41,30 @@ internal sealed class WelcomeWindow : Window
         AllowClickthrough = false;
     }
 
-    /// <summary>Opens when a welcome waits and nothing stands in front of it; closes once the Plate it started is made.</summary>
+    /// <summary>
+    /// Opens when a welcome waits and nothing stands in front of it; closes once the Plate it started
+    /// is made and open. A start that made nothing (the unsaved-changes question's Cancel, or a
+    /// failure, which it shows) leaves the welcome open to answer again.
+    /// </summary>
     public override void PreOpenCheck()
     {
         if (!IsOpen && guided.WelcomeRequested && guided.ConsumeWelcome(mayShow()))
         {
             creating = false;
+            startError = null;
             IsOpen = true;
             BringToFront();
         }
 
-        if (IsOpen && creating && !guided.IsStarting && guided.StartError is null)
+        if (IsOpen && creating && !guided.IsStarting)
         {
-            // The Plate is made and opening in the Basic editor, on its first step.
             creating = false;
-            IsOpen = false;
+            startError = guided.StartError;
+            if (startError is null && guided.CanContinue)
+            {
+                // The Plate is made and open in the Basic editor, on its first step.
+                IsOpen = false;
+            }
         }
     }
 
@@ -88,7 +99,7 @@ internal sealed class WelcomeWindow : Window
 
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceMd * scale));
 
-        if (creating && guided.StartError is { } error)
+        if (startError is { } error)
         {
             AetherControls.StatusLine(AetherTone.Danger, error);
             ImGui.Spacing();
@@ -100,6 +111,7 @@ internal sealed class WelcomeWindow : Window
             if (AetherControls.PrimaryButton(busy ? "Creating your Plate...##WelcomeCreate" : "Create My First Plate##WelcomeCreate", new Vector2(width, 0f), "Makes a new Plate and opens it on the first step."))
             {
                 creating = true;
+                startError = null;
                 guided.AnswerWelcome(WelcomeAnswer.Create);
             }
         }
@@ -108,14 +120,14 @@ internal sealed class WelcomeWindow : Window
         var half = (width - ImGui.GetStyle().ItemSpacing.X) / 2f;
         using (ImRaii.Disabled(busy))
         {
-            if (AetherControls.SecondaryButton("Not Now", new Vector2(half, 0f), "A quiet reminder stays in My Plates until you create a Plate or dismiss it."))
+            if (AetherControls.SecondaryButton("Not Now", new Vector2(half, 0f), "Asks again another time, while you have no Plate.\nMy Plates can start your first Plate whenever you like."))
             {
                 guided.AnswerWelcome(WelcomeAnswer.NotNow);
                 IsOpen = false;
             }
 
             ImGui.SameLine();
-            if (AetherControls.GhostButton("Don't Show Again", new Vector2(half, 0f), "No welcome and no reminder. Help, in My Plates, can still create a Plate step by step."))
+            if (AetherControls.GhostButton("Don't Show Again", new Vector2(half, 0f), "No welcome from now on.\nMy Plates and its Help can still create a Plate step by step."))
             {
                 guided.AnswerWelcome(WelcomeAnswer.Never);
                 IsOpen = false;

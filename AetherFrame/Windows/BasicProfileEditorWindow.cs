@@ -103,6 +103,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     private readonly List<Domain.Components.PaintStep> previewPlanBuffer = new(ProfileDocument.MaxElementCount + 64);
     private readonly List<Vector2[]> previewOutlineBuffer = new(8);
 
+    // The Simple view's fold labels with their ids, built once each.
+    private readonly Dictionary<string, string> moreControlsIds = [];
+
     // The Component slot to scroll into view once, after a click selected its Component on the live view.
     private Domain.Components.PlateComponentKind? revealComponentSlot;
     private bool previewDragged;
@@ -159,6 +162,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// choice of the Simple or Detailed view, set by the plugin.
     /// </summary>
     internal GuidedCreation? Guided { get; set; }
+
+    /// <summary>Whether the full tutorial is running, set by the plugin: it points at the editor's bar and rail, so the steps step aside meanwhile.</summary>
+    internal Func<bool>? TutorialRunning { get; set; }
 
     /// <summary>Whether the Simple view shows: the everyday controls first, the detailed ones folded into labelled sections.</summary>
     private bool Simple => Guided?.SimpleWorkspace ?? false;
@@ -277,7 +283,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         basicEditorSession.Identity.RefineLayout();
 
         // The guided Plate: its steps (or, once saved, View Plate and Keep Editing) around the live view.
-        if (Guided is { } guided && (guided.IsGuiding(profile.ProfileId) || guided.ShowsSuccess(profile.ProfileId)))
+        if (Guided is { } guided && (guided.IsGuiding(profile.ProfileId) || guided.ShowsSuccess(profile.ProfileId)) && TutorialRunning?.Invoke() != true)
         {
             DrawGuided(profile, guided);
             DrawResetLayoutPopup();
@@ -367,10 +373,11 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                     }
 
                     break;
-                case EditorShortcutActionKind.Undo:
+                // Not while guided creation's Save is being written: completing it then would hide the undone change.
+                case EditorShortcutActionKind.Undo when Guided is not { CanEdit: false }:
                     actionBar.Commands.Undo();
                     break;
-                case EditorShortcutActionKind.Redo:
+                case EditorShortcutActionKind.Redo when Guided is not { CanEdit: false }:
                     actionBar.Commands.Redo();
                     break;
             }
@@ -858,6 +865,12 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             }
         }
 
+        // Guided creation's steps have no categories to open: its live view only pans.
+        if (drawingGuided)
+        {
+            return;
+        }
+
         var logicalMouse = (ImGui.GetMousePos() - canvasOrigin) / scale;
         var clicked = ImGui.IsItemDeactivated() && !previewDragged;
         var hovered = ImGui.IsItemHovered() && !ImGui.IsItemActive();
@@ -894,8 +907,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
             ImGui.SetTooltip(component is not null
-                ? $"Edit the {Domain.Components.PlateComponentEditor.KindLabel(component.Kind)} ({BasicEditorView.Title(hoveredCategory)})"
-                : $"Edit {BasicEditorView.Title(hoveredCategory)}");
+                ? $"Edit the {Domain.Components.PlateComponentEditor.KindLabel(component.Kind)} ({BasicEditorView.Title(hoveredCategory, Simple)})"
+                : $"Edit {BasicEditorView.Title(hoveredCategory, Simple)}");
         }
     }
 
@@ -939,7 +952,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         const string label = "Simple view";
         var width = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + ImGui.CalcTextSize(label).X;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + ImGui.GetStyle().ItemSpacing.X, ImGui.GetContentRegionMax().X - width));
+
+        // After the zoom and any artwork status, on a row of its own when they leave no room.
+        AetherControls.AlignRightAfterItem(width);
         var simple = guided.SimpleWorkspace;
         if (ImGui.Checkbox(label + "##BasicSimpleView", ref simple))
         {
@@ -951,17 +966,30 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     /// <summary>
     /// In the Simple view, the detailed controls that follow sit under one labelled section, closed
-    /// until opened; the Detailed view shows them as always. Returns whether to draw them.
+    /// until opened; the Detailed view shows them as always. Returns whether to draw them. The section
+    /// that <paramref name="holdsComponentSlots"/> opens itself when a Component clicked on the live
+    /// view waits to be brought into view (each category has one such section).
     /// </summary>
-    private bool MoreControls(string label)
+    private bool MoreControls(string label, bool holdsComponentSlots = false)
     {
         if (!Simple)
         {
             return true;
         }
 
+        if (!moreControlsIds.TryGetValue(label, out var id))
+        {
+            id = $"{label}##More{label}";
+            moreControlsIds[label] = id;
+        }
+
+        if (holdsComponentSlots && revealComponentSlot is not null)
+        {
+            ImGui.SetNextItemOpen(true);
+        }
+
         ImGui.Spacing();
-        return ImGui.CollapsingHeader($"{label}##More{label}");
+        return ImGui.CollapsingHeader(id);
     }
 
     private void DrawResetLayoutPopup()

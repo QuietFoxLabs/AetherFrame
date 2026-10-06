@@ -89,10 +89,10 @@ internal sealed class HelpMenu
     }
 
     /// <summary>
-    /// My Plates' quiet reminder, one line at most: continue a guided creation left partway; or, for
-    /// a new player who put the welcome off, create a first Plate step by step; or, for a player who
-    /// said Maybe Later to the tour an earlier version offered, take the tour. Each until it is taken
-    /// or dismissed. Draws nothing otherwise.
+    /// My Plates' quiet reminder, one at most: continue a guided creation left partway; or, for a
+    /// player who said Maybe Later to the tour an earlier version offered, take the tour. Each until
+    /// it is taken or dismissed. Draws nothing otherwise. (A new player with no Plate needs no
+    /// reminder: the empty My Plates itself offers the steps.)
     /// </summary>
     internal void DrawReminder()
     {
@@ -101,9 +101,9 @@ internal sealed class HelpMenu
             return;
         }
 
-        if (Guided is { } guided && guided.Reminder is var reminder and not GuidedReminder.None)
+        if (Guided is { ShowsResumeReminder: true } guided)
         {
-            DrawGuidedReminder(guided, reminder);
+            DrawGuidedReminder(guided);
             return;
         }
 
@@ -145,39 +145,56 @@ internal sealed class HelpMenu
         ImGui.SetCursorScreenPos(new Vector2(min.X, min.Y + height + (AetherMetrics.SpaceXs * scale)));
     }
 
-    /// <summary>The guided creation reminder, in the tutorial reminder's style.</summary>
-    private static void DrawGuidedReminder(GuidedCreation guided, GuidedReminder reminder)
+    /// <summary>
+    /// The guided creation reminder, in the tutorial reminder's style: its buttons on the text's row,
+    /// or on a row of their own beneath it when My Plates is too narrow for one.
+    /// </summary>
+    private static void DrawGuidedReminder(GuidedCreation guided)
     {
+        const string text = "Your Plate isn't finished yet.";
+        const string continueLabel = "Continue Step by Step";
+        const string notNowLabel = "Not Now";
+
         var scale = ImGuiHelpers.GlobalScale;
+        var style = ImGui.GetStyle();
         using var id = ImRaii.PushId("GuidedReminder");
         var drawList = ImGui.GetWindowDrawList();
         var min = ImGui.GetCursorScreenPos();
-        var height = ImGui.GetFrameHeight() + (AetherMetrics.SpaceSm * scale);
         var width = ImGui.GetContentRegionAvail().X;
+        var inset = AetherMetrics.SpaceMd * scale;
+        float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2f);
+        var buttonsWidth = ButtonWidth(continueLabel) + style.ItemSpacing.X + ButtonWidth(notNowLabel);
+        var textWidth = ImGui.GetFrameHeight() + style.ItemSpacing.X + ImGui.CalcTextSize(text).X;
+        var oneRow = inset + textWidth + style.ItemSpacing.X + buttonsWidth + inset <= width;
+        var height = (oneRow ? ImGui.GetFrameHeight() : (ImGui.GetFrameHeight() * 2f) + style.ItemSpacing.Y) + (AetherMetrics.SpaceSm * scale);
         drawList.AddRectFilled(min, min + new Vector2(width, height), ImGui.GetColorU32(AetherPalette.InfoTint), AetherMetrics.RadiusMd * scale);
         drawList.AddRectFilled(min, new Vector2(min.X + (AetherMetrics.AccentBarWidth * scale), min.Y + height), ImGui.GetColorU32(AetherPalette.Glow), AetherMetrics.RadiusMd * scale, ImDrawFlags.RoundCornersLeft);
 
-        ImGui.SetCursorScreenPos(min + new Vector2(AetherMetrics.SpaceMd * scale, AetherMetrics.SpaceXs * scale));
-        EditorWidgets.IconText(reminder == GuidedReminder.Resume ? FontAwesomeIcon.PencilAlt : FontAwesomeIcon.IdCard, AetherPalette.Glow);
+        ImGui.SetCursorScreenPos(min + new Vector2(inset, AetherMetrics.SpaceXs * scale));
+        EditorWidgets.IconText(FontAwesomeIcon.PencilAlt, AetherPalette.Glow);
         ImGui.SameLine();
         ImGui.AlignTextToFramePadding();
         using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextSecondary))
         {
-            ImGui.TextUnformatted(reminder == GuidedReminder.Resume
-                ? "Your Plate isn't finished yet."
-                : "New here? Make your first Plate in three short steps.");
+            ImGui.TextUnformatted(text);
         }
 
-        ImGui.SameLine();
-        if (AetherControls.PrimaryButton(reminder == GuidedReminder.Resume ? "Continue" : "Create My First Plate"))
+        if (oneRow)
+        {
+            ImGui.SameLine();
+        }
+        else
+        {
+            ImGui.SetCursorScreenPos(new Vector2(min.X + inset, ImGui.GetCursorScreenPos().Y));
+        }
+
+        if (AetherControls.PrimaryButton(continueLabel, tooltip: "Opens the Plate you were creating, on the step you reached."))
         {
             guided.Start();
         }
 
         ImGui.SameLine();
-        if (AetherControls.GhostButton("Not now", tooltip: reminder == GuidedReminder.Resume
-                ? "Hide this until AetherFrame next loads. Help can continue it any time."
-                : "Hide this reminder. Help can still create a Plate step by step."))
+        if (AetherControls.GhostButton(notNowLabel, tooltip: "Hide this until AetherFrame next loads. Help can continue it any time."))
         {
             guided.DismissReminder();
         }
@@ -200,7 +217,7 @@ internal sealed class HelpMenu
             AetherControls.SectionHeader("Get started", topSpacing: 0f);
             using (ImRaii.Disabled(guided.IsStarting))
             {
-                if (ImGui.MenuItem(guided.CanContinue ? "Continue your Plate step by step" : "Create a Plate step by step"))
+                if (ImGui.MenuItem(guided.CanContinue ? "Continue Step by Step" : "Create Step by Step"))
                 {
                     guided.Start();
                 }

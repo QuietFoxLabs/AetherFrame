@@ -53,6 +53,9 @@ internal sealed class GuidedHarness : IDisposable
     /// <summary>The editor guided creation asked to show (when its Plate was already open).</summary>
     internal List<EditorSurfaceKind> Shown { get; } = new();
 
+    /// <summary>Whether the Basic editor's window is open (closing it leaves its Plate open).</summary>
+    internal bool BasicEditorOpen { get; set; } = true;
+
     internal BasicHarness Editor => Switcher.Plates.Editor;
 
     internal PlateLibraryService Library => Switcher.Library;
@@ -105,6 +108,17 @@ internal sealed class GuidedHarness : IDisposable
 
     internal int PlateCount => Library.GetOrderedPlates().Count;
 
+    /// <summary>My Plates emptied, as a new player's is (the editor keeps its open document).</summary>
+    internal async Task EmptyLibraryAsync()
+    {
+        foreach (var plate in Library.GetOrderedPlates().ToList())
+        {
+            await Library.DeletePlateAsync(plate.PlateId);
+        }
+
+        Assert.Equal(0, PlateCount);
+    }
+
     private GuidedCreation Create(MemoryGuidedStore store) => new(
         store,
         Switcher.Library,
@@ -112,7 +126,8 @@ internal sealed class GuidedHarness : IDisposable
         Commands,
         Switcher.Plates.Editor.Session,
         Switcher.Switcher,
-        Shown.Add);
+        Shown.Add,
+        () => BasicEditorOpen);
 
     public void Dispose() => Switcher.Dispose();
 }
@@ -120,9 +135,10 @@ internal sealed class GuidedHarness : IDisposable
 /// <summary>
 /// Guided creation (Choose a Look, Make It Yours, Save): who is welcomed and when (a recovery offer
 /// always first; an install that couldn't be judged never), the welcome's answers and My Plates'
-/// reminder, one Plate per guided creation however often it is started, closed or reloaded, Back
-/// and Next keeping everything entered, completion only after a successful save, and the Basic
-/// editor's Simple view for new players only.
+/// reminder to continue, one Plate per guided creation however often it is started, closed or
+/// reloaded, Back and Next keeping everything entered, completion only after a successful save of
+/// exactly what is shown, the saved state ending with the next edit, and the Basic editor's Simple
+/// view for new players with no Plate only.
 /// </summary>
 public class GuidedCreationTests
 {
@@ -144,7 +160,8 @@ public class GuidedCreationTests
     public async Task AWelcomeThatMayNotShowYet_IsKept_AndShownOnceRecoveryIsAnswered()
     {
         using var harness = await GuidedHarness.CreateAsync();
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
+        await harness.EmptyLibraryAsync();
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
 
         Assert.False(harness.Guided.ConsumeWelcome(mayShow: false));
         Assert.False(harness.Guided.ConsumeWelcome(mayShow: false));
@@ -156,6 +173,19 @@ public class GuidedCreationTests
         Assert.Equal(1, harness.Store.Preferences.OfferCount);
     }
 
+    [Fact]
+    public async Task AWelcomeStillWaiting_WhenAPlateIsMade_IsDropped()
+    {
+        // The welcome waited (for a login, or a recovery answer) while the player made a Plate with Create Plate.
+        using var harness = await GuidedHarness.CreateAsync();
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
+        Assert.True(harness.PlateCount > 0);
+
+        Assert.False(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.False(harness.Guided.WelcomeRequested);
+        Assert.Equal(0, harness.Store.Preferences.OfferCount);
+    }
+
     // ---------------------------------------------------------------- who is welcomed
 
     [Fact]
@@ -163,7 +193,7 @@ public class GuidedCreationTests
     {
         using var harness = await GuidedHarness.CreateAsync();
 
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
 
         Assert.True(harness.Guided.WelcomeRequested);
         Assert.Equal(BasicWorkspaceMode.Simple, harness.Store.Workspace);
@@ -177,7 +207,7 @@ public class GuidedCreationTests
     {
         using var harness = await GuidedHarness.CreateAsync();
 
-        harness.Guided.ResolveWelcome(newPlayer, plates);
+        harness.Guided.ResolveWelcome(newPlayer, librariesLoaded: true, plates);
 
         Assert.False(harness.Guided.WelcomeRequested);
         Assert.False(harness.Guided.ConsumeWelcome(mayShow: true));
@@ -197,21 +227,53 @@ public class GuidedCreationTests
             Assert.NotEqual(FirstRunDecision.OfferTutorial, decision);
 
             using var harness = await GuidedHarness.CreateAsync();
-            harness.Guided.ResolveWelcome(newPlayer: decision == FirstRunDecision.OfferTutorial, plateCount: 0);
+            harness.Guided.ResolveWelcome(newPlayer: decision == FirstRunDecision.OfferTutorial, libraryLoaded, plateCount: 0);
             Assert.False(harness.Guided.WelcomeRequested);
             Assert.Equal(BasicWorkspaceMode.Unset, harness.Store.Workspace);
         }
     }
 
     [Fact]
-    public async Task ANewPlayerWhoAlreadyMadeAPlate_IsNotWelcomed_ButGetsTheSimpleView()
+    public async Task ALibraryThatDidntLoad_IsNeverWelcomed_WhateverTheStoredVerdictSays()
+    {
+        // A player who began on this build stays a new install in the tutorial's record: on a launch
+        // whose Library fails to load, its count of Plates (0) means nothing.
+        var tutorial = new TutorialPreferences { Install = TutorialInstallKind.NewInstall };
+        Assert.Equal(FirstRunDecision.OfferTutorial, FirstRunDetector.Decide(tutorial, configurationFound: true, configurationUnreadable: false, libraryLoaded: false, 0, 0));
+
+        using var harness = await GuidedHarness.CreateAsync();
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: false, plateCount: 0);
+
+        Assert.False(harness.Guided.WelcomeRequested);
+        Assert.Equal(BasicWorkspaceMode.Unset, harness.Store.Workspace);
+        Assert.Equal(0, harness.Store.Saves);
+    }
+
+    [Fact]
+    public void ThePlugin_WelcomesOnlyOnceTheLibrariesLoaded_AndReadsKeptChangesFirst()
+    {
+        var plugin = System.IO.File.ReadAllText(System.IO.Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Plugin.cs"));
+
+        Assert.Contains("guidedCreation.ResolveWelcome(onboarding.IsNewPlayer, libraryLoaded, plateCount);", plugin, StringComparison.Ordinal);
+
+        // With the Plate Library not loaded, kept changes aren't read, so nothing may follow them.
+        Assert.Contains("keptChangesRead = plateLibrary.IsLoaded;", plugin, StringComparison.Ordinal);
+        Assert.DoesNotContain("keptChangesRead = true;", plugin, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(1)] // a new player who made a Plate before answering the welcome
+    [InlineData(6)] // an earlier version's install whose tutorial offer was closed unanswered still counts as new
+    public async Task APlayerWithPlates_IsNotWelcomed_AndKeepsTheirView(int plates)
     {
         using var harness = await GuidedHarness.CreateAsync();
 
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 1);
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: plates);
 
         Assert.False(harness.Guided.WelcomeRequested);
-        Assert.True(harness.Guided.SimpleWorkspace);
+        Assert.Equal(BasicWorkspaceMode.Unset, harness.Store.Workspace);
+        Assert.False(harness.Guided.SimpleWorkspace);
+        Assert.Equal(0, harness.Store.Saves);
     }
 
     [Fact]
@@ -220,7 +282,7 @@ public class GuidedCreationTests
         using var harness = await GuidedHarness.CreateAsync();
         harness.Store.Workspace = BasicWorkspaceMode.Detailed;
 
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
 
         Assert.Equal(BasicWorkspaceMode.Detailed, harness.Store.Workspace);
         Assert.False(harness.Guided.SimpleWorkspace);
@@ -243,20 +305,21 @@ public class GuidedCreationTests
         Assert.Equal(2, harness.Store.Saves);
 
         // An existing player's later launch never switches it back.
-        harness.Guided.ResolveWelcome(newPlayer: false, plateCount: 3);
+        harness.Guided.ResolveWelcome(newPlayer: false, librariesLoaded: true, plateCount: 3);
         Assert.Equal(BasicWorkspaceMode.Detailed, harness.Store.Workspace);
     }
 
     // ---------------------------------------------------------------- the welcome's answers
 
     [Fact]
-    public async Task ClosingTheWelcome_AsksAgainNextTime_ButOnlyAFewTimes_ThenTheReminderStays()
+    public async Task ClosingTheWelcome_AsksAgainNextTime_ButOnlyAFewTimes()
     {
         using var harness = await GuidedHarness.CreateAsync();
+        await harness.EmptyLibraryAsync();
         for (var launch = 1; launch <= GuidedCreation.MaxOffers + 2; launch++)
         {
             harness.Reload();
-            harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
+            harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
             if (launch <= GuidedCreation.MaxOffers)
             {
                 Assert.True(harness.Guided.ConsumeWelcome(mayShow: true), $"launch {launch}");
@@ -269,51 +332,54 @@ public class GuidedCreationTests
 
         Assert.Equal(GuidedCreation.MaxOffers, harness.Store.Preferences.OfferCount);
         Assert.Equal(GuidedOfferAnswer.Undecided, harness.Store.Preferences.Offer);
-        Assert.Equal(GuidedReminder.Offer, harness.Guided.Reminder);
+        Assert.False(harness.Guided.ShowsResumeReminder); // the empty My Plates offers the steps itself
     }
 
     [Fact]
-    public async Task NotNow_LeavesAQuietReminder_UntilItIsDismissed_ForGood()
+    public async Task NotNow_AsksAgainOnALaterLoad_WithinTheSameFewShowings_AndMakesNothing()
     {
         using var harness = await GuidedHarness.CreateAsync();
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
-        harness.Guided.ConsumeWelcome(mayShow: true);
+        await harness.EmptyLibraryAsync();
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
+        Assert.True(harness.Guided.ConsumeWelcome(mayShow: true));
 
         harness.Guided.AnswerWelcome(WelcomeAnswer.NotNow);
 
         Assert.Equal(GuidedOfferAnswer.Deferred, harness.Store.Preferences.Offer);
-        Assert.Equal(GuidedReminder.Offer, harness.Guided.Reminder);
-        Assert.Equal(harness.PlateCount, harness.Library.GetOrderedPlates().Count);
+        Assert.False(harness.Guided.WelcomeRequested); // not again this load
+        Assert.False(harness.Guided.ShowsResumeReminder);
+        Assert.Equal(0, harness.PlateCount);
 
-        harness.Reload();
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
-        Assert.False(harness.Guided.WelcomeRequested); // not a nag
-        Assert.Equal(GuidedReminder.Offer, harness.Guided.Reminder);
+        for (var launch = 2; launch <= GuidedCreation.MaxOffers + 1; launch++)
+        {
+            harness.Reload();
+            harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
+            Assert.Equal(launch <= GuidedCreation.MaxOffers, harness.Guided.ConsumeWelcome(mayShow: true));
+            harness.Guided.AnswerWelcome(WelcomeAnswer.NotNow);
+        }
 
-        harness.Guided.DismissReminder();
-        Assert.Equal(GuidedReminder.None, harness.Guided.Reminder);
-        harness.Reload();
-        Assert.Equal(GuidedReminder.None, harness.Guided.Reminder);
+        Assert.Equal(GuidedCreation.MaxOffers, harness.Store.Preferences.OfferCount);
+        Assert.Equal(0, harness.PlateCount);
     }
 
     [Fact]
     public async Task DontShowAgain_LeavesNoWelcomeAndNoReminder_ButStartStillWorks()
     {
         using var harness = await GuidedHarness.CreateAsync();
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
         harness.Guided.ConsumeWelcome(mayShow: true);
         var plates = harness.PlateCount;
 
         harness.Guided.AnswerWelcome(WelcomeAnswer.Never);
 
         Assert.Equal(GuidedOfferAnswer.Declined, harness.Store.Preferences.Offer);
-        Assert.Equal(GuidedReminder.None, harness.Guided.Reminder);
+        Assert.False(harness.Guided.ShowsResumeReminder);
         Assert.Equal(plates, harness.PlateCount);
         harness.Reload();
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
         Assert.False(harness.Guided.WelcomeRequested);
 
-        // Help's "Create a Plate step by step".
+        // Help's Create Step by Step.
         var made = await harness.StartAndOpenAsync();
         Assert.Equal(plates + 1, harness.PlateCount);
         Assert.True(harness.Guided.IsGuiding(made));
@@ -325,7 +391,7 @@ public class GuidedCreationTests
     public async Task Create_MakesOneAdventurePlate_RecordsIt_AndOpensItOnTheFirstStep()
     {
         using var harness = await GuidedHarness.CreateAsync();
-        harness.Guided.ResolveWelcome(newPlayer: true, plateCount: 0);
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
         harness.Guided.ConsumeWelcome(mayShow: true);
         var plates = harness.PlateCount;
 
@@ -344,7 +410,7 @@ public class GuidedCreationTests
         Assert.Equal([EditorSurfaceKind.Basic], harness.Switcher.Shown);
         Assert.Null(harness.Guided.StartError);
         Assert.False(harness.Commands.IsDirty);
-        Assert.Equal(GuidedReminder.None, harness.Guided.Reminder); // it's open
+        Assert.False(harness.Guided.ShowsResumeReminder); // its steps are on screen
     }
 
     [Fact]
@@ -365,7 +431,7 @@ public class GuidedCreationTests
         harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
         await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
         harness.Reload();
-        Assert.Equal(GuidedReminder.Resume, harness.Guided.Reminder);
+        Assert.True(harness.Guided.ShowsResumeReminder);
         Assert.True(harness.Guided.CanContinue);
 
         await harness.StartAndOpenAsync();
@@ -383,14 +449,35 @@ public class GuidedCreationTests
         await harness.StartAndOpenAsync();
         harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
         await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
-        Assert.Equal(GuidedReminder.Resume, harness.Guided.Reminder);
+        Assert.True(harness.Guided.ShowsResumeReminder);
 
+        var saves = harness.Store.Saves;
         harness.Guided.DismissReminder();
-        Assert.Equal(GuidedReminder.None, harness.Guided.Reminder);
-        Assert.False(harness.Store.Preferences.ReminderDismissed);
+        Assert.False(harness.Guided.ShowsResumeReminder);
+        Assert.Equal(saves, harness.Store.Saves); // nothing stored: only until the next load
 
         harness.Reload();
-        Assert.Equal(GuidedReminder.Resume, harness.Guided.Reminder);
+        Assert.True(harness.Guided.ShowsResumeReminder);
+    }
+
+    [Fact]
+    public async Task TheResumeReminder_Shows_OnceTheEditorIsClosedMidGuide_AndContinueOpensItAgain()
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Guided.Next();
+        Assert.False(harness.Guided.ShowsResumeReminder);
+
+        // Closing the Basic editor leaves its Plate open in the editors.
+        harness.BasicEditorOpen = false;
+        Assert.Equal(made, harness.OpenId);
+        Assert.True(harness.Guided.ShowsResumeReminder);
+
+        harness.Guided.Start();
+        harness.Frame();
+        Assert.Equal([EditorSurfaceKind.Basic], harness.Shown);
+        Assert.True(harness.Guided.IsGuiding(made));
+        Assert.Equal(GuidedStage.MakeItYours, harness.Guided.Stage);
     }
 
     [Fact]
@@ -403,7 +490,7 @@ public class GuidedCreationTests
         await harness.Library.DeletePlateAsync(first);
 
         Assert.False(harness.Guided.CanContinue);
-        Assert.Equal(GuidedReminder.None, harness.Guided.Reminder);
+        Assert.False(harness.Guided.ShowsResumeReminder);
 
         var second = await harness.StartAndOpenAsync();
         Assert.NotEqual(first, second);
@@ -431,6 +518,7 @@ public class GuidedCreationTests
         Assert.Equal(plates, harness.PlateCount);
         Assert.Null(harness.Store.Preferences.PlateId);
         Assert.Equal(GuidedRunStatus.None, harness.Store.Preferences.Run);
+        Assert.Equal(GuidedOfferAnswer.Undecided, harness.Store.Preferences.Offer); // nothing was started: the welcome may still come
         Assert.True(harness.Switcher.IsDirty);
         Assert.Equal(harness.Switcher.OriginalId, harness.OpenId);
     }
@@ -464,6 +552,7 @@ public class GuidedCreationTests
         Assert.Equal(plates, harness.PlateCount);
         Assert.Null(harness.Store.Preferences.PlateId);
         Assert.Equal(GuidedRunStatus.None, harness.Store.Preferences.Run);
+        Assert.Equal(GuidedOfferAnswer.Undecided, harness.Store.Preferences.Offer);
         Assert.Equal(harness.Switcher.OriginalId, harness.OpenId);
     }
 
@@ -505,7 +594,7 @@ public class GuidedCreationTests
     }
 
     [Fact]
-    public async Task ExitGuide_KeepsThePlate_AndHelpBringsTheStepsBack()
+    public async Task ExitGuide_KeepsThePlate_AndStartingAgainMakesANewPlate()
     {
         using var harness = await GuidedHarness.CreateAsync();
         var made = await harness.StartAndOpenAsync();
@@ -519,13 +608,55 @@ public class GuidedCreationTests
         Assert.Equal(GuidedRunStatus.Left, harness.Store.Preferences.Run);
         Assert.Equal(made, harness.OpenId);
         Assert.True(harness.Commands.IsDirty); // the edits stay
-        Assert.Equal(GuidedReminder.None, harness.Guided.Reminder); // left on purpose: no nagging
-        Assert.True(harness.Guided.CanContinue);
+        Assert.False(harness.Guided.ShowsResumeReminder); // left on purpose: no nagging
+        Assert.False(harness.Guided.CanContinue); // and not reopened on an old step later
 
-        harness.Guided.Start();
-        harness.Frame();
+        Assert.True(await harness.Commands.SaveAsync());
+        var plates = harness.PlateCount;
+        var next = await harness.StartAndOpenAsync();
+        Assert.NotEqual(made, next);
+        Assert.Equal(plates + 1, harness.PlateCount);
+        Assert.Equal(GuidedStage.ChooseLook, harness.Guided.Stage);
+        Assert.Equal("Lyra Moonfall", BasicIdentitySession.Find(harness.Library.GetSavedDocument(made)!, ProfileElementRole.BasicName)!.Text);
+    }
+
+    [Fact]
+    public async Task CreateStepByStep_AlwaysMakesANewPlate_EvenWithOneUnderWay()
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        var first = await harness.StartAndOpenAsync();
+        harness.Guided.Next();
+        var plates = harness.PlateCount;
+
+        harness.Guided.StartNew();
+        await harness.FramesUntilAsync(() => !harness.Guided.IsStarting && harness.OpenId is { } open && open != first);
+
+        var second = harness.Store.Preferences.PlateId!.Value;
+        Assert.NotEqual(first, second);
+        Assert.Equal(second, harness.OpenId);
+        Assert.Equal(plates + 1, harness.PlateCount);
+        Assert.NotNull(harness.Library.FindPlate(first)); // the first stays, as it was saved
+        Assert.Equal(GuidedStage.ChooseLook, harness.Guided.Stage);
+        Assert.True(harness.Guided.IsGuiding(second));
+    }
+
+    [Theory]
+    [InlineData(3)] // a step a newer build added
+    [InlineData(-1)]
+    [InlineData(99)]
+    public async Task AStepThisBuildDoesntKnow_ReadsAsTheFirstStep(int stored)
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Store.Preferences.Stage = (GuidedStage)stored;
+
         Assert.True(harness.Guided.IsGuiding(made));
-        Assert.Equal(GuidedStage.MakeItYours, harness.Guided.Stage);
+        Assert.Equal(GuidedStage.ChooseLook, harness.Guided.Stage);
+        Assert.Equal(1, harness.Guided.StepNumber);
+        Assert.False(harness.Guided.CanGoBack);
+
+        harness.Guided.Next();
+        Assert.Equal(GuidedStage.MakeItYours, harness.Store.Preferences.Stage);
     }
 
     // ---------------------------------------------------------------- saving
@@ -554,6 +685,8 @@ public class GuidedCreationTests
         Assert.Equal("Lyra Moonfall", BasicIdentitySession.Find(saved, ProfileElementRole.BasicName)!.Text);
         Assert.Equal(CuratedLooks.Styles()[0].Id, PlateStyle.InUse(saved)?.Id);
 
+        harness.Frame();
+        Assert.True(harness.Guided.ShowsSuccess(made)); // until it is dismissed, or the Plate edited, closed or switched
         harness.Guided.DismissSuccess();
         Assert.False(harness.Guided.ShowsSuccess(made));
 
@@ -608,9 +741,19 @@ public class GuidedCreationTests
         Assert.NotEqual("Lyra Moonfall", BasicIdentitySession.Find(harness.Library.GetSavedDocument(made)!, ProfileElementRole.BasicName)?.Text);
         Assert.Equal(savedBefore.Elements.Count, harness.Library.GetSavedDocument(made)!.Elements.Count);
 
-        // Back clears the message; the next try works.
+        // The editor's own error line holds the same failure: the steps show it once, as "Not saved".
+        Assert.NotNull(harness.Editor.Session.ErrorMessage);
+        Assert.Same(harness.Editor.Session.ErrorMessage, harness.Guided.SaveFailure);
+
+        // Back clears the message, and the header still leaves the failure out until the editor's next operation.
         harness.Guided.Back();
+        harness.Frame();
         Assert.Null(harness.Guided.SaveError);
+        Assert.Same(harness.Editor.Session.ErrorMessage, harness.Guided.SaveFailure);
+        harness.Editor.Basic.SetText(ProfileElementRole.BasicMessage, "Find me in Gridania.");
+        harness.Editor.Basic.CommitTextEdit();
+        harness.Frame();
+        Assert.Null(harness.Guided.SaveFailure);
         harness.Guided.Next();
         store.FailWrite = null;
         await harness.SaveAsync();
@@ -618,6 +761,82 @@ public class GuidedCreationTests
         Assert.Null(harness.Guided.SaveError);
         Assert.Equal(GuidedRunStatus.Completed, harness.Store.Preferences.Run);
         Assert.Equal("Lyra Moonfall", BasicIdentitySession.Find(harness.Library.GetSavedDocument(made)!, ProfileElementRole.BasicName)!.Text);
+    }
+
+    [Fact]
+    public async Task AnUndoWhileTheSaveIsWritten_LeavesItUnsaved_AndCompletesNothing()
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Guided.Next();
+        harness.Editor.Identity.SetNameText("Lyra Moonfall");
+        harness.Editor.Identity.Commit();
+        harness.Guided.Next();
+
+        harness.Guided.Save();
+        Assert.True(harness.Guided.IsSaving);
+        Assert.False(harness.Guided.CanEdit); // the steps' Undo, Redo, Exit Guide and Ctrl+Z wait
+        harness.Guided.Leave(); // Exit Guide can't slip in meanwhile
+        Assert.Equal(GuidedRunStatus.InProgress, harness.Store.Preferences.Run);
+
+        // An Undo that reached the editor anyway: the save writes what was there when Save was pressed.
+        harness.Commands.Undo();
+        await harness.FramesUntilAsync(() => !harness.Guided.IsSaving && !harness.Commands.IsSaving);
+
+        Assert.True(harness.Commands.IsDirty);
+        Assert.Equal(GuidedRunStatus.InProgress, harness.Store.Preferences.Run);
+        Assert.False(harness.Guided.ShowsSuccess(made));
+        Assert.True(harness.Guided.IsGuiding(made));
+        Assert.Null(harness.Guided.SaveError);
+        Assert.True(harness.Guided.CanEdit);
+
+        // Save Plate again saves what is shown, and completes.
+        await harness.SaveAsync();
+        Assert.Equal(GuidedRunStatus.Completed, harness.Store.Preferences.Run);
+        Assert.False(harness.Commands.IsDirty);
+    }
+
+    [Theory]
+    [InlineData("edit")]
+    [InlineData("close")]
+    [InlineData("switch")]
+    public async Task TheSavedState_EndsOnceThePlateIsEditedClosedOrSwitched(string then)
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Guided.Next();
+        harness.Guided.Next();
+        harness.Guided.Save();
+        Assert.True(harness.Guided.ShowsSuccess(made));
+
+        switch (then)
+        {
+            case "edit":
+                harness.Editor.Basic.SetText(ProfileElementRole.BasicMessage, "Find me in Limsa.");
+                harness.Editor.Basic.CommitTextEdit();
+                break;
+            case "close":
+                harness.BasicEditorOpen = false;
+                break;
+            default:
+                harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+                await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+                break;
+        }
+
+        harness.Frame();
+        Assert.Null(harness.Guided.SuccessPlateId);
+
+        // Back on the saved Plate, it is edited normally: no saved state, no steps.
+        harness.BasicEditorOpen = true;
+        if (harness.OpenId != made)
+        {
+            harness.Switcher.Switcher.Open(made);
+            await harness.FramesUntilAsync(() => harness.OpenId == made);
+        }
+
+        Assert.False(harness.Guided.ShowsSuccess(made));
+        Assert.False(harness.Guided.IsGuiding(made));
     }
 
     [Fact]

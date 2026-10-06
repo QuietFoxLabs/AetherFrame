@@ -77,7 +77,7 @@ internal sealed partial class BasicProfileEditorWindow
             DrawTitleControls(profile, identity);
         }
 
-        if (!MoreControls("Style and Layout"))
+        if (!MoreControls("Style and Layout", holdsComponentSlots: true))
         {
             DrawTitlePickerPopup(profile);
             return;

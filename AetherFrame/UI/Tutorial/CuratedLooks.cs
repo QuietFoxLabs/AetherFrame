@@ -25,19 +25,23 @@ internal static class CuratedLooks
     /// <summary>The fallback for an Art Style that isn't curated (one picked from the full collection).</summary>
     internal const string DefaultFallbackThemeId = "Midnight";
 
-    /// <summary>The curated Art Styles this build has, in order (a missing id is skipped, never an error).</summary>
-    internal static IReadOnlyList<ProfileThemePreset> Styles()
+    private static IReadOnlyList<ProfileThemePreset>? styles;
+
+    /// <summary>The curated Art Styles this build has, in order (a missing id is skipped, never an error). Built once.</summary>
+    internal static IReadOnlyList<ProfileThemePreset> Styles() => styles ??= FindStyles();
+
+    private static List<ProfileThemePreset> FindStyles()
     {
-        var styles = new List<ProfileThemePreset>(Pairs.Count);
+        var found = new List<ProfileThemePreset>(Pairs.Count);
         foreach (var (styleId, _) in Pairs)
         {
             if (ProfileThemePresets.Find(styleId) is { IsArtStyle: true } style)
             {
-                styles.Add(style);
+                found.Add(style);
             }
         }
 
-        return styles;
+        return found;
     }
 
     /// <summary>The Simple Theme to offer when <paramref name="style"/>'s artwork can't download.</summary>

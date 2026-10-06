@@ -51,7 +51,7 @@ internal sealed partial class BasicProfileEditorWindow
             DrawSectionHeadingSize(profile);
         }
 
-        if (MoreControls("Frame and Decorations"))
+        if (MoreControls("Frame and Decorations", holdsComponentSlots: true))
         {
             DrawFrameAndDecorations(profile);
         }

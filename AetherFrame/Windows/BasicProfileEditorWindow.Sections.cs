@@ -97,7 +97,7 @@ internal sealed partial class BasicProfileEditorWindow
             }
         }
 
-        if (!MoreControls("Fit, Frame and Layout"))
+        if (!MoreControls("Fit, Frame and Layout", holdsComponentSlots: true))
         {
             return;
         }

@@ -499,13 +499,21 @@ internal sealed class TemplateChooser
                 ImGui.CloseCurrentPopup();
             }
 
-            EditorWidgets.Tooltip("A new Plate in three short steps, with your look, name, portrait and message: the easiest start.");
+            EditorWidgets.Tooltip("Always a new Plate, in three short steps: your look, name, portrait and message. The easiest start.");
         }
 
-        // Right side: Cancel, then Use Template as the primary (accent-colored) action.
+        // Right side: Cancel, then Use Template as the primary (accent-colored) action; on a row of
+        // their own when the left side leaves no room for them.
         var buttonSize = new Vector2(130f, 0f) * ImGuiHelpers.GlobalScale;
         var rightWidth = (buttonSize.X * 2f) + ImGui.GetStyle().ItemSpacing.X;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - rightWidth));
+        if (ManageTemplates is not null || CreateStepByStep is not null)
+        {
+            AetherControls.AlignRightAfterItem(rightWidth);
+        }
+        else
+        {
+            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - rightWidth));
+        }
 
         if (ImGui.Button("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
         {

@@ -36,6 +36,14 @@ internal sealed partial class BasicProfileEditorWindow
 
     private static readonly string[] StepTitles = ["Choose a Look", "Make It Yours", "Save"];
 
+    // "Step 1 of 3: Choose a Look", built once.
+    private static readonly string[] StepLabels =
+    [
+        $"Step 1 of {GuidedCreation.StepCount}: {StepTitles[0]}",
+        $"Step 2 of {GuidedCreation.StepCount}: {StepTitles[1]}",
+        $"Step 3 of {GuidedCreation.StepCount}: {StepTitles[2]}",
+    ];
+
     private bool drawingGuided;
 
     /// <summary>Whether a saved Plate is the logged-in character's Active Plate: null with no character logged in. Set by the plugin.</summary>
@@ -65,7 +73,9 @@ internal sealed partial class BasicProfileEditorWindow
         var scale = ImGuiHelpers.GlobalScale;
         var success = guided.ShowsSuccess(profile.ProfileId);
         DrawGuidedHeader(guided, success);
-        if (basicEditorSession.ErrorMessage is { } error && !success)
+
+        // The editor's error line, except a failed Save the Save step already explains (or did, before Back).
+        if (basicEditorSession.ErrorMessage is { } error && !success && !ReferenceEquals(error, guided.SaveFailure))
         {
             AetherControls.StatusLine(AetherTone.Danger, error);
         }
@@ -101,9 +111,14 @@ internal sealed partial class BasicProfileEditorWindow
         }
     }
 
-    /// <summary>The title, where the player is ("Step 1 of 3"), Undo and Redo, Help, and Exit Guide.</summary>
+    /// <summary>
+    /// The title and where the player is ("Step 1 of 3"), then, at the right, the save state (nothing
+    /// is saved until Save), Undo, Redo, Exit Guide and Help. Each part moves to a row of its own
+    /// when the window is too narrow to hold it beside the last, so nothing is ever drawn over another.
+    /// </summary>
     private void DrawGuidedHeader(GuidedCreation guided, bool success)
     {
+        var style = ImGui.GetStyle();
         using (AetherFonts.Heading())
         {
             ImGui.AlignTextToFramePadding();
@@ -112,30 +127,38 @@ internal sealed partial class BasicProfileEditorWindow
 
         if (!success)
         {
-            ImGui.SameLine();
+            var step = StepLabels[guided.StepNumber - 1];
+            var titleEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
+            if (titleEnd + style.ItemSpacing.X + ImGui.CalcTextSize(step).X <= ImGui.GetWindowContentRegionMax().X)
+            {
+                ImGui.SameLine();
+            }
+
             ImGui.AlignTextToFramePadding();
-            ImGui.TextDisabled($"Step {guided.StepNumber} of {GuidedCreation.StepCount}: {StepTitles[(int)guided.Stage]}");
+            ImGui.TextDisabled(step);
         }
 
-        // Right: Undo, Redo, Help, Exit Guide, on a row of their own when one row can't hold them.
         var commands = actionBar.Commands;
-        var style = ImGui.GetStyle();
         float Width(string label) => ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2f);
-        var rightWidth = success ? 0f : Width("Undo") + Width("Redo") + Width("Exit Guide") + (style.ItemSpacing.X * 3f);
+        var stateWidth = EditorActionBar.WidestSaveState();
+        var rightWidth = success ? 0f : stateWidth + Width("Undo") + Width("Redo") + Width("Exit Guide") + (style.ItemSpacing.X * 3f);
         if (Help is not null)
         {
-            rightWidth += HelpMenu.ButtonWidth + style.ItemSpacing.X;
+            rightWidth += HelpMenu.ButtonWidth + (success ? 0f : style.ItemSpacing.X);
         }
 
-        var right = ImGui.GetContentRegionMax().X - rightWidth;
-        if (right > ImGui.GetCursorPosX() + ImGui.CalcTextSize(" ").X + 200f)
-        {
-            ImGui.SameLine(right);
-        }
-
+        AetherControls.AlignRightAfterItem(rightWidth);
         if (!success)
         {
-            using (ImRaii.Disabled(!commands.CanUndo))
+            // The action bar's own save state, in the room its widest wording needs, so the buttons never shift.
+            var stateStart = ImGui.GetCursorPosX();
+            var (stateText, stateColor) = actionBar.CurrentSaveState;
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(stateColor, stateText);
+            ImGui.SameLine(stateStart + stateWidth + style.ItemSpacing.X);
+
+            // None of these while Save is being written: what's being saved is what was there when Save was pressed.
+            using (ImRaii.Disabled(!commands.CanUndo || !guided.CanEdit))
             {
                 if (ImGui.Button("Undo##GuidedUndo"))
                 {
@@ -145,7 +168,7 @@ internal sealed partial class BasicProfileEditorWindow
 
             EditorWidgets.Tooltip("Undo (Ctrl+Z)");
             ImGui.SameLine();
-            using (ImRaii.Disabled(!commands.CanRedo))
+            using (ImRaii.Disabled(!commands.CanRedo || !guided.CanEdit))
             {
                 if (ImGui.Button("Redo##GuidedRedo"))
                 {
@@ -155,9 +178,12 @@ internal sealed partial class BasicProfileEditorWindow
 
             EditorWidgets.Tooltip("Redo (Ctrl+Y)");
             ImGui.SameLine();
-            if (AetherControls.GhostButton("Exit Guide", tooltip: "Leave the steps and edit this Plate with every Basic control.\nEverything you entered stays. Help can bring the steps back."))
+            using (ImRaii.Disabled(!guided.CanEdit))
             {
-                guided.Leave();
+                if (AetherControls.GhostButton("Exit Guide", tooltip: "Leave the steps and edit this Plate with every Basic control.\nEverything you entered stays."))
+                {
+                    guided.Leave();
+                }
             }
         }
 
@@ -166,10 +192,6 @@ internal sealed partial class BasicProfileEditorWindow
             if (!success)
             {
                 ImGui.SameLine();
-            }
-            else
-            {
-                ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetContentRegionMax().X - HelpMenu.ButtonWidth));
             }
 
             help.DrawButton("GuidedHelp");
@@ -279,13 +301,13 @@ internal sealed partial class BasicProfileEditorWindow
         DrawLookArtwork(profile);
 
         ImGui.Spacing();
-        if (ImGui.CollapsingHeader("Browse the full collection##GuidedAllStyles"))
+        var browse = ImGui.CollapsingHeader("Browse the full collection##GuidedAllStyles");
+        EditorWidgets.Tooltip("Every Art Style and Simple Theme. Only the style you choose is downloaded.");
+        if (browse)
         {
             using var id = ImRaii.PushId("AllLooks");
             backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme);
         }
-
-        EditorWidgets.Tooltip("Every Art Style and Simple Theme. Only the style you choose is downloaded.");
     }
 
     /// <summary>
@@ -532,7 +554,7 @@ internal sealed partial class BasicProfileEditorWindow
         AetherControls.Secondary(active switch
         {
             true => "It's your current character's Active Plate: the one AetherFrame shows for them, and what /af view opens.",
-            false => "To make it your current character's Active Plate, right-click it in My Plates and choose Set Active. The Plate menu at the top of the editor has Set Active too.",
+            false => "To make it your current character's Active Plate, right-click it in My Plates and choose Set Active.",
             null => "To make it a character's Active Plate, log in to that character, then right-click the Plate in My Plates and choose Set Active.",
         });
 
@@ -547,6 +569,7 @@ internal sealed partial class BasicProfileEditorWindow
         if (AetherControls.PrimaryButton("View Plate##GuidedView", half, "Shows the saved Plate in the Plate Viewer."))
         {
             ViewPlate?.Invoke(plateId);
+            guided.DismissSuccess();
         }
 
         if (half.X * 2f <= ImGui.GetContentRegionAvail().X)

@@ -154,6 +154,26 @@ internal static class AetherControls
         }
     }
 
+    /// <summary>
+    /// Before a row of <paramref name="rowWidth"/> that ends at the content's right edge: on the last
+    /// item's line when it fits after that item, otherwise on a line of its own, right-aligned there
+    /// when that line can hold it, so it never draws over what came before. Returns whether it shares
+    /// the last item's line.
+    /// </summary>
+    internal static bool AlignRightAfterItem(float rowWidth)
+    {
+        var x = ImGui.GetWindowContentRegionMax().X - rowWidth;
+        var lastItemEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
+        if (x >= lastItemEnd + ImGui.GetStyle().ItemSpacing.X)
+        {
+            ImGui.SameLine(x);
+            return true;
+        }
+
+        AlignRight(rowWidth);
+        return false;
+    }
+
     // ---------------------------------------------------------------- small pieces
 
     /// <summary>A keycap for a shortcut ("Ctrl+S").</summary>

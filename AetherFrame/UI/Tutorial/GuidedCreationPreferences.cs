@@ -8,10 +8,10 @@ public enum GuidedOfferAnswer
     /// <summary>Never answered (the welcome may still be shown, a few times at most).</summary>
     Undecided = 0,
 
-    /// <summary>Not now: a quiet reminder stays in My Plates until it is taken or dismissed.</summary>
+    /// <summary>Not now: the welcome may ask again on a later load (a few showings in all), while there is still no Plate.</summary>
     Deferred,
 
-    /// <summary>Don't show again: no welcome and no reminder. Help still offers the steps.</summary>
+    /// <summary>Don't show again: no welcome from now on. An empty My Plates and Help still offer the steps.</summary>
     Declined,
 
     /// <summary>The player started guided creation (from the welcome or anywhere else).</summary>
@@ -27,14 +27,14 @@ public enum GuidedRunStatus
     /// <summary>Started and not saved at the Save step yet: its Plate opens on the step it reached.</summary>
     InProgress,
 
-    /// <summary>The player chose Exit Guide: the Plate stays, edited normally; Help can bring the steps back.</summary>
+    /// <summary>The player chose Exit Guide: the Plate stays, edited normally; starting again makes a new Plate.</summary>
     Left,
 
     /// <summary>Saved at the Save step.</summary>
     Completed,
 }
 
-/// <summary>The three steps of guided creation, in order.</summary>
+/// <summary>The three steps of guided creation, in order. A value this build doesn't know reads as the first step.</summary>
 public enum GuidedStage
 {
     ChooseLook = 0,
@@ -69,9 +69,6 @@ public sealed class GuidedCreationPreferences
 
     /// <summary>How many times the welcome was shown (it stops after a few unanswered showings).</summary>
     public int OfferCount { get; set; }
-
-    /// <summary>The quiet "create your first Plate" reminder in My Plates was dismissed.</summary>
-    public bool ReminderDismissed { get; set; }
 
     public GuidedRunStatus Run { get; set; }
 

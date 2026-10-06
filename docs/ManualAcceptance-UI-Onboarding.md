@@ -19,9 +19,9 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 Since guided creation became the introductory route, a new player is offered it, not the tutorial; the tutorial starts from Help (section C starts it there). The guided steps themselves have their own checklist in the onboarding pull request.
 
 6. **Empty folder.** Load with the empty folder and log in: the Welcome to AetherFrame window appears centered once the Library has loaded and a character is logged in, with Create My First Plate (accent), Not Now and Don't Show Again. The log shows `OfferTutorial` and `welcome waits`. Loaded at the title screen, it waits for the login.
-7. **Close without answering** (X or Escape): it disappears; reload: welcomed again; after the third unanswered showing it is not shown again and My Plates shows the quiet "Make your first Plate in three short steps" reminder instead.
-8. **Not Now.** Reload: not welcomed; the reminder is in My Plates; its Not now removes it for good; Help still offers "Create a Plate step by step" and the full tutorial.
-9. **Don't Show Again.** Reload: not welcomed, no reminder; Help still offers both.
+7. **Close without answering** (X or Escape): it disappears and My Plates, still empty, offers Create My First Plate; reload: welcomed again; after the third showing it is not shown again.
+8. **Not Now.** The same as closing it: My Plates offers Create My First Plate, no reminder row; reload: welcomed again, within the same three showings.
+9. **Don't Show Again.** Reload: not welcomed, no reminder; Help still offers Create Step by Step and the full tutorial.
 10. **Create My First Plate**: the welcome closes, an Adventure Plate Classic is made and opens in the Basic editor on step 1, Choose a Look.
 10b. **Recovery first.** With kept unsaved changes or a recovery checkpoint waiting, load a new install: the "Unsaved changes kept" window comes first, and the welcome appears only once it has been answered (Decide Later counts).
 
