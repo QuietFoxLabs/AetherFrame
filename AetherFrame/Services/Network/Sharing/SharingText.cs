@@ -47,7 +47,7 @@ internal static class SharingText
     /// the server keeps is in <see cref="OnlineCountDetails"/>, behind a control under the consent.
     /// </summary>
     internal const string OnlineCountSends =
-        "While this character is logged in with sharing on, AetherFrame tells the sharing server about once a minute that it is online, and My Plates shows how many sharing characters are online, refreshed every 5 minutes. Logging out, pausing or turning off sharing, or closing the game stops it. Another sharing player who watches the total can sometimes tell when this character logs in or out.";
+        "While this character is logged in with sharing on, AetherFrame tells the sharing server about once a minute that it is online, and My Plates shows how many sharing characters are online, refreshed every 5 minutes. Logging out, pausing or turning off sharing, or closing the game stops it. Another sharing player who watches the total can sometimes tell when this character logs in or out, even below 5 if they keep characters of their own counted.";
 
     internal const string OnlineNoticeTitle = "My Plates now shows how many are online";
 
@@ -60,18 +60,18 @@ internal static class SharingText
     [
         "What is sent: while this character is logged in with sharing on, a small signal about once a minute that it is online. Characters that don't share send nothing.",
         "What you see: how many sharing characters are online, in My Plates, refreshed every 5 minutes, and \"Fewer than 5\" below 5.",
-        "When it stops: when you log out, pause or turn off sharing, or close the game. After a crash, within about 3 minutes.",
-        "What others can tell: another sharing player who watches the total can sometimes tell, to within about 5 minutes, when this character logs in or out.",
+        "When it stops: when you log out, pause or turn off sharing, or close the game; after a crash, within about 3 minutes. Others see the change at the next refresh.",
+        "What others can tell: another sharing player who watches the total can sometimes tell, to within about 5 minutes, when this character logs in or out, even below 5 if they keep characters of their own counted.",
         "Nothing is sent until you choose Got it.",
     ];
 
     /// <summary>The control that opens <see cref="OnlineCountDetails"/>, under the consent and the notice.</summary>
-    internal const string OnlineDetailsLabel = "Details: what the server keeps";
+    internal const string OnlineDetailsLabel = "Online count details: what the server keeps";
 
     /// <summary>What the server keeps for the online count, for a player who opens the details: under the consent, and under the notice.</summary>
     internal static readonly string[] OnlineCountDetails =
     [
-        "The server holds who is online in memory only, until 3 minutes after the last signal, and counts each character once. It gives out only the total, the same to everyone for each 5 minutes, and keeps no record of who was online.",
+        "The server holds who is online in memory only, for about 3 minutes after the last signal, and counts each character once. It gives out only the total, the same to everyone for each 5 minutes. Apart from its rate limits (below), it keeps no record of who was online.",
         "Signals that get through aren't logged. One that fails leaves a line in the server's log for 14 days, saying what failed and when, never whose.",
         "Each signal shows the server your network address, which it never writes down or logs. Its rate limits hold the address, and when this character started being counted, in memory for up to an hour.",
         "Below 5, the total hides who comes and goes only from a player who adds no characters of their own: someone who keeps several of their own counted can see others come and go even then.",

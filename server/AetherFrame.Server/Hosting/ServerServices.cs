@@ -86,6 +86,14 @@ internal sealed class UnloggedWhenSuccessful
 /// </summary>
 internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logger)
 {
+    /// <summary>
+    /// A request's id: 8 random bytes in hex, its own and nothing else's. Kestrel's would be the
+    /// connection's id and the request's number on it, and behind the proxy, which carries many
+    /// players' requests over each connection it keeps open, that number would tell how many
+    /// requests came before on the connection, the unlogged ones included.
+    /// </summary>
+    internal static string NewRequestId() => Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8));
+
     /// <summary>Whether a request that ran to its end leaves no line: a success, on an endpoint marked <see cref="UnloggedWhenSuccessful"/>.</summary>
     internal static bool Unlogged(HttpContext http) =>
         http.Response.StatusCode is >= 200 and < 300
@@ -94,6 +102,7 @@ internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logge
     public async Task InvokeAsync(HttpContext http)
     {
         var started = Stopwatch.GetTimestamp();
+        http.TraceIdentifier = NewRequestId();
         http.Response.OnStarting(() =>
         {
             http.Response.Headers.CacheControl = "no-store";
@@ -109,7 +118,13 @@ internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logge
             await next(http);
             finished = true;
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            // Mostly a client that went away: named, so its line isn't taken for a success.
+            http.Items[SignedRequests.ErrorKindItem] ??= "cancelled";
+            throw;
+        }
+        catch (Exception e)
         {
             http.Items[SignedRequests.ErrorKindItem] = "exception:" + e.GetType().Name;
             if (!http.Response.HasStarted)

@@ -559,47 +559,73 @@ public class PresenceTests
     }
 
     [Fact]
-    public void ARevocation_OutlastsEveryAdmissionBeforeIt_EvenWhenTheClockGoesBack()
+    public void SettingTheWallClock_MovesNoExpiryAdmissionRevocationOrWindow()
     {
+        // The rechecks of 7843256: with ages read from the wall clock, setting it an hour forward let
+        // a sweep forget a revocation, and setting it back again left the start it should refuse
+        // still admitted. The store's clock is the monotonic timestamp, which neither moves.
         var start = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero);
         var time = new ManualTime(start);
         var store = new PresenceStore(time);
         var key = KeyOf(1);
         var admitted = Issued(store);
-
-        // The clock is set back a minute before sharing stops. A start isn't made while the clock
-        // reads earlier than its challenge.
-        time.Now = start - TimeSpan.FromMinutes(1);
         store.ForgetKey(key);
-        Assert.Equal(StartResult.Expired, store.Start(key, Aria, admitted).Result);
 
-        // The revocation is dated no earlier than the challenge, so at 12:04, 5 minutes after the
-        // clock's 11:59, it is still remembered, while the challenge, 4 minutes old, still admits.
-        time.Now = start + TimeSpan.FromMinutes(4);
+        time.Now = start + TimeSpan.FromHours(1);
         store.SweepExpired();
+        Assert.Equal(1, store.Revocations);
+        time.Now = start + TimeSpan.FromSeconds(30);
         Assert.Equal(StartResult.Stale, store.Start(key, Aria, admitted).Result);
-        time.Now = start + PresenceStore.RevocationMemory;
+
+        // Set back instead, the clock shortens nothing: a fresh challenge still admits its start.
+        time.Now = start - TimeSpan.FromDays(1);
+        var session = store.Start(KeyOf(2), Bram, Issued(store));
+        Assert.Equal(StartResult.Started, session.Result);
+
+        // A session's spacing and expiry go by the time that passed, whatever the clock reads.
+        time.Now = start + TimeSpan.FromHours(2);
+        Assert.Equal(BeatResult.TooSoon, store.Beat(session.Token!).Result);
+        time.Advance(PresenceStore.MinimumBeatSpacing);
+        Assert.Equal(BeatResult.Counted, store.Beat(session.Token!).Result);
+        time.Now = start - TimeSpan.FromDays(2);
+        time.Advance(PresenceStore.Expiry);
+        Assert.Equal(BeatResult.Unknown, store.Beat(session.Token!).Result);
+
+        // And the admission and the revocation end together, 300 seconds after the challenge by the
+        // time that passed.
+        time.Advance(PresenceStore.RevocationMemory - PresenceStore.Expiry - PresenceStore.MinimumBeatSpacing);
         Assert.Equal(StartResult.Expired, store.Start(key, Aria, admitted).Result);
-        Assert.Equal(0, store.Sessions);
+        store.SweepExpired();
+        Assert.Equal(0, store.Revocations);
+
+        // The windows too: one snapshot per window, whichever way the clock is set inside it.
+        Assert.Equal(TimeSpan.FromMinutes(5), store.UntilNextWindow());
+        var snapshot = store.Snapshot();
+        time.Now = start + TimeSpan.FromDays(3);
+        Assert.Equal(snapshot, store.Snapshot());
+        Assert.Equal(TimeSpan.FromMinutes(5), store.UntilNextWindow());
     }
 
     [Fact]
-    public void TheCount_IsOneSnapshotPerFiveMinuteWindow_TheSameForStartsAndHeartbeats()
+    public void TheCount_IsOneSnapshotPerFiveMinuteWindow_TakenAsTheWindowBegins()
     {
         // GPT's privacy decision, October 6, 2026: one shared snapshot for each fixed 5-minute window,
-        // while leaving, revocation and expiry still end a session at once.
-        var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 2, 30, TimeSpan.Zero));
+        // the same for starts and heartbeats, while leaving, revocation and expiry still end a session
+        // at once. The rechecks of 7843256: taken as the window begins, of the sessions live then,
+        // so no request chooses the moment it shows.
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
         var store = new PresenceStore(time);
         Assert.Equal(TimeSpan.FromMinutes(5), PresenceStore.SnapshotWindow);
 
-        // The first answer in the window takes its snapshot: Aria alone. Five more characters start
-        // in the same window, and each is answered that same snapshot.
+        // The first window began with the store, before any session: six characters start in it,
+        // and each is answered its snapshot, none.
+        time.Advance(TimeSpan.FromSeconds(150));
         var tokens = new byte[6][];
         for (var index = 0; index < tokens.Length; index++)
         {
             var started = store.Start(KeyOf(index), 1_000 + index, Issued(store));
             Assert.Equal(StartResult.Started, started.Result);
-            Assert.Equal(1, started.Online);
+            Assert.Equal(0, started.Online);
             tokens[index] = started.Token!;
         }
 
@@ -613,32 +639,67 @@ public class PresenceTests
         Assert.Equal(4, store.Online());
         Assert.Equal(BeatResult.Unknown, store.Beat(tokens[1]).Result);
         Assert.Equal(BeatResult.Unknown, store.Beat(tokens[2]).Result);
-        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
-        time.Now = new DateTimeOffset(2026, 10, 6, 12, 4, 59, 999, TimeSpan.Zero);
-        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[3]));
-        Assert.Equal(1, store.Snapshot());
+        Assert.Equal((BeatResult.Counted, 0), store.Beat(tokens[0]));
+        time.Advance(TimeSpan.FromSeconds(90) - TimeSpan.FromMilliseconds(1));
+        Assert.Equal((BeatResult.Counted, 0), store.Beat(tokens[3]));
+        Assert.Equal(TimeSpan.FromMilliseconds(1), store.UntilNextWindow());
 
-        // The windows are fixed by the clock, not by the first answer: at 12:05 the next one starts,
-        // two and a half minutes after the first snapshot, with the 4 sessions live then.
-        time.Now = new DateTimeOffset(2026, 10, 6, 12, 5, 0, TimeSpan.Zero);
-        Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[4]));
+        // The sweep wakes as the next window begins and takes its snapshot: the 4 sessions live then.
+        // A leave and a start right after it change the sessions, not the snapshot, and the start
+        // waits for the next window to be counted.
+        Assert.Equal(TimeSpan.FromMilliseconds(10), PresenceSweep.Wait(store.UntilNextWindow()));
+        time.Advance(TimeSpan.FromMilliseconds(1));
+        store.SweepExpired();
+        store.Leave(tokens[3]);
         var seventh = store.Start(KeyOf(6), 1_006, Issued(store));
-        Assert.Equal(4, seventh.Online);
-        Assert.Equal(5, store.Online());
-
-        // A session with no heartbeat still expires 180 seconds after its start, inside the window,
-        // with the snapshot as it was.
-        time.Now = new DateTimeOffset(2026, 10, 6, 12, 5, 30, TimeSpan.Zero);
-        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[5]).Result);
+        Assert.Equal((StartResult.Started, 4), (seventh.Result, seventh.Online));
         Assert.Equal(4, store.Online());
+        Assert.Equal(4, store.Snapshot());
+
+        // Two sessions with no heartbeat expire 180 seconds after their start, inside the window,
+        // with the snapshot as it was.
+        time.Advance(TimeSpan.FromSeconds(30));
+        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[5]).Result);
+        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[4]).Result);
+        Assert.Equal(2, store.Online());
         Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[0]));
-        time.Now = new DateTimeOffset(2026, 10, 6, 12, 8, 0, TimeSpan.Zero);
+        time.Advance(TimeSpan.FromSeconds(150));
         Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[0]));
 
-        // By the next window only Aria still beats, and its snapshot says so.
-        time.Now = new DateTimeOffset(2026, 10, 6, 12, 10, 0, TimeSpan.Zero);
+        // By the third window the seventh has expired too, and only the first still beats.
+        time.Advance(TimeSpan.FromSeconds(120));
         Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
         Assert.Equal(1, store.Snapshot());
+
+        // With no sweep to take it as the fourth begins, the window's first answer takes it, of the
+        // sessions that began before the window: a start that comes first doesn't count itself.
+        time.Advance(TimeSpan.FromSeconds(150));
+        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
+        time.Advance(TimeSpan.FromSeconds(150));
+        var eighth = store.Start(KeyOf(7), 1_007, Issued(store));
+        Assert.Equal((StartResult.Started, 1), (eighth.Result, eighth.Online));
+        Assert.Equal(2, store.Online());
+    }
+
+    [Fact]
+    public void TheSweep_WakesAsEachWindowBegins_AndNeverSpins()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        Assert.Equal(PresenceStore.SnapshotWindow, store.UntilNextWindow());
+        Assert.Equal(PresenceSweep.Interval, PresenceSweep.Wait(store.UntilNextWindow()));
+        time.Advance(PresenceStore.SnapshotWindow - TimeSpan.FromSeconds(4));
+        Assert.Equal(TimeSpan.FromSeconds(4), PresenceSweep.Wait(store.UntilNextWindow()));
+        Assert.Equal(PresenceSweep.Interval, PresenceSweep.Wait(PresenceSweep.Interval));
+        Assert.Equal(PresenceSweep.MinimumWait, PresenceSweep.Wait(TimeSpan.FromTicks(1)));
+        Assert.Equal(PresenceSweep.MinimumWait, PresenceSweep.Wait(TimeSpan.Zero));
+        time.Advance(TimeSpan.FromSeconds(4));
+        Assert.Equal(PresenceStore.SnapshotWindow, store.UntilNextWindow());
+
+        // And the background sweep waits that long, so it is what takes each window's snapshot.
+        var source = System.IO.File.ReadAllText(System.IO.Path.Combine(RepositoryRoot(), "server", "AetherFrame.Server", "Presence", "PresenceStore.cs"));
+        Assert.Contains("wait = Wait(presence.UntilNextWindow());", source, StringComparison.Ordinal);
+        Assert.Contains("await Task.Delay(wait, time, stoppingToken);", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -683,8 +744,8 @@ public class PresenceTests
 
         var failures = Lines().Where(line => line.Contains("/v1/presence", StringComparison.Ordinal)).ToArray();
         Assert.Equal(2, failures.Length);
-        Assert.Matches(@"^\S+ Information: \S+ /v1/presence/beat 404 \d+ presence:unknown $", failures[0]);
-        Assert.Matches(@"^\S+ Information: \S+ /v1/presence/beat 400 \d+ body:token $", failures[1]);
+        Assert.Matches(@"^\S+ Information: [0-9a-f]{16} /v1/presence/beat 404 \d+ presence:unknown $", failures[0]);
+        Assert.Matches(@"^\S+ Information: [0-9a-f]{16} /v1/presence/beat 400 \d+ body:token $", failures[1]);
         var log = server.Log.All;
         Assert.DoesNotContain(Convert.ToBase64String(token), log, StringComparison.Ordinal);
         Assert.DoesNotContain(Convert.ToHexString(token), log, StringComparison.OrdinalIgnoreCase);
@@ -697,6 +758,64 @@ public class PresenceTests
             .Select(endpoint => endpoint.RoutePattern.RawText!)
             .Order(StringComparer.Ordinal);
         Assert.Equal(["/v1/presence", "/v1/presence/beat", "/v1/presence/challenge", "/v1/presence/leave"], endpoints);
+    }
+
+    [Fact]
+    public async Task TheRequestLog_LeavesOutOnlyAFinishedSuccess_AndGivesEachRequestARandomIdOfItsOwn()
+    {
+        // The rechecks of 7843256: a request cut short leaves its line even with a success's status,
+        // and named as such; and the id is random, not Kestrel's connection id and request number,
+        // which behind the proxy's shared connections would count the unlogged requests before it.
+        var captured = new CapturedLog();
+        using var factory = new Microsoft.Extensions.Logging.LoggerFactory([captured]);
+        var logger = new Microsoft.Extensions.Logging.Logger<AetherFrame.Server.Hosting.RequestLog>(factory);
+        static Microsoft.AspNetCore.Routing.RouteEndpoint Endpoint(string route, params object[] metadata) =>
+            new(_ => Task.CompletedTask, Microsoft.AspNetCore.Routing.Patterns.RoutePatternFactory.Parse(route), 0, new Microsoft.AspNetCore.Http.EndpointMetadataCollection(metadata), route);
+        var marked = Endpoint("/v1/presence/beat", AetherFrame.Server.Hosting.UnloggedWhenSuccessful.Instance);
+        var unmarked = Endpoint("/v1/status");
+
+        async Task<string[]> Run(Microsoft.AspNetCore.Http.Endpoint endpoint, int status, Exception? thrown = null)
+        {
+            var before = captured.Lines.Count;
+            var http = new Microsoft.AspNetCore.Http.DefaultHttpContext { TraceIdentifier = "0HN7AETHER:00000002" };
+            Microsoft.AspNetCore.Http.EndpointHttpContextExtensions.SetEndpoint(http, endpoint);
+            var log = new AetherFrame.Server.Hosting.RequestLog(
+                context =>
+                {
+                    context.Response.StatusCode = status;
+                    return thrown is null ? Task.CompletedTask : Task.FromException(thrown);
+                },
+                logger);
+            if (thrown is OperationCanceledException)
+            {
+                await Assert.ThrowsAsync<OperationCanceledException>(() => log.InvokeAsync(http));
+            }
+            else
+            {
+                await log.InvokeAsync(http);
+            }
+
+            return [.. captured.Lines.Skip(before)];
+        }
+
+        Assert.Empty(await Run(marked, 200));
+        Assert.Empty(await Run(marked, 204));
+        var lines = new[]
+        {
+            Assert.Single(await Run(marked, 404)),
+            Assert.Single(await Run(marked, 200, new OperationCanceledException())),
+            Assert.Single(await Run(marked, 200, new InvalidOperationException("a body, say"))),
+            Assert.Single(await Run(unmarked, 200)),
+        };
+
+        var prefix = typeof(AetherFrame.Server.Hosting.RequestLog).FullName + " Information: ";
+        Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/presence/beat 404 \\d+ - $", lines[0]);
+        Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/presence/beat 200 \\d+ cancelled $", lines[1]);
+        Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/presence/beat 500 \\d+ exception:InvalidOperationException $", lines[2]);
+        Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/status 200 \\d+ - $", lines[3]);
+        Assert.DoesNotContain("a body, say", captured.All, StringComparison.Ordinal);
+        Assert.DoesNotContain("0HN7AETHER", captured.All, StringComparison.Ordinal);
+        Assert.Equal(lines.Length, lines.Select(line => line.Split(' ')[2]).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]

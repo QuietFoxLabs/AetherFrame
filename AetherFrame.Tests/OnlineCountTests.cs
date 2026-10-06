@@ -335,7 +335,8 @@ public class OnlineCountTests
         Assert.Contains("about once a minute", SharingText.OnlineCountSends, StringComparison.Ordinal);
         Assert.Contains("refreshed every 5 minutes", SharingText.OnlineCountSends, StringComparison.Ordinal);
         Assert.Contains("can sometimes tell", SharingText.OnlineCountSends, StringComparison.Ordinal);
-        Assert.True(Words(SharingText.OnlineCountSends) <= 70, "The consent's statement of the count is one statement among many.");
+        Assert.Contains("even below 5 if they keep characters of their own counted", SharingText.OnlineCountSends, StringComparison.Ordinal);
+        Assert.True(Words(SharingText.OnlineCountSends) <= 80, "The consent's statement of the count is one statement among many.");
     }
 
     [Fact]
@@ -344,22 +345,24 @@ public class OnlineCountTests
         // GPT's review of fa51214: the notice's 200-word paragraph was too much. What is sent, the
         // refresh, what stops it and what others can still tell are short visible points.
         var points = SharingText.OnlineNoticePoints;
-        Assert.All(points, point => Assert.True(Words(point) <= 30, point));
-        Assert.True(points.Sum(Words) <= 110, "The notice's points stay short in all.");
+        Assert.All(points, point => Assert.True(Words(point) <= 40, point));
+        Assert.True(points.Sum(Words) <= 130, "The notice's points stay short in all.");
         Assert.Contains(points, point => point.StartsWith("What is sent:", StringComparison.Ordinal) && point.Contains("about once a minute", StringComparison.Ordinal) && point.Contains("Characters that don't share send nothing", StringComparison.Ordinal));
         Assert.Contains(points, point => point.StartsWith("What you see:", StringComparison.Ordinal) && point.Contains("refreshed every 5 minutes", StringComparison.Ordinal) && point.Contains("Fewer than 5", StringComparison.Ordinal));
-        Assert.Contains(points, point => point.StartsWith("When it stops:", StringComparison.Ordinal) && point.Contains("log out", StringComparison.Ordinal) && point.Contains("pause", StringComparison.Ordinal) && point.Contains("close the game", StringComparison.Ordinal) && point.Contains("about 3 minutes", StringComparison.Ordinal));
-        Assert.Contains(points, point => point.StartsWith("What others can tell:", StringComparison.Ordinal) && point.Contains("can sometimes tell", StringComparison.Ordinal));
+        Assert.Contains(points, point => point.StartsWith("When it stops:", StringComparison.Ordinal) && point.Contains("log out", StringComparison.Ordinal) && point.Contains("pause", StringComparison.Ordinal) && point.Contains("close the game", StringComparison.Ordinal) && point.Contains("about 3 minutes", StringComparison.Ordinal) && point.Contains("at the next refresh", StringComparison.Ordinal));
+        Assert.Contains(points, point => point.StartsWith("What others can tell:", StringComparison.Ordinal) && point.Contains("can sometimes tell", StringComparison.Ordinal) && point.Contains("even below 5 if they keep characters of their own counted", StringComparison.Ordinal));
         Assert.Equal("Nothing is sent until you choose Got it.", points[^1]);
 
         // The retention details are there for whoever opens them, and none of them is a visible point.
         var details = string.Join(" ", SharingText.OnlineCountDetails);
-        foreach (var said in new[] { "memory only", "3 minutes after the last signal", "counts each character once", "no record of who was online", "aren't logged", "14 days", "never whose", "network address", "never writes down or logs", "up to an hour", "adds no characters of their own" })
+        foreach (var said in new[] { "memory only", "about 3 minutes after the last signal", "counts each character once", "Apart from its rate limits (below), it keeps no record of who was online", "the same to everyone for each 5 minutes", "aren't logged", "14 days", "never whose", "network address", "never writes down or logs", "up to an hour", "adds no characters of their own" })
         {
             Assert.Contains(said, details, StringComparison.Ordinal);
         }
 
         Assert.DoesNotContain(points, point => point.Contains("14 days", StringComparison.Ordinal) || point.Contains("network address", StringComparison.Ordinal));
+
+        Assert.StartsWith("Online count details", SharingText.OnlineDetailsLabel, StringComparison.Ordinal);
 
         // The window draws the points as bullets, and the details only once the control is opened,
         // under the notice and under the consent alike.
