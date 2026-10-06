@@ -258,21 +258,25 @@ internal sealed class ContinuousRecovery
     {
         var document = profiles.CurrentProfile;
         var epoch = session.RecoveryEpoch;
-        if (!ReferenceEquals(document, current?.Document) || current!.Epoch != epoch)
-        {
-            var ended = current;
-            current = document is null ? null : new Editing(document, Guid.NewGuid(), epoch, ProfileService.DocumentState.Capture(document), now);
-            if (current is not null)
-            {
-                current.HistorySteps = session.RecoveryHistorySteps;
-                current.WholeDocumentSteps = session.RecoveryWholeDocumentSteps;
-                editings[current.EditId] = current;
-            }
 
-            if (ended is not null)
-            {
-                End(ended, current);
-            }
+        // The same editing, or still no Plate open (the game's start, or since the open Plate closed).
+        if (ReferenceEquals(document, current?.Document) && (current is null || current.Epoch == epoch))
+        {
+            return;
+        }
+
+        var ended = current;
+        current = document is null ? null : new Editing(document, Guid.NewGuid(), epoch, ProfileService.DocumentState.Capture(document), now);
+        if (current is not null)
+        {
+            current.HistorySteps = session.RecoveryHistorySteps;
+            current.WholeDocumentSteps = session.RecoveryWholeDocumentSteps;
+            editings[current.EditId] = current;
+        }
+
+        if (ended is not null)
+        {
+            End(ended, current);
         }
     }
 

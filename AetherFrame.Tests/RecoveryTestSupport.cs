@@ -17,17 +17,20 @@ namespace AetherFrame.Tests;
 /// <summary>
 /// Continuous recovery as the plugin wires it, over one editor session, on an elapsed-time clock the
 /// test moves: <see cref="FrameAsync"/> is one editor frame (the session syncs, recovery ticks), then
-/// waits for whatever the writer was asked to do, so every test reads a settled folder.
+/// waits for whatever the writer was asked to do, so every test reads a settled folder. A frame that
+/// failed inside recovery, which only logs it, fails the test (see <see cref="AssertNoFailure"/>).
 /// </summary>
 internal sealed class RecoveryRig
 {
     private readonly EditorSession session;
+    private readonly IAetherFrameLog log;
 
     internal RecoveryRig(
         PlateStoragePaths paths, ProfileService profiles, EditorSession session, Func<EditorSurfaceKind?> surface, IAetherFrameLog log,
         TestRecoveryFiles? files = null, Func<DateTime>? utcNow = null, Guid? sessionId = null)
     {
         this.session = session;
+        this.log = log;
         Files = files ?? new TestRecoveryFiles();
         Store = new RecoveryCheckpointStore(paths, Files, sessionId ?? Guid.NewGuid(), log, utcNow);
         Recovery = new ContinuousRecovery(profiles, session, surface, Store, "AetherFrame test", log, () => Now, utcNow);
@@ -49,6 +52,22 @@ internal sealed class RecoveryRig
         session.SyncWithCurrentProfile();
         Recovery.Tick();
         Assert.True(await Recovery.Writer.WaitIdleAsync(TimeSpan.FromSeconds(10)), "The recovery writer didn't settle.");
+        AssertNoFailure(log);
+    }
+
+    /// <summary>
+    /// Recovery never throws out of a frame or out of unloading: it logs the failure once and goes on.
+    /// This fails a test whose frames or unload failed that way (build 9bfa246's null state did, unseen).
+    /// </summary>
+    internal static void AssertNoFailure(IAetherFrameLog log)
+    {
+        if (log is TestLog test)
+        {
+            Assert.DoesNotContain(
+                test.Messages.ToArray(),
+                m => m.StartsWith("E AetherFrame's continuous recovery failed", StringComparison.Ordinal)
+                    || m.StartsWith("E AetherFrame couldn't settle its recovery checkpoints", StringComparison.Ordinal));
+        }
     }
 
     /// <summary>Frames every <paramref name="step"/> seconds for <paramref name="seconds"/>, calling <paramref name="each"/> before each one.</summary>
