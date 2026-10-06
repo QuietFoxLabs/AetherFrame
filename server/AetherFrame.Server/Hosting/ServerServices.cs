@@ -118,9 +118,10 @@ internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logge
             await next(http);
             finished = true;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (http.RequestAborted.IsCancellationRequested)
         {
-            // Mostly a client that went away: named, so its line isn't taken for a success.
+            // The client went away: named, so its line isn't taken for a success. Any other
+            // cancellation, a timeout's say, is an exception like the rest, below.
             http.Items[SignedRequests.ErrorKindItem] ??= "cancelled";
             throw;
         }

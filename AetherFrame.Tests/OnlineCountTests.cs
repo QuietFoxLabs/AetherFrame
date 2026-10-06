@@ -93,6 +93,124 @@ public class OnlineCountTests
     }
 
     [Fact]
+    public async Task ASession_IsRenewedBeforeItsHour_ByANewStartThatReplacesIt_WithNoHeartbeatRefused()
+    {
+        // The rechecks of 28be0e2: the server counts a session's heartbeats for an hour, and the
+        // refusal at the hour left a line in its log an hour apart for as long as a character played.
+        // The plugin replaces the session first, 50 to 54 minutes in, while it is live.
+        using var harness = new Harness();
+        Assert.Equal((TimeSpan.FromMinutes(52), TimeSpan.FromMinutes(2)), (OnlineCountPace.Default.Renewal, OnlineCountPace.Default.RenewalJitter));
+        Assert.Equal((OnlineCountPace.Default.Renewal, OnlineCountPace.Default.RenewalJitter), (Quick.Renewal, Quick.RenewalJitter));
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 2);
+        var started = harness.Now;
+
+        // Not before 50 minutes, whatever the jitter.
+        harness.Now = started + TimeSpan.FromMinutes(50) - TimeSpan.FromSeconds(1);
+        var beats = harness.Server.Beats.Count;
+        await harness.WaitFor(() => harness.Server.Beats.Count >= beats + 3);
+        Assert.Single(harness.Server.Tokens);
+
+        // By 54 minutes it is due: a new start signed by the same key replaces the session, and the
+        // heartbeats carry its token from then on.
+        harness.Now = started + TimeSpan.FromMinutes(54);
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 2 && harness.Server.Beats.Count(beat => beat.SequenceEqual(harness.Server.Tokens[1])) >= 2);
+        Assert.Equal([harness.Key.PublicKey.Id, harness.Key.PublicKey.Id], harness.Server.Signers);
+        Assert.False(harness.Server.IsLive(harness.Server.Tokens[0]));
+
+        // And again, 50 to 54 minutes after the renewal.
+        harness.Now = started + TimeSpan.FromMinutes(54 + 54);
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 3 && harness.Server.Beats.Count(beat => beat.SequenceEqual(harness.Server.Tokens[2])) >= 1);
+        Assert.Equal(0, harness.Server.UnknownBeats);
+        Assert.Empty(harness.Server.Leaves);
+
+        // A renewal takes the place of its heartbeat: the next goes a heartbeat's wait after it, so
+        // the server never sees one too soon.
+        Assert.True(harness.Server.ShortestGap >= Quick.Beat * 0.8 - TimeSpan.FromMilliseconds(15), $"A heartbeat came {harness.Server.ShortestGap.TotalMilliseconds} ms after its session's start or last heartbeat.");
+        Assert.Equal(3, harness.Server.Paths.Count(path => path == "/v1/presence/challenge"));
+        Assert.Equal(OnlineCountState.Online, harness.Count.View.AsOf(harness.Now).State);
+    }
+
+    [Fact]
+    public async Task ARenewalThatFails_IsNotTriedAgain_TheSessionBeatsOn_AndItsHourStartsItAgain()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.Server.StartStatus = HttpStatusCode.ServiceUnavailable;
+        harness.Now += TimeSpan.FromMinutes(54);
+
+        // One try, which fails: the session's own heartbeats go on, each counted, and no other try.
+        await harness.WaitFor(() => harness.Server.StartTimes.Count == 2);
+        var beats = harness.Server.Beats.Count;
+        await harness.WaitFor(() => harness.Server.Beats.Count >= beats + 4);
+        Assert.Equal(2, harness.Server.StartTimes.Count);
+        Assert.All(harness.Server.Beats, beat => Assert.Equal(harness.Server.Tokens.Single(), beat));
+        Assert.Equal(0, harness.Server.UnknownBeats);
+        Assert.Equal(OnlineCountState.Online, harness.Count.View.AsOf(harness.Now).State);
+
+        // At its hour the server refuses its heartbeat, and the session is started again, as after
+        // a restart of the server.
+        harness.Server.StartStatus = HttpStatusCode.OK;
+        harness.Server.Forget();
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 2 && harness.Server.Beats.Count(beat => beat.SequenceEqual(harness.Server.Tokens[1])) >= 1);
+        Assert.Equal(1, harness.Server.UnknownBeats);
+        Assert.Equal(3, harness.Server.StartTimes.Count);
+    }
+
+    [Fact]
+    public async Task ARenewalThePersonaSessionIsTooBusyFor_BeatsMeanwhile_AndRenewsOnceItIsFree()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.SessionBusy = true;
+        harness.Now += TimeSpan.FromMinutes(54);
+
+        // The renewal's challenge is asked for once and kept, and the session's heartbeats go on.
+        await harness.WaitFor(() => harness.Server.Paths.Count(path => path == "/v1/presence/challenge") == 2);
+        var beats = harness.Server.Beats.Count;
+        await harness.WaitFor(() => harness.Server.Beats.Count >= beats + 3);
+        Assert.Single(harness.Server.Tokens);
+        Assert.Equal(2, harness.Server.Paths.Count(path => path == "/v1/presence/challenge"));
+
+        harness.SessionBusy = false;
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 2 && harness.Server.Beats.Count(beat => beat.SequenceEqual(harness.Server.Tokens[1])) >= 1);
+        Assert.Equal(2, harness.Server.Paths.Count(path => path == "/v1/presence/challenge"));
+        Assert.Equal(0, harness.Server.UnknownBeats);
+        Assert.False(harness.Server.IsLive(harness.Server.Tokens[0]));
+    }
+
+    [Fact]
+    public async Task ARenewalRefusedForATakeover_EndsTheRun_AndSendsNothingMore()
+    {
+        // The takeover that refuses the start has already ended the session, so not even a leave goes.
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.Server.StartStatus = HttpStatusCode.Gone;
+        harness.Now += TimeSpan.FromMinutes(54);
+        await harness.WaitFor(() => harness.Server.StartTimes.Count == 2);
+        await Task.Delay(300);
+        Assert.Equal("/v1/presence", harness.Server.Paths[^1]);
+        Assert.Empty(harness.Server.Leaves);
+    }
+
+    [Fact]
+    public async Task AClockSetBack_RenewsTheSessionOnce_AtOnce_RatherThanAfterItsHour()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.Now -= TimeSpan.FromDays(1);
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 2);
+        var beats = harness.Server.Beats.Count;
+        await harness.WaitFor(() => harness.Server.Beats.Count >= beats + 3);
+        Assert.Equal(2, harness.Server.Tokens.Count);
+        Assert.Equal(0, harness.Server.UnknownBeats);
+    }
+
+    [Fact]
     public async Task AServerWithoutTheEndpoint_ReadsUnavailable_NeverZero_AndBacksOff()
     {
         using var harness = new Harness();
@@ -409,6 +527,9 @@ public class OnlineCountTests
         // October 6, 2026), which is the server's snapshot window, not the plugin's heartbeat.
         Assert.Contains("refreshes this total every 5 minutes", OnlineCountFooter.Scope, StringComparison.Ordinal);
         Assert.DoesNotContain("once a minute", OnlineCountFooter.Scope, StringComparison.Ordinal);
+
+        // The rechecks of 28be0e2: the first window after the server restarts began with no session.
+        Assert.Contains("for the first 5 minutes after the server restarts, it says fewer than 5", OnlineCountFooter.Scope, StringComparison.Ordinal);
         Assert.All(new[] { OnlineCountFooter.Connecting, OnlineCountFooter.Unavailable, OnlineCountFooter.NoticeDue }, item => Assert.DoesNotContain("0", item.Text, StringComparison.Ordinal));
     }
 
@@ -493,13 +614,48 @@ public class OnlineCountTests
         }
     }
 
-    /// <summary>The presence endpoints, answered in memory: starts checked as section 14.5 says for kind 9, tokens it issued, and what each request carried.</summary>
+    /// <summary>
+    /// The presence endpoints, answered in memory: starts checked as section 14.5 says for kind 9,
+    /// tokens it issued, a key's new start replacing its earlier session as the server's does, and
+    /// what each request carried.
+    /// </summary>
     private sealed class PresenceServer : HttpMessageHandler
     {
         internal static readonly DeploymentName Deployment = DeploymentName.Parse("plates.example.com");
 
         private readonly HashSet<string> challenges = new();
         private readonly HashSet<string> live = new();
+        private readonly Dictionary<PersonaId, string> bySigner = new();
+        private readonly Dictionary<string, TimeSpan> lastSeen = new();
+        private int unknownBeats;
+        private TimeSpan shortestGap = TimeSpan.MaxValue;
+
+        /// <summary>
+        /// The shortest time from a session's start or counted heartbeat to its next heartbeat, on a
+        /// monotonic clock: the server refuses a heartbeat too soon after either.
+        /// </summary>
+        internal TimeSpan ShortestGap
+        {
+            get
+            {
+                lock (this)
+                {
+                    return shortestGap;
+                }
+            }
+        }
+
+        /// <summary>How many heartbeats named no session the server counts, each answered 404.</summary>
+        internal int UnknownBeats
+        {
+            get
+            {
+                lock (this)
+                {
+                    return unknownBeats;
+                }
+            }
+        }
 
         internal int Online { get; set; } = 1;
 
@@ -682,7 +838,14 @@ public class OnlineCountTests
                         Assert.True(challenges.Remove(Convert.ToHexString(verified.Challenge.ToArray())), "The start names a challenge this server didn't issue.");
                         signers.Add(verified.PublicKey.Id);
                         tokens.Add(token);
+                        if (bySigner.TryGetValue(verified.PublicKey.Id, out var replaced))
+                        {
+                            live.Remove(replaced);
+                        }
+
+                        bySigner[verified.PublicKey.Id] = Convert.ToHexString(token);
                         live.Add(Convert.ToHexString(token));
+                        lastSeen[Convert.ToHexString(token)] = clock.Elapsed;
                     }
 
                     // The session is made: from here the server counts the character whatever becomes
@@ -703,8 +866,13 @@ public class OnlineCountTests
                         beats.Add(body);
                         if (!live.Contains(Convert.ToHexString(body)))
                         {
+                            unknownBeats++;
                             return new HttpResponseMessage(HttpStatusCode.NotFound);
                         }
+
+                        var now = clock.Elapsed;
+                        shortestGap = TimeSpan.FromTicks(Math.Min(shortestGap.Ticks, (now - lastSeen[Convert.ToHexString(body)]).Ticks));
+                        lastSeen[Convert.ToHexString(body)] = now;
                     }
 
                     return BeatStatus == HttpStatusCode.OK ? Json($"{{\"online\":{Online}}}") : new HttpResponseMessage(BeatStatus);

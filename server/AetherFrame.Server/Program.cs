@@ -79,6 +79,16 @@ builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
 
+// And no logging scope reaches a line, whatever the configuration says: hosting's scope for each
+// request holds its path, and Kestrel's its connection id and the request's number on it, which would
+// undo the request log's own random id and count the presence requests it leaves out.
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>(options => options.IncludeScopes = false);
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.SimpleConsoleFormatterOptions>(options => options.IncludeScopes = false);
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.JsonConsoleFormatterOptions>(options => options.IncludeScopes = false);
+#pragma warning disable CS0618 // The console logger's own switch is obsolete, but older configuration still sets it.
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.ConsoleLoggerOptions>(options => options.IncludeScopes = false);
+#pragma warning restore CS0618
+
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
     kestrel.AddServerHeader = false;

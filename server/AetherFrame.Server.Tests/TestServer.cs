@@ -309,6 +309,8 @@ internal sealed class ManualTime(DateTimeOffset start) : TimeProvider
 
     public void Advance(TimeSpan by)
     {
+        // Time passing never goes back: a test sets Now for that.
+        ArgumentOutOfRangeException.ThrowIfLessThan(by, TimeSpan.Zero);
         Now += by;
         Interlocked.Add(ref elapsed, by.Ticks);
     }

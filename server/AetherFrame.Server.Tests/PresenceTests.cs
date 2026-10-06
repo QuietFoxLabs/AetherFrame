@@ -249,11 +249,24 @@ public class PresenceTests
     }
 
     [Fact]
-    public async Task Heartbeats_HaveTheirOwnAddressLimit_AndTakeNothingFromAnyOther()
+    public async Task Heartbeats_HaveTheirOwnAddressLimit_WhichOnlyRequestsNamingNoSessionTakeFrom()
     {
+        // The rechecks of 28be0e2: every heartbeat and leave took from the address group's limit, so
+        // anyone sharing a network could count the others' heartbeats, minute by minute and under
+        // the floor too, by how soon their own met it, and use it up to stop them being counted.
         using var server = new TestServer();
         using var aria = server.NewPlayer();
+        using var bram = server.NewPlayer();
         await aria.BindAsync(Aria);
+        await bram.BindAsync(Bram, "Bram Oakes");
+        var (token, _) = await StartedAsync(aria);
+        var (other, _) = await StartedAsync(bram);
+
+        // Counted heartbeats take nothing: after them, every one of the group's 120 that name no
+        // session is still answered, and only the next is refused.
+        server.Time.Advance(TimeSpan.FromSeconds(21));
+        Assert.Equal(PresenceStore.Reported(2), await BeatOnlineAsync(aria, token));
+        Assert.Equal(PresenceStore.Reported(2), await BeatOnlineAsync(bram, other));
         for (var beat = 0; beat < ServerLimits.PresenceBeatsPerAddress.Count; beat++)
         {
             using var response = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength]);
@@ -265,15 +278,41 @@ public class PresenceTests
             Assert.Equal(HttpStatusCode.TooManyRequests, over.StatusCode);
         }
 
+        using (var junk = await aria.PostRawAsync("/v1/presence/leave", new byte[PresenceStore.TokenLength]))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, junk.StatusCode);
+        }
+
+        // With the limit used up, a live session's heartbeat is still counted, and its leave still
+        // ends it: no one on the network can stop them.
+        server.Time.Advance(TimeSpan.FromSeconds(21));
+        Assert.Equal(PresenceStore.Reported(2), await BeatOnlineAsync(aria, token));
+        using (var left = await bram.PostRawAsync("/v1/presence/leave", other))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
+        }
+
+        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
+
+        // A heartbeat too soon after the last names no session that counts, and takes from it too.
+        using (var early = await aria.PostRawAsync("/v1/presence/beat", token))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, early.StatusCode);
+        }
+
         // Signed requests from the same address go on: a challenge, and a presence start with it.
-        var (token, online) = await StartedAsync(aria);
+        var (again, online) = await StartedAsync(aria);
         Assert.Equal(PresenceStore.Reported(1), online);
         Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
 
         // A minute later there is room again.
         server.Time.Advance(TimeSpan.FromSeconds(61));
-        Assert.Equal(PresenceStore.Reported(1), await BeatOnlineAsync(aria, token));
-        Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
+        using (var room = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength]))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, room.StatusCode);
+        }
+
+        Assert.Equal(PresenceStore.Reported(1), await BeatOnlineAsync(aria, again));
     }
 
     [Fact]
@@ -598,108 +637,133 @@ public class PresenceTests
         store.SweepExpired();
         Assert.Equal(0, store.Revocations);
 
-        // The windows too: one snapshot per window, whichever way the clock is set inside it.
-        Assert.Equal(TimeSpan.FromMinutes(5), store.UntilNextWindow());
-        var snapshot = store.Snapshot();
-        time.Now = start + TimeSpan.FromDays(3);
-        Assert.Equal(snapshot, store.Snapshot());
-        Assert.Equal(TimeSpan.FromMinutes(5), store.UntilNextWindow());
+        // The windows too (the rechecks of 28be0e2): a session started as the second window begins
+        // is counted from the third, however the wall clock is set in between, to times that fall in
+        // other 5-minute windows of its own.
+        var counted = store.Start(KeyOf(3), Aria, Issued(store)).Token!;
+        time.Now = start + TimeSpan.FromDays(3) + TimeSpan.FromSeconds(137);
+        time.Advance(TimeSpan.FromSeconds(150));
+        Assert.Equal((BeatResult.Counted, 0), store.Beat(counted));
+        time.Advance(TimeSpan.FromSeconds(149));
+        Assert.Equal((BeatResult.Counted, 0), store.Beat(counted));
+        time.Now = start - TimeSpan.FromDays(1) + TimeSpan.FromSeconds(181);
+        Assert.Equal(0, store.Snapshot());
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(1, store.Snapshot());
+        time.Now = start + TimeSpan.FromSeconds(7);
+        Assert.Equal(1, store.Snapshot());
     }
 
     [Fact]
-    public void TheCount_IsOneSnapshotPerFiveMinuteWindow_TakenAsTheWindowBegins()
+    public void TheCount_IsOneSnapshotPerFiveMinuteWindow_ExactlyAsTheWindowBegan()
     {
         // GPT's privacy decision, October 6, 2026: one shared snapshot for each fixed 5-minute window,
         // the same for starts and heartbeats, while leaving, revocation and expiry still end a session
-        // at once. The rechecks of 7843256: taken as the window begins, of the sessions live then,
-        // so no request chooses the moment it shows.
+        // at once. The rechecks of 28be0e2: the count as it stood when the window began, whichever
+        // request comes first and whenever, so no request chooses the moment it shows.
         var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
         var store = new PresenceStore(time);
         Assert.Equal(TimeSpan.FromMinutes(5), PresenceStore.SnapshotWindow);
 
         // The first window began with the store, before any session: six characters start in it,
         // and each is answered its snapshot, none.
-        time.Advance(TimeSpan.FromSeconds(150));
+        time.Advance(TimeSpan.FromSeconds(290));
         var tokens = new byte[6][];
         for (var index = 0; index < tokens.Length; index++)
         {
             var started = store.Start(KeyOf(index), 1_000 + index, Issued(store));
-            Assert.Equal(StartResult.Started, started.Result);
-            Assert.Equal(0, started.Online);
+            Assert.Equal((StartResult.Started, 0), (started.Result, started.Online));
             tokens[index] = started.Token!;
         }
 
+        // The second window's first request replaces one of those sessions, before any sweep: it is
+        // still answered all six, live as the window began.
+        time.Advance(TimeSpan.FromSeconds(10));
+        var renewed = store.Start(KeyOf(0), 1_000, Issued(store));
+        Assert.Equal((StartResult.Started, 6), (renewed.Result, renewed.Online));
+        tokens[0] = renewed.Token!;
         Assert.Equal(6, store.Online());
 
-        // A leave and a revocation still end their sessions at once, and the window's heartbeats are
-        // answered the same snapshot, to its last moment.
-        time.Advance(TimeSpan.FromMinutes(1));
-        store.Leave(tokens[1]);
-        store.ForgetKey(KeyOf(2));
+        // A leave and a revocation end their sessions at once, and change the sessions, not the snapshot.
+        time.Advance(TimeSpan.FromSeconds(5));
+        Assert.True(store.Leave(tokens[5]));
+        store.ForgetKey(KeyOf(4));
         Assert.Equal(4, store.Online());
-        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[1]).Result);
-        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[2]).Result);
-        Assert.Equal((BeatResult.Counted, 0), store.Beat(tokens[0]));
-        time.Advance(TimeSpan.FromSeconds(90) - TimeSpan.FromMilliseconds(1));
-        Assert.Equal((BeatResult.Counted, 0), store.Beat(tokens[3]));
-        Assert.Equal(TimeSpan.FromMilliseconds(1), store.UntilNextWindow());
-
-        // The sweep wakes as the next window begins and takes its snapshot: the 4 sessions live then.
-        // A leave and a start right after it change the sessions, not the snapshot, and the start
-        // waits for the next window to be counted.
-        Assert.Equal(TimeSpan.FromMilliseconds(10), PresenceSweep.Wait(store.UntilNextWindow()));
-        time.Advance(TimeSpan.FromMilliseconds(1));
-        store.SweepExpired();
-        store.Leave(tokens[3]);
-        var seventh = store.Start(KeyOf(6), 1_006, Issued(store));
-        Assert.Equal((StartResult.Started, 4), (seventh.Result, seventh.Online));
-        Assert.Equal(4, store.Online());
-        Assert.Equal(4, store.Snapshot());
-
-        // Two sessions with no heartbeat expire 180 seconds after their start, inside the window,
-        // with the snapshot as it was.
-        time.Advance(TimeSpan.FromSeconds(30));
+        Assert.Equal(6, store.Snapshot());
         Assert.Equal(BeatResult.Unknown, store.Beat(tokens[5]).Result);
         Assert.Equal(BeatResult.Unknown, store.Beat(tokens[4]).Result);
-        Assert.Equal(2, store.Online());
-        Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[0]));
-        time.Advance(TimeSpan.FromSeconds(150));
-        Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[0]));
 
-        // By the third window the seventh has expired too, and only the first still beats.
+        // Two sessions with no heartbeat expire inside the window, 180 seconds after their start,
+        // and the window's heartbeats are still answered its snapshot.
+        time.Advance(TimeSpan.FromSeconds(25));
+        Assert.Equal((BeatResult.Counted, 6), store.Beat(tokens[0]));
+        Assert.Equal((BeatResult.Counted, 6), store.Beat(tokens[1]));
+        time.Advance(TimeSpan.FromSeconds(150));
+        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[2]).Result);
+        Assert.Equal((BeatResult.Counted, 6), store.Beat(tokens[0]));
+        Assert.Equal(2, store.Online());
+
+        // The third window: only the first character was still live as it began. A start at its
+        // very first moment doesn't count itself.
+        time.Advance(TimeSpan.FromSeconds(120));
+        var seventh = store.Start(KeyOf(6), 1_006, Issued(store));
+        Assert.Equal((StartResult.Started, 1), (seventh.Result, seventh.Online));
+        Assert.Equal(2, store.Online());
+        time.Advance(TimeSpan.FromSeconds(30));
+        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
+        Assert.Equal((BeatResult.Counted, 1), store.Beat(seventh.Token!));
         time.Advance(TimeSpan.FromSeconds(120));
         Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
+
+        // The fourth window began with the first character live; nothing asks until after it has
+        // expired, and the sweep that drops it takes the window's snapshot first: it is counted.
+        time.Advance(TimeSpan.FromSeconds(250));
+        store.SweepExpired();
+        Assert.Equal(0, store.Online());
         Assert.Equal(1, store.Snapshot());
 
-        // With no sweep to take it as the fourth begins, the window's first answer takes it, of the
-        // sessions that began before the window: a start that comes first doesn't count itself.
-        time.Advance(TimeSpan.FromSeconds(150));
-        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
-        time.Advance(TimeSpan.FromSeconds(150));
-        var eighth = store.Start(KeyOf(7), 1_007, Issued(store));
-        Assert.Equal((StartResult.Started, 1), (eighth.Result, eighth.Online));
-        Assert.Equal(2, store.Online());
+        // And the fifth began with no one.
+        time.Advance(TimeSpan.FromSeconds(200));
+        Assert.Equal(0, store.Snapshot());
     }
 
     [Fact]
-    public void TheSweep_WakesAsEachWindowBegins_AndNeverSpins()
+    public void PastItsHour_ASessionIsCountedUntilItsExpiry_OrUntilANewStartReplacesIt()
     {
+        // The rechecks of 28be0e2: a session that stopped being counted at its hour left its character
+        // out of a window that began before the plugin's new start, and the dip told when the
+        // character had logged in to within that gap. Past the hour only its heartbeats stop counting.
         var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
         var store = new PresenceStore(time);
-        Assert.Equal(PresenceStore.SnapshotWindow, store.UntilNextWindow());
-        Assert.Equal(PresenceSweep.Interval, PresenceSweep.Wait(store.UntilNextWindow()));
-        time.Advance(PresenceStore.SnapshotWindow - TimeSpan.FromSeconds(4));
-        Assert.Equal(TimeSpan.FromSeconds(4), PresenceSweep.Wait(store.UntilNextWindow()));
-        Assert.Equal(PresenceSweep.Interval, PresenceSweep.Wait(PresenceSweep.Interval));
-        Assert.Equal(PresenceSweep.MinimumWait, PresenceSweep.Wait(TimeSpan.FromTicks(1)));
-        Assert.Equal(PresenceSweep.MinimumWait, PresenceSweep.Wait(TimeSpan.Zero));
-        time.Advance(TimeSpan.FromSeconds(4));
-        Assert.Equal(PresenceStore.SnapshotWindow, store.UntilNextWindow());
+        var renewing = store.Start(KeyOf(1), Aria, Issued(store)).Token!;
+        var left = store.Start(KeyOf(2), Bram, Issued(store)).Token!;
+        for (var minute = 1; minute < 60; minute++)
+        {
+            time.Advance(TimeSpan.FromSeconds(60));
+            Assert.Equal(BeatResult.Counted, store.Beat(renewing).Result);
+            Assert.Equal(BeatResult.Counted, store.Beat(left).Result);
+        }
 
-        // And the background sweep waits that long, so it is what takes each window's snapshot.
-        var source = System.IO.File.ReadAllText(System.IO.Path.Combine(RepositoryRoot(), "server", "AetherFrame.Server", "Presence", "PresenceStore.cs"));
-        Assert.Contains("wait = Wait(presence.UntilNextWindow());", source, StringComparison.Ordinal);
-        Assert.Contains("await Task.Delay(wait, time, stoppingToken);", source, StringComparison.Ordinal);
+        // The hour, which is also where a window begins: no heartbeat is counted, both characters are.
+        time.Advance(TimeSpan.FromSeconds(60));
+        Assert.Equal(TimeSpan.Zero, TimeSpan.FromTicks(PresenceStore.SessionLifetime.Ticks % PresenceStore.SnapshotWindow.Ticks));
+        Assert.Equal(BeatResult.Unknown, store.Beat(renewing).Result);
+        Assert.Equal(BeatResult.Unknown, store.Beat(left).Result);
+        Assert.Equal(2, store.Online());
+        Assert.Equal(2, store.Snapshot());
+
+        // One plugin's new start replaces its session at once; the other's plugin has gone, and its
+        // session expires 180 seconds after its last counted heartbeat, as any does.
+        time.Advance(TimeSpan.FromSeconds(10));
+        var renewed = store.Start(KeyOf(1), Aria, Issued(store));
+        Assert.Equal((StartResult.Started, 2), (renewed.Result, renewed.Online));
+        Assert.Equal(BeatResult.Unknown, store.Beat(renewing).Result);
+        Assert.Equal(2, store.Sessions);
+        time.Advance(PresenceStore.Expiry - TimeSpan.FromSeconds(71));
+        Assert.Equal(2, store.Online());
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(1, store.Online());
+        Assert.Equal(BeatResult.Counted, store.Beat(renewed.Token!).Result);
     }
 
     [Fact]
@@ -774,10 +838,16 @@ public class PresenceTests
         var marked = Endpoint("/v1/presence/beat", AetherFrame.Server.Hosting.UnloggedWhenSuccessful.Instance);
         var unmarked = Endpoint("/v1/status");
 
-        async Task<string[]> Run(Microsoft.AspNetCore.Http.Endpoint endpoint, int status, Exception? thrown = null)
+        async Task<string[]> Run(Microsoft.AspNetCore.Http.Endpoint endpoint, int status, Exception? thrown = null, bool aborted = false)
         {
             var before = captured.Lines.Count;
-            var http = new Microsoft.AspNetCore.Http.DefaultHttpContext { TraceIdentifier = "0HN7AETHER:00000002" };
+            using var abort = new System.Threading.CancellationTokenSource();
+            var http = new Microsoft.AspNetCore.Http.DefaultHttpContext { TraceIdentifier = "0HN7AETHER:00000002", RequestAborted = abort.Token };
+            if (aborted)
+            {
+                abort.Cancel();
+            }
+
             Microsoft.AspNetCore.Http.EndpointHttpContextExtensions.SetEndpoint(http, endpoint);
             var log = new AetherFrame.Server.Hosting.RequestLog(
                 context =>
@@ -786,7 +856,7 @@ public class PresenceTests
                     return thrown is null ? Task.CompletedTask : Task.FromException(thrown);
                 },
                 logger);
-            if (thrown is OperationCanceledException)
+            if (aborted)
             {
                 await Assert.ThrowsAsync<OperationCanceledException>(() => log.InvokeAsync(http));
             }
@@ -803,9 +873,12 @@ public class PresenceTests
         var lines = new[]
         {
             Assert.Single(await Run(marked, 404)),
-            Assert.Single(await Run(marked, 200, new OperationCanceledException())),
+            Assert.Single(await Run(marked, 200, new OperationCanceledException(), aborted: true)),
             Assert.Single(await Run(marked, 200, new InvalidOperationException("a body, say"))),
             Assert.Single(await Run(unmarked, 200)),
+
+            // A cancellation with the client still there, a timeout's say, is an exception like any.
+            Assert.Single(await Run(marked, 200, new TaskCanceledException())),
         };
 
         var prefix = typeof(AetherFrame.Server.Hosting.RequestLog).FullName + " Information: ";
@@ -813,9 +886,31 @@ public class PresenceTests
         Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/presence/beat 200 \\d+ cancelled $", lines[1]);
         Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/presence/beat 500 \\d+ exception:InvalidOperationException $", lines[2]);
         Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/status 200 \\d+ - $", lines[3]);
+        Assert.Matches("^" + System.Text.RegularExpressions.Regex.Escape(prefix) + "[0-9a-f]{16} /v1/presence/beat 500 \\d+ exception:TaskCanceledException $", lines[4]);
         Assert.DoesNotContain("a body, say", captured.All, StringComparison.Ordinal);
         Assert.DoesNotContain("0HN7AETHER", captured.All, StringComparison.Ordinal);
         Assert.Equal(lines.Length, lines.Select(line => line.Split(' ')[2]).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void LoggingScopes_StayOff_WhateverTheConfigurationSays()
+    {
+        // The rechecks of 28be0e2: hosting's scope for each request holds its path, and Kestrel's its
+        // connection id and request number, so a configuration that turned scopes on would put back
+        // into every failure's line the count the random request id took out.
+        using var server = new TestServer();
+        using var scoped = server.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Logging:Console:IncludeScopes", "true");
+            builder.UseSetting("Logging:Console:FormatterOptions:IncludeScopes", "true");
+        });
+        var services = scoped.Services;
+        Assert.False(services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.Extensions.Logging.Console.SimpleConsoleFormatterOptions>>().CurrentValue.IncludeScopes);
+        Assert.False(services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.Extensions.Logging.Console.JsonConsoleFormatterOptions>>().CurrentValue.IncludeScopes);
+        Assert.False(services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>>().CurrentValue.IncludeScopes);
+#pragma warning disable CS0618 // The console logger's own switch, which older configuration sets.
+        Assert.False(services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.Extensions.Logging.Console.ConsoleLoggerOptions>>().CurrentValue.IncludeScopes);
+#pragma warning restore CS0618
     }
 
     [Fact]

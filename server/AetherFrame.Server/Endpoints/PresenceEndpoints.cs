@@ -94,6 +94,9 @@ internal static class PresenceEndpoints
             });
         }).WithMetadata(UnloggedWhenSuccessful.Instance);
 
+        // A heartbeat that is counted, and a leave that ends a session, take nothing from the address
+        // group's limit: only one that names no session the server counts does (Refuse). So players
+        // sharing a network can't use up each other's heartbeats, or count them through the limit.
         app.MapPost("/v1/presence/beat", async (HttpContext http, RateLimiter limiter, PresenceStore presence) =>
         {
             var (token, refusal) = await ReadTokenAsync(http, limiter);
@@ -106,12 +109,13 @@ internal static class PresenceEndpoints
             return result switch
             {
                 BeatResult.Counted => Results.Json(new BeatAnswer(PresenceStore.Reported(online)), ServerJson.Options),
-                BeatResult.TooSoon => SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:presence/session"),
-                _ => SignedRequests.Fail(http, StatusCodes.Status404NotFound, "presence:unknown"),
+                BeatResult.TooSoon => Refuse(http, limiter, StatusCodes.Status429TooManyRequests, "limit:presence/session"),
+                _ => Refuse(http, limiter, StatusCodes.Status404NotFound, "presence:unknown"),
             };
         }).WithMetadata(UnloggedWhenSuccessful.Instance);
 
-        // Answered the same whether or not the token named a session, so it tells nothing.
+        // Answered the same whether or not the token named a session, so it tells nothing, unless
+        // the address group's limit is used up, which only a leave naming no session takes from.
         app.MapPost("/v1/presence/leave", async (HttpContext http, RateLimiter limiter, PresenceStore presence) =>
         {
             var (token, refusal) = await ReadTokenAsync(http, limiter);
@@ -120,31 +124,43 @@ internal static class PresenceEndpoints
                 return refusal!;
             }
 
-            presence.Leave(token);
-            return Results.NoContent();
+            return presence.Leave(token) ? Results.NoContent() : Refuse(http, limiter, StatusCodes.Status204NoContent, null);
         }).WithMetadata(UnloggedWhenSuccessful.Instance);
     }
 
     /// <summary>
-    /// A heartbeat's or a leave's body: exactly the token's 32 bytes, read after the address group's
-    /// presence limit, which no other request takes from. The token, or the answer refusing it.
+    /// A heartbeat's or a leave's body: exactly the token's 32 bytes. The token, or the answer
+    /// refusing it, which takes from the address group's limit as every request that names no
+    /// session does.
     /// </summary>
     private static async System.Threading.Tasks.Task<(byte[]? Token, IResult? Refusal)> ReadTokenAsync(HttpContext http, RateLimiter limiter)
     {
-        if (!limiter.TryTakeAddress(ServerLimits.PresenceBeatsPerAddress, http.Connection.RemoteIpAddress))
-        {
-            return (null, SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:" + ServerLimits.PresenceBeatsPerAddress.Name));
-        }
-
         var (body, failure) = await SignedRequests.ReadBoundedAsync(http, PresenceStore.TokenLength, http.RequestAborted);
         if (body is null)
         {
-            return (null, SignedRequests.Fail(http, failure, "body:unread"));
+            return (null, Refuse(http, limiter, failure, "body:unread"));
         }
 
         return body.Length == PresenceStore.TokenLength
             ? (body, null)
-            : (null, SignedRequests.Fail(http, StatusCodes.Status400BadRequest, "body:token"));
+            : (null, Refuse(http, limiter, StatusCodes.Status400BadRequest, "body:token"));
+    }
+
+    /// <summary>
+    /// The answer to a heartbeat or a leave that names no session the server counts (an unknown,
+    /// ended or replaced token, a heartbeat too soon after the last, a body that isn't a token): it
+    /// takes one from the address group's presence limit, which no other request takes from, and
+    /// past it is refused with <c>429</c>; otherwise <paramref name="status"/>, with
+    /// <paramref name="kind"/> as its failure kind when there is one.
+    /// </summary>
+    private static IResult Refuse(HttpContext http, RateLimiter limiter, int status, string? kind)
+    {
+        if (!limiter.TryTakeAddress(ServerLimits.PresenceBeatsPerAddress, http.Connection.RemoteIpAddress))
+        {
+            return SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:" + ServerLimits.PresenceBeatsPerAddress.Name);
+        }
+
+        return kind is null ? Results.StatusCode(status) : SignedRequests.Fail(http, status, kind);
     }
 
     internal sealed record StartAnswer(string Session, int Online);

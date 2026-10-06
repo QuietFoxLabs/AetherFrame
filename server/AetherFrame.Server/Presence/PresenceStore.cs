@@ -71,12 +71,12 @@ internal readonly record struct Admission(long Sequence, TimeSpan IssuedAt);
 /// The count is the number of distinct Lodestone ids with a live session, so a character is
 /// counted once however many sessions name it (a takeover's two PCs, say). What an answer gives is
 /// not the count at that moment but one snapshot of it for each <see cref="SnapshotWindow"/>
-/// (<see cref="Snapshot"/>), taken as the window begins and the same for every start and heartbeat
-/// in it; the sessions themselves still end at once on a leave or a revocation, and at their
-/// expiry. A key holds one session at a time: starting another replaces it. The token itself is
-/// never kept, only its SHA-256, so the server's memory holds nothing a heartbeat could be forged
-/// from. The store holds at most <see cref="MaxSessions"/> sessions; past that, a start is refused
-/// until expired ones are swept.
+/// (<see cref="Snapshot"/>): the count as it stood when the window began, the same for every start
+/// and heartbeat in it, whichever request comes first and whenever. The sessions themselves still
+/// end at once on a leave or a revocation, and at their expiry. A key holds one session at a time:
+/// starting another replaces it. The token itself is never kept, only its SHA-256, so the server's
+/// memory holds nothing a heartbeat could be forged from. The store holds at most
+/// <see cref="MaxSessions"/> sessions; past that, a start is refused until expired ones are swept.
 /// </para>
 /// <para>
 /// Every time here is read from the store's own clock (<see cref="Now"/>): the monotonic
@@ -86,23 +86,26 @@ internal readonly record struct Admission(long Sequence, TimeSpan IssuedAt);
 /// <para>
 /// Expired sessions and unused challenges go whether or not anything asks for the count:
 /// <see cref="PresenceSweep"/> calls <see cref="SweepExpired"/> every
-/// <see cref="PresenceSweep.Interval"/>, and as each window begins, so a plugin that crashed is
-/// forgotten within <see cref="Expiry"/> plus that interval even on an idle server. A revocation (a
-/// pause, an opt-out, a takeover, a binding removed) is remembered for <see cref="RevocationMemory"/>,
-/// long enough to refuse a start that was signed before it and arrived after it, and a start is
+/// <see cref="PresenceSweep.Interval"/>, so a plugin that crashed is forgotten within
+/// <see cref="Expiry"/> plus that interval even on an idle server. A revocation (a pause, an
+/// opt-out, a takeover, a binding removed) is remembered for <see cref="RevocationMemory"/>, long
+/// enough to refuse a start that was signed before it and arrived after it, and a start is
 /// admitted only for that long after its challenge was issued, so no start can outlast the memory
 /// that would refuse it (<see cref="Admission"/>).
 /// </para>
 /// </summary>
 internal sealed class PresenceStore(TimeProvider time)
 {
-    /// <summary>How long a session stays counted after its start or its last heartbeat.</summary>
+    /// <summary>How long a session stays counted after its start or its last counted heartbeat.</summary>
     public static readonly TimeSpan Expiry = TimeSpan.FromSeconds(180);
 
     /// <summary>
-    /// How long a session lasts from its start, whatever its heartbeats: after that, a heartbeat is
-    /// <see cref="BeatResult.Unknown"/> and the plugin signs a new start, so the binding and the
-    /// allowlist are checked again at least this often.
+    /// How long a session's heartbeats are counted from its start: after that a heartbeat is
+    /// <see cref="BeatResult.Unknown"/>, so the binding and the allowlist are checked again by a
+    /// signed start at least this often. The plugin signs that start before the hour ends, and the
+    /// start replaces the session. A session whose hour ended first is still counted until its
+    /// expiry, unless a new start replaces it sooner, so a character is never missing from a window
+    /// over the change.
     /// </summary>
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(1);
 
@@ -112,9 +115,10 @@ internal sealed class PresenceStore(TimeProvider time)
     /// <summary>
     /// The windows the count is answered in, fixed by the store's clock (every 5 minutes from when
     /// the server started): one snapshot of the count as each begins, given to every start and
-    /// heartbeat in it. The snapshot holds the characters whose sessions were live at the window's
-    /// start, never one started later, so asking more often, or starting a session at a chosen
-    /// moment, tells nothing more, and a login or logout can be timed only to the window it fell in.
+    /// heartbeat in it. It holds the characters whose sessions were live at the window's start,
+    /// worked out exactly whichever request takes it and whenever, so asking more often, or at a
+    /// chosen moment, tells nothing more, and a login or logout can be timed only to the window it
+    /// fell in.
     /// </summary>
     public static readonly TimeSpan SnapshotWindow = TimeSpan.FromMinutes(5);
 
@@ -227,7 +231,7 @@ internal sealed class PresenceStore(TimeProvider time)
     {
         lock (gate)
         {
-            var now = Now();
+            var now = Enter();
 
             // Before anything is touched. A start with no challenge of its own admits nothing.
             if (admission.Sequence == 0)
@@ -266,7 +270,7 @@ internal sealed class PresenceStore(TimeProvider time)
             byToken[id] = new Session(key, lodestoneId, now, now);
             byKey[key] = id;
             characters[lodestoneId] = characters.GetValueOrDefault(lodestoneId) + 1;
-            return (StartResult.Started, token, SnapshotLocked(now));
+            return (StartResult.Started, token, snapshot);
         }
     }
 
@@ -281,7 +285,7 @@ internal sealed class PresenceStore(TimeProvider time)
         var id = IdOf(token);
         lock (gate)
         {
-            var now = Now();
+            var now = Enter();
             if (!byToken.TryGetValue(id, out var session))
             {
                 return (BeatResult.Unknown, 0);
@@ -293,31 +297,47 @@ internal sealed class PresenceStore(TimeProvider time)
                 return (BeatResult.Unknown, 0);
             }
 
+            // Past its hour the session's heartbeats aren't counted, so the plugin signs a new start;
+            // the session itself is kept, and counted until its expiry or until that start replaces
+            // it, so the character isn't missing from a window over the change.
+            if (now - session.Started >= SessionLifetime)
+            {
+                return (BeatResult.Unknown, 0);
+            }
+
             if (now - session.LastBeat < MinimumBeatSpacing)
             {
                 return (BeatResult.TooSoon, 0);
             }
 
             byToken[id] = session with { LastBeat = now };
-            return (BeatResult.Counted, SnapshotLocked(now));
+            return (BeatResult.Counted, snapshot);
         }
     }
 
-    /// <summary>Ends the session with <paramref name="token"/> at once, if there is one. Answers nothing either way.</summary>
-    public void Leave(ReadOnlySpan<byte> token)
+    /// <summary>
+    /// Ends the session with <paramref name="token"/> at once, if there is one: whether there was.
+    /// The leave is answered the same either way; this tells the endpoint only whether the request
+    /// takes from the address group's limit.
+    /// </summary>
+    public bool Leave(ReadOnlySpan<byte> token)
     {
         if (token.Length != TokenLength)
         {
-            return;
+            return false;
         }
 
         var id = IdOf(token);
         lock (gate)
         {
-            if (byToken.TryGetValue(id, out var session))
+            Enter();
+            if (!byToken.TryGetValue(id, out var session))
             {
-                Remove(id, session);
+                return false;
             }
+
+            Remove(id, session);
+            return true;
         }
     }
 
@@ -329,7 +349,7 @@ internal sealed class PresenceStore(TimeProvider time)
     {
         lock (gate)
         {
-            var now = Now();
+            var now = Enter();
             RemoveKey(key);
             Revoke(now, key, null);
         }
@@ -345,7 +365,7 @@ internal sealed class PresenceStore(TimeProvider time)
     {
         lock (gate)
         {
-            var now = Now();
+            var now = Enter();
             List<(string, Session)>? stale = null;
             foreach (var (id, session) in byToken)
             {
@@ -430,51 +450,46 @@ internal sealed class PresenceStore(TimeProvider time)
     {
         lock (gate)
         {
-            Sweep(Now());
+            Sweep(Enter());
             return characters.Count;
         }
     }
 
-    /// <summary>The window's snapshot of the count, as every answer in it gives it: taken now if this window has none yet. For tests.</summary>
+    /// <summary>The window's snapshot of the count, as every answer in it gives it. For tests.</summary>
     internal int Snapshot()
     {
         lock (gate)
         {
-            return SnapshotLocked(Now());
-        }
-    }
-
-    /// <summary>How long until the next window begins, when <see cref="PresenceSweep"/> takes its snapshot.</summary>
-    internal TimeSpan UntilNextWindow()
-    {
-        lock (gate)
-        {
-            return SnapshotWindow - TimeSpan.FromTicks(Now().Ticks % SnapshotWindow.Ticks);
+            Enter();
+            return snapshot;
         }
     }
 
     /// <summary>
     /// Drops every expired session, unused challenge and remembered revocation now, whether or not
-    /// anything asked for the count, and takes the window's snapshot if it has none yet: on a server
-    /// nobody is asking, a plugin that crashed or lost its network is still forgotten within
-    /// <see cref="Expiry"/> and a sweep's interval, instead of sitting in memory until the next
-    /// request, and each window's snapshot is taken as the window begins (<see cref="PresenceSweep"/>).
+    /// anything asked for the count: on a server nobody is asking, a plugin that crashed or lost its
+    /// network is still forgotten within <see cref="Expiry"/> and a sweep's interval, instead of
+    /// sitting in memory until the next request (<see cref="PresenceSweep"/>).
     /// </summary>
     public void SweepExpired()
     {
         lock (gate)
         {
-            var now = Now();
+            var now = Enter();
             Sweep(now);
             SweepChallenges(now);
-            SnapshotLocked(now);
         }
     }
 
     private static string IdOf(ReadOnlySpan<byte> token) => Convert.ToHexString(SHA256.HashData(token));
 
-    private static bool Live(Session session, TimeSpan now) =>
-        now - session.LastBeat < Expiry && now - session.Started < SessionLifetime;
+    /// <summary>
+    /// Whether a session is counted at <paramref name="at"/>: within <see cref="Expiry"/> of its
+    /// start or its last counted heartbeat. Heartbeats are counted only within
+    /// <see cref="SessionLifetime"/> of the start, so no session is live for longer than that and
+    /// <see cref="Expiry"/>.
+    /// </summary>
+    private static bool Live(Session session, TimeSpan at) => at - session.LastBeat < Expiry;
 
     /// <summary>
     /// Whether a challenge issued at <paramref name="at"/> is past its lifetime at
@@ -492,33 +507,42 @@ internal sealed class PresenceStore(TimeProvider time)
     private TimeSpan Now() => time.GetElapsedTime(origin);
 
     /// <summary>
-    /// The count as answers give it: one snapshot for each <see cref="SnapshotWindow"/>, taken by the
-    /// sweep as the window begins, or by the window's first answer if that comes first, after expired
-    /// sessions are swept. It counts the characters whose sessions began before the window did, so a
-    /// session started in the window waits for the next one, and it is given to every answer until
-    /// the window ends. Under the lock.
+    /// The clock read for one operation on the sessions, under the lock, after the window's snapshot
+    /// is taken if it has none yet: so nothing that operation does, or any later one, changes what
+    /// the window shows.
     /// </summary>
-    private int SnapshotLocked(TimeSpan now)
+    private TimeSpan Enter()
     {
+        var now = Now();
         var window = now.Ticks / SnapshotWindow.Ticks;
         if (window > snapshotWindow)
         {
-            Sweep(now);
-            var begins = TimeSpan.FromTicks(window * SnapshotWindow.Ticks);
-            var counted = new HashSet<long>();
-            foreach (var session in byToken.Values)
-            {
-                if (session.Started < begins)
-                {
-                    counted.Add(session.LodestoneId);
-                }
-            }
-
             snapshotWindow = window;
-            snapshot = counted.Count;
+            snapshot = CountAt(TimeSpan.FromTicks(window * SnapshotWindow.Ticks));
         }
 
-        return snapshot;
+        return now;
+    }
+
+    /// <summary>
+    /// The count as it stood at <paramref name="begins"/>, a window's start, for its snapshot: the
+    /// characters with a session started before it and live at it. It is exact whenever it is worked
+    /// out, since every operation that changes the sessions takes the window's snapshot first
+    /// (<see cref="Enter"/>): every session that was live then is still held, with the times it had
+    /// then. Under the lock.
+    /// </summary>
+    private int CountAt(TimeSpan begins)
+    {
+        var counted = new HashSet<long>();
+        foreach (var session in byToken.Values)
+        {
+            if (session.Started < begins && Live(session, begins))
+            {
+                counted.Add(session.LodestoneId);
+            }
+        }
+
+        return counted.Count;
     }
 
     private void Sweep(TimeSpan now)
@@ -684,45 +708,33 @@ internal sealed class PresenceStore(TimeProvider time)
 }
 
 /// <summary>
-/// Sweeps presence in the background, every <see cref="Interval"/> and as each snapshot window
-/// begins: expiry is what the player was told ("the server then forgets the character within about
-/// 3 minutes"), so it can't wait for the next request to come in, and each window's snapshot is
-/// taken as the window begins, not at a moment a request chose. On a server nobody is asking, a
-/// session whose plugin crashed is held for at most <see cref="PresenceStore.Expiry"/> plus this
-/// interval, and the rate limiter's counters, which hold the times requests were counted at, are
-/// dropped as soon as their windows have passed instead of at the next request.
+/// Sweeps presence in the background, every <see cref="Interval"/>: expiry is what the player was
+/// told ("the server then forgets the character within about 3 minutes"), so it can't wait for the
+/// next request to come in. On a server nobody is asking, a session whose plugin crashed is held
+/// for at most <see cref="PresenceStore.Expiry"/> plus this interval, and the rate limiter's
+/// counters, which hold the times requests were counted at, are dropped as soon as their windows
+/// have passed instead of at the next request.
 /// </summary>
 internal sealed class PresenceSweep(PresenceStore presence, AetherFrame.Server.Limits.RateLimiter limiter, TimeProvider time) : Microsoft.Extensions.Hosting.BackgroundService
 {
-    /// <summary>The longest time between two sweeps.</summary>
+    /// <summary>How often the sweep runs.</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(15);
-
-    /// <summary>The shortest: a timer that fires a moment before a window begins costs one more sweep, not a spin.</summary>
-    internal static readonly TimeSpan MinimumWait = TimeSpan.FromMilliseconds(10);
-
-    /// <summary>How long to wait for the next sweep: <see cref="Interval"/>, or less, to wake as the next window begins.</summary>
-    internal static TimeSpan Wait(TimeSpan untilNextWindow) =>
-        untilNextWindow >= Interval ? Interval
-        : untilNextWindow > MinimumWait ? untilNextWindow
-        : MinimumWait;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var wait = Interval;
             try
             {
                 presence.SweepExpired();
                 limiter.SweepNow();
-                wait = Wait(presence.UntilNextWindow());
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 // The next sweep tries again; nothing here can leave the store inconsistent.
             }
 
-            await Task.Delay(wait, time, stoppingToken);
+            await Task.Delay(Interval, time, stoppingToken);
         }
     }
 }
