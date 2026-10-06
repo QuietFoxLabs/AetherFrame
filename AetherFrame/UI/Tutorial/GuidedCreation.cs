@@ -1,0 +1,438 @@
+using System;
+using System.Threading.Tasks;
+using AetherFrame.Domain.Templates;
+using AetherFrame.Services;
+using AetherFrame.Services.Plates;
+using AetherFrame.UI.Editor;
+using AetherFrame.UI.Library;
+
+namespace AetherFrame.UI.Tutorial;
+
+/// <summary>How the player answered the welcome.</summary>
+internal enum WelcomeAnswer
+{
+    /// <summary>Create my first Plate: guided creation starts.</summary>
+    Create,
+
+    /// <summary>Not now: a quiet reminder stays in My Plates.</summary>
+    NotNow,
+
+    /// <summary>Don't show again: no welcome and no reminder; Help still offers the steps.</summary>
+    Never,
+}
+
+/// <summary>What My Plates' guided creation reminder offers, if anything.</summary>
+internal enum GuidedReminder
+{
+    None,
+
+    /// <summary>A new player put the welcome off: create your first Plate.</summary>
+    Offer,
+
+    /// <summary>A guided creation was left partway: continue it.</summary>
+    Resume,
+}
+
+/// <summary>
+/// Guided creation: a short route to a personalized, saved Plate in three steps (Choose a Look, Make
+/// It Yours, Save), shown by the Basic editor around its live view while the open Plate is the one
+/// the route made (<see cref="IsGuiding"/>). It is the introductory route for a new player, offered
+/// by the welcome once the Libraries have loaded, after any recovery offer has been answered
+/// (<see cref="WelcomeMayShow"/>), and reachable by anyone from Help, Create Plate's chooser and an
+/// empty My Plates.
+///
+/// <para>Everything it changes goes through the existing commands: the Plate is made by the editors'
+/// New Plate (<see cref="PlateSwitcher.New"/>, Adventure Plate Classic, asking first about unsaved
+/// changes), edited through the Basic editor's own session (so Undo, Redo, Revert, recovery
+/// checkpoints and image ownership work as they always do), and saved by the editors' Save. The Plate
+/// is made once: its id is stored the moment it exists, and every later start, Back, close, reload
+/// or crash opens that Plate again on the step it reached. Completion is recorded only when Save at
+/// the Save step succeeds.</para>
+///
+/// <para>Sharing and its consent and verification are never touched here, nor is any other consent:
+/// sharing stays a separate action in My Plates. Render thread only.</para>
+/// </summary>
+internal sealed class GuidedCreation
+{
+    /// <summary>The welcome stops after this many unanswered showings, as if Not now were chosen.</summary>
+    internal const int MaxOffers = FirstRunDetector.MaxOffers;
+
+    /// <summary>What the Save step says when the save failed and the editor gave no reason.</summary>
+    internal const string SaveFailedMessage = "Your Plate couldn't be saved.";
+
+    private readonly IGuidedCreationStore store;
+    private readonly PlateLibraryService library;
+    private readonly ProfileService profiles;
+    private readonly EditorDocumentCommands commands;
+    private readonly EditorSession session;
+    private readonly PlateSwitcher switcher;
+    private readonly Action<EditorSurfaceKind> showEditor;
+
+    private bool offerRequested;
+    private bool starting;
+    private Task<bool>? saving;
+    private Guid? savingPlateId;
+    private Guid? successPlateId;
+    private bool resumeHidden;
+
+    /// <param name="store">Where the state and the Basic editor's view are kept.</param>
+    /// <param name="library">Whether the guided Plate still exists.</param>
+    /// <param name="profiles">The open Plate.</param>
+    /// <param name="commands">The editors' Save, and whether the open Plate has unsaved changes.</param>
+    /// <param name="session">Why a save failed.</param>
+    /// <param name="switcher">The editors' New Plate and Open another Plate, which ask first about unsaved changes.</param>
+    /// <param name="showEditor">Shows the open Plate in the Basic or Advanced editor.</param>
+    internal GuidedCreation(
+        IGuidedCreationStore store,
+        PlateLibraryService library,
+        ProfileService profiles,
+        EditorDocumentCommands commands,
+        EditorSession session,
+        PlateSwitcher switcher,
+        Action<EditorSurfaceKind> showEditor)
+    {
+        this.store = store;
+        this.library = library;
+        this.profiles = profiles;
+        this.commands = commands;
+        this.session = session;
+        this.switcher = switcher;
+        this.showEditor = showEditor;
+    }
+
+    internal GuidedCreationPreferences Preferences => store.Preferences;
+
+    // ---------------------------------------------------------------- the Basic editor's view
+
+    /// <summary>Whether the Basic editor shows its Simple view (the everyday controls first, the rest folded away).</summary>
+    internal bool SimpleWorkspace => store.Workspace == BasicWorkspaceMode.Simple;
+
+    /// <summary>The player's explicit choice of view. Kept from then on.</summary>
+    internal void SetSimpleWorkspace(bool simple)
+    {
+        var mode = simple ? BasicWorkspaceMode.Simple : BasicWorkspaceMode.Detailed;
+        if (store.Workspace != mode)
+        {
+            store.Workspace = mode;
+            store.Save();
+        }
+    }
+
+    // ---------------------------------------------------------------- the welcome
+
+    /// <summary>
+    /// Whether nothing about recovery stands in front of the welcome: the kept unsaved changes (and
+    /// recovery checkpoints) have been read, and none waits for an answer or is on screen. A recovery
+    /// offer always comes first; the welcome waits for it.
+    /// </summary>
+    internal static bool WelcomeMayShow(bool recoveryRead, bool recoveryAwaitsAnswer, bool recoveryOnScreen) =>
+        recoveryRead && !recoveryAwaitsAnswer && !recoveryOnScreen;
+
+    /// <summary>
+    /// At load, once the Libraries' state is known. A new player (<see cref="OnboardingCoordinator.IsNewPlayer"/>)
+    /// gets the Simple view unless they already chose one, and the welcome when they have no Plate,
+    /// haven't answered it, haven't started guided creation, and it hasn't been shown too often. An
+    /// install that couldn't be judged (the Library didn't load, or the configuration couldn't be read)
+    /// is never a new player, so it is never welcomed. Never touches a Plate.
+    /// </summary>
+    internal void ResolveWelcome(bool newPlayer, int plateCount)
+    {
+        if (!newPlayer)
+        {
+            return;
+        }
+
+        if (store.Workspace == BasicWorkspaceMode.Unset)
+        {
+            store.Workspace = BasicWorkspaceMode.Simple;
+            store.Save();
+        }
+
+        offerRequested = plateCount == 0
+            && Preferences.Offer == GuidedOfferAnswer.Undecided
+            && Preferences.Run == GuidedRunStatus.None
+            && Preferences.OfferCount < MaxOffers;
+    }
+
+    /// <summary>Whether a welcome waits to be shown.</summary>
+    internal bool WelcomeRequested => offerRequested;
+
+    /// <summary>
+    /// For the welcome window, once a frame: true once, when a welcome waits and
+    /// <paramref name="mayShow"/> (<see cref="WelcomeMayShow"/>) says nothing stands in front of it.
+    /// Counts the showing.
+    /// </summary>
+    internal bool ConsumeWelcome(bool mayShow)
+    {
+        if (!offerRequested || !mayShow)
+        {
+            return false;
+        }
+
+        offerRequested = false;
+        Preferences.OfferCount++;
+        store.Save();
+        return true;
+    }
+
+    /// <summary>The player answered the welcome.</summary>
+    internal void AnswerWelcome(WelcomeAnswer answer)
+    {
+        offerRequested = false;
+        switch (answer)
+        {
+            case WelcomeAnswer.Create:
+                Start();
+                return;
+            case WelcomeAnswer.NotNow:
+                Preferences.Offer = GuidedOfferAnswer.Deferred;
+                break;
+            case WelcomeAnswer.Never:
+                Preferences.Offer = GuidedOfferAnswer.Declined;
+                Preferences.ReminderDismissed = true;
+                break;
+        }
+
+        store.Save();
+    }
+
+    // ---------------------------------------------------------------- My Plates' reminder
+
+    /// <summary>What My Plates' reminder offers now.</summary>
+    internal GuidedReminder Reminder
+    {
+        get
+        {
+            var prefs = Preferences;
+            if (prefs.Run == GuidedRunStatus.InProgress && prefs.PlateId is { } plateId && !resumeHidden && !starting)
+            {
+                return IsGuiding(profiles.OpenPlateId) || library.FindPlate(plateId) is null ? GuidedReminder.None : GuidedReminder.Resume;
+            }
+
+            var putOff = prefs.Offer == GuidedOfferAnswer.Deferred
+                || (prefs.Offer == GuidedOfferAnswer.Undecided && prefs.OfferCount >= MaxOffers);
+            return putOff && !prefs.ReminderDismissed && prefs.Run == GuidedRunStatus.None && !starting ? GuidedReminder.Offer : GuidedReminder.None;
+        }
+    }
+
+    /// <summary>The reminder's Not now: the offer is dismissed for good; a resume only until the next load.</summary>
+    internal void DismissReminder()
+    {
+        if (Reminder == GuidedReminder.Resume)
+        {
+            resumeHidden = true;
+            return;
+        }
+
+        if (!Preferences.ReminderDismissed)
+        {
+            Preferences.ReminderDismissed = true;
+            store.Save();
+        }
+    }
+
+    // ---------------------------------------------------------------- starting and resuming
+
+    /// <summary>A start is under way: the new Plate is being made, or the unsaved-changes question waits.</summary>
+    internal bool IsStarting => starting;
+
+    /// <summary>Why the last start couldn't go ahead, or null.</summary>
+    internal string? StartError { get; private set; }
+
+    /// <summary>Whether a guided creation was left partway and its Plate still exists: Start continues it.</summary>
+    internal bool CanContinue =>
+        Preferences.Run is GuidedRunStatus.InProgress or GuidedRunStatus.Left
+        && Preferences.PlateId is { } plateId && library.FindPlate(plateId) is not null;
+
+    /// <summary>
+    /// Starts guided creation: continues the Plate a guided creation left partway, on the step it
+    /// reached, when it still exists; otherwise makes a new Plate (Adventure Plate Classic, through
+    /// the editors' New Plate, which asks first about unsaved changes) and opens it on Choose a Look.
+    /// The new Plate's id is stored as soon as it exists, so nothing ever makes a second one.
+    /// </summary>
+    internal void Start()
+    {
+        StartError = null;
+        if (starting)
+        {
+            return;
+        }
+
+        resumeHidden = false;
+        if (Preferences.Offer != GuidedOfferAnswer.Accepted)
+        {
+            Preferences.Offer = GuidedOfferAnswer.Accepted;
+            store.Save();
+        }
+
+        if (CanContinue)
+        {
+            Preferences.Run = GuidedRunStatus.InProgress;
+            store.Save();
+            OpenGuidedPlate(Preferences.PlateId!.Value);
+            return;
+        }
+
+        var decision = switcher.New(BuiltInTemplateCatalog.AdventurePlateClassicId, Created);
+        if (decision == PlateOpenDecision.Refused)
+        {
+            StartError = switcher.Runner.Error ?? PlateSwitcher.CannotOpenNote;
+            return;
+        }
+
+        starting = true;
+    }
+
+    /// <summary>The guided Plate exists: recorded before it opens, on Choose a Look.</summary>
+    private void Created(Guid plateId)
+    {
+        starting = false;
+        Preferences.PlateId = plateId;
+        Preferences.Run = GuidedRunStatus.InProgress;
+        Preferences.Stage = GuidedStage.ChooseLook;
+        store.Save();
+    }
+
+    private void OpenGuidedPlate(Guid plateId)
+    {
+        if (profiles.OpenPlateId == plateId)
+        {
+            showEditor(EditorSurfaceKind.Basic);
+            return;
+        }
+
+        if (switcher.Open(plateId) == PlateOpenDecision.Refused)
+        {
+            StartError = switcher.Runner.Error ?? PlateSwitcher.CannotOpenNote;
+        }
+    }
+
+    /// <summary>
+    /// Once a frame: a start that ended without a Plate (the question's Cancel, or a failure) stops
+    /// waiting and says why; a save that finished completes the route or says why it failed.
+    /// </summary>
+    internal void Advance()
+    {
+        if (starting && !switcher.Runner.IsBusy && switcher.Guard.Pending is null && !switcher.Guard.IsSaving)
+        {
+            starting = false;
+            StartError = switcher.Runner.Error;
+        }
+
+        if (saving is not { IsCompleted: true } finished)
+        {
+            return;
+        }
+
+        saving = null;
+        var saved = finished.IsCompletedSuccessfully && finished.Result;
+        if (saved && savingPlateId is { } plateId && Preferences.PlateId == plateId)
+        {
+            Complete(plateId);
+        }
+        else if (!saved)
+        {
+            SaveError = session.ErrorMessage ?? SaveFailedMessage;
+        }
+
+        savingPlateId = null;
+    }
+
+    // ---------------------------------------------------------------- the steps
+
+    /// <summary>Whether the Basic editor shows the steps for <paramref name="openPlateId"/>: it is the guided Plate, and the route is under way.</summary>
+    internal bool IsGuiding(Guid? openPlateId) =>
+        openPlateId is { } open && Preferences.Run == GuidedRunStatus.InProgress && Preferences.PlateId == open;
+
+    /// <summary>Whether the Basic editor shows the saved state for <paramref name="openPlateId"/> (View Plate, Keep Editing).</summary>
+    internal bool ShowsSuccess(Guid? openPlateId) => openPlateId is { } open && successPlateId == open;
+
+    internal GuidedStage Stage => Preferences.Stage;
+
+    /// <summary>The step's position, 1 to 3.</summary>
+    internal int StepNumber => (int)Preferences.Stage + 1;
+
+    internal const int StepCount = 3;
+
+    internal bool CanGoBack => Preferences.Stage > GuidedStage.ChooseLook && !IsSaving;
+
+    /// <summary>Next: the following step. Nothing is saved by moving; the Plate's edits stay in the editor.</summary>
+    internal void Next()
+    {
+        if (Preferences.Stage < GuidedStage.Save)
+        {
+            Preferences.Stage++;
+            SaveError = null;
+            store.Save();
+        }
+    }
+
+    /// <summary>Back: the previous step, with everything entered kept.</summary>
+    internal void Back()
+    {
+        if (CanGoBack)
+        {
+            Preferences.Stage--;
+            SaveError = null;
+            store.Save();
+        }
+    }
+
+    /// <summary>Exit Guide: the Plate stays as it is and is edited normally from now on; Help brings the steps back.</summary>
+    internal void Leave()
+    {
+        if (Preferences.Run == GuidedRunStatus.InProgress)
+        {
+            Preferences.Run = GuidedRunStatus.Left;
+            store.Save();
+        }
+    }
+
+    // ---------------------------------------------------------------- saving
+
+    /// <summary>The Save step's save is being written.</summary>
+    internal bool IsSaving => saving is not null;
+
+    /// <summary>Why the Save step's last save failed, or null. Everything entered stays in the editor.</summary>
+    internal string? SaveError { get; private set; }
+
+    /// <summary>
+    /// The Save step's Save: the editors' Save, for the guided Plate. A Plate with nothing unsaved is
+    /// already saved as it is, so it completes at once. Completion is recorded only once the save
+    /// has succeeded (<see cref="Advance"/>); a failed save keeps the route on this step with
+    /// everything entered, and says why.
+    /// </summary>
+    internal void Save()
+    {
+        if (saving is not null || !IsGuiding(profiles.OpenPlateId) || commands.IsSaving)
+        {
+            return;
+        }
+
+        SaveError = null;
+        var plateId = Preferences.PlateId!.Value;
+        if (!commands.IsDirty)
+        {
+            Complete(plateId);
+            return;
+        }
+
+        savingPlateId = plateId;
+        saving = commands.SaveAsync();
+    }
+
+    private void Complete(Guid plateId)
+    {
+        Preferences.Run = GuidedRunStatus.Completed;
+        Preferences.Stage = GuidedStage.ChooseLook;
+        Preferences.CompletedCount++;
+        store.Save();
+        successPlateId = plateId;
+    }
+
+    /// <summary>The saved state's Keep Editing (or View Plate): the Plate is edited normally from now on.</summary>
+    internal void DismissSuccess() => successPlateId = null;
+
+    /// <summary>The Plate the saved state is about, while it shows.</summary>
+    internal Guid? SuccessPlateId => successPlateId;
+}

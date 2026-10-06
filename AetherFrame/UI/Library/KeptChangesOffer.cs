@@ -152,6 +152,13 @@ internal sealed class KeptChangesOffer
     /// <summary>A draft is on offer (or being acted on): the window shows it.</summary>
     internal bool HasCurrent => Current is not null;
 
+    /// <summary>
+    /// Kept changes wait for the player's answer: one is on offer or being acted on, or one is still
+    /// to be offered (at the next login, say). Changes left for later (Decide Later, or the window
+    /// closed) don't count: the player has answered for now. The welcome waits while this holds.
+    /// </summary>
+    internal bool AwaitsAnswer => creating is not null || entries.Any(e => e.State is EntryState.Pending or EntryState.Acting);
+
     internal KeptChangesVariant? CurrentVariant => Current is { } entry ? VariantOf(entry.Choice) : null;
 
     internal Guid? CurrentPlateId => Current?.PlateId;

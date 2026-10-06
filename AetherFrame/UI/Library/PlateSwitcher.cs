@@ -48,6 +48,9 @@ internal sealed class PlateSwitcher
     // An open that goes ahead at the start of the next frame (see Advance).
     private PlateOpenRequest? queued;
 
+    // Told the id of the Plate the latest New makes, once it is made (guided creation records it).
+    private Action<Guid>? created;
+
     /// <param name="library">The Plates, in My Plates' order.</param>
     /// <param name="profileService">The open Plate.</param>
     /// <param name="editorSession">Whether the open Plate has unsaved changes, and their Save or Discard.</param>
@@ -81,6 +84,9 @@ internal sealed class PlateSwitcher
 
     /// <summary>The unsaved-changes question's state and answers, which the editors' Plate menu draws.</summary>
     internal PlateOpenGuard Guard { get; }
+
+    /// <summary>The editors' Plate actions' runner: whether a new Plate is still being made, and why one couldn't be.</summary>
+    internal PlateOperationRunner Runner => actions.Runner;
 
     /// <summary>Whether Open another Plate shows a search field, and scrolls: My Plates holds more Plates than <see cref="VisibleRows"/>.</summary>
     internal bool NeedsSearch => library.GetOrderedPlates().Count > VisibleRows;
@@ -140,12 +146,17 @@ internal sealed class PlateSwitcher
     /// Discard checks again (<see cref="Discard"/>), so Discard doesn't drop unsaved changes for a
     /// Plate the Template can't make.
     /// </summary>
-    internal PlateOpenDecision New(Guid templateId)
+    /// <param name="templateId">The Template.</param>
+    /// <param name="onCreated">Told the new Plate's id once it is made, before it opens (guided creation
+    /// records it, so resuming never makes a second one). A later New replaces it.</param>
+    internal PlateOpenDecision New(Guid templateId, Action<Guid>? onCreated = null)
     {
         actions.Runner.Error = null;
+        created = onCreated;
         if (WhyNotNew(templateId) is { } why)
         {
             actions.Runner.Error = why;
+            created = null;
             return PlateOpenDecision.Refused;
         }
 
@@ -236,8 +247,16 @@ internal sealed class PlateSwitcher
         }
     }
 
-    private void Create(Guid templateId) =>
-        actions.UseTemplate(templateId, character(), starter(), result => OpenCreated(result.PlateId));
+    private void Create(Guid templateId)
+    {
+        var told = created;
+        created = null;
+        actions.UseTemplate(templateId, character(), starter(), result =>
+        {
+            told?.Invoke(result.PlateId);
+            OpenCreated(result.PlateId);
+        });
+    }
 
     /// <summary>
     /// The new Plate is made. Nothing unsaved stood in the way when it was asked for, but an edit

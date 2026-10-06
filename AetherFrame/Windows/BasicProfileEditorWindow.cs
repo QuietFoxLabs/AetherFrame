@@ -154,6 +154,15 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
     internal HelpMenu? Help { get; set; }
 
+    /// <summary>
+    /// Guided creation (its steps, shown around the live view while the guided Plate is open) and the
+    /// choice of the Simple or Detailed view, set by the plugin.
+    /// </summary>
+    internal GuidedCreation? Guided { get; set; }
+
+    /// <summary>Whether the Simple view shows: the everyday controls first, the detailed ones folded into labelled sections.</summary>
+    private bool Simple => Guided?.SimpleWorkspace ?? false;
+
     public void Dispose()
     {
     }
@@ -266,6 +275,17 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         // Opening Basic mode never creates or changes anything: section elements (and the
         // Basic settings) are only created by the first explicit edit that needs them.
         basicEditorSession.Identity.RefineLayout();
+
+        // The guided Plate: its steps (or, once saved, View Plate and Keep Editing) around the live view.
+        if (Guided is { } guided && (guided.IsGuiding(profile.ProfileId) || guided.ShowsSuccess(profile.ProfileId)))
+        {
+            DrawGuided(profile, guided);
+            DrawResetLayoutPopup();
+            actionBar.DrawPopups();
+            EditorClosePrompt.Draw(closeGuard, () => IsOpen = false);
+            editorSession.CommitPendingEditsIfIdle(ImGui.IsAnyItemActive());
+            return;
+        }
 
         // The shared action bar (My Plates, Basic | Advanced, Undo/Redo, Preview/Revert/Save),
         // outside every scrolling region so it's always in view.
@@ -390,11 +410,11 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         ImGui.SetCursorPosY(padding);
 
         using var spacing = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, RailRowGap * scale));
-        foreach (var category in BasicEditorView.Categories)
+        foreach (var category in BasicEditorView.CategoriesFor(Simple))
         {
             var status = BasicEditorView.StatusOf(profile, category);
             var selected = navigation.Selected == category;
-            var title = BasicEditorView.Title(category);
+            var title = BasicEditorView.Title(category, Simple);
 
             ImGui.SetCursorPosX(padding);
             if (ImGui.InvisibleButton($"##Nav{category}", new Vector2(rowWidth, rowHeight)))
@@ -438,9 +458,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         var stripMin = ImGui.GetCursorScreenPos();
         var stripMax = stripMin;
 
-        foreach (var category in BasicEditorView.Categories)
+        foreach (var category in BasicEditorView.CategoriesFor(Simple))
         {
-            var label = BasicEditorView.Title(category);
+            var label = BasicEditorView.Title(category, Simple);
             var width = ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2f) + (8f * ImGuiHelpers.GlobalScale);
             if (rowUsed > 0f)
             {
@@ -550,7 +570,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         var category = navigation.Selected;
-        AetherControls.SectionHeader(BasicEditorView.Title(category), topSpacing: 0f);
+        AetherControls.SectionHeader(BasicEditorView.Title(category, Simple), topSpacing: 0f);
         foreach (var line in BasicEditorView.SummaryOf(profile, category))
         {
             AetherControls.Secondary(line);
@@ -582,6 +602,13 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             case BasicEditorCategory.Message:
                 DrawMessageCategory(profile);
                 break;
+        }
+
+        // The Simple view keeps the way to everything else in sight.
+        if (Simple)
+        {
+            ImGui.Spacing();
+            Hint("Want layers, free placement or your own elements? Choose Advanced in the bar above. Your Plate stays as it is.");
         }
 
         // The page that holds the clicked Component's slot has been drawn once: if the slot wasn't on
@@ -887,6 +914,45 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         TutorialAnchorMarks.MarkRect(TutorialTarget.BasicPreviewZoom, zoomMin, ImGui.GetItemRectMax());
         ArtDownloadStatus.DrawInline(previewArt, renderResources.ArtStore);
+        DrawViewChoice();
+    }
+
+    /// <summary>
+    /// The Simple view's switch, at the right end of the live view's toolbar, where it shows in every
+    /// layout. The player's choice is kept.
+    /// </summary>
+    private void DrawViewChoice()
+    {
+        if (Guided is not { } guided || drawingGuided)
+        {
+            return;
+        }
+
+        const string label = "Simple view";
+        var width = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + ImGui.CalcTextSize(label).X;
+        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + ImGui.GetStyle().ItemSpacing.X, ImGui.GetContentRegionMax().X - width));
+        var simple = guided.SimpleWorkspace;
+        if (ImGui.Checkbox(label + "##BasicSimpleView", ref simple))
+        {
+            guided.SetSimpleWorkspace(simple);
+        }
+
+        ToolTip("Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way.");
+    }
+
+    /// <summary>
+    /// In the Simple view, the detailed controls that follow sit under one labelled section, closed
+    /// until opened; the Detailed view shows them as always. Returns whether to draw them.
+    /// </summary>
+    private bool MoreControls(string label)
+    {
+        if (!Simple)
+        {
+            return true;
+        }
+
+        ImGui.Spacing();
+        return ImGui.CollapsingHeader($"{label}##More{label}");
     }
 
     private void DrawResetLayoutPopup()

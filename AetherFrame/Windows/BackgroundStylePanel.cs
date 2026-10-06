@@ -364,6 +364,21 @@ internal sealed class BackgroundStylePanel
     private static float ThemeCardHeight(ProfileDocument profile, ThemeFamily family, float cardWidth) =>
         PreviewHeight(profile, family == ThemeFamily.ArtStyle, cardWidth) + (ThemeCardPadding * 3f) + ImGui.GetTextLineHeight();
 
+    /// <summary>
+    /// Guided creation's Choose a Look: <paramref name="looks"/> as the style browser's own cards
+    /// (bundled previews, so nothing downloads until one is applied), large, two to a row where they
+    /// fit and one where they don't, the Plate's current style marked. A click applies the look
+    /// through <paramref name="applyTheme"/>, the Basic editor's own Apply Theme.
+    /// </summary>
+    internal void DrawLooks(ProfileDocument profile, IReadOnlyList<ProfileThemePreset> looks, Action<ProfileThemePreset> applyTheme)
+    {
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var available = ImGui.GetContentRegionAvail().X;
+        var twoAcross = (available - spacing) / 2f >= EditorWidgets.Scaled(150f);
+        var cardWidth = MathF.Floor(Math.Min(twoAcross ? (available - spacing) / 2f : available, EditorWidgets.Scaled(320f)));
+        DrawThemeCardGrid(profile, looks, ThemeBrowser.Current(profile), applyTheme, cardWidth);
+    }
+
     private void DrawThemeCardGrid(ProfileDocument profile, IReadOnlyList<ProfileThemePreset> members, ProfileThemePreset? current, Action<ProfileThemePreset> applyTheme, float cardWidth)
     {
         var spacing = ImGui.GetStyle().ItemSpacing.X;

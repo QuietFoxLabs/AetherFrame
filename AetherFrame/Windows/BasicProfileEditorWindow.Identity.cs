@@ -72,7 +72,17 @@ internal sealed partial class BasicProfileEditorWindow
         }
 
         DrawNameControls(profile, identity);
-        DrawTitleControls(profile, identity);
+        if (MoreControls("Title"))
+        {
+            DrawTitleControls(profile, identity);
+        }
+
+        if (!MoreControls("Style and Layout"))
+        {
+            DrawTitlePickerPopup(profile);
+            return;
+        }
+
         DrawIdentityLayoutChoice(profile, identity);
 
         ImGui.Spacing();

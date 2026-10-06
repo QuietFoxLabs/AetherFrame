@@ -122,6 +122,27 @@ internal static class BasicEditorView
 {
     internal static readonly BasicEditorCategory[] Categories = Enum.GetValues<BasicEditorCategory>();
 
+    /// <summary>
+    /// The Simple view's categories: the everyday ones first (the look, the name, the portrait, the
+    /// message), then everything else about the character.
+    /// </summary>
+    internal static readonly BasicEditorCategory[] SimpleCategories =
+    [
+        BasicEditorCategory.Style, BasicEditorCategory.Identity, BasicEditorCategory.Portrait, BasicEditorCategory.Message, BasicEditorCategory.Details,
+    ];
+
+    /// <summary>The categories in navigator order for the Simple or the Detailed view.</summary>
+    internal static IReadOnlyList<BasicEditorCategory> CategoriesFor(bool simple) => simple ? SimpleCategories : Categories;
+
+    /// <summary>A category's name in the Simple view, in everyday words, or in the Detailed view as always.</summary>
+    internal static string Title(BasicEditorCategory category, bool simple) => !simple ? Title(category) : category switch
+    {
+        BasicEditorCategory.Style => "Look",
+        BasicEditorCategory.Identity => "Name",
+        BasicEditorCategory.Details => "More Details",
+        _ => Title(category),
+    };
+
     /// <summary>The window's minimum size, in unscaled pixels (Dalamud scales it).</summary>
     internal static readonly Vector2 MinimumWindowSize = new(520f, 560f);
 

@@ -112,6 +112,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly bool configurationFound;
     private readonly bool configurationUnreadable;
 
+    // Guided creation (the introductory route: a personalized, saved Plate in three steps), its
+    // welcome, and whether the kept unsaved changes have been read: a recovery offer always comes
+    // before the welcome. Set once LoadKeptChangesAsync has finished, whatever its outcome.
+    private readonly GuidedCreation guidedCreation;
+    private volatile bool keptChangesRead;
+
     // Every file-writing operation the plugin owns (Library, Templates, package import/export),
     // so unloading can let running ones finish before disposing what they use.
     private readonly OwnedOperations ownedOperations = new();
@@ -272,16 +278,27 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             var editorPlateActions = new PlateActions(plateLibrary, templateLibrary, packageService, profileService, editorSession, new PlateOperationRunner(log), log);
             var editorPlates = new PlateMenu(
                 editorPlateActions, plateLibrary, templateLibrary, profileService, editorSession, characterIdentityService, thumbnailService, renderResources, editorPlateFileDialogs);
-            editorPlates.AttachSwitcher(new PlateSwitcher(
+            var plateSwitcher = new PlateSwitcher(
                 plateLibrary, profileService, editorSession, editorPlateActions,
                 () => characterIdentityService.CurrentCharacter, () => new PlateStarterContent(characterIdentityService.CurrentInfo),
-                ShowEditor, editorPlates.AskBeforeOpening, log));
+                ShowEditor, editorPlates.AskBeforeOpening, log);
+            editorPlates.AttachSwitcher(plateSwitcher);
             editorPlateMenu = new EditorPlateMenu(
                 editorPlates, plateLibrary, characterIdentityService, documentCommands, editorPlateFileDialogs, plateId => profileViewWindow!.ShowPlate(plateId));
 
             basicProfileEditorWindow = new BasicProfileEditorWindow(
                 profileService, editorSession, basicEditorSession, imageTextureCache, renderResources, basicFileDialogManager, gameTitleCatalog, jobCatalog,
                 OpenAdvancedEditor, OpenMyPlates, editorSurfaces, documentCommands, keyboardShortcutService, editorPlateMenu);
+
+            // Guided creation: the Plate is made by the editors' New Plate (through the switcher, which
+            // asks first about unsaved changes), edited and saved in the Basic editor, which shows the
+            // steps while the guided Plate is open. Its state lives in the configuration.
+            guidedCreation = new GuidedCreation(
+                new ConfigurationGuidedStore(Configuration, log), plateLibrary, profileService, documentCommands, editorSession, plateSwitcher, ShowEditor);
+            basicProfileEditorWindow.Guided = guidedCreation;
+            basicProfileEditorWindow.SharingAvailable = AetherFrameBuildInfo.NetworkPreview;
+            basicProfileEditorWindow.IsActivePlate = plateId => characterIdentityService.CurrentCharacter is { } who ? plateLibrary.GetActivePlateId(who.ContentId) == plateId : null;
+            editorPlates.Chooser.CreateStepByStep = guidedCreation.Start;
             profileEditorWindow = new ProfileEditorWindow(
                 profileService, editorSession, keyboardShortcutService, renderResources, fileDialogManager, OpenBasicEditor, OpenMyPlates, editorSurfaces, documentCommands, editorPlateMenu);
             editorSurfaces.Attach(basicProfileEditorWindow, profileEditorWindow);
@@ -306,6 +323,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowEditor, log);
             keptChangesWindow = new KeptChangesWindow(keptChanges);
             plateLibraryWindow.KeptChanges = keptChanges;
+            plateLibraryWindow.Guided = guidedCreation;
+            basicProfileEditorWindow.ViewPlate = profileViewWindow.ShowPlate;
 
             WindowSystem.AddWindow(plateLibraryWindow);
             WindowSystem.AddWindow(basicProfileEditorWindow);
@@ -336,7 +355,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // A player taking the tour is being shown both editors: the one-time Basic suggestion
             // would only get in the way of a step, so it counts as handled once the tour starts.
             onboarding.Started += basicGuidance.MarkHandled;
-            var helpMenu = new HelpMenu(onboarding, tutorialHost);
+            var helpMenu = new HelpMenu(onboarding, tutorialHost) { Guided = guidedCreation };
             var fontLicencesWindow = new FontLicencesWindow();
             WindowSystem.AddWindow(fontLicencesWindow);
             helpMenu.OpenFontLicences = () =>
@@ -492,6 +511,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 WindowSystem.AddWindow(window);
             }
 
+            // The welcome: guided creation for a new player, once no recovery offer waits for an answer.
+            var welcomeWindow = new WelcomeWindow(
+                guidedCreation, () => GuidedCreation.WelcomeMayShow(keptChangesRead, keptChanges.AwaitsAnswer, keptChangesWindow.IsOpen));
+            WindowSystem.AddWindow(welcomeWindow);
+
             // Drawing starts last: the plugin is created off the framework thread, so a frame can
             // run while this constructor does, and every frame's work must find all it uses made.
             PluginInterface.UiBuilder.Draw += DrawUi;
@@ -581,6 +605,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
             Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not read the unsaved changes it kept; they are left as they are.");
         }
+        finally
+        {
+            // Whatever was found is on offer now (or waits for a login): the welcome may follow it.
+            keptChangesRead = true;
+        }
     }
 
     /// <summary>
@@ -627,7 +656,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         }
 
         onboarding.ResolveFirstRun(configurationFound, configurationUnreadable, libraryLoaded, plateCount, userTemplateCount);
-        Log.Information($"AetherFrame tutorial: {onboarding.LastDecision} (install {onboarding.Preferences.Install}, status {onboarding.Preferences.Status}).");
+        guidedCreation.ResolveWelcome(onboarding.IsNewPlayer, plateCount);
+        Log.Information($"AetherFrame tutorial: {onboarding.LastDecision} (install {onboarding.Preferences.Install}, status {onboarding.Preferences.Status}); welcome {(guidedCreation.WelcomeRequested ? "waits" : "not offered")}.");
     }
 
     /// <summary>
@@ -642,6 +672,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         {
             tutorialOverlay.Update();
             keptChanges.Advance();
+            guidedCreation.Advance();
 #if AETHERFRAME_NETWORK_PREVIEW
             livePublisher.OnFrame();
             plateViewing.OnFrame();
@@ -911,6 +942,32 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         public TutorialPreferences Preferences => configuration.Tutorial ??= new TutorialPreferences();
 
         /// <summary>Never throws: failing to remember only means the offer may be shown again.</summary>
+        public void Save()
+        {
+            configuration.Version = Math.Max(configuration.Version, PluginConfiguration.CurrentVersion);
+            try
+            {
+                PluginInterface.SavePluginConfig(configuration);
+            }
+            catch (Exception ex)
+            {
+                log.Error(ex, "AetherFrame could not save its configuration.");
+            }
+        }
+    }
+
+    /// <summary>Guided creation's state and the Basic editor's view, persisted in the plugin configuration beside the tutorial's.</summary>
+    private sealed class ConfigurationGuidedStore(PluginConfiguration configuration, IAetherFrameLog log) : IGuidedCreationStore
+    {
+        public GuidedCreationPreferences Preferences => configuration.GuidedCreation ??= new GuidedCreationPreferences();
+
+        public BasicWorkspaceMode Workspace
+        {
+            get => configuration.BasicWorkspace;
+            set => configuration.BasicWorkspace = value;
+        }
+
+        /// <summary>Never throws: failing to remember only means a choice may be asked again.</summary>
         public void Save()
         {
             configuration.Version = Math.Max(configuration.Version, PluginConfiguration.CurrentVersion);

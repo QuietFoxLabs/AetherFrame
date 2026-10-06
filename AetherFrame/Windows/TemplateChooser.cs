@@ -105,6 +105,9 @@ internal sealed class TemplateChooser
     /// <summary>The footer's Manage Templates...: My Plates' Templates view. The link shows only when set.</summary>
     internal Action? ManageTemplates { get; set; }
 
+    /// <summary>The footer's Step by Step...: guided creation, for a player who'd rather be guided. The link shows only when set.</summary>
+    internal Action? CreateStepByStep { get; set; }
+
     /// <summary>A row menu's Duplicate made this copy (My Plates: Manage Templates' selection follows it).</summary>
     internal Action<Guid>? TemplateDuplicated { get; set; }
 
@@ -481,6 +484,22 @@ internal sealed class TemplateChooser
             }
 
             EditorWidgets.Tooltip("Preview, rename, duplicate, or delete your saved Templates.");
+        }
+
+        if (CreateStepByStep is { } stepByStep)
+        {
+            if (ManageTemplates is not null)
+            {
+                ImGui.SameLine();
+            }
+
+            if (AetherControls.SecondaryButton("Create Step by Step..."))
+            {
+                stepByStep();
+                ImGui.CloseCurrentPopup();
+            }
+
+            EditorWidgets.Tooltip("A new Plate in three short steps, with your look, name, portrait and message: the easiest start.");
         }
 
         // Right side: Cancel, then Use Template as the primary (accent-colored) action.

@@ -40,6 +40,31 @@ internal sealed partial class BasicProfileEditorWindow
 
         ImGui.Spacing();
 
+        // The Simple view folds everything after the Look into labelled sections.
+        if (MoreControls("Background and Pattern"))
+        {
+            DrawBackgroundControls(profile);
+        }
+
+        if (MoreControls("Heading Size"))
+        {
+            DrawSectionHeadingSize(profile);
+        }
+
+        if (MoreControls("Frame and Decorations"))
+        {
+            DrawFrameAndDecorations(profile);
+        }
+
+        if (MoreControls("Orientation and Layout"))
+        {
+            DrawPlateLayoutActions(profile);
+        }
+    }
+
+    /// <summary>The Plate's own background: Pattern and Customize Background, or why artwork covers them.</summary>
+    private void DrawBackgroundControls(ProfileDocument profile)
+    {
         // Asked after the Look, so a style chosen this frame is already reflected (issue #119).
         var cover = AppearanceControls.Background(profile);
         if (cover.Component is { } covering)
@@ -71,12 +96,6 @@ internal sealed partial class BasicProfileEditorWindow
                 backgroundPanel.Draw(profile, applyTheme: null);
             }
         }
-
-        DrawSectionHeadingSize(profile);
-
-        DrawFrameAndDecorations(profile);
-
-        DrawPlateLayoutActions(profile);
     }
 
     /// <summary>

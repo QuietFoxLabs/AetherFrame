@@ -95,7 +95,15 @@ internal sealed partial class BasicProfileEditorWindow
 
                 ToolTip("Removes the portrait from this Plate (undoable). The image stays in your library.");
             }
+        }
 
+        if (!MoreControls("Fit, Frame and Layout"))
+        {
+            return;
+        }
+
+        if (portrait is not null)
+        {
             Subheading("Image Fit");
             var fitClicked = EditorWidgets.Segmented("PortraitFit", PortraitFitLabels, Array.IndexOf(PortraitFitOrder, portrait.DisplayMode));
             if (fitClicked >= 0)
@@ -169,6 +177,11 @@ internal sealed partial class BasicProfileEditorWindow
 
         DrawPlaystyleEntries(profile);
         DrawActiveHours(profile);
+
+        if (!MoreControls("Style and Layout"))
+        {
+            return;
+        }
 
         ImGui.Spacing();
         var targets = new[]
@@ -525,6 +538,11 @@ internal sealed partial class BasicProfileEditorWindow
         if (ImGui.IsItemDeactivatedAfterEdit())
         {
             basicEditorSession.CommitTextEdit();
+        }
+
+        if (!MoreControls("Style and Layout"))
+        {
+            return;
         }
 
         ImGui.Spacing();
