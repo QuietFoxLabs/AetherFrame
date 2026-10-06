@@ -332,9 +332,56 @@ public class OnlineCountTests
     public void TheWords_SayWhatIsSent_AndTheConsentHasThem()
     {
         Assert.Contains(SharingText.OnlineCountSends, SharingText.Consent);
-        Assert.Contains(SharingText.OnlineCountSends, SharingText.OnlineNotice);
-        Assert.Contains("only ever gives out the total", SharingText.OnlineCountSends, StringComparison.Ordinal);
-        Assert.Contains("Characters that don't share send nothing", SharingText.OnlineCountSends, StringComparison.Ordinal);
+        Assert.Contains("about once a minute", SharingText.OnlineCountSends, StringComparison.Ordinal);
+        Assert.Contains("refreshed every 5 minutes", SharingText.OnlineCountSends, StringComparison.Ordinal);
+        Assert.Contains("can sometimes tell", SharingText.OnlineCountSends, StringComparison.Ordinal);
+        Assert.True(Words(SharingText.OnlineCountSends) <= 70, "The consent's statement of the count is one statement among many.");
+    }
+
+    [Fact]
+    public void TheNotice_IsShortPoints_WithWhatTheServerKeepsBehindAControl()
+    {
+        // GPT's review of fa51214: the notice's 200-word paragraph was too much. What is sent, the
+        // refresh, what stops it and what others can still tell are short visible points.
+        var points = SharingText.OnlineNoticePoints;
+        Assert.All(points, point => Assert.True(Words(point) <= 30, point));
+        Assert.True(points.Sum(Words) <= 110, "The notice's points stay short in all.");
+        Assert.Contains(points, point => point.StartsWith("What is sent:", StringComparison.Ordinal) && point.Contains("about once a minute", StringComparison.Ordinal) && point.Contains("Characters that don't share send nothing", StringComparison.Ordinal));
+        Assert.Contains(points, point => point.StartsWith("What you see:", StringComparison.Ordinal) && point.Contains("refreshed every 5 minutes", StringComparison.Ordinal) && point.Contains("Fewer than 5", StringComparison.Ordinal));
+        Assert.Contains(points, point => point.StartsWith("When it stops:", StringComparison.Ordinal) && point.Contains("log out", StringComparison.Ordinal) && point.Contains("pause", StringComparison.Ordinal) && point.Contains("close the game", StringComparison.Ordinal) && point.Contains("about 3 minutes", StringComparison.Ordinal));
+        Assert.Contains(points, point => point.StartsWith("What others can tell:", StringComparison.Ordinal) && point.Contains("can sometimes tell", StringComparison.Ordinal));
+        Assert.Equal("Nothing is sent until you choose Got it.", points[^1]);
+
+        // The retention details are there for whoever opens them, and none of them is a visible point.
+        var details = string.Join(" ", SharingText.OnlineCountDetails);
+        foreach (var said in new[] { "memory only", "3 minutes after the last signal", "counts each character once", "no record of who was online", "aren't logged", "14 days", "never whose", "network address", "never writes down or logs", "up to an hour", "adds no characters of their own" })
+        {
+            Assert.Contains(said, details, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain(points, point => point.Contains("14 days", StringComparison.Ordinal) || point.Contains("network address", StringComparison.Ordinal));
+
+        // The window draws the points as bullets, and the details only once the control is opened,
+        // under the notice and under the consent alike.
+        var window = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "Network", "SharingWindow.cs"));
+        var notice = Body(window, "private void DrawOnlineNotice(");
+        Assert.Contains("foreach (var point in SharingText.OnlineNoticePoints)", notice, StringComparison.Ordinal);
+        Assert.Contains("DrawOnlineDetails(", notice, StringComparison.Ordinal);
+        Assert.Contains("DrawOnlineDetails(", Body(window, "private void DrawConsent("), StringComparison.Ordinal);
+        var detailsDrawn = Body(window, "private static void DrawOnlineDetails(");
+        var opened = detailsDrawn.IndexOf("if (!ImGui.CollapsingHeader(SharingText.OnlineDetailsLabel", StringComparison.Ordinal);
+        Assert.True(opened >= 0 && opened < detailsDrawn.IndexOf("SharingText.OnlineCountDetails", StringComparison.Ordinal), "The details are drawn only behind their control.");
+    }
+
+    private static int Words(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    /// <summary>A method's text in a source file, from its signature to the next member's.</summary>
+    private static string Body(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, signature);
+        var end = source.IndexOf("\n    private ", start + signature.Length, StringComparison.Ordinal);
+        return end < 0 ? source[start..] : source[start..end];
     }
 
     [Fact]
@@ -354,6 +401,11 @@ public class OnlineCountTests
         Assert.Equal("5 online", OnlineCountFooter.Text(OnlineCountFooter.Floor));
         Assert.Contains("fewer than 5", OnlineCountFooter.Scope, StringComparison.Ordinal);
         Assert.Contains("counted once each", OnlineCountFooter.Scope, StringComparison.Ordinal);
+
+        // The tooltip says how often the server refreshes the total (GPT's privacy decision of
+        // October 6, 2026), which is the server's snapshot window, not the plugin's heartbeat.
+        Assert.Contains("refreshes this total every 5 minutes", OnlineCountFooter.Scope, StringComparison.Ordinal);
+        Assert.DoesNotContain("once a minute", OnlineCountFooter.Scope, StringComparison.Ordinal);
         Assert.All(new[] { OnlineCountFooter.Connecting, OnlineCountFooter.Unavailable, OnlineCountFooter.NoticeDue }, item => Assert.DoesNotContain("0", item.Text, StringComparison.Ordinal));
     }
 

@@ -321,6 +321,7 @@ internal sealed class SharingWindow : Window
             Wrapped(statement);
         }
 
+        DrawOnlineDetails("AetherFrameSharingConsentOnlineDetails");
         ImGui.Spacing();
         ImGui.Checkbox(SharingText.Agree, ref agreed);
         var tickMin = ImGui.GetItemRectMin();
@@ -459,17 +460,23 @@ internal sealed class SharingWindow : Window
         AetherControls.Divider();
     }
 
-    /// <summary>The one-time notice for players who shared before the online count: nothing of it is sent until they dismiss it.</summary>
+    /// <summary>
+    /// The one-time notice for players who shared before the online count, as short points with what
+    /// the server keeps behind a control: nothing of it is sent until they dismiss it.
+    /// </summary>
     private void DrawOnlineNotice(CharacterSharingView view)
     {
         using (ImRaii.Group())
         {
             AetherControls.SectionHeader(SharingText.OnlineNoticeTitle);
-            foreach (var line in SharingText.OnlineNotice)
+            foreach (var point in SharingText.OnlineNoticePoints)
             {
-                Wrapped(line);
+                ImGui.Bullet();
+                ImGui.SameLine();
+                Wrapped(point);
             }
 
+            DrawOnlineDetails("AetherFrameSharingOnlineNoticeDetails");
             if (!view.Busy && AetherControls.SecondaryButton("Got it##AetherFrameSharingOnlineNotice"))
             {
                 sharing.TryDismissOnlineNotice();
@@ -477,6 +484,22 @@ internal sealed class SharingWindow : Window
         }
 
         AetherControls.Divider();
+    }
+
+    /// <summary>What the server keeps for the online count, closed until the player opens it: under the consent and under the notice.</summary>
+    private static void DrawOnlineDetails(string id)
+    {
+        if (!ImGui.CollapsingHeader(SharingText.OnlineDetailsLabel + "##" + id))
+        {
+            return;
+        }
+
+        foreach (var detail in SharingText.OnlineCountDetails)
+        {
+            ImGui.Bullet();
+            ImGui.SameLine();
+            Wrapped(detail, AetherPalette.TextMuted);
+        }
     }
 
     private void DrawShared(CharacterSharingView view, SharingCharacter entry, CharacterContext character)

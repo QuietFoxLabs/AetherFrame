@@ -416,7 +416,7 @@ public class PresenceTests
         var store = new PresenceStore(time);
         var first = store.Start(KeyOf(1), Aria, Issued(store));
         var second = store.Start(KeyOf(2), Aria, Issued(store));
-        Assert.Equal(1, second.Online);
+        Assert.Equal(1, store.Online());
         store.Leave(first.Token!);
         Assert.Equal(1, store.Online());
         store.Leave(second.Token!);
@@ -499,19 +499,204 @@ public class PresenceTests
         Assert.Equal(StartResult.Stale, store.Start(KeyOf(3), Aria, beforeTakeover).Result);
         Assert.Equal(StartResult.Started, store.Start(other, Aria, Issued(store)).Result);
 
-        // A start with no challenge of its own is stale while anything is remembered.
+        // A start with no challenge of its own admits nothing.
         var signedBefore = Issued(store);
         store.ForgetKey(key);
-        Assert.Equal(StartResult.Stale, store.Start(key, Aria, 0).Result);
+        Assert.Equal(StartResult.Stale, store.Start(key, Aria, default).Result);
         Assert.Equal(StartResult.Stale, store.Start(key, Aria, signedBefore).Result);
 
-        // The memory is kept no longer than a challenge can be: just before, a start signed before
-        // the revocation is still refused; from then on the revocation is forgotten, and the sweep
-        // drops it whether or not anything starts.
+        // Just before the revocation is forgotten, a start signed before it is still refused as
+        // stale. From then on its own admission has ended too, so it is still refused, as expired
+        // (GPT's review of fa51214: this start was accepted here before), and the sweep drops the
+        // revocation whether or not anything starts.
         time.Advance(PresenceStore.RevocationMemory - TimeSpan.FromSeconds(1));
         Assert.Equal(StartResult.Stale, store.Start(key, Aria, signedBefore).Result);
         time.Advance(TimeSpan.FromSeconds(1));
-        Assert.Equal(StartResult.Started, store.Start(key, Aria, signedBefore).Result);
+        Assert.Equal(StartResult.Expired, store.Start(key, Aria, signedBefore).Result);
+        store.SweepExpired();
+        Assert.Equal(0, store.Revocations);
+        Assert.Equal(StartResult.Started, store.Start(key, Aria, Issued(store)).Result);
+    }
+
+    [Fact]
+    public void AnAdmission_EndsWithItsChallengesLifetime_HoweverLateTheStartIsMade()
+    {
+        // GPT's regression test, October 6, 2026: a consumed challenge's admission was bounded only
+        // by the revocation memory, so a start whose signature was checked and whose request was then
+        // held up (a suspended process, a slow database) past the 300 seconds started a session a
+        // revocation in between should have refused.
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        var key = KeyOf(1);
+
+        // The challenge is consumed and the signature checked; then the request stalls, and the
+        // character's sharing stops 10 seconds in.
+        var admitted = Issued(store);
+        time.Advance(TimeSpan.FromSeconds(10));
+        store.ForgetKey(key);
+
+        // While the revocation is remembered the start is stale; from the challenge's 300 seconds
+        // it is expired, before the revocation is forgotten and after.
+        time.Advance(PresenceStore.RevocationMemory - TimeSpan.FromSeconds(11));
+        Assert.Equal(StartResult.Stale, store.Start(key, Aria, admitted).Result);
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(StartResult.Expired, store.Start(key, Aria, admitted).Result);
+        time.Advance(TimeSpan.FromSeconds(10));
+        store.SweepExpired();
+        Assert.Equal(0, store.Revocations);
+        Assert.Equal(StartResult.Expired, store.Start(key, Aria, admitted).Result);
+        Assert.Equal(0, store.Sessions);
+
+        // With nothing revoked at all the bound is the same: up to just before the challenge's 300
+        // seconds a start is made, and from then on it isn't.
+        var inTime = Issued(store);
+        time.Advance(PresenceStore.RevocationMemory - TimeSpan.FromMilliseconds(1));
+        Assert.Equal(StartResult.Started, store.Start(KeyOf(2), Bram, inTime).Result);
+        var late = Issued(store);
+        time.Advance(PresenceStore.RevocationMemory);
+        Assert.Equal(StartResult.Expired, store.Start(KeyOf(3), Bram, late).Result);
+        Assert.Equal(PresenceStore.RevocationMemory, AetherFrame.Server.Storage.ChallengeStore.Lifetime);
+    }
+
+    [Fact]
+    public void ARevocation_OutlastsEveryAdmissionBeforeIt_EvenWhenTheClockGoesBack()
+    {
+        var start = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero);
+        var time = new ManualTime(start);
+        var store = new PresenceStore(time);
+        var key = KeyOf(1);
+        var admitted = Issued(store);
+
+        // The clock is set back a minute before sharing stops. A start isn't made while the clock
+        // reads earlier than its challenge.
+        time.Now = start - TimeSpan.FromMinutes(1);
+        store.ForgetKey(key);
+        Assert.Equal(StartResult.Expired, store.Start(key, Aria, admitted).Result);
+
+        // The revocation is dated no earlier than the challenge, so at 12:04, 5 minutes after the
+        // clock's 11:59, it is still remembered, while the challenge, 4 minutes old, still admits.
+        time.Now = start + TimeSpan.FromMinutes(4);
+        store.SweepExpired();
+        Assert.Equal(StartResult.Stale, store.Start(key, Aria, admitted).Result);
+        time.Now = start + PresenceStore.RevocationMemory;
+        Assert.Equal(StartResult.Expired, store.Start(key, Aria, admitted).Result);
+        Assert.Equal(0, store.Sessions);
+    }
+
+    [Fact]
+    public void TheCount_IsOneSnapshotPerFiveMinuteWindow_TheSameForStartsAndHeartbeats()
+    {
+        // GPT's privacy decision, October 6, 2026: one shared snapshot for each fixed 5-minute window,
+        // while leaving, revocation and expiry still end a session at once.
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 2, 30, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        Assert.Equal(TimeSpan.FromMinutes(5), PresenceStore.SnapshotWindow);
+
+        // The first answer in the window takes its snapshot: Aria alone. Five more characters start
+        // in the same window, and each is answered that same snapshot.
+        var tokens = new byte[6][];
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            var started = store.Start(KeyOf(index), 1_000 + index, Issued(store));
+            Assert.Equal(StartResult.Started, started.Result);
+            Assert.Equal(1, started.Online);
+            tokens[index] = started.Token!;
+        }
+
+        Assert.Equal(6, store.Online());
+
+        // A leave and a revocation still end their sessions at once, and the window's heartbeats are
+        // answered the same snapshot, to its last moment.
+        time.Advance(TimeSpan.FromMinutes(1));
+        store.Leave(tokens[1]);
+        store.ForgetKey(KeyOf(2));
+        Assert.Equal(4, store.Online());
+        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[1]).Result);
+        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[2]).Result);
+        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
+        time.Now = new DateTimeOffset(2026, 10, 6, 12, 4, 59, 999, TimeSpan.Zero);
+        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[3]));
+        Assert.Equal(1, store.Snapshot());
+
+        // The windows are fixed by the clock, not by the first answer: at 12:05 the next one starts,
+        // two and a half minutes after the first snapshot, with the 4 sessions live then.
+        time.Now = new DateTimeOffset(2026, 10, 6, 12, 5, 0, TimeSpan.Zero);
+        Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[4]));
+        var seventh = store.Start(KeyOf(6), 1_006, Issued(store));
+        Assert.Equal(4, seventh.Online);
+        Assert.Equal(5, store.Online());
+
+        // A session with no heartbeat still expires 180 seconds after its start, inside the window,
+        // with the snapshot as it was.
+        time.Now = new DateTimeOffset(2026, 10, 6, 12, 5, 30, TimeSpan.Zero);
+        Assert.Equal(BeatResult.Unknown, store.Beat(tokens[5]).Result);
+        Assert.Equal(4, store.Online());
+        Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[0]));
+        time.Now = new DateTimeOffset(2026, 10, 6, 12, 8, 0, TimeSpan.Zero);
+        Assert.Equal((BeatResult.Counted, 4), store.Beat(tokens[0]));
+
+        // By the next window only Aria still beats, and its snapshot says so.
+        time.Now = new DateTimeOffset(2026, 10, 6, 12, 10, 0, TimeSpan.Zero);
+        Assert.Equal((BeatResult.Counted, 1), store.Beat(tokens[0]));
+        Assert.Equal(1, store.Snapshot());
+    }
+
+    [Fact]
+    public async Task APresenceRequestThatSucceeds_LeavesNoLogLine_AndOneThatFails_OnlyItsUsualLine()
+    {
+        // GPT's direction, October 6, 2026: successful presence requests are left out of the request
+        // log, and a failure keeps its line, which holds no token, key, address or body.
+        using var server = new TestServer();
+        using var aria = server.NewPlayer();
+        await aria.BindAsync(Aria);
+        var (token, _) = await StartedAsync(aria);
+        server.Time.Advance(TimeSpan.FromSeconds(60));
+        await BeatOnlineAsync(aria, token);
+        using (var left = await aria.PostRawAsync("/v1/presence/leave", token))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
+        }
+
+        using (var status = await server.CreateClient().GetAsync("/v1/status"))
+        {
+            Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        }
+
+        // The challenge, the start, the heartbeat and the leave left no line; every other request
+        // still logs its success.
+        var requestLog = typeof(AetherFrame.Server.Hosting.RequestLog).FullName + " Information: ";
+        string[] Lines() => [.. server.Log.Lines.Where(line => line.StartsWith(requestLog, StringComparison.Ordinal))];
+        Assert.DoesNotContain(Lines(), line => line.Contains("/v1/presence", StringComparison.Ordinal));
+        Assert.Contains(Lines(), line => line.Contains(" /v1/status 200 ", StringComparison.Ordinal));
+
+        // A heartbeat for the session just left fails, and leaves its line: the request's id, the
+        // route, the status, the duration and the failure's kind, and nothing else.
+        using (var unknown = await BeatAsync(aria, token))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        }
+
+        using (var wrongLength = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength - 1]))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, wrongLength.StatusCode);
+        }
+
+        var failures = Lines().Where(line => line.Contains("/v1/presence", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(2, failures.Length);
+        Assert.Matches(@"^\S+ Information: \S+ /v1/presence/beat 404 \d+ presence:unknown $", failures[0]);
+        Assert.Matches(@"^\S+ Information: \S+ /v1/presence/beat 400 \d+ body:token $", failures[1]);
+        var log = server.Log.All;
+        Assert.DoesNotContain(Convert.ToBase64String(token), log, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToHexString(token), log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(aria.Key.PublicKey.Id.ToString(), log, StringComparison.Ordinal);
+
+        // The mark that leaves a success unlogged is on the four presence endpoints and nothing else.
+        var endpoints = server.Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>().Endpoints
+            .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
+            .Where(endpoint => endpoint.Metadata.GetMetadata<AetherFrame.Server.Hosting.UnloggedWhenSuccessful>() is not null)
+            .Select(endpoint => endpoint.RoutePattern.RawText!)
+            .Order(StringComparer.Ordinal);
+        Assert.Equal(["/v1/presence", "/v1/presence/beat", "/v1/presence/challenge", "/v1/presence/leave"], endpoints);
     }
 
     [Fact]
@@ -532,10 +717,12 @@ public class PresenceTests
         Assert.Equal(StartResult.Stale, store.Start(KeyOf(2), Bram, signedBefore).Result);
         Assert.Equal(StartResult.Started, store.Start(KeyOf(2), Bram, Issued(store)).Result);
 
-        // And it goes with the rest once no challenge from before it can be accepted.
+        // And it goes with the rest once no start from before it can be admitted.
+        Assert.Equal(PresenceStore.MaxRevocations + 1, store.Revocations);
         time.Advance(PresenceStore.RevocationMemory);
         store.SweepExpired();
-        Assert.Equal(StartResult.Started, store.Start(KeyOf(3), Aria, signedBefore).Result);
+        Assert.Equal(0, store.Revocations);
+        Assert.Equal(StartResult.Expired, store.Start(KeyOf(3), Aria, signedBefore).Result);
     }
 
     [Fact]
@@ -576,13 +763,13 @@ public class PresenceTests
         return directory!.FullName;
     }
 
-    /// <summary>A challenge issued and consumed, as a start's own is: its number, for <see cref="PresenceStore.Start"/>.</summary>
-    private static long Issued(PresenceStore store)
+    /// <summary>A challenge issued and consumed, as a start's own is: what it admits, for <see cref="PresenceStore.Start"/>.</summary>
+    private static Admission Issued(PresenceStore store)
     {
         var challenge = store.IssueChallenge();
         Assert.NotNull(challenge);
-        Assert.True(store.TryConsumeChallenge(challenge, out var issuedAs));
-        return issuedAs;
+        Assert.True(store.TryConsumeChallenge(challenge, out var admission));
+        return admission;
     }
 
     private static PersonaId KeyOf(int index)

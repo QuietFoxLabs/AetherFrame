@@ -62,13 +62,35 @@ internal sealed class Allowlist(IOptionsMonitor<ServerOptions> options, ILogger<
 }
 
 /// <summary>
+/// Marks an endpoint whose requests leave no line in the request log when they succeed (a 2xx
+/// that ran to its end): the online count's ("The online count" in the decision register), whose
+/// lines would otherwise show, minute by minute, how many were online, under the floor too. A
+/// request to it that fails, or doesn't finish, still leaves its line, which holds nothing more
+/// than any other's.
+/// </summary>
+internal sealed class UnloggedWhenSuccessful
+{
+    public static readonly UnloggedWhenSuccessful Instance = new();
+
+    private UnloggedWhenSuccessful()
+    {
+    }
+}
+
+/// <summary>
 /// The request log (decision S5): for each request, its id, the route's template, the status, the
 /// duration and a failure's kind. Never an address, a body, a proof, a challenge, a code, a marker,
-/// an identifier, a Lodestone id, a name or a World. Every response gets <c>Cache-Control: no-store</c>
-/// and <c>X-Content-Type-Options: nosniff</c> here too.
+/// an identifier, a Lodestone id, a name or a World. A successful request to an endpoint marked
+/// <see cref="UnloggedWhenSuccessful"/> leaves no line. Every response gets
+/// <c>Cache-Control: no-store</c> and <c>X-Content-Type-Options: nosniff</c> here too.
 /// </summary>
 internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logger)
 {
+    /// <summary>Whether a request that ran to its end leaves no line: a success, on an endpoint marked <see cref="UnloggedWhenSuccessful"/>.</summary>
+    internal static bool Unlogged(HttpContext http) =>
+        http.Response.StatusCode is >= 200 and < 300
+        && http.GetEndpoint()?.Metadata.GetMetadata<UnloggedWhenSuccessful>() is not null;
+
     public async Task InvokeAsync(HttpContext http)
     {
         var started = Stopwatch.GetTimestamp();
@@ -79,9 +101,13 @@ internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logge
             return Task.CompletedTask;
         });
 
+        // Only a request that ran to its end can go unlogged: one cut short by an exception or a
+        // cancellation still leaves its line, whatever status it was left with.
+        var finished = false;
         try
         {
             await next(http);
+            finished = true;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -94,15 +120,18 @@ internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logge
         }
         finally
         {
-            var route = (http.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(none)";
-            var kind = http.Items[SignedRequests.ErrorKindItem] as string ?? "-";
-            logger.LogInformation(
-                "{RequestId} {Route} {Status} {DurationMs} {ErrorKind}",
-                http.TraceIdentifier,
-                route,
-                http.Response.StatusCode,
-                (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-                kind);
+            if (!(finished && Unlogged(http)))
+            {
+                var route = (http.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(none)";
+                var kind = http.Items[SignedRequests.ErrorKindItem] as string ?? "-";
+                logger.LogInformation(
+                    "{RequestId} {Route} {Status} {DurationMs} {ErrorKind}",
+                    http.TraceIdentifier,
+                    route,
+                    http.Response.StatusCode,
+                    (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                    kind);
+            }
         }
     }
 }

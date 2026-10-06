@@ -15,10 +15,13 @@ namespace AetherFrame.Server.Endpoints;
 /// The online count ("The online count" in docs/networking/DecisionRegister.md; ServerApi-v1.md,
 /// section 2.4): a signed start for a bound character on the allowlist, then heartbeats and a
 /// leave that carry only the session's token. Every answer holds the count and nothing else about
-/// anyone, and a count under <see cref="PresenceStore.Floor"/> is answered as 0, "fewer than that".
-/// A start signs a challenge from <c>/v1/presence/challenge</c>, never one from <c>/v1/challenge</c>. These paths are their own: <c>/v1/status</c> is unchanged, since older plugins read it
-/// strictly. The token travels in the body only, never in a path, query or header, so nothing that
-/// logs a request can hold it.
+/// anyone: the window's snapshot of it (<see cref="PresenceStore.SnapshotWindow"/>), with a count
+/// under <see cref="PresenceStore.Floor"/> answered as 0, "fewer than that". A start signs a
+/// challenge from <c>/v1/presence/challenge</c>, never one from <c>/v1/challenge</c>. These paths
+/// are their own: <c>/v1/status</c> is unchanged, since older plugins read it strictly. The token
+/// travels in the body only, never in a path, query or header, so nothing that logs a request can
+/// hold it; and a presence request that succeeds leaves no line in the request log at all
+/// (<see cref="UnloggedWhenSuccessful"/>), while one that fails leaves its usual line.
 /// </summary>
 internal static class PresenceEndpoints
 {
@@ -42,15 +45,17 @@ internal static class PresenceEndpoints
             return presence.IssueChallenge() is { } challenge
                 ? Results.Bytes(challenge.ToArray(), "application/octet-stream")
                 : SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "presence:full");
-        });
+        }).WithMetadata(UnloggedWhenSuccessful.Instance);
 
         app.MapPost("/v1/presence", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings, Allowlist allowlist, PresenceStore presence) =>
         {
-            // Which challenge the start signed, taken as it is consumed and weighed by the store
-            // against the revocations it remembers: a start signed before a pause, an opt-out or a
-            // takeover, and arriving after it, starts nothing (StartResult.Stale).
-            var issuedAs = 0L;
-            return requests.RunActionAsync(http, RequestProofKind.Presence, ServerLimits.PresenceStartsPerAddress, challenge => presence.TryConsumeChallenge(challenge, out issuedAs), async call =>
+            // What the start's challenge admits, taken as it is consumed and weighed by the store
+            // when the session would be made: a start signed before a pause, an opt-out or a
+            // takeover, and arriving after it, starts nothing (StartResult.Stale), and nor does one
+            // whose challenge is too old for the store to still remember such a change
+            // (StartResult.Expired), however long the request took on its way here.
+            var admission = default(Admission);
+            return requests.RunActionAsync(http, RequestProofKind.Presence, ServerLimits.PresenceStartsPerAddress, challenge => presence.TryConsumeChallenge(challenge, out admission), async call =>
             {
                 if (ActionBody.Read(call.Action.Body, []) is null)
                 {
@@ -75,7 +80,7 @@ internal static class PresenceEndpoints
                     return SignedRequests.Fail(http, StatusCodes.Status404NotFound, "presence:not-bound");
                 }
 
-                var started = presence.Start(call.Persona, binding.LodestoneId, issuedAs);
+                var started = presence.Start(call.Persona, binding.LodestoneId, admission);
                 return started switch
                 {
                     { Result: StartResult.Started, Token: { } token } => Results.Json(new StartAnswer(Convert.ToBase64String(token), PresenceStore.Reported(started.Online)), ServerJson.Options),
@@ -83,10 +88,11 @@ internal static class PresenceEndpoints
                     // The plugin asks for a fresh challenge and signs again: while the character
                     // still shares that passes, and otherwise the binding check refuses it.
                     { Result: StartResult.Stale } => SignedRequests.Fail(http, StatusCodes.Status409Conflict, "presence:stale"),
+                    { Result: StartResult.Expired } => SignedRequests.Fail(http, StatusCodes.Status409Conflict, "presence:expired"),
                     _ => SignedRequests.Fail(http, StatusCodes.Status503ServiceUnavailable, "presence:full"),
                 };
             });
-        });
+        }).WithMetadata(UnloggedWhenSuccessful.Instance);
 
         app.MapPost("/v1/presence/beat", async (HttpContext http, RateLimiter limiter, PresenceStore presence) =>
         {
@@ -103,7 +109,7 @@ internal static class PresenceEndpoints
                 BeatResult.TooSoon => SignedRequests.Fail(http, StatusCodes.Status429TooManyRequests, "limit:presence/session"),
                 _ => SignedRequests.Fail(http, StatusCodes.Status404NotFound, "presence:unknown"),
             };
-        });
+        }).WithMetadata(UnloggedWhenSuccessful.Instance);
 
         // Answered the same whether or not the token named a session, so it tells nothing.
         app.MapPost("/v1/presence/leave", async (HttpContext http, RateLimiter limiter, PresenceStore presence) =>
@@ -116,7 +122,7 @@ internal static class PresenceEndpoints
 
             presence.Leave(token);
             return Results.NoContent();
-        });
+        }).WithMetadata(UnloggedWhenSuccessful.Instance);
     }
 
     /// <summary>
