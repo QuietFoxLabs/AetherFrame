@@ -174,6 +174,19 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     /// <summary>Unsaved changes AetherFrame kept when it last unloaded: a reminder under the header while they wait for an answer.</summary>
     internal KeptChangesOffer? KeptChanges { get; set; }
 
+    /// <summary>Guided creation, set by the plugin: an empty My Plates starts it, and so does Create Plate's Step by Step.</summary>
+    internal GuidedCreation? Guided
+    {
+        get => guided;
+        set
+        {
+            guided = value;
+            plateMenu.Chooser.CreateStepByStep = value is null ? null : value.StartNew;
+        }
+    }
+
+    private GuidedCreation? guided;
+
     /// <summary>Opens the sharing window, when this build has one; the header shows a Sharing button only then.</summary>
     internal Action? OpenSharing { get; set; }
 
@@ -280,12 +293,15 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         AetherBrand.Header("My Plates");
         DrawHeader(character, allPlates.Count);
         ImGui.Separator();
-        if (KeptChanges is { } keptChanges)
+        // One reminder at a time, kept unsaved changes first: they may belong to the Plate another reminder would open.
+        if (KeptChanges is { ReminderText: not null } keptChanges)
         {
             KeptChangesWindow.DrawReminder(keptChanges);
         }
-
-        Help?.DrawReminder();
+        else
+        {
+            Help?.DrawReminder();
+        }
 
         // Plain text lines (status/info, then the right-click hint with the version at the right,
         // or under it in a narrow window) — no button row.
@@ -308,7 +324,13 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     private void DrawHeader(CharacterContext? character, int plateCount)
     {
         var headerMin = ImGui.GetCursorScreenPos();
-        if (AetherControls.PrimaryButton("Create Plate", tooltip: "Start a new Plate from a Template."))
+
+        // One primary action at a time: while the empty My Plates offers the steps, or the reminder
+        // offers to continue them, Create Plate (the Template chooser) is an ordinary button.
+        var guidedLeads = Guided is { } steps && (plateCount == 0 || steps.ShowsResumeReminder);
+        if (guidedLeads
+                ? AetherControls.SecondaryButton("Create Plate", tooltip: "Start a new Plate from a Template.")
+                : AetherControls.PrimaryButton("Create Plate", tooltip: "Start a new Plate from a Template."))
         {
             plateMenu.Chooser.Open();
         }
@@ -417,16 +439,31 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         }
     }
 
+    /// <summary>
+    /// No Plates yet: guided creation is the one action (or Create Plate's chooser, where guided
+    /// creation isn't available); Create Plate in the header still opens the chooser.
+    /// </summary>
     private void DrawEmptyLibrary()
     {
+        var guided = Guided;
         if (AetherControls.EmptyState(
                 FontAwesomeIcon.IdCard,
                 "You don't have any Plates yet.",
-                "A Plate is a complete Adventure Plate style design. Make as many as you like; each character can choose one to be its Active Plate.",
-                "Create Your First Plate",
-                "Start a new Plate from a Template."))
+                guided is null
+                    ? "A Plate is a complete Adventure Plate style design. Make as many as you like; each character can choose one to be its Active Plate."
+                    : "Make your first one in three short steps.",
+                guided is null ? "Create Your First Plate" : guided.IsStarting ? "Creating your Plate..." : "Create My First Plate",
+                guided is null ? "Start a new Plate from a Template." : "Choose a look, make it yours, save.\nA Plate is your character's card; each character can have one Active Plate.",
+                guided?.StartError))
         {
-            plateMenu.Chooser.Open();
+            if (guided is null)
+            {
+                plateMenu.Chooser.Open();
+            }
+            else if (!guided.IsStarting)
+            {
+                guided.Start();
+            }
         }
     }
 

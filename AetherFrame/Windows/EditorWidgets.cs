@@ -223,9 +223,10 @@ internal static class EditorWidgets
 
     /// <summary>
     /// A row of equally sized text buttons filling the available width, the one matching
-    /// <paramref name="selectedIndex"/> highlighted. Returns the clicked index, or -1.
+    /// <paramref name="selectedIndex"/> highlighted, each with its tooltip when
+    /// <paramref name="tooltips"/> gives one. Returns the clicked index, or -1.
     /// </summary>
-    internal static int Segmented(string id, ReadOnlySpan<string> labels, int selectedIndex)
+    internal static int Segmented(string id, ReadOnlySpan<string> labels, int selectedIndex, ReadOnlySpan<string> tooltips = default)
     {
         var spacing = ImGui.GetStyle().ItemSpacing.X;
         var width = (ImGui.GetContentRegionAvail().X - (spacing * (labels.Length - 1))) / labels.Length;
@@ -242,6 +243,11 @@ internal static class EditorWidgets
             if (TextToggle(labels[i], i == selectedIndex, new Vector2(width, 0f)) && i != selectedIndex)
             {
                 clicked = i;
+            }
+
+            if (i < tooltips.Length)
+            {
+                Tooltip(tooltips[i]);
             }
         }
 

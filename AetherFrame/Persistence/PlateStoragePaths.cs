@@ -32,6 +32,7 @@ internal sealed class PlateStoragePaths
         TemplateThumbnailsDirectory = Path.Combine(rootDirectory, "thumbnails", "templates");
         DraftsDirectory = Path.Combine(rootDirectory, "Drafts");
         DraftTrashDirectory = Path.Combine(rootDirectory, "Trash", "Drafts");
+        RecoverySessionsDirectory = Path.Combine(DraftsDirectory, "Sessions");
     }
 
     internal string Root { get; }
@@ -92,6 +93,91 @@ internal sealed class PlateStoragePaths
 
     /// <summary>Kept changes that were answered or retired, moved here intact (never destroyed).</summary>
     internal string DraftTrashDirectory { get; }
+
+    /// <summary>
+    /// Recovery checkpoints taken while editing (see <c>RecoveryCheckpointStore</c>): one folder per
+    /// run of AetherFrame in a game client, "{session id, 32 hex}", holding that run's lock file and
+    /// its checkpoints. Inside the Drafts folder, so everything kept of unsaved changes stays together,
+    /// but in folders of its own, which the unload drafts' reader never lists.
+    /// </summary>
+    internal string RecoverySessionsDirectory { get; }
+
+    /// <summary>One run's folder of recovery checkpoints.</summary>
+    internal string GetRecoverySessionDirectory(Guid sessionId) => Path.Combine(RecoverySessionsDirectory, sessionId.ToString("N"));
+
+    /// <summary>The file a running game client holds open, unshared, for as long as it runs: how another client tells its checkpoints are still in use.</summary>
+    internal static string GetRecoverySessionLockPath(string sessionDirectory) => Path.Combine(sessionDirectory, RecoverySessionLockName);
+
+    internal const string RecoverySessionLockName = "session.lock";
+
+    /// <summary>
+    /// A recovery checkpoint: "{plateId}.checkpoint-{edit id, 32 hex}-{sequence, 10 digits}.json" in
+    /// its run's folder. The sequence grows with every checkpoint of one editing, so a name is never
+    /// written twice and the newest is the highest.
+    /// </summary>
+    internal string GetCheckpointPath(Guid sessionId, Guid plateId, Guid editId, long sequence) =>
+        Path.Combine(GetRecoverySessionDirectory(sessionId), $"{plateId}{CheckpointMarker}{editId:N}-{sequence.ToString("D10", CultureInfo.InvariantCulture)}.json");
+
+    private const string CheckpointMarker = ".checkpoint-";
+
+    /// <summary>The run a folder under <see cref="RecoverySessionsDirectory"/> is named for, only when its name is exactly what <see cref="GetRecoverySessionDirectory"/> writes.</summary>
+    internal static bool TryParseRecoverySessionDirectoryName(string path, out Guid sessionId)
+    {
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        if (name.Length == 32 && Guid.TryParseExact(name, "N", out sessionId) && sessionId != Guid.Empty
+            && string.Equals(sessionId.ToString("N"), name, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        sessionId = Guid.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// The Plate, editing and sequence a checkpoint file is named for, only when the name is exactly
+    /// what <see cref="GetCheckpointPath"/> writes (letter case ignored). Anything else, an interrupted
+    /// write's temporary file included, is not a checkpoint.
+    /// </summary>
+    internal static bool TryParseCheckpointFileName(string path, out Guid plateId, out Guid editId, out long sequence)
+    {
+        plateId = Guid.Empty;
+        editId = Guid.Empty;
+        sequence = 0;
+
+        const int guidLength = 36;
+        const int idLength = 32;
+        const int sequenceLength = 10;
+        if (!string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (name.Length != guidLength + CheckpointMarker.Length + idLength + 1 + sequenceLength
+            || string.Compare(name, guidLength, CheckpointMarker, 0, CheckpointMarker.Length, StringComparison.OrdinalIgnoreCase) != 0
+            || name[guidLength + CheckpointMarker.Length + idLength] != '-')
+        {
+            return false;
+        }
+
+        var id = name.Substring(guidLength + CheckpointMarker.Length, idLength);
+        var number = name[^sequenceLength..];
+        if (!TryParseCanonicalGuid(name[..guidLength], out plateId)
+            || !Guid.TryParseExact(id, "N", out editId)
+            || editId == Guid.Empty
+            || !string.Equals(editId.ToString("N"), id, StringComparison.OrdinalIgnoreCase)
+            || !long.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out sequence)
+            || sequence <= 0)
+        {
+            plateId = Guid.Empty;
+            editId = Guid.Empty;
+            sequence = 0;
+            return false;
+        }
+
+        return true;
+    }
 
     internal string GetPlatePath(Guid plateId) => Path.Combine(PlatesDirectory, $"{plateId}.json");
 

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Plates;
+using AetherFrame.Domain.Profiles;
 using AetherFrame.Persistence;
 using AetherFrame.Services.Diagnostics;
 using AetherFrame.Services.Lifecycle;
@@ -12,8 +13,10 @@ namespace AetherFrame.UI.Editor;
 /// <summary>
 /// Keeps an editor's unsaved changes when AetherFrame unloads (a test build's reload, an update, a
 /// disable, the game closing), so the next load can offer them back (see
-/// <c>KeptChangesOffer</c>): as a draft beside the Library, never in the Plate itself. A crash
-/// leaves nothing: nothing is written while editing.
+/// <c>KeptChangesOffer</c>): as a draft beside the Library, never in the Plate itself. A crash is
+/// covered by the recovery checkpoints written while editing (<see cref="ContinuousRecovery"/>); this
+/// draft is the best-effort last word of that same editing, named for it, so the next load offers both
+/// as one choice.
 ///
 /// <para>Two steps, in unloading's order. <see cref="Capture"/> runs once nothing draws any more and
 /// before the windows go, while the editor that showed the Plate is still known; it reads the open
@@ -35,14 +38,19 @@ internal sealed class UnsavedChangesKeeper
     private readonly string build;
     private readonly IAetherFrameLog log;
 
+    private readonly Func<ProfileDocument, (Guid SessionId, Guid EditId)?>? editingOf;
+
     private int captured;
     private PlateDraft? draft;
 
     /// <param name="activeSurface">Which editor shows the open Plate, if any.</param>
     /// <param name="build">The running build, recorded in the draft for diagnosis.</param>
+    /// <param name="editingOf">The recovery editing a document belongs to (see <see cref="ContinuousRecovery.EditingOf"/>), or null.</param>
     internal UnsavedChangesKeeper(
-        EditorSession session, Func<EditorSurfaceKind?> activeSurface, PlateStoragePaths paths, PluginFileStores stores, string build, IAetherFrameLog log, Func<DateTime>? utcNow = null)
+        EditorSession session, Func<EditorSurfaceKind?> activeSurface, PlateStoragePaths paths, PluginFileStores stores, string build, IAetherFrameLog log, Func<DateTime>? utcNow = null,
+        Func<ProfileDocument, (Guid SessionId, Guid EditId)?>? editingOf = null)
     {
+        this.editingOf = editingOf;
         this.session = session;
         this.activeSurface = activeSurface;
         writer = new DraftStore(paths, stores.Unguarded, log, utcNow);
@@ -74,7 +82,14 @@ internal sealed class UnsavedChangesKeeper
                 EditorSurfaceKind.Advanced => DraftEditor.Advanced,
                 _ => DraftEditor.None,
             };
-            Volatile.Write(ref draft, writer.Create(copy, editor, build));
+            var kept = writer.Create(copy, editor, build);
+            if (editingOf?.Invoke(copy.Source) is { } editing)
+            {
+                kept.SessionId = editing.SessionId;
+                kept.EditId = editing.EditId;
+            }
+
+            Volatile.Write(ref draft, kept);
         }
         catch (Exception ex)
         {

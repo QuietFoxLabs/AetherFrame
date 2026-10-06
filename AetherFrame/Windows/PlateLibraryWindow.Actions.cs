@@ -76,6 +76,7 @@ internal sealed partial class PlateLibraryWindow
     private FooterFrame MeasureFooter()
     {
         var (status, color) = FooterStatus();
+        var hint = library.GetOrderedPlates().Count == 0 ? string.Empty : ActionsHint;
         var items = FooterItems();
         var width = ImGui.GetContentRegionAvail().X;
         var style = ImGui.GetStyle();
@@ -86,13 +87,13 @@ internal sealed partial class PlateLibraryWindow
         }
 
         var separator = ImGui.CalcTextSize(FooterItemSeparator).X + (style.ItemSpacing.X * 2f);
-        var hintWidth = ImGui.CalcTextSize(ActionsHint).X;
+        var hintWidth = ImGui.CalcTextSize(hint).X;
         var layout = MyPlatesFooterLayout.For(width, hintWidth, MyPlatesFooterLayout.ItemsWidth(widths, separator), style.ItemSpacing.X * 2f);
 
         var line = ImGui.GetTextLineHeightWithSpacing();
         var statusHeight = ImGui.CalcTextSize(status, false, width).Y + style.ItemSpacing.Y;
-        var rowsHeight = layout.ItemsOnOwnRow ? ImGui.CalcTextSize(ActionsHint, false, width).Y + style.ItemSpacing.Y + line : line;
-        return new FooterFrame(status, color, items, layout, statusHeight + rowsHeight + EditorWidgets.Scaled(4f));
+        var rowsHeight = layout.ItemsOnOwnRow ? ImGui.CalcTextSize(hint, false, width).Y + style.ItemSpacing.Y + line : line;
+        return new FooterFrame(status, color, hint, items, layout, statusHeight + rowsHeight + EditorWidgets.Scaled(4f));
     }
 
     /// <summary>What's happening (busy/error/status), or the selected Plate's own info, plus a
@@ -104,7 +105,7 @@ internal sealed partial class PlateLibraryWindow
         FooterText(footer.Status, footer.Color);
 
         var rowStart = ImGui.GetCursorPosX();
-        FooterText(ActionsHint, ImGui.GetColorU32(ImGuiCol.TextDisabled));
+        FooterText(footer.Hint, ImGui.GetColorU32(ImGuiCol.TextDisabled));
         if (footer.Layout.ItemsOnOwnRow)
         {
             ImGui.SetCursorPosX(rowStart + footer.Layout.ItemsX);
@@ -155,7 +156,8 @@ internal sealed partial class PlateLibraryWindow
                 : plate.Problem ?? "This Plate can't be opened.", disabled);
         }
 
-        return ("Select a Plate. Double-click to edit; drag to reorder.", disabled);
+        // With no Plate yet there is nothing to select: the empty My Plates says what to do.
+        return (library.GetOrderedPlates().Count == 0 ? string.Empty : "Select a Plate. Double-click to edit; drag to reorder.", disabled);
     }
 
     /// <summary>A footer line in <paramref name="color"/>, wrapped at the window's edge rather than cut off.</summary>
@@ -168,8 +170,8 @@ internal sealed partial class PlateLibraryWindow
         }
     }
 
-    /// <summary>The footer measured for one frame: what it says, and the height it takes.</summary>
-    private readonly record struct FooterFrame(string Status, uint Color, IReadOnlyList<MyPlatesFooterItem> Items, MyPlatesFooterLayout Layout, float Height);
+    /// <summary>The footer measured for one frame: what it says (no right-click hint while there's no Plate to right-click), and the height it takes.</summary>
+    private readonly record struct FooterFrame(string Status, uint Color, string Hint, IReadOnlyList<MyPlatesFooterItem> Items, MyPlatesFooterLayout Layout, float Height);
 
     // ---------------------------------------------------------------- opening Plates
 

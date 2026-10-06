@@ -28,18 +28,52 @@ internal sealed partial class BasicProfileEditorWindow
         // The look first: the two first-class visual pickers, the style browser (an Art Style, or a
         // Simple Theme), then Pattern (the background's procedural texture) — both discoverable
         // without first opening Customize Background.
-        Subheading("Look");
-        using (ImRaii.PushId("Theme"))
+        // The Simple view's category is called Look already; what each style system is shows on
+        // hover over its toggle there, instead of the line below.
+        if (!Simple)
         {
-            backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme);
+            Subheading("Look");
         }
 
-        Hint(backgroundPanel.ShowingArtStyles
-            ? "An Art Style is a whole look: background, frames, corners, name plaque, divider and section headers, with text colors to match. Each piece stays yours to change under Frame & Decorations."
-            : "A Simple Theme sets the background and every Basic text color at once. Each value stays editable.");
+        using (ImRaii.PushId("Theme"))
+        {
+            backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme, explainOnHover: Simple);
+        }
+
+        if (!Simple)
+        {
+            Hint(backgroundPanel.ShowingArtStyles
+                ? "An Art Style is a whole look: background, frames, corners, name plaque, divider and section headers, with text colors to match. Each piece stays yours to change under Frame & Decorations."
+                : "A Simple Theme sets the background and every Basic text color at once. Each value stays editable.");
+        }
 
         ImGui.Spacing();
 
+        // The Simple view folds everything after the Look into labelled sections.
+        if (MoreControls("Background and Pattern"))
+        {
+            DrawBackgroundControls(profile);
+        }
+
+        if (MoreControls("Heading Size"))
+        {
+            DrawSectionHeadingSize(profile);
+        }
+
+        if (MoreControls("Frame and Decorations", holdsComponentSlots: true))
+        {
+            DrawFrameAndDecorations(profile);
+        }
+
+        if (MoreControls("Orientation and Layout"))
+        {
+            DrawPlateLayoutActions(profile);
+        }
+    }
+
+    /// <summary>The Plate's own background: Pattern and Customize Background, or why artwork covers them.</summary>
+    private void DrawBackgroundControls(ProfileDocument profile)
+    {
         // Asked after the Look, so a style chosen this frame is already reflected (issue #119).
         var cover = AppearanceControls.Background(profile);
         if (cover.Component is { } covering)
@@ -71,12 +105,6 @@ internal sealed partial class BasicProfileEditorWindow
                 backgroundPanel.Draw(profile, applyTheme: null);
             }
         }
-
-        DrawSectionHeadingSize(profile);
-
-        DrawFrameAndDecorations(profile);
-
-        DrawPlateLayoutActions(profile);
     }
 
     /// <summary>

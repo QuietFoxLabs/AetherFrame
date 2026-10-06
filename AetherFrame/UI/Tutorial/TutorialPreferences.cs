@@ -55,7 +55,7 @@ public sealed class TutorialPreferences
 
     public TutorialStatus Status { get; set; }
 
-    /// <summary>How many times the first-run offer was shown (it stops after a few unanswered showings).</summary>
+    /// <summary>How many times an earlier version's tutorial offer was shown (it stopped after a few unanswered showings).</summary>
     public int OfferCount { get; set; }
 
     /// <summary>The script version last started (progress below refers to it).</summary>

@@ -18,11 +18,11 @@ public enum DraftEditor
 }
 
 /// <summary>
-/// An editor's unsaved changes, kept when AetherFrame unloaded with a Plate open and not saved: a
-/// test build's reload, an update, a disable or the game closing (never a crash: nothing is written
-/// while editing). It lives beside the Library, in its own folder, and never in the Plate itself;
-/// the next load offers it back (see <c>DraftStore</c> and <c>KeptChangesOffer</c>). Write-once: each
-/// unload writes a new file, and an answered one moves intact to the trash.
+/// An editor's unsaved changes, kept beside the Library and never in the Plate itself: when AetherFrame
+/// unloaded with a Plate open and not saved (a test build's reload, an update, a disable or the game
+/// closing; see <c>DraftStore</c>), and as recovery checkpoints taken while editing, which survive a
+/// crash (see <c>RecoveryCheckpointStore</c>). The next load offers it back (see <c>KeptChangesOffer</c>).
+/// Write-once: each draft and checkpoint is a new file, and an answered one moves intact to the trash.
 ///
 /// <para>Two independently versioned layers, like a Template: this envelope (see
 /// <c>PersistenceSchemas.Draft</c>) and the embedded <see cref="Document"/>, which keeps
@@ -73,6 +73,29 @@ public sealed class PlateDraft
 
     /// <summary>The whole open document, unknown data included, as a save would have written it.</summary>
     public ProfileDocument Document { get; set; } = null!;
+
+    /// <summary>
+    /// The game client's run that wrote it (one per load of AetherFrame), whose lock says whether that
+    /// run is still going (see <c>RecoveryCheckpointStore</c>). Null in a draft written before
+    /// continuous recovery, and then left out of the file, so such drafts keep their exact shape.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? SessionId { get; set; }
+
+    /// <summary>
+    /// One editing of one Plate: the recovery checkpoints taken while it was open, and the draft kept
+    /// if AetherFrame unloaded during it, share this id, so the next load offers them as one choice
+    /// with its older checkpoints, never as one question each. Null before continuous recovery.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? EditId { get; set; }
+
+    /// <summary>
+    /// A recovery checkpoint's order within its editing (1, 2, ...), also in its file name; null for
+    /// the draft kept at unload, which is that editing's last word.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? Sequence { get; set; }
 
     /// <summary>Top-level properties this build doesn't know, carried through a read.</summary>
     [JsonExtensionData]
