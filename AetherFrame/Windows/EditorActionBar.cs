@@ -39,6 +39,7 @@ internal sealed class EditorActionBar
     private const string SavingText = "Saving...";
     private const string UnsavedText = "Unsaved changes";
     private const string SavedText = "Saved";
+    private const string RetryLabel = "Retry now";
 
     private static readonly Vector4 SavingColor = new(0.85f, 0.85f, 0.4f, 1f);
 
@@ -129,8 +130,7 @@ internal sealed class EditorActionBar
         var recovery = commands.RecoveryIndicator;
 
         // The recovery checkpoint's mark beside the save state: always measured, so the bar never shifts when it appears.
-        var recoveryMarkWidth = commands.Recovery is null ? 0f : ImGui.GetFrameHeight() + style.ItemSpacing.X;
-        var buttonsWidth = recoveryMarkWidth + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
+        var buttonsWidth = RecoveryMarkWidth + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : HelpMenu.ButtonWidth + style.ItemSpacing.X);
         var widestState = WidestSaveState();
@@ -289,6 +289,13 @@ internal sealed class EditorActionBar
     }
 
     /// <summary>
+    /// The room the recovery mark takes after the save state, with the spacing before what follows it:
+    /// the same whether the mark shows or not, and nothing where recovery doesn't run. Guided creation's
+    /// header reserves it too.
+    /// </summary>
+    internal float RecoveryMarkWidth => commands.Recovery is null ? 0f : ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X;
+
+    /// <summary>
     /// A small shield after the save state while there are unsaved changes: muted once the last recovery
     /// checkpoint holds them, dimmer while newer changes wait for one, the warning colour while writing
     /// fails. Its tooltip names the last checkpoint that finished. Takes its room even when hidden.
@@ -301,6 +308,20 @@ internal sealed class EditorActionBar
         }
 
         ImGui.SameLine();
+        DrawRecoveryMarkHere(recovery);
+    }
+
+    /// <summary>
+    /// The recovery mark where the cursor stands (<see cref="DrawRecoveryMark"/>), in its frame-height
+    /// room shown or hidden; the next <c>SameLine</c> follows that room. Nothing where recovery doesn't run.
+    /// </summary>
+    internal void DrawRecoveryMarkHere(RecoveryIndicator recovery)
+    {
+        if (commands.Recovery is null)
+        {
+            return;
+        }
+
         var start = ImGui.GetCursorPosX();
         var room = ImGui.GetFrameHeight();
         if (recovery.Kind == RecoveryIndicatorKind.None)
@@ -323,18 +344,29 @@ internal sealed class EditorActionBar
         ImGui.Dummy(Vector2.Zero);
     }
 
-    /// <summary>While recovery checkpoints fail: one restrained line under the bar, with Retry now.</summary>
-    private void DrawRecoveryWarning(RecoveryIndicator recovery)
+    /// <summary>
+    /// While recovery checkpoints fail: one restrained line under the bar (or guided creation's header),
+    /// with Retry now at its right. In a window too narrow for both on one line the text wraps beside
+    /// the button, so neither runs past the window's edge.
+    /// </summary>
+    internal void DrawRecoveryWarning(RecoveryIndicator recovery)
     {
         if (EditorDocumentCommands.RecoveryWarning(recovery) is not { } warning)
         {
             return;
         }
 
+        var style = ImGui.GetStyle();
+        var retryWidth = ImGui.CalcTextSize(RetryLabel).X + (style.FramePadding.X * 2f);
+        var textRoom = Math.Max(ImGui.GetFontSize() * 4f, ImGui.GetContentRegionAvail().X - retryWidth - style.ItemSpacing.X);
         ImGui.AlignTextToFramePadding();
-        ImGui.TextColored(EditorWidgets.WarningColor, warning);
+        using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + textRoom))
+        {
+            ImGui.TextColored(EditorWidgets.WarningColor, warning);
+        }
+
         ImGui.SameLine();
-        if (ImGui.SmallButton("Retry now##RecoveryRetry"))
+        if (ImGui.SmallButton(RetryLabel + "##RecoveryRetry"))
         {
             commands.Recovery?.RetryNow();
         }

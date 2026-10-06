@@ -369,6 +369,29 @@ internal static class BasicEditorView
     internal static Vector2 PreviewOffset(Vector2 available, Vector2 size) =>
         new(Math.Max(0f, (available.X - size.X) / 2f), Math.Max(0f, (available.Y - size.Y) / 2f));
 
+    /// <summary>The live view's largest share of the height above the inspector, in the Basic editor's stacked layout.</summary>
+    internal const float StackedPreviewShare = 0.45f;
+
+    /// <summary>The live view's largest share of the height above the step, in guided creation's narrow layout.</summary>
+    internal const float GuidedPreviewShare = 0.42f;
+
+    /// <summary>
+    /// How tall the live view is where it sits above the controls (the Basic editor's stacked layout,
+    /// and guided creation in a narrow window): the canvas' own shape at <paramref name="width"/> plus
+    /// <paramref name="toolbarHeight"/>, never more than <paramref name="share"/> of the
+    /// <paramref name="available"/> height, so the controls below always keep the rest, and at least
+    /// <paramref name="preferredMinimum"/> while that share allows it. However little room a short
+    /// window leaves (an error line and a recovery warning above take some), the preferred minimum
+    /// gives way first: the result is never negative, never above the share, and never throws.
+    /// </summary>
+    internal static float StackedPreviewHeight(float width, float canvasWidth, float canvasHeight, float toolbarHeight, float available, float share, float preferredMinimum)
+    {
+        var ceiling = float.IsFinite(available) && float.IsFinite(share) ? Math.Max(0f, available * share) : 0f;
+        var floor = Math.Min(float.IsFinite(preferredMinimum) ? Math.Max(0f, preferredMinimum) : 0f, ceiling);
+        var natural = (Math.Max(0f, width) * canvasHeight / Math.Max(1f, canvasWidth)) + toolbarHeight;
+        return float.IsFinite(natural) ? Math.Clamp(natural, floor, ceiling) : floor;
+    }
+
     /// <summary>
     /// The category a click at a point on the Plate (logical canvas coordinates) opens, or null: what
     /// <see cref="TargetAt"/> finds over the finished Plate's paint sequence, built here without the

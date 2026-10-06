@@ -224,8 +224,12 @@ internal static class AetherControls
         _ => (AetherPalette.Info, AetherPalette.InfoTint, FontAwesomeIcon.InfoCircle),
     };
 
-    /// <summary>A one-line status (saved, working, an error) with its icon; nothing when <paramref name="text"/> is null.</summary>
-    internal static void StatusLine(AetherTone tone, string? text)
+    /// <summary>
+    /// A one-line status (saved, working, an error) with its icon; nothing when <paramref name="text"/>
+    /// is null. With <paramref name="wrap"/>, a text longer than the window wraps at its edge instead
+    /// of running past it.
+    /// </summary>
+    internal static void StatusLine(AetherTone tone, string? text, bool wrap = false)
     {
         if (text is null)
         {
@@ -239,7 +243,14 @@ internal static class AetherControls
         ImGui.PushStyleColor(ImGuiCol.Text, color);
         try
         {
-            ImGui.TextUnformatted(text);
+            if (wrap)
+            {
+                ImGui.TextWrapped(text);
+            }
+            else
+            {
+                ImGui.TextUnformatted(text);
+            }
         }
         finally
         {

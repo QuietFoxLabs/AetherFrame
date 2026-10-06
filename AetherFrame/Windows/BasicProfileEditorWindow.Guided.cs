@@ -75,10 +75,16 @@ internal sealed partial class BasicProfileEditorWindow
         artStatusInSteps = !success && guided.Stage == GuidedStage.ChooseLook;
         DrawGuidedHeader(guided, success);
 
+        // While recovery checkpoints fail, the action bar's warning line with Retry now, on its own row.
+        if (!success)
+        {
+            actionBar.DrawRecoveryWarning(actionBar.Commands.RecoveryIndicator);
+        }
+
         // The editor's error line, except a failed Save the Save step already explains (or did, before Back).
         if (basicEditorSession.ErrorMessage is { } error && !success && !ReferenceEquals(error, guided.SaveFailure))
         {
-            AetherControls.StatusLine(AetherTone.Danger, error);
+            AetherControls.StatusLine(AetherTone.Danger, error, wrap: true);
         }
 
         ImGui.Separator();
@@ -99,11 +105,10 @@ internal sealed partial class BasicProfileEditorWindow
         }
         else
         {
-            // Narrow: the live view first, at the canvas' own shape, then the step's controls.
-            var previewHeight = Math.Clamp(
-                (body.X * profile.CanvasHeight / Math.Max(1f, profile.CanvasWidth)) + ImGui.GetFrameHeightWithSpacing(),
-                120f * scale,
-                body.Y * 0.42f);
+            // Narrow: the live view first, at the canvas' own shape within its share of the height
+            // (smaller than its usual minimum when a short window has little room), then the step's controls.
+            var previewHeight = BasicEditorView.StackedPreviewHeight(
+                body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), body.Y, BasicEditorView.GuidedPreviewShare, 120f * scale);
             DrawPreview(profile, new Vector2(-1f, previewHeight));
             DrawGuidedPanel(profile, guided, success, new Vector2(-1f, Math.Max(100f * scale, body.Y - previewHeight - style.ItemSpacing.Y)));
         }
@@ -115,9 +120,10 @@ internal sealed partial class BasicProfileEditorWindow
     }
 
     /// <summary>
-    /// The title, then, at the right, the save state (nothing is saved until Save), Undo, Redo, Exit
-    /// Guide and Help, on a row of their own when the window is too narrow to hold them beside the
-    /// title, so nothing is ever drawn over another. Where the player is shows once, in the steps below.
+    /// The title, then, at the right, the save state (nothing is saved until Save) with the recovery
+    /// mark the action bar shows beside it, Undo, Redo, Exit Guide and Help, on a row of their own when
+    /// the window is too narrow to hold them beside the title, so nothing is ever drawn over another.
+    /// Where the player is shows once, in the steps below.
     /// </summary>
     private void DrawGuidedHeader(GuidedCreation guided, bool success)
     {
@@ -131,7 +137,8 @@ internal sealed partial class BasicProfileEditorWindow
         var commands = actionBar.Commands;
         float Width(string label) => ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2f);
         var stateWidth = EditorActionBar.WidestSaveState();
-        var rightWidth = success ? 0f : stateWidth + Width("Undo") + Width("Redo") + Width("Exit Guide") + (style.ItemSpacing.X * 3f);
+        var markWidth = actionBar.RecoveryMarkWidth;
+        var rightWidth = success ? 0f : stateWidth + markWidth + Width("Undo") + Width("Redo") + Width("Exit Guide") + (style.ItemSpacing.X * 3f);
         if (Help is not null)
         {
             rightWidth += HelpMenu.ButtonWidth + (success ? 0f : style.ItemSpacing.X);
@@ -146,6 +153,14 @@ internal sealed partial class BasicProfileEditorWindow
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(stateColor, stateText);
             ImGui.SameLine(stateStart + stateWidth + style.ItemSpacing.X);
+
+            // The recovery mark (its tooltip gives the last checkpoint's time), in room taken shown or
+            // hidden, after the save state's widest wording, so Undo and what follows never shift.
+            if (markWidth > 0f)
+            {
+                actionBar.DrawRecoveryMarkHere(commands.RecoveryIndicator);
+                ImGui.SameLine();
+            }
 
             // None of these while Save is being written: what's being saved is what was there when Save was pressed.
             using (ImRaii.Disabled(!commands.CanUndo || !guided.CanEdit))

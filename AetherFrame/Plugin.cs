@@ -118,8 +118,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly bool configurationUnreadable;
 
     // Guided creation (the introductory route: a personalized, saved Plate in three steps), its
-    // welcome, and whether the kept unsaved changes have been read: a recovery offer always comes
-    // before the welcome. Set once LoadKeptChangesAsync has finished, whatever its outcome.
+    // welcome, and whether the kept unsaved changes and recovery checkpoints were all read: a recovery
+    // offer always comes before the welcome. Set only by LoadKeptChangesAsync, once every one of them
+    // was read and what they hold is on offer; while that is unknown (a failure, anything unread, the
+    // Plate Library not loaded) it stays false and the welcome waits for a later load.
     private readonly GuidedCreation guidedCreation;
     private volatile bool keptChangesRead;
 
@@ -608,7 +610,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
 
         // The unsaved changes an editor had when AetherFrame last unloaded: read and judged against
         // the Library now that both have loaded, and offered once a character is logged in. A
-        // failure only means they aren't offered this time; they stay kept.
+        // failure only means they aren't offered this time; they stay kept, and the welcome waits.
         try
         {
             await LoadKeptChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -618,19 +620,14 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
             Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not read the unsaved changes it kept; they are left as they are.");
         }
-        finally
-        {
-            // Whatever was found is on offer now (or waits for a login): the welcome may follow it.
-            // With the Plate Library not loaded nothing was read, so the welcome never shows.
-            keptChangesRead = plateLibrary.IsLoaded;
-        }
     }
 
     /// <summary>
     /// Reads the kept unsaved changes off the framework thread, as an owned operation (unloading waits
     /// for it, and it stops between files once abandoned), retires those a save already covers, and
     /// hands the rest to the offer on the framework thread. With the Plate Library not loaded, nothing
-    /// is touched and nothing offered.
+    /// is touched and nothing offered. Records that recovery was read (<see cref="keptChangesRead"/>)
+    /// only once every kept draft and checkpoint was read and the offer holds what they hold.
     /// </summary>
     private async Task LoadKeptChangesAsync(CancellationToken cancellationToken)
     {
@@ -639,20 +636,27 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             return;
         }
 
-        IReadOnlyList<KeptDraft> found;
+        KeptChangesScan scan;
         using (operation)
         {
-            found = await Task.Run(() =>
+            scan = await Task.Run(() =>
             {
                 recoveryCheckpoints.Sweep();
-                return KeptChangesReview.LoadAsync(keptChangesFiles, plateLibrary, log, recoveryCheckpoints);
+                return KeptChangesReview.ReviewAsync(keptChangesFiles, plateLibrary, log, recoveryCheckpoints);
             }, cancellationToken).ConfigureAwait(false);
         }
 
-        if (found.Count > 0)
+        if (scan.Offers.Count > 0)
         {
-            await Framework.RunOnTick(() => keptChanges.Present(found, ClientState.IsLoggedIn), cancellationToken: cancellationToken).ConfigureAwait(false);
+            await Framework.RunOnTick(() => keptChanges.Present(scan.Offers, ClientState.IsLoggedIn), cancellationToken: cancellationToken).ConfigureAwait(false);
         }
+
+        if (!scan.Complete)
+        {
+            Log.Warning("AetherFrame couldn't read every kept change and recovery checkpoint; they are left as they are, and no first-run welcome shows until they can be read.");
+        }
+
+        keptChangesRead = scan.Complete;
     }
 
     private void ResolveFirstRun()

@@ -47,7 +47,8 @@ internal sealed class WelcomeWindow : Window
     /// is made and open. A start that made nothing (the unsaved-changes question's Cancel, or a
     /// failure, which it shows) leaves the welcome open to answer again. Closes unanswered once a
     /// Plate is made another way (My Plates, Help, Create Plate), and steps aside, to come back, when
-    /// the character logs out or a recovery offer comes up.
+    /// the character logs out or a recovery offer comes up, whether or not it shows an error
+    /// (<see cref="GuidedCreation.WelcomeOnScreenNow"/>).
     /// </summary>
     public override void PreOpenCheck()
     {
@@ -59,7 +60,12 @@ internal sealed class WelcomeWindow : Window
             BringToFront();
         }
 
-        if (IsOpen && creating && !guided.IsStarting)
+        if (!IsOpen)
+        {
+            return;
+        }
+
+        if (creating && !guided.IsStarting)
         {
             creating = false;
             startError = guided.StartError;
@@ -67,20 +73,19 @@ internal sealed class WelcomeWindow : Window
             {
                 // The Plate is made and open in the Basic editor, on its first step.
                 IsOpen = false;
+                return;
             }
         }
 
-        if (IsOpen && !creating && startError is null)
+        switch (GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue, mayShow()))
         {
-            if (guided.HasPlate)
-            {
+            case WelcomeOnScreen.Closes:
                 IsOpen = false;
-            }
-            else if (!mayShow())
-            {
+                break;
+            case WelcomeOnScreen.StepsAside:
                 IsOpen = false;
                 guided.WithdrawWelcome();
-            }
+                break;
         }
     }
 
@@ -104,7 +109,7 @@ internal sealed class WelcomeWindow : Window
 
         using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + width))
         {
-            ImGui.TextWrapped("Make your first Plate in three short steps.");
+            ImGui.TextWrapped("Create a character card in three short steps.");
             using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextSecondary))
             {
                 ImGui.TextWrapped("1. Choose a look     2. Make it yours     3. Save");

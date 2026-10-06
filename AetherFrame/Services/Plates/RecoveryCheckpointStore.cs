@@ -160,12 +160,16 @@ internal sealed class RecoveryCheckpointStore
     /// <summary>
     /// Every checkpoint of runs that have ended (their lock not held), and, separately, how many runs
     /// are still going: their folders are left alone. This run's own folder is never listed.
+    /// <c>Complete</c> is false when the Sessions folder or an ended run's folder couldn't be listed:
+    /// what it holds is then unknown, and a later load looks again.
     /// </summary>
-    internal (IReadOnlyList<CheckpointFile> Files, int RunningSessions) ListEndedSessions()
+    internal (IReadOnlyList<CheckpointFile> Files, int RunningSessions, bool Complete) ListEndedSessions()
     {
         var found = new List<CheckpointFile>();
         var running = 0;
-        foreach (var directory in ListRunFolders())
+        var folders = ListRunFolders();
+        var complete = folders is not null;
+        foreach (var directory in folders ?? [])
         {
             if (!PlateStoragePaths.TryParseRecoverySessionDirectoryName(directory, out var sessionId) || sessionId == SessionId)
             {
@@ -186,10 +190,11 @@ internal sealed class RecoveryCheckpointStore
             {
                 // Another game client removed it as it unloaded, or it can't be listed now: a later load looks again.
                 log.Warning($"AetherFrame couldn't list a recovery folder: {ex.GetType().Name}.");
+                complete = false;
             }
         }
 
-        return (found, running);
+        return (found, running, complete);
     }
 
     /// <summary>
@@ -225,7 +230,7 @@ internal sealed class RecoveryCheckpointStore
     internal void Sweep()
     {
         var now = utcNow();
-        foreach (var directory in ListRunFolders())
+        foreach (var directory in ListRunFolders() ?? [])
         {
             try
             {
@@ -289,8 +294,8 @@ internal sealed class RecoveryCheckpointStore
         }
     }
 
-    // Every run's folder; none, logged, when the Sessions folder can't be listed now (a later load looks again).
-    private IReadOnlyList<string> ListRunFolders()
+    // Every run's folder; null, logged, when the Sessions folder can't be listed now (a later load looks again).
+    private IReadOnlyList<string>? ListRunFolders()
     {
         try
         {
@@ -299,7 +304,7 @@ internal sealed class RecoveryCheckpointStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.Warning($"AetherFrame couldn't list its recovery folders: {ex.GetType().Name}.");
-            return [];
+            return null;
         }
     }
 

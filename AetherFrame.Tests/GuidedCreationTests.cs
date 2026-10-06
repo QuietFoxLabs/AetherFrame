@@ -256,8 +256,10 @@ public class GuidedCreationTests
 
         Assert.Contains("guidedCreation.ResolveWelcome(onboarding.IsNewPlayer, libraryLoaded, plateCount);", plugin, StringComparison.Ordinal);
 
-        // With the Plate Library not loaded, kept changes aren't read, so nothing may follow them.
-        Assert.Contains("keptChangesRead = plateLibrary.IsLoaded;", plugin, StringComparison.Ordinal);
+        // Recovery counts as read only when every kept draft and checkpoint was (GuidedReviewFixesTests):
+        // with the Plate Library not loaded, or anything unread, nothing may follow it.
+        Assert.Contains("keptChangesRead = scan.Complete;", plugin, StringComparison.Ordinal);
+        Assert.DoesNotContain("keptChangesRead = plateLibrary.IsLoaded;", plugin, StringComparison.Ordinal);
         Assert.DoesNotContain("keptChangesRead = true;", plugin, StringComparison.Ordinal);
 
         // The welcome waits on the real recovery gate: a login, kept changes read, none awaiting an

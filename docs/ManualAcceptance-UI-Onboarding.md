@@ -18,13 +18,13 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 
 Since guided creation became the introductory route, a new player is offered it, not the tutorial; the tutorial starts from Help (section C starts it there). The guided steps themselves have their own checklist in the onboarding pull request.
 
-6. **Empty folder.** Load with the empty folder and log in: the Welcome to AetherFrame window appears centered once the Library has loaded and a character is logged in, with Create My First Plate (accent), Not Now and Don't Show Again. The log shows `OfferTutorial` and `welcome waits`. Loaded at the title screen, it waits for the login.
+6. **Empty folder.** Load with the empty folder and log in: the Welcome to AetherFrame window appears centered once the Library has loaded and a character is logged in, with one line, "Create a character card in three short steps.", the steps' names, Create My First Plate (accent), Not Now and Don't Show Again. The log shows `OfferTutorial` and `welcome waits`. Loaded at the title screen, it waits for the login.
 7. **Close without answering** (X or Escape): it disappears and My Plates, still empty, offers Create My First Plate; reload: welcomed again; after the third showing it is not shown again.
 8. **Not Now.** The same as closing it: My Plates offers Create My First Plate, no reminder row; reload: welcomed again, within the same three showings.
 9. **Don't Show Again.** Reload: not welcomed, no reminder; Help still offers Create Step by Step and the full tutorial.
 10. **Create My First Plate**: the welcome closes, an Adventure Plate Classic is made and opens in the Basic editor on step 1, Choose a look.
-10b. **Recovery first.** With kept unsaved changes waiting for a Plate that is no longer in My Plates (so My Plates is empty), load: the "Unsaved changes kept" window comes first, and the welcome appears only once it has been answered (Decide Later counts). Recovery checkpoints join this once crash recovery (#141) is in.
-10c. **Made another way.** With the welcome open, make a Plate from My Plates' Create Plate: the welcome closes. With it open again on a new install, log out: it closes, comes back after the next login, and that showing isn't counted twice.
+10b. **Recovery first.** With kept unsaved changes waiting for a Plate that is no longer in My Plates (so My Plates is empty), load: the "Unsaved changes kept" window comes first, and the welcome appears only once it has been answered (Decide Later counts). The same with a crash's recovery checkpoints instead of kept changes. With a kept changes file that can't be read (a copy of one with its middle cut out, say), load: no welcome that load, the file is left as it is, and the log says AetherFrame couldn't read every kept change and recovery checkpoint.
+10c. **Made another way.** With the welcome open, make a Plate from My Plates' Create Plate: the welcome closes. With it open again on a new install, log out: it closes, comes back after the next login, and that showing isn't counted twice. The same while it shows why Create My First Plate failed: a logout still moves it aside.
 
 ## C. The spotlight
 

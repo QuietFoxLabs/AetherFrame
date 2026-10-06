@@ -21,6 +21,19 @@ internal enum WelcomeAnswer
     Never,
 }
 
+/// <summary>What the welcome on screen does this frame (see <see cref="GuidedCreation.WelcomeOnScreenNow"/>).</summary>
+internal enum WelcomeOnScreen
+{
+    /// <summary>It stays.</summary>
+    Stays,
+
+    /// <summary>It closes: My Plates holds a Plate, so it has nothing left to offer.</summary>
+    Closes,
+
+    /// <summary>It steps aside, to show again later without counting that showing twice: the character logged out, or a recovery offer came up.</summary>
+    StepsAside,
+}
+
 /// <summary>
 /// Guided creation: a short route to a personalized, saved Plate in three steps (Choose a Look, Make
 /// It Yours, Save), shown by the Basic editor around its live view while the open Plate is the one
@@ -116,9 +129,10 @@ internal sealed class GuidedCreation
     /// <summary>
     /// Whether the welcome may show now: a character is logged in (so the Plate it makes starts with
     /// that character's details and becomes their Active Plate, as any first Plate does), and nothing
-    /// about recovery stands in front of it: the kept unsaved changes (and recovery checkpoints) have
-    /// been read, and none waits for an answer or is on screen. A recovery offer always comes first;
-    /// the welcome waits for it.
+    /// about recovery stands in front of it: every kept unsaved change and recovery checkpoint has
+    /// been read (<paramref name="recoveryRead"/>, false while any is unread or the read failed, so
+    /// what recovery holds is unknown), and none waits for an answer or is on screen. A recovery offer
+    /// always comes first; the welcome waits for it.
     /// </summary>
     internal static bool WelcomeMayShow(bool loggedIn, bool recoveryRead, bool recoveryAwaitsAnswer, bool recoveryOnScreen) =>
         loggedIn && recoveryRead && !recoveryAwaitsAnswer && !recoveryOnScreen;
@@ -179,6 +193,34 @@ internal sealed class GuidedCreation
 
     /// <summary>Whether My Plates holds a Plate: a welcome on screen then has nothing left to offer.</summary>
     internal bool HasPlate => library.GetOrderedPlates().Count > 0;
+
+    /// <summary>
+    /// The welcome on screen, once a frame. A logout or a recovery offer (<paramref name="mayShow"/>
+    /// false, see <see cref="WelcomeMayShow"/>) moves it aside whatever it shows, an error from its
+    /// last start included, so it is never on screen without a character or over recovery. Otherwise
+    /// it stays while its own start is under way (that start's outcome decides), and a Plate in My
+    /// Plates closes it, except while it says why its start failed and the guided Plate that start
+    /// made still exists: Create My First Plate then opens that Plate again.
+    /// </summary>
+    /// <param name="starting">The welcome's own start is under way.</param>
+    /// <param name="showsStartError">The welcome shows why its last start failed.</param>
+    /// <param name="hasPlate">My Plates holds a Plate (<see cref="HasPlate"/>).</param>
+    /// <param name="guidedPlateExists">A guided creation is under way and its Plate exists (<see cref="CanContinue"/>).</param>
+    /// <param name="mayShow">Nothing stands in front of the welcome (<see cref="WelcomeMayShow"/>).</param>
+    internal static WelcomeOnScreen WelcomeOnScreenNow(bool starting, bool showsStartError, bool hasPlate, bool guidedPlateExists, bool mayShow)
+    {
+        if (!mayShow)
+        {
+            return WelcomeOnScreen.StepsAside;
+        }
+
+        if (starting)
+        {
+            return WelcomeOnScreen.Stays;
+        }
+
+        return hasPlate && !(showsStartError && guidedPlateExists) ? WelcomeOnScreen.Closes : WelcomeOnScreen.Stays;
+    }
 
     /// <summary>
     /// The welcome on screen closed unanswered because something now stands in front of it (the

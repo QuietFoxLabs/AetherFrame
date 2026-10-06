@@ -1,0 +1,423 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using AetherFrame.Services.Plates;
+using AetherFrame.UI.Editor;
+using AetherFrame.UI.Theme;
+using AetherFrame.UI.Tutorial;
+using Xunit;
+
+namespace AetherFrame.Tests;
+
+/// <summary>
+/// What GPT's review of the onboarding pull request at <c>2b1441a</c> (October 6, 2026) found: the
+/// welcome left on screen over a logout or a recovery offer once it showed a failed start, recovery
+/// counted as read when reading it had failed, a live view height that threw in a short window, and
+/// the guided header without the crash recovery mark, its tooltip, warning and Retry now.
+/// </summary>
+public class GuidedReviewFixesTests
+{
+    // ---------------------------------------------------------------- 1. the welcome after a failed start
+
+    [Theory]
+    [InlineData(false, true, false, false, false, (int)WelcomeOnScreen.StepsAside)] // a failed start's error, then a logout or a recovery offer
+    [InlineData(false, true, true, true, false, (int)WelcomeOnScreen.StepsAside)] // the same, the guided Plate made but not opened
+    [InlineData(true, false, false, false, false, (int)WelcomeOnScreen.StepsAside)] // its start still under way
+    [InlineData(false, false, false, false, false, (int)WelcomeOnScreen.StepsAside)]
+    [InlineData(false, false, true, false, false, (int)WelcomeOnScreen.StepsAside)]
+    [InlineData(false, true, false, false, true, (int)WelcomeOnScreen.Stays)] // says why nothing was made; Create My First Plate tries again
+    [InlineData(false, true, true, true, true, (int)WelcomeOnScreen.Stays)] // says why the guided Plate didn't open; trying again opens it
+    [InlineData(false, true, true, false, true, (int)WelcomeOnScreen.Closes)] // an old error, and a Plate made another way since
+    [InlineData(false, false, true, false, true, (int)WelcomeOnScreen.Closes)] // a Plate made another way
+    [InlineData(true, false, true, true, true, (int)WelcomeOnScreen.Stays)] // its own Plate made, opening: the start's outcome decides
+    [InlineData(false, false, false, false, true, (int)WelcomeOnScreen.Stays)]
+    public void TheWelcome_StepsAsideOnLogoutOrRecovery_WhateverErrorItShows(bool starting, bool showsStartError, bool hasPlate, bool guidedPlateExists, bool mayShow, int expected)
+    {
+        Assert.Equal((WelcomeOnScreen)expected, GuidedCreation.WelcomeOnScreenNow(starting, showsStartError, hasPlate, guidedPlateExists, mayShow));
+    }
+
+    [Fact]
+    public void TheWelcomeWindow_AsksTheRuleEveryFrame_WithNoErrorGateAroundIt()
+    {
+        var welcome = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "Tutorial", "WelcomeWindow.cs"));
+        var check = welcome[welcome.IndexOf("public override void PreOpenCheck()", StringComparison.Ordinal)..welcome.IndexOf("public override void PreDraw()", StringComparison.Ordinal)];
+
+        Assert.Contains("GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue, mayShow())", check, StringComparison.Ordinal);
+        Assert.DoesNotContain("startError is null)", check.Replace("startError is null && guided.CanContinue", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("guided.WithdrawWelcome();", check, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AFailedStart_ThenALogoutOrARecoveryOffer_StepsTheWelcomeAside()
+    {
+        // A start that fails: the guided Plate is gone by the time its open runs, so the welcome says why.
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+        await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+        harness.Guided.Start();
+        Assert.True(harness.Guided.IsStarting);
+        await harness.Library.DeletePlateAsync(made);
+        harness.Frame();
+        Assert.False(harness.Guided.IsStarting);
+        Assert.NotNull(harness.Guided.StartError);
+        await harness.EmptyLibraryAsync();
+
+        // With the error on screen it stays to be read and answered, until a logout or a recovery offer.
+        Assert.Equal(WelcomeOnScreen.Stays, GuidedCreation.WelcomeOnScreenNow(false, true, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: true));
+        Assert.Equal(WelcomeOnScreen.StepsAside, GuidedCreation.WelcomeOnScreenNow(false, true, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: false));
+    }
+
+    // ---------------------------------------------------------------- 2. recovery read, or unknown
+
+    [Fact]
+    public async Task NothingKept_IsAComplete_Read()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+
+        var scan = await Review(game);
+
+        Assert.True(scan.Complete);
+        Assert.Empty(scan.Offers);
+    }
+
+    [Fact]
+    public async Task ADraftAndACrashedEditing_ReadIntact_AreAComplete_Read()
+    {
+        using var fixture = new LibraryFixture();
+        await KeepAtUnloadAsync(fixture, "kept");
+        await CrashAsync(fixture, "crashed");
+
+        var scan = await Review(await GameSession.StartAsync(fixture));
+
+        Assert.True(scan.Complete);
+        Assert.Equal(2, scan.Offers.Count);
+    }
+
+    [Fact]
+    public async Task ALibraryThatDidntLoad_IsNeverAComplete_Read()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        var unloaded = new PlateLibraryService(fixture.Paths, fixture.Store, fixture.Log, () => fixture.Clock.Now);
+
+        var scan = await KeptChangesReview.ReviewAsync(game.Drafts, unloaded, fixture.Log, game.Recovery.Store);
+
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+    }
+
+    [Fact]
+    public async Task ADamagedDraft_LeavesTheRead_Incomplete_AndTheFileAsItIs()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        var plateId = await game.CreatePlateAsync(name: "Damaged");
+        KeptFiles.WriteDraftJson(fixture.Paths, plateId, fixture.Clock.Now, Guid.NewGuid(), "{");
+        var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
+
+        var scan = await Review(await GameSession.StartAsync(fixture));
+
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Equal(before, KeptFiles.Snapshot(fixture.Paths.DraftsDirectory));
+    }
+
+    [Fact]
+    public async Task ARecoveryFolderThatCantBeListed_LeavesTheRead_Incomplete_AndStillOffersTheDrafts()
+    {
+        using var fixture = new LibraryFixture();
+        await KeepAtUnloadAsync(fixture, "kept");
+        await CrashAsync(fixture, "crashed");
+        var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
+        var next = await GameSession.StartAsync(fixture);
+        next.Recovery.Files.FailListDirectories = true;
+
+        var scan = await Review(next);
+
+        Assert.False(scan.Complete);
+        Assert.Single(scan.Offers);
+        Assert.Equal(before, KeptFiles.Snapshot(fixture.Paths.DraftsDirectory));
+    }
+
+    [Fact]
+    public async Task ACheckpointThatCantBeOpened_LeavesTheRead_Incomplete_AndItsEditingUntouched()
+    {
+        using var fixture = new LibraryFixture();
+        await CrashAsync(fixture, "held open");
+        var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
+        var next = await GameSession.StartAsync(fixture);
+        next.Recovery.Files.FailRead = _ => true;
+
+        var scan = await Review(next);
+
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Equal(before, KeptFiles.Snapshot(fixture.Paths.DraftsDirectory));
+    }
+
+    [Fact]
+    public async Task AnEditingWithNoIntactCheckpoint_LeavesTheRead_Incomplete_AndItsFilesAsTheyAre()
+    {
+        using var fixture = new LibraryFixture();
+        foreach (var checkpoint in await CrashAsync(fixture, "one", "two"))
+        {
+            var bytes = File.ReadAllBytes(checkpoint);
+            File.WriteAllBytes(checkpoint, bytes[..(bytes.Length / 2)]);
+        }
+
+        var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
+        var scan = await Review(await GameSession.StartAsync(fixture));
+
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Equal(before, KeptFiles.Snapshot(fixture.Paths.DraftsDirectory));
+    }
+
+    [Fact]
+    public async Task ANewerVersionsCheckpoint_LeavesTheRead_Incomplete()
+    {
+        using var fixture = new LibraryFixture();
+        var newest = (await CrashAsync(fixture, "newer")).Max(StringComparer.Ordinal)!;
+        var envelope = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(newest))!.AsObject();
+        envelope["Version"] = 99;
+        File.WriteAllText(newest, envelope.ToJsonString());
+
+        var scan = await Review(await GameSession.StartAsync(fixture));
+
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.True(File.Exists(newest));
+    }
+
+    [Fact]
+    public async Task MoreEditingsThanOneLoadReads_LeaveTheRead_Incomplete()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        for (var i = 0; i <= DraftStore.MaxDraftsRead; i++)
+        {
+            game.Open(await game.CreatePlateAsync(name: $"Plate {i}"));
+            await game.Recovery.FrameAsync();
+            game.Edit($"edit {i}");
+            fixture.Clock.Tick();
+            await game.Recovery.RunAsync(6);
+        }
+
+        game.Recovery.Files.Crash();
+
+        var scan = await Review(await GameSession.StartAsync(fixture));
+
+        Assert.False(scan.Complete);
+        Assert.Equal(DraftStore.MaxDraftsRead, scan.Offers.Count);
+    }
+
+    [Fact]
+    public void ThePlugin_RecordsRecoveryAsRead_OnlyFromACompleteRead()
+    {
+        var plugin = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Plugin.cs"));
+
+        Assert.Single(Regex.Matches(plugin, @"keptChangesRead = "));
+        Assert.Contains("keptChangesRead = scan.Complete;", plugin, StringComparison.Ordinal);
+        Assert.Contains("KeptChangesReview.ReviewAsync(keptChangesFiles, plateLibrary, log, recoveryCheckpoints)", plugin, StringComparison.Ordinal);
+
+        // Set after the offer has what was found, and never by a failure's handler.
+        var load = plugin[plugin.IndexOf("private async Task LoadKeptChangesAsync(", StringComparison.Ordinal)..];
+        Assert.True(load.IndexOf("keptChanges.Present(scan.Offers", StringComparison.Ordinal) < load.IndexOf("keptChangesRead = scan.Complete;", StringComparison.Ordinal));
+        Assert.DoesNotContain("finally", plugin[plugin.IndexOf("await LoadKeptChangesAsync(cancellationToken)", StringComparison.Ordinal)..plugin.IndexOf("private async Task LoadKeptChangesAsync(", StringComparison.Ordinal)], StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------- 3. the live view's height in a short window
+
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(1.5f)]
+    [InlineData(2f)]
+    public void TheGuidedSteps_AtTheMinimumWindow_WithAnErrorAndARecoveryWarning_FitWithoutAScrollbar(float scale)
+    {
+        // The Basic editor at its minimum size, measured as AetherFrame's style draws it (AetherMetrics,
+        // Dalamud's 16 px interface font, the 14 pt heading face at 18.7 px), all times the scale:
+        // narrow, so the live view sits above the step, with the header's buttons on a row of their
+        // own, a recovery warning and an error line each wrapped onto two lines, then the footer.
+        var m = Metrics.At(scale);
+        var width = (BasicEditorView.MinimumWindowSize.X * scale) - (m.WindowPadding * 2f);
+        Assert.True(width < 700f * scale); // narrow: the steps' side-by-side layout needs 700
+
+        var header = (m.HeadingFrame + m.Spacing) + (m.Frame + m.Spacing);
+        var footer = m.Frame + (m.Spacing * 3f) + (AetherMetrics.SpaceXs * scale) + 1f;
+        var body = m.Content - header - m.WrappedLine - m.WrappedLine - m.Separator - footer;
+
+        // Before: Math.Clamp's minimum (120) was above its maximum (42% of this height), which throws.
+        Assert.True(120f * scale > body * BasicEditorView.GuidedPreviewShare);
+
+        var preview = BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, m.Frame + m.Spacing, body, BasicEditorView.GuidedPreviewShare, 120f * scale);
+        Assert.InRange(preview, 0f, body * BasicEditorView.GuidedPreviewShare);
+        Assert.True(preview > m.Frame + m.Spacing, "the live view keeps room below its toolbar");
+
+        // The window's body floor (160) and the step panel's (100) are never reached: nothing scrolls the window.
+        Assert.True(body >= 160f * scale);
+        Assert.True(body - preview - m.Spacing >= 100f * scale);
+    }
+
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(1.5f)]
+    [InlineData(2f)]
+    public void TheStackedBasicEditor_AtTheMinimumWindow_WithAnErrorAndARecoveryWarning_FitsWithoutAScrollbar(float scale)
+    {
+        // The ordinary Basic editor at its minimum size: the action bar on two rows, the recovery
+        // warning on two, the error line, the separator, then the categories on two rows above the live view.
+        var m = Metrics.At(scale);
+        var width = (BasicEditorView.MinimumWindowSize.X * scale) - (m.WindowPadding * 2f);
+        Assert.Equal(BasicEditorLayoutMode.Stacked, BasicEditorView.ChooseLayout(width, scale));
+
+        var remaining = m.Content - ((m.Frame + m.Spacing) * 2f) - m.WrappedLine - (m.Font + m.Spacing) - m.Separator - ((m.Frame + m.Spacing) * 2f);
+
+        // Before: Math.Clamp's minimum (140) was above its maximum (45% of this height), which throws.
+        Assert.True(140f * scale > remaining * BasicEditorView.StackedPreviewShare);
+
+        var preview = BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, m.Frame + m.Spacing, remaining, BasicEditorView.StackedPreviewShare, 140f * scale);
+        Assert.InRange(preview, 0f, remaining * BasicEditorView.StackedPreviewShare);
+        Assert.True(remaining - preview - m.Spacing >= 120f * scale, "the inspector keeps its minimum");
+    }
+
+    [Theory]
+    [InlineData(400f, 300f, 0.42f, 120f, 126f)] // the share caps the canvas' shape
+    [InlineData(400f, 1000f, 0.42f, 120f, 255f)] // the canvas' shape (400 x 675/1200 = 225) plus its toolbar
+    [InlineData(400f, 200f, 0.42f, 120f, 84f)] // a short window: the share, below the usual minimum
+    [InlineData(400f, 0f, 0.42f, 120f, 0f)]
+    [InlineData(400f, -50f, 0.45f, 140f, 0f)] // content already past the window's edge
+    [InlineData(0f, 500f, 0.45f, 140f, 140f)]
+    public void TheStackedLiveView_NeverThrows_AndKeepsWithinItsShare(float width, float available, float share, float minimum, float expected)
+    {
+        Assert.Equal(expected, BasicEditorView.StackedPreviewHeight(width, 1200f, 675f, 30f, available, share, minimum), 3);
+    }
+
+    [Fact]
+    public void TheStackedLiveView_SurvivesNonsense()
+    {
+        Assert.Equal(0f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, float.NaN, 0.42f, 120f));
+        Assert.Equal(120f, BasicEditorView.StackedPreviewHeight(400f, 0f, float.NaN, 30f, 1000f, 0.42f, 120f));
+        Assert.Equal(0f, BasicEditorView.StackedPreviewHeight(400f, 1200f, 675f, 30f, float.PositiveInfinity, 0.42f, 120f));
+    }
+
+    [Fact]
+    public void BothNarrowLayouts_UseTheBoundedHeight_AndNoUnguardedClamp()
+    {
+        var root = RepositoryPaths.Root().FullName;
+        var basic = File.ReadAllText(Path.Combine(root, "AetherFrame", "Windows", "BasicProfileEditorWindow.cs"));
+        var steps = File.ReadAllText(Path.Combine(root, "AetherFrame", "Windows", "BasicProfileEditorWindow.Guided.cs"));
+
+        foreach (var code in new[] { basic, steps })
+        {
+            Assert.Contains("BasicEditorView.StackedPreviewHeight(", code, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"Math\.Clamp\(\s*\(body\.X \* profile\.CanvasHeight", code);
+        }
+    }
+
+    // ---------------------------------------------------------------- 4. crash recovery in the guided header
+
+    [Fact]
+    public void TheGuidedHeader_ShowsTheRecoveryMarkAndWarning_InRoomItReserves()
+    {
+        var root = RepositoryPaths.Root().FullName;
+        var steps = File.ReadAllText(Path.Combine(root, "AetherFrame", "Windows", "BasicProfileEditorWindow.Guided.cs"));
+        var bar = File.ReadAllText(Path.Combine(root, "AetherFrame", "Windows", "EditorActionBar.cs"));
+        var header = steps[steps.IndexOf("private void DrawGuidedHeader(", StringComparison.Ordinal)..steps.IndexOf("private void DrawGuidedPanel(", StringComparison.Ordinal)];
+
+        // The header's right group reserves the mark's room (the bar's own measure) beside the save
+        // state's widest wording, and draws the mark (with its checkpoint tooltip) after it, before Undo.
+        Assert.Contains("var markWidth = actionBar.RecoveryMarkWidth;", header, StringComparison.Ordinal);
+        Assert.Contains("stateWidth + markWidth + Width(\"Undo\")", header, StringComparison.Ordinal);
+        var mark = header.IndexOf("actionBar.DrawRecoveryMarkHere(commands.RecoveryIndicator);", StringComparison.Ordinal);
+        Assert.True(header.IndexOf("ImGui.SameLine(stateStart + stateWidth + style.ItemSpacing.X);", StringComparison.Ordinal) < mark);
+        Assert.True(mark < header.IndexOf("ImGui.Button(\"Undo##GuidedUndo\")", StringComparison.Ordinal));
+        Assert.Contains("EditorWidgets.Tooltip(EditorDocumentCommands.RecoveryText(recovery));", bar, StringComparison.Ordinal);
+
+        // The warning with Retry now on its own row under the header, before the error line and the
+        // separator, so the steps' height is measured after it; it wraps beside Retry now in a narrow window.
+        var body = steps[steps.IndexOf("private void DrawGuidedBody(", StringComparison.Ordinal)..steps.IndexOf("private void DrawGuidedHeader(", StringComparison.Ordinal)];
+        var warning = body.IndexOf("actionBar.DrawRecoveryWarning(actionBar.Commands.RecoveryIndicator);", StringComparison.Ordinal);
+        Assert.True(body.IndexOf("DrawGuidedHeader(guided, success);", StringComparison.Ordinal) < warning);
+        Assert.True(warning < body.IndexOf("AetherControls.StatusLine(AetherTone.Danger, error, wrap: true);", StringComparison.Ordinal));
+        Assert.True(warning < body.IndexOf("ImGui.Separator();", StringComparison.Ordinal));
+        Assert.True(warning < body.IndexOf("var body = ImGui.GetContentRegionAvail();", StringComparison.Ordinal));
+        Assert.Contains("using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + textRoom))", bar, StringComparison.Ordinal);
+        Assert.Contains("ImGui.SmallButton(RetryLabel + \"##RecoveryRetry\")", bar, StringComparison.Ordinal);
+        Assert.Contains("commands.Recovery?.RetryNow();", bar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheWelcome_SaysWhatAPlateIs_InItsOneLine()
+    {
+        var welcome = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "Tutorial", "WelcomeWindow.cs"));
+
+        Assert.Contains("ImGui.TextWrapped(\"Create a character card in three short steps.\");", welcome, StringComparison.Ordinal);
+        Assert.DoesNotContain("Make your first Plate in three short steps.", welcome, StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private static Task<KeptChangesScan> Review(GameSession game) =>
+        KeptChangesReview.ReviewAsync(game.Drafts, game.Library, game.Fixture.Log, game.Recovery.Store);
+
+    /// <summary>A Plate edited and left unsaved as AetherFrame unloads: a draft kept at unload.</summary>
+    private static async Task KeepAtUnloadAsync(LibraryFixture fixture, string text)
+    {
+        var game = await GameSession.StartAsync(fixture);
+        game.Open(await game.CreatePlateAsync(name: text));
+        game.Edit(text);
+        await game.UnloadAsync();
+        game.Recovery.Recovery.Stop();
+        Assert.True(await game.Recovery.Recovery.Writer.WaitIdleAsync(TimeSpan.FromSeconds(10)));
+        game.Recovery.Store.CloseSession();
+        fixture.Clock.Tick(60);
+    }
+
+    /// <summary>A Plate edited with one checkpoint per edit, then the game crashes. Returns the checkpoints.</summary>
+    private static async Task<string[]> CrashAsync(LibraryFixture fixture, params string[] edits)
+    {
+        var game = await GameSession.StartAsync(fixture);
+        game.Open(await game.CreatePlateAsync(name: edits[0]));
+        await game.Recovery.FrameAsync();
+        foreach (var text in edits)
+        {
+            game.Edit(text);
+            fixture.Clock.Tick();
+            await game.Recovery.RunAsync(6);
+        }
+
+        var checkpoints = game.Recovery.OwnCheckpoints();
+        Assert.Equal(edits.Length, checkpoints.Length);
+        game.Recovery.Files.Crash();
+        fixture.Clock.Tick(60);
+        return checkpoints;
+    }
+
+    /// <summary>AetherFrame's style at a scale: what the Basic editor's rows measure.</summary>
+    private sealed record Metrics(float Scale)
+    {
+        internal float Font => 16f * Scale;
+
+        internal float Frame => Font + (AetherMetrics.FramePaddingY * 2f * Scale);
+
+        internal float HeadingFrame => (18.7f * Scale) + (AetherMetrics.FramePaddingY * 2f * Scale);
+
+        internal float Spacing => AetherMetrics.ItemSpacingY * Scale;
+
+        internal float WindowPadding => AetherMetrics.WindowPadding * Scale;
+
+        // A line drawn after AlignTextToFramePadding that wraps onto two.
+        internal float WrappedLine => (AetherMetrics.FramePaddingY * Scale) + (Font * 2f) + Spacing;
+
+        internal float Separator => 1f + Spacing;
+
+        // The window's height inside its title bar (one frame tall) and padding.
+        internal float Content => (BasicEditorView.MinimumWindowSize.Y * Scale) - Frame - (WindowPadding * 2f);
+
+        internal static Metrics At(float scale) => new(scale);
+    }
+}

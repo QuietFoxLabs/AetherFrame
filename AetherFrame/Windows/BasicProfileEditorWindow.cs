@@ -54,6 +54,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     private const float InspectorMinWidth = 340f;
     private const float InspectorMaxWidth = 500f;
 
+
     // A press that moves further than this is a pan, not a click on a section.
     private const float PreviewClickTolerance = 4f;
 
@@ -338,10 +339,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 // canvas' own aspect, then the inspector.
                 DrawCategoryStrip(profile);
                 var remaining = ImGui.GetContentRegionAvail().Y;
-                var previewHeight = Math.Clamp(
-                    (body.X * profile.CanvasHeight / Math.Max(1f, profile.CanvasWidth)) + ImGui.GetFrameHeightWithSpacing(),
-                    140f * scale,
-                    remaining * 0.45f);
+                var previewHeight = BasicEditorView.StackedPreviewHeight(
+                    body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), remaining, BasicEditorView.StackedPreviewShare, 140f * scale);
                 DrawPreview(profile, new Vector2(-1f, previewHeight));
                 DrawInspector(profile, new Vector2(-1f, Math.Max(120f * scale, remaining - previewHeight - style.ItemSpacing.Y)), withCategoryStrip: false);
                 break;

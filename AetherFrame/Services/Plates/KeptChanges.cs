@@ -78,31 +78,52 @@ internal sealed record KeptDraft(string Path, PlateDraft Draft, string DocumentJ
 }
 
 /// <summary>
+/// What a load read of the kept unsaved changes and recovery checkpoints (see <see cref="KeptChangesReview.ReviewAsync"/>).
+/// </summary>
+/// <param name="Offers">The editings to offer, newest first.</param>
+/// <param name="Complete">
+/// Whether every kept draft and recovery checkpoint there was has been listed and read by this
+/// version, so <paramref name="Offers"/> holds everything there is to answer. False when the Library
+/// didn't load, a folder couldn't be listed, or anything was left unread: damaged, couldn't be
+/// opened, saved by a newer version, beyond what one load reads, or an editing with no checkpoint
+/// left intact. What recovery holds is then unknown: nothing may take the install for one with
+/// nothing to recover (the welcome waits for a later load), and every such file is left as it is.
+/// </param>
+internal sealed record KeptChangesScan(IReadOnlyList<KeptDraft> Offers, bool Complete);
+
+/// <summary>
 /// The next load's side of unsaved changes AetherFrame kept when it unloaded: reading them, judging
 /// each against the Library, and retiring those a save already covers. Free of Dalamud.
 /// </summary>
 internal static class KeptChangesReview
 {
+    /// <summary>What to offer (see <see cref="ReviewAsync"/>), for a caller that doesn't need to know whether everything was read.</summary>
+    internal static async Task<IReadOnlyList<KeptDraft>> LoadAsync(DraftStore files, PlateLibraryService library, IAetherFrameLog log, RecoveryCheckpointStore? checkpoints = null) =>
+        (await ReviewAsync(files, library, log, checkpoints).ConfigureAwait(false)).Offers;
+
     /// <summary>
     /// Reads the newest drafts (see <see cref="DraftStore.ReadNewestAsync"/>) and judges each against
     /// the Library, newest first. A draft identical to its Plate's saved content is retired (moved
     /// intact to the trash) and not returned; one that can't be read is left as it is and not
     /// returned; the rest are what to offer. With the Library not loaded, nothing is touched and
-    /// nothing is offered: no draft can be judged against a Library that failed to load.
+    /// nothing is offered: no draft can be judged against a Library that failed to load. Says whether
+    /// everything was read (<see cref="KeptChangesScan.Complete"/>); a Drafts folder that can't be
+    /// listed throws, as before, and nothing is read.
     /// </summary>
-    internal static async Task<IReadOnlyList<KeptDraft>> LoadAsync(DraftStore files, PlateLibraryService library, IAetherFrameLog log, RecoveryCheckpointStore? checkpoints = null)
+    internal static async Task<KeptChangesScan> ReviewAsync(DraftStore files, PlateLibraryService library, IAetherFrameLog log, RecoveryCheckpointStore? checkpoints = null)
     {
         if (!library.IsLoaded)
         {
-            return [];
+            return new KeptChangesScan([], Complete: false);
         }
 
         var listing = await files.ReadNewestAsync().ConfigureAwait(false);
+        var complete = listing.Unread == 0;
         var groups = new List<Group>();
         var byEdit = new Dictionary<(Guid Session, Guid Edit), Group>();
         if (checkpoints is not null)
         {
-            ReadCheckpoints(checkpoints, groups, byEdit, log);
+            complete &= ReadCheckpoints(checkpoints, groups, byEdit, log);
         }
 
         // A draft kept at unload is its editing's last word: the newest point of its checkpoints' group.
@@ -110,6 +131,8 @@ internal static class KeptChangesReview
         {
             if (read.Status != DraftReadStatus.Ready)
             {
+                // Damaged, unopenable or a newer version's: left as it is, and what it holds is unknown.
+                complete = false;
                 continue;
             }
 
@@ -132,6 +155,7 @@ internal static class KeptChangesReview
         {
             log.Warning($"AetherFrame found unsaved changes from {ordered.Count} editings and offers the newest {DraftStore.MaxDraftsRead}; the others stay kept for a later start.");
             ordered = ordered.Take(DraftStore.MaxDraftsRead).ToList();
+            complete = false;
         }
 
         var offers = new List<KeptDraft>();
@@ -165,7 +189,7 @@ internal static class KeptChangesReview
             log.Information($"AetherFrame kept unsaved changes for {offers.Count} Plate edit(s) when it last stopped; offering them back.");
         }
 
-        return offers;
+        return new KeptChangesScan(offers, complete);
     }
 
     /// <summary>
@@ -207,11 +231,14 @@ internal static class KeptChangesReview
     /// intact: a damaged or interrupted newest one leaves the earlier ones on offer. Damaged ones are
     /// logged and go to the Drafts trash with an answer rather than being deleted; a newer version's are never
     /// offered or removed. One that can't be opened (held open, or gone because another game window is
-    /// answering its editing) holds the whole editing back, untouched, for a later load.
+    /// answering its editing) holds the whole editing back, untouched, for a later load. Returns
+    /// whether every checkpoint was listed and read, or goes with an editing on offer: false when a
+    /// folder couldn't be listed, a checkpoint couldn't be opened, names another Plate or is a newer
+    /// version's, or an editing has no intact checkpoint left to offer.
     /// </summary>
-    private static void ReadCheckpoints(RecoveryCheckpointStore checkpoints, List<Group> groups, Dictionary<(Guid Session, Guid Edit), Group> byEdit, IAetherFrameLog log)
+    private static bool ReadCheckpoints(RecoveryCheckpointStore checkpoints, List<Group> groups, Dictionary<(Guid Session, Guid Edit), Group> byEdit, IAetherFrameLog log)
     {
-        var (found, running) = checkpoints.ListEndedSessions();
+        var (found, running, complete) = checkpoints.ListEndedSessions();
         if (running > 0)
         {
             log.Information($"AetherFrame left the recovery checkpoints of {running} other running game client(s) alone.");
@@ -226,6 +253,7 @@ internal static class KeptChangesReview
                 if (file.PlateId != group.PlateId)
                 {
                     log.Warning($"AetherFrame ignored a recovery checkpoint that names another Plate than its editing: {LogPrivacy.FileName(file.Path)}");
+                    complete = false;
                     continue;
                 }
 
@@ -269,9 +297,17 @@ internal static class KeptChangesReview
                 group.Points.Clear();
             }
 
+            // Held back, a newer version's, or nothing intact to offer: what this editing holds is unknown here.
+            if (group.Unavailable || group.Points.Count == 0)
+            {
+                complete = false;
+            }
+
             groups.Add(group);
             byEdit[edit.Key] = group;
         }
+
+        return complete;
     }
 
     private sealed class Group(Guid plateId)

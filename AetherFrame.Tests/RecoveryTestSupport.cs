@@ -124,6 +124,9 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
     /// <summary>Listing folders throws, as a Sessions folder that can't be listed would.</summary>
     internal bool FailListDirectories { get; set; }
 
+    /// <summary>Reads whose path matches fail as a file held open by another program does.</summary>
+    internal Func<string, bool>? FailRead { get; set; }
+
     /// <summary>Signalled when a held write has started.</summary>
     internal ManualResetEventSlim WriteStarted { get; } = new();
 
@@ -189,7 +192,8 @@ internal sealed class TestRecoveryFiles : IRecoveryFiles
         }
     }
 
-    public StoredText ReadText(string path) => files.ReadText(path);
+    public StoredText ReadText(string path) =>
+        FailRead?.Invoke(path) == true ? throw new IOException($"Injected read failure: '{path}'") : files.ReadText(path);
 
     public bool FileExists(string path) => files.FileExists(path);
 
