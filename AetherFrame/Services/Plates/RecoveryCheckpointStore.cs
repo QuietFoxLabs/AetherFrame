@@ -158,17 +158,16 @@ internal sealed class RecoveryCheckpointStore
     }
 
     /// <summary>
-    /// Every checkpoint of runs that have ended (their lock not held), and, separately, how many runs
-    /// are still going: their folders are left alone. This run's own folder is never listed.
-    /// <c>Unlisted</c> names the runs whose folder couldn't be listed, or whose lock couldn't be told
-    /// held or not: what they hold is unknown, and a later load looks again. It is null when the
-    /// Sessions folder itself couldn't be listed, so no run is known. <c>Complete</c> is true only when
-    /// no run is unknown.
+    /// Every checkpoint of runs that have ended (their lock not held), and, separately, the runs still
+    /// going: their folders are left alone. This run's own folder is never listed. <c>Unlisted</c>
+    /// names the runs whose folder couldn't be listed, or whose lock couldn't be told held or not: what
+    /// they hold is unknown, and a later load looks again. It is null when the Sessions folder itself
+    /// couldn't be listed, so no run is known. <c>Complete</c> is true only when no run is unknown.
     /// </summary>
-    internal (IReadOnlyList<CheckpointFile> Files, int RunningSessions, IReadOnlySet<Guid>? Unlisted, bool Complete) ListEndedSessions()
+    internal (IReadOnlyList<CheckpointFile> Files, IReadOnlySet<Guid> Running, IReadOnlySet<Guid>? Unlisted, bool Complete) ListEndedSessions()
     {
         var found = new List<CheckpointFile>();
-        var running = 0;
+        var running = new HashSet<Guid>();
         var folders = ListRunFolders();
         var unlisted = folders is null ? null : new HashSet<Guid>();
         foreach (var directory in folders ?? [])
@@ -182,7 +181,7 @@ internal sealed class RecoveryCheckpointStore
             {
                 if (files.IsLockHeld(PlateStoragePaths.GetRecoverySessionLockPath(directory)))
                 {
-                    running++;
+                    running.Add(sessionId);
                     continue;
                 }
 

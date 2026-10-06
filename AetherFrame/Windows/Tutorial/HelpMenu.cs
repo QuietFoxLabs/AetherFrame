@@ -231,9 +231,9 @@ internal sealed class HelpMenu
             AetherControls.Tooltip(onSteps
                 ? "The steps are open in the Basic editor."
                 : waitsForRecovery
-                ? guided.LoggedIn()
-                    ? "Answer Unsaved Changes Kept first: it may hold this Plate's changes."
-                    : "Log in first: AetherFrame then offers the unsaved changes it kept for this Plate."
+                ? guided.RecoveryWaitsForLogin()
+                    ? "Log in first: AetherFrame then offers the unsaved changes it kept for this Plate."
+                    : "Answer Unsaved Changes Kept first: it may hold this Plate's changes."
                 : guided.CanContinue
                     ? "Opens the Plate you were creating, on the step you reached."
                     : "A new Plate in three short steps: choose a look, make it yours, save.");

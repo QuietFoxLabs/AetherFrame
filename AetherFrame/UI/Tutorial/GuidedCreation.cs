@@ -293,8 +293,11 @@ internal sealed class GuidedCreation
     /// </summary>
     internal Func<Guid, bool> RecoveryWaits { get; set; } = static _ => false;
 
-    /// <summary>Whether a character is logged in (set by the plugin): kept changes are offered only then.</summary>
-    internal Func<bool> LoggedIn { get; set; } = static () => true;
+    /// <summary>
+    /// Whether the recovery offer waits for a login before it can be answered (<see cref="KeptChangesOffer.WaitsForLogin"/>,
+    /// set by the plugin): Help then says to log in first.
+    /// </summary>
+    internal Func<bool> RecoveryWaitsForLogin { get; set; } = static () => false;
 
     /// <summary>Whether Continue Step by Step waits for the recovery offer's answer about the guided Plate (<see cref="RecoveryWaits"/>).</summary>
     internal bool ContinueWaitsForRecovery => CanContinue && Preferences.PlateId is { } plateId && RecoveryWaits(plateId);

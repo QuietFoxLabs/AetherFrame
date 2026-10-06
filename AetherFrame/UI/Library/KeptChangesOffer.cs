@@ -169,10 +169,47 @@ internal sealed class KeptChangesOffer
     /// <summary>
     /// Whether opening Plate <paramref name="plateId"/> as saved should wait for this offer: kept changes
     /// of that Plate wait for the player's answer (see <see cref="AwaitsAnswer"/>), or an answer is being
-    /// acted on, which may open a Plate itself.
+    /// acted on, which may open a Plate itself. Asked every frame, so it allocates nothing.
     /// </summary>
-    internal bool AwaitsAnswerFor(Guid plateId) =>
-        creating is not null || entries.Any(e => e.State == EntryState.Acting || (e.State == EntryState.Pending && e.PlateId == plateId));
+    internal bool AwaitsAnswerFor(Guid plateId)
+    {
+        if (creating is not null)
+        {
+            return true;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (entry.State == EntryState.Acting || (entry.State == EntryState.Pending && entry.PlateId == plateId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Kept changes wait to be offered at the next login: read before one, and not offered yet (see <see cref="OnLogin"/>).</summary>
+    internal bool WaitsForLogin
+    {
+        get
+        {
+            if (presented)
+            {
+                return false;
+            }
+
+            foreach (var entry in entries)
+            {
+                if (entry.State == EntryState.Pending)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     internal KeptChangesVariant? CurrentVariant => Current is { } entry ? VariantOf(entry.Choice) : null;
 

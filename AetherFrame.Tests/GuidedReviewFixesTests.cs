@@ -211,7 +211,7 @@ public class GuidedReviewFixesTests
     }
 
     [Fact]
-    public async Task TheRecoveryOffer_HoldsBackOnlyThePlatesWhoseKeptChangesWait()
+    public async Task TheRecoveryOffer_HoldsBackThePlatesWhoseKeptChangesWait_OrEveryPlateWhileAnAnswerIsActedOn()
     {
         using var fixture = new LibraryFixture();
         var game = await GameSession.StartAsync(fixture);
@@ -222,18 +222,33 @@ public class GuidedReviewFixesTests
         fixture.Clock.Tick();
         await game.UnloadAsync();
 
-        // Read before a login: Kept's changes wait to be offered; Other has nothing kept.
+        // Read before a login: Kept's changes wait to be offered there; Other has nothing kept.
         var next = await GameSession.StartAsync(fixture);
         await next.LoadKeptChangesAsync(loggedIn: false);
+        Assert.True(next.Offer.WaitsForLogin);
         Assert.True(next.Offer.AwaitsAnswerFor(kept));
         Assert.False(next.Offer.AwaitsAnswerFor(other));
 
-        // Left for later (the window closed): answered for now.
+        // Offered at the login, then left for later (the window closed): answered for now.
         next.Offer.OnLogin();
+        Assert.False(next.Offer.WaitsForLogin);
         Assert.True(next.Offer.ConsumeOpenRequest());
         next.Offer.Closed();
         Assert.False(next.Offer.AwaitsAnswerFor(kept));
         Assert.False(next.Offer.AwaitsAnswerFor(other));
+
+        // Kept deleted, its changes recovered as a new Plate: while that Plate is made, which then opens,
+        // every Plate waits; once it is open, none does.
+        var third = await GameSession.StartAsync(fixture);
+        await third.Library.DeletePlateAsync(kept);
+        Assert.Equal(KeptChangesChoice.Deleted, Assert.Single(await third.LoadKeptChangesAsync()).Choice);
+        third.Offer.Choose();
+        Assert.True(third.Offer.IsBusy);
+        Assert.True(third.Offer.AwaitsAnswerFor(other));
+        await third.SettleAsync();
+        Assert.False(third.Offer.IsBusy);
+        Assert.False(third.Offer.AwaitsAnswerFor(other));
+        Assert.Equal(2, third.Library.GetOrderedPlates().Count);
     }
 
     [Fact]
@@ -244,13 +259,13 @@ public class GuidedReviewFixesTests
         var help = File.ReadAllText(Path.Combine(root, "AetherFrame", "Windows", "Tutorial", "HelpMenu.cs"));
 
         Assert.Contains("guidedCreation.RecoveryWaits = recoveryOffer.AwaitsAnswerFor;", plugin, StringComparison.Ordinal);
-        Assert.Contains("guidedCreation.LoggedIn = () => ClientState.IsLoggedIn;", plugin, StringComparison.Ordinal);
+        Assert.Contains("guidedCreation.RecoveryWaitsForLogin = () => recoveryOffer.WaitsForLogin;", plugin, StringComparison.Ordinal);
         Assert.Contains("using (ImRaii.Disabled(guided.IsStarting || onSteps || waitsForRecovery))", help, StringComparison.Ordinal);
 
-        // Before a login no offer window can show, so the tooltip says what comes first.
+        // Before the login that offers them, no offer window can show, so the tooltip says what comes first.
         Assert.Contains("Answer Unsaved Changes Kept first: it may hold this Plate's changes.", help, StringComparison.Ordinal);
         Assert.Contains("Log in first: AetherFrame then offers the unsaved changes it kept for this Plate.", help, StringComparison.Ordinal);
-        Assert.Contains("guided.LoggedIn()", help, StringComparison.Ordinal);
+        Assert.Contains("guided.RecoveryWaitsForLogin()", help, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -439,7 +454,7 @@ public class GuidedReviewFixesTests
     public async Task ADraftASaveAlreadyHolds_WaitsOnlyForItsOwnRunsFolder_NotAnotherRunsItCantTell()
     {
         using var fixture = new LibraryFixture();
-        var run = await KeepWhatASaveHoldsAsync(fixture);
+        var (run, _) = await KeepWhatASaveHoldsAsync(fixture);
         var crashed = await CrashAsync(fixture, "crashed");
         var unrelated = Path.GetFileName(Path.GetDirectoryName(crashed[0]))!;
         var editing = Assert.Single(KeptFiles.Checkpoints(fixture.Paths), f => !crashed.Contains(f, StringComparer.OrdinalIgnoreCase));
@@ -465,6 +480,32 @@ public class GuidedReviewFixesTests
         Assert.All(crashed, f => Assert.True(File.Exists(f)));
 
         static string? RunOf(string lockPath) => Path.GetFileName(Path.GetDirectoryName(lockPath));
+    }
+
+    [Fact]
+    public async Task ADraftASaveAlreadyHolds_WaitsWhileItsRunStillHoldsItsLock_ThenGoesWithItsCheckpoints()
+    {
+        // Another game client loads while this one is still unloading: its draft written, its lock still
+        // held, so its folder isn't read. The draft waits, untouched, and the read is still complete.
+        using var fixture = new LibraryFixture();
+        var (_, unloading) = await KeepWhatASaveHoldsAsync(fixture, endRun: false);
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        var checkpoint = Assert.Single(KeptFiles.Checkpoints(fixture.Paths));
+        var next = await GameSession.StartAsync(fixture);
+        var scan = await Review(next);
+        Assert.True(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.True(File.Exists(draft));
+        Assert.True(File.Exists(checkpoint));
+        Assert.Empty(KeptFiles.Trashed(fixture.Paths));
+
+        // Once that run has ended, the editing retires whole.
+        unloading.Recovery.Store.CloseSession();
+        scan = await Review(next);
+        Assert.True(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+        Assert.Empty(KeptFiles.Checkpoints(fixture.Paths));
     }
 
     [Fact]
@@ -748,9 +789,10 @@ public class GuidedReviewFixesTests
     /// <summary>
     /// An editing checkpointed once ("one"), edited again ("two") and kept at unload; the same changes
     /// then saved by another game, so the kept draft is the Plate's saved content. Returns the name of
-    /// the editing's run folder.
+    /// the editing's run folder, and that game: with <paramref name="endRun"/> false, its run still
+    /// holds its lock, as one does between writing its unload draft and closing its folder.
     /// </summary>
-    private static async Task<string> KeepWhatASaveHoldsAsync(LibraryFixture fixture)
+    private static async Task<(string Run, GameSession Game)> KeepWhatASaveHoldsAsync(LibraryFixture fixture, bool endRun = true)
     {
         var first = await GameSession.StartAsync(fixture);
         var plateId = await first.CreatePlateAsync();
@@ -761,7 +803,18 @@ public class GuidedReviewFixesTests
         await first.Recovery.RunAsync(6);
         Assert.Single(first.Recovery.OwnCheckpoints());
         first.Edit("two");
-        await EndAsync(first, unload: true);
+        if (endRun)
+        {
+            await EndAsync(first, unload: true);
+        }
+        else
+        {
+            await first.UnloadAsync();
+            first.Recovery.Recovery.Stop();
+            Assert.True(await first.Recovery.Recovery.Writer.WaitIdleAsync(TimeSpan.FromSeconds(10)));
+            fixture.Clock.Tick(60);
+        }
+
         var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
         Assert.Single(KeptFiles.Checkpoints(fixture.Paths));
 
@@ -771,7 +824,7 @@ public class GuidedReviewFixesTests
         Assert.True(other.Session.ApplyRecoveredState(ProfileService.DocumentState.Capture(drafted.Document)));
         Assert.True(await other.Session.SaveProfileAsync());
         await EndAsync(other, unload: false);
-        return Path.GetFileName(first.Recovery.Store.SessionDirectory);
+        return (Path.GetFileName(first.Recovery.Store.SessionDirectory), first);
     }
 
     /// <summary>A game ends: as it unloads (keeping a draft of unsaved changes) or just its recovery settled, its folder closed.</summary>
