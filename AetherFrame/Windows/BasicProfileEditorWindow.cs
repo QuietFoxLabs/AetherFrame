@@ -964,7 +964,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         ToolTip(touring
             ? "The tutorial shows every control while it runs.\nYour view comes back when it ends."
-            : "Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way. For layers and free placement, choose Advanced in the bar above.");
+            : "Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way.\nFor layers and free placement, choose Advanced in the bar above.");
     }
 
     /// <summary>

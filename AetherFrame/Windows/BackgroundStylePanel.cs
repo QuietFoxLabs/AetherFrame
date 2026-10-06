@@ -297,35 +297,40 @@ internal sealed class BackgroundStylePanel
 
     /// <summary>
     /// The style in use, always named whatever is browsed, and, while the other system is browsed,
-    /// what choosing from it does: the system in use keeps its choice for later.
+    /// what choosing from it does: the system in use keeps its choice for later. With
+    /// <paramref name="explainOnHover"/>, that is a wrapped tooltip over the whole In use line
+    /// (swatch, name and kind, grouped) instead of a line of text under it.
     /// </summary>
     private static void DrawStyleInUse(ProfileDocument profile, StyleSystem showing, bool explainOnHover)
     {
         EditorWidgets.PropertyLabel("In use", 0f);
-        if (PlateStyle.InUse(profile) is { } chosen)
+        using (ImRaii.Group())
         {
-            var swatch = ImGui.GetTextLineHeight();
-            var min = ImGui.GetCursorScreenPos() + new Vector2(0f, (ImGui.GetFrameHeight() - swatch) / 2f);
-            ImGui.GetWindowDrawList().AddRectFilledMultiColor(
-                min, min + new Vector2(swatch * 1.6f, swatch),
-                ImGui.GetColorU32(chosen.PrimaryColor), ImGui.GetColorU32(chosen.SecondaryColor),
-                ImGui.GetColorU32(chosen.SecondaryColor), ImGui.GetColorU32(chosen.PrimaryColor));
-            ImGui.Dummy(new Vector2(swatch * 1.6f, ImGui.GetFrameHeight()));
-            ImGui.SameLine();
-            ImGui.TextUnformatted(chosen.Name);
-            ImGui.SameLine();
-            ImGui.TextDisabled(chosen.IsArtStyle ? "Art Style" : "Simple Theme");
-        }
-        else
-        {
-            ImGui.TextDisabled("None chosen yet");
+            if (PlateStyle.InUse(profile) is { } chosen)
+            {
+                var swatch = ImGui.GetTextLineHeight();
+                var min = ImGui.GetCursorScreenPos() + new Vector2(0f, (ImGui.GetFrameHeight() - swatch) / 2f);
+                ImGui.GetWindowDrawList().AddRectFilledMultiColor(
+                    min, min + new Vector2(swatch * 1.6f, swatch),
+                    ImGui.GetColorU32(chosen.PrimaryColor), ImGui.GetColorU32(chosen.SecondaryColor),
+                    ImGui.GetColorU32(chosen.SecondaryColor), ImGui.GetColorU32(chosen.PrimaryColor));
+                ImGui.Dummy(new Vector2(swatch * 1.6f, ImGui.GetFrameHeight()));
+                ImGui.SameLine();
+                ImGui.TextUnformatted(chosen.Name);
+                ImGui.SameLine();
+                ImGui.TextDisabled(chosen.IsArtStyle ? "Art Style" : "Simple Theme");
+            }
+            else
+            {
+                ImGui.TextDisabled("None chosen yet");
+            }
         }
 
         if (ThemeBrowser.SwitchHint(profile, showing) is { } hint)
         {
             if (explainOnHover)
             {
-                EditorWidgets.Tooltip(hint);
+                AetherControls.Tooltip(hint);
             }
             else
             {
