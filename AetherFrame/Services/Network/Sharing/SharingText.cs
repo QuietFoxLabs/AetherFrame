@@ -74,7 +74,7 @@ internal static class SharingText
         "The server holds who is online in memory only, for about 3 minutes after the last signal, and counts each character once. It gives out only the total, the same to everyone for each 5 minutes. Apart from its rate limits (below), it keeps no record of who was online.",
         "Signals that get through aren't logged. One that fails leaves a line in the server's log for 14 days, saying what failed and when, never whose.",
         "Each signal shows the server your network address, which it never writes down or logs. Its rate limits hold the address, and the time this character started being counted and each time that is renewed (about every 52 minutes while it plays), in memory for up to an hour each.",
-        "Someone using the same network address as you (at home, on a VPN or a mobile network) can use those limits up on purpose. That stops characters on the address being counted within the hour, and shows that person, to the second, when characters on it logged in or renewed their count in the hour before, though never whose.",
+        "Someone using the same network address as you (at home, on a VPN or a mobile network) can use those limits up on purpose. That stops characters on the address being counted within about an hour, and shows that person, to the second, when characters on it logged in or renewed their count in the hour before, though never whose.",
         "Below 5, the total hides who comes and goes only from a player who adds no characters of their own: someone who keeps several of their own counted can see others come and go even then.",
     ];
 

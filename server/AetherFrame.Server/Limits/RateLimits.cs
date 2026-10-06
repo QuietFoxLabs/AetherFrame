@@ -82,8 +82,10 @@ internal static class ServerLimits
     /// <summary>
     /// Heartbeats and leaves from one address group that name no session the server counts: only
     /// those take from it, so a counted heartbeat is never refused for it. At the plugin's pace that
-    /// is a restart's or an hour's 404, once a session, and a leave after an expiry; counted in a
-    /// minute so the counter holds few events. Its own counter, so they never take from any other limit.
+    /// is a restart's or an hour's 404, once a session, and a leave for a session the server already
+    /// ended or forgot (after a pause, turning sharing off, a takeover, an expiry or a restart);
+    /// counted in a minute so the counter holds few events. Its own counter, so they never take from
+    /// any other limit.
     /// </summary>
     public static readonly Limit PresenceBeatsPerAddress = new("presence/address", 120, TimeSpan.FromMinutes(1));
 }
