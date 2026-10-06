@@ -93,7 +93,7 @@ internal static class RequestProofVectorBuilder
         Add("proof-final-version", Substitute(baseProof, 4, [0x00, 0x01]), ProtocolError.UnsupportedVersion, "version 1, the final marker: a draft reader refuses it");
         Add("proof-version-2-draft", Substitute(baseProof, 4, [0x80, 0x02]), ProtocolError.UnsupportedVersion, "version 0x8002, a draft of version 2");
         Add("proof-kind-0", Mutate(baseProof, 6, 0), ProtocolError.InvalidValue, "proof kind 0");
-        Add("proof-kind-9", Mutate(baseProof, 6, 9), ProtocolError.InvalidValue, "proof kind 9, not defined in version 1");
+        Add("proof-kind-10", Mutate(baseProof, 6, 10), ProtocolError.InvalidValue, "proof kind 10, not defined in version 1");
         Add("proof-kind-rewritten-to-lookup", Mutate(baseProof, 6, 6), ProtocolError.SignatureMismatch, "the kind byte changed to 6, a lookup: the kind is signed, so the signature fails");
         Add("proof-kind-255", Mutate(baseProof, 6, 255), ProtocolError.InvalidValue, "proof kind 255");
 
@@ -178,6 +178,7 @@ internal static class RequestProofVectorBuilder
         new("action-lookup", "B", RequestProofKind.Lookup, "{\"name\":\"Jane Doe\",\"world\":\"Gilgamesh\"}", "chl_" + string.Concat(Enumerable.Repeat("56", 32))),
         new("action-image", "B", RequestProofKind.Image, "{\"name\":\"Jane Doe\",\"world\":\"Gilgamesh\",\"marker\":\"00112233445566778899aabbccddeeff\",\"index\":0}", "chl_" + string.Concat(Enumerable.Repeat("67", 32))),
         new("action-report", "B", RequestProofKind.Report, "{\"name\":\"Jane Doe\",\"world\":\"Gilgamesh\",\"reason\":\"offensive\"}", "chl_" + string.Concat(Enumerable.Repeat("78", 32))),
+        new("action-presence", "A", RequestProofKind.Presence, "{}", "chl_" + string.Concat(Enumerable.Repeat("89", 32))),
     ];
 
     public static List<ActionProofVector> BuildActions(IReadOnlyDictionary<string, EcdsaPersonaSigner> signers)

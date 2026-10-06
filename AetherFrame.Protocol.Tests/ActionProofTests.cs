@@ -24,11 +24,11 @@ public class ActionProofTests
     public void EveryKindButASubmission_IsAnAction()
     {
         Assert.Equal(
-            [RequestProofKind.LodestoneCode, RequestProofKind.LodestoneCheck, RequestProofKind.LodestoneReread, RequestProofKind.OptOut, RequestProofKind.Lookup, RequestProofKind.Image, RequestProofKind.Report],
+            [RequestProofKind.LodestoneCode, RequestProofKind.LodestoneCheck, RequestProofKind.LodestoneReread, RequestProofKind.OptOut, RequestProofKind.Lookup, RequestProofKind.Image, RequestProofKind.Report, RequestProofKind.Presence],
             Actions());
         Assert.False(RequestProofCodec.IsAction(RequestProofKind.DocumentSubmission));
         Assert.False(RequestProofCodec.IsAction((RequestProofKind)0));
-        Assert.False(RequestProofCodec.IsAction((RequestProofKind)9));
+        Assert.False(RequestProofCodec.IsAction((RequestProofKind)10));
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public class ActionProofTests
     {
         using var a = TestPersonas.CreateA();
         Assert.Throws<ArgumentOutOfRangeException>(() => RequestProofCodec.SignAction(RequestProofKind.DocumentSubmission, Body, Deployment, Challenge, a));
-        Assert.Throws<ArgumentOutOfRangeException>(() => RequestProofCodec.SignAction((RequestProofKind)9, Body, Deployment, Challenge, a));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RequestProofCodec.SignAction((RequestProofKind)10, Body, Deployment, Challenge, a));
         var proof = RequestProofCodec.SignAction(RequestProofKind.Lookup, Body, Deployment, Challenge, a);
         Assert.Throws<ArgumentOutOfRangeException>(() => RequestProofCodec.VerifyAction(proof, Body, Deployment, RequestProofKind.DocumentSubmission));
     }

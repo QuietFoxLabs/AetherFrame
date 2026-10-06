@@ -8,6 +8,7 @@ using AetherFrame.Server.Hosting;
 using AetherFrame.Server.Images;
 using AetherFrame.Server.Limits;
 using AetherFrame.Server.Lodestone;
+using AetherFrame.Server.Presence;
 using AetherFrame.Server.Requests;
 using AetherFrame.Server.Storage;
 using Microsoft.AspNetCore.Builder;
@@ -78,6 +79,16 @@ builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
 
+// And no logging scope reaches a line, whatever the configuration says: hosting's scope for each
+// request holds its path, and Kestrel's its connection id and the request's number on it, which would
+// undo the request log's own random id and count the presence requests it leaves out.
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>(options => options.IncludeScopes = false);
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.SimpleConsoleFormatterOptions>(options => options.IncludeScopes = false);
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.JsonConsoleFormatterOptions>(options => options.IncludeScopes = false);
+#pragma warning disable CS0618 // The console logger's own switch is obsolete, but older configuration still sets it.
+builder.Services.PostConfigureAll<Microsoft.Extensions.Logging.Console.ConsoleLoggerOptions>(options => options.IncludeScopes = false);
+#pragma warning restore CS0618
+
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
     kestrel.AddServerHeader = false;
@@ -109,6 +120,7 @@ builder.Services.AddSingleton<ServerDatabase>();
 builder.Services.AddSingleton<ChallengeStore>();
 builder.Services.AddSingleton<BindingStore>();
 builder.Services.AddSingleton<RateLimiter>();
+builder.Services.AddSingleton<PresenceStore>();
 builder.Services.AddSingleton<SignedRequests>();
 builder.Services.AddSingleton<Allowlist>();
 builder.Services.AddSingleton(services => new Worlds(services.GetRequiredService<IOptions<ServerOptions>>().Value.Worlds));
@@ -134,6 +146,7 @@ builder.Services.AddSingleton<IImageProcessor>(services =>
 builder.Services.AddHostedService<DatabaseStartup>();
 builder.Services.AddHostedService<CheckpointRetries>();
 builder.Services.AddHostedService<Housekeeping>();
+builder.Services.AddHostedService<PresenceSweep>();
 builder.Services.AddHostedService<Backups>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Rereads>());
 builder.Services.AddSingleton<ImageCanary>();
@@ -179,6 +192,7 @@ app.UseWebSockets();
 AdminEndpoints.Map(app, deskOptions);
 CharacterEndpoints.Map(app);
 PlateEndpoints.Map(app);
+PresenceEndpoints.Map(app);
 HealthEndpoints.Map(app);
 await app.RunAsync();
 return 0;

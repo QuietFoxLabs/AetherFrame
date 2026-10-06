@@ -42,7 +42,16 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
     /// <summary>The <see cref="HttpContext.Items"/> key under which a failure's kind is left for the request log.</summary>
     public const string ErrorKindItem = "AetherFrame.ErrorKind";
 
-    public async Task<IResult> RunActionAsync(HttpContext http, RequestProofKind kind, Limit? addressLimit, Func<ActionCall, Task<IResult>> handler)
+    public Task<IResult> RunActionAsync(HttpContext http, RequestProofKind kind, Limit? addressLimit, Func<ActionCall, Task<IResult>> handler) =>
+        RunActionAsync(http, kind, addressLimit, null, handler);
+
+    /// <summary>
+    /// As <see cref="RunActionAsync(HttpContext, RequestProofKind, Limit?, Func{ActionCall, Task{IResult}})"/>,
+    /// with the challenge consumed by <paramref name="consume"/> instead of the challenge store when
+    /// it is given (a presence start's, from <c>/v1/presence/challenge</c>): a challenge it refuses
+    /// is answered <c>409</c> with none, so a refusal never issues one from the general store.
+    /// </summary>
+    public async Task<IResult> RunActionAsync(HttpContext http, RequestProofKind kind, Limit? addressLimit, Func<RequestChallenge, bool>? consume, Func<ActionCall, Task<IResult>> handler)
     {
         if (addressLimit is not null && !limiter.TryTakeAddress(addressLimit, http.Connection.RemoteIpAddress))
         {
@@ -55,7 +64,7 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
             return Fail(http, bodyFailure, "body:unread");
         }
 
-        var (action, refusal) = await VerifyAsync(body, kind, http.Connection.RemoteIpAddress, http.RequestAborted);
+        var (action, refusal) = await VerifyAsync(body, kind, http.Connection.RemoteIpAddress, consume, http.RequestAborted);
         if (action is null)
         {
             return refusal!.ToResult(http);
@@ -70,7 +79,10 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
     /// it: <c>400</c> for the envelope, <c>413</c> or <c>403</c> for the proof, and <c>409</c> with a
     /// fresh challenge (or <c>429</c>) for the challenge.
     /// </summary>
-    public async Task<(VerifiedAction? Action, ActionAnswer? Refusal)> VerifyAsync(byte[] body, RequestProofKind kind, IPAddress? address, CancellationToken cancellation)
+    public Task<(VerifiedAction? Action, ActionAnswer? Refusal)> VerifyAsync(byte[] body, RequestProofKind kind, IPAddress? address, CancellationToken cancellation) =>
+        VerifyAsync(body, kind, address, null, cancellation);
+
+    private async Task<(VerifiedAction? Action, ActionAnswer? Refusal)> VerifyAsync(byte[] body, RequestProofKind kind, IPAddress? address, Func<RequestChallenge, bool>? consume, CancellationToken cancellation)
     {
         if (!TrySplit(body, out var proof, out var payload))
         {
@@ -87,7 +99,14 @@ internal sealed class SignedRequests(IOptions<ServerOptions> options, ChallengeS
             return (null, ActionAnswer.Fail(e.Error == ProtocolError.LimitExceeded ? StatusCodes.Status413PayloadTooLarge : StatusCodes.Status403Forbidden, "proof:" + e.Error));
         }
 
-        if (!await challenges.TryConsumeAsync(action.Challenge, cancellation))
+        if (consume is not null)
+        {
+            if (!consume(action.Challenge))
+            {
+                return (null, ActionAnswer.Fail(StatusCodes.Status409Conflict, "challenge:presence"));
+            }
+        }
+        else if (!await challenges.TryConsumeAsync(action.Challenge, cancellation))
         {
             return (null, await RefuseChallengeAsync(address, cancellation));
         }

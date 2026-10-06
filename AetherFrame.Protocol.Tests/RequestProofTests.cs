@@ -94,7 +94,7 @@ public class RequestProofTests
         var n = Deployment.Bytes.Length;
 
         // The kind, the name and the challenge as soon as each is read, before a later truncation.
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Truncate(Mutate(proof, 6, 9), 20)));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Truncate(Mutate(proof, 6, 10), 20)));
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Truncate(Mutate(proof, 73, (byte)'P'), 73 + n)));
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Truncate(Substitute(proof, 73 + n, new byte[32]), 105 + n)));
 
@@ -123,7 +123,7 @@ public class RequestProofTests
         ProtocolAssert.Throws(ProtocolError.UnsupportedVersion, () => RequestProofCodec.Verify(Substitute(proof, 4, [0x00, 0x00])));
 
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Mutate(proof, 6, 0)));
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Mutate(proof, 6, 9)));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Mutate(proof, 6, 10)));
         ProtocolAssert.Throws(ProtocolError.SignatureMismatch, () => RequestProofCodec.Verify(Mutate(proof, 6, 2)));
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => RequestProofCodec.Verify(Mutate(proof, 6, 0xff)));
 
@@ -301,7 +301,7 @@ public class RequestProofTests
         Assert.Equal(SigningContext.SignedDocument, input.Context);
         Assert.Equal(DocumentType.ProfileRetraction, input.DocumentType);
 
-        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => SigningInput.CreateRequestProof((RequestProofKind)9, a.PublicKey, Deployment, Challenge, new byte[32]));
+        ProtocolAssert.Throws(ProtocolError.InvalidValue, () => SigningInput.CreateRequestProof((RequestProofKind)10, a.PublicKey, Deployment, Challenge, new byte[32]));
         ProtocolAssert.Throws(ProtocolError.InvalidValue, () => SigningInput.CreateRequestProof((RequestProofKind)0, a.PublicKey, Deployment, Challenge, new byte[32]));
         ProtocolAssert.Throws(ProtocolError.InvalidLength, () => SigningInput.CreateRequestProof(RequestProofKind.DocumentSubmission, a.PublicKey, Deployment, Challenge, new byte[31]));
     }

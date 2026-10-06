@@ -1560,6 +1560,7 @@ public sealed class LodestonePipeTests
             server.Services.GetRequiredService<BindingStore>(),
             server.Services.GetRequiredService<LodestoneReader>(),
             server.Services.GetRequiredService<Allowlist>(),
+            server.Services.GetRequiredService<AetherFrame.Server.Presence.PresenceStore>(),
             Options.Create(options),
             server.Time,
             NullLogger<Rereads>.Instance);
