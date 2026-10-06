@@ -21,10 +21,12 @@ namespace AetherFrame.Windows;
 /// Guided creation in the Basic editor (<see cref="GuidedCreation"/>): while the open Plate is the
 /// guided one, the editor shows its three steps around the same live view instead of the category
 /// navigator. Choose a Look (four curated looks, the full collection one click away), Make It Yours
-/// (name, optional portrait, optional message) and Save, one obvious primary action each, Back and
-/// Next in a footer that never scrolls away. Every edit is the Basic editor's own, through the same
-/// session, so Undo, Redo, recovery and image ownership work as they always do; nothing here saves
-/// except the Save step's Save. Once saved, View Plate and Keep Editing.
+/// (name, portrait and message, each optional) and Save. Each step is one decision: a short heading,
+/// at most one short line of guidance (anything more is a tooltip), labelled controls, and one
+/// primary button, Continue or Save, beside Back in a footer that never scrolls away. Every edit is
+/// the Basic editor's own, through the same session, so Undo, Redo, recovery and image ownership work
+/// as they always do; nothing here saves except the Save step's Save. Once saved, a short success
+/// line, View Plate and Keep Editing.
 /// </summary>
 internal sealed partial class BasicProfileEditorWindow
 {
@@ -35,14 +37,6 @@ internal sealed partial class BasicProfileEditorWindow
     private const float GuidedSideBySideMinWidth = 700f;
 
     private static readonly string[] StepTitles = ["Choose a Look", "Make It Yours", "Save"];
-
-    // "Step 1 of 3: Choose a Look", built once.
-    private static readonly string[] StepLabels =
-    [
-        $"Step 1 of {GuidedCreation.StepCount}: {StepTitles[0]}",
-        $"Step 2 of {GuidedCreation.StepCount}: {StepTitles[1]}",
-        $"Step 3 of {GuidedCreation.StepCount}: {StepTitles[2]}",
-    ];
 
     private bool drawingGuided;
 
@@ -112,9 +106,9 @@ internal sealed partial class BasicProfileEditorWindow
     }
 
     /// <summary>
-    /// The title and where the player is ("Step 1 of 3"), then, at the right, the save state (nothing
-    /// is saved until Save), Undo, Redo, Exit Guide and Help. Each part moves to a row of its own
-    /// when the window is too narrow to hold it beside the last, so nothing is ever drawn over another.
+    /// The title, then, at the right, the save state (nothing is saved until Save), Undo, Redo, Exit
+    /// Guide and Help, on a row of their own when the window is too narrow to hold them beside the
+    /// title, so nothing is ever drawn over another. Where the player is shows once, in the steps below.
     /// </summary>
     private void DrawGuidedHeader(GuidedCreation guided, bool success)
     {
@@ -122,20 +116,7 @@ internal sealed partial class BasicProfileEditorWindow
         using (AetherFonts.Heading())
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(success ? "Your Plate is saved" : "Create your Plate");
-        }
-
-        if (!success)
-        {
-            var step = StepLabels[guided.StepNumber - 1];
-            var titleEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
-            if (titleEnd + style.ItemSpacing.X + ImGui.CalcTextSize(step).X <= ImGui.GetWindowContentRegionMax().X)
-            {
-                ImGui.SameLine();
-            }
-
-            ImGui.AlignTextToFramePadding();
-            ImGui.TextDisabled(step);
+            ImGui.TextUnformatted("Create your Plate");
         }
 
         var commands = actionBar.Commands;
@@ -198,7 +179,7 @@ internal sealed partial class BasicProfileEditorWindow
         }
     }
 
-    /// <summary>The step's controls, scrolling on their own: the step's title, a line of explanation, then what it asks.</summary>
+    /// <summary>The step's controls, scrolling on their own: the steps, the step's heading and at most one short line, then what it asks.</summary>
     private void DrawGuidedPanel(ProfileDocument profile, GuidedCreation guided, bool success, Vector2 size)
     {
         using var panel = AetherChild.Begin("##GuidedPanel", size, false);
@@ -290,7 +271,7 @@ internal sealed partial class BasicProfileEditorWindow
     private void DrawChooseLook(ProfileDocument profile)
     {
         AetherControls.SectionHeader("Choose a look", topSpacing: 0f);
-        AetherControls.Secondary("Pick a starting style. You can change it any time, and your name, portrait and message stay as they are.");
+        AetherControls.Secondary("Pick a style; you can change it later.");
         ImGui.Spacing();
 
         using (ImRaii.PushId("CuratedLooks"))
@@ -321,14 +302,16 @@ internal sealed partial class BasicProfileEditorWindow
         {
             case ArtNeedKind.Downloading:
                 ImGui.Spacing();
-                AetherControls.StatusLine(AetherTone.Info, "Downloading this look's artwork. The live view fills in as it arrives; you can carry on meanwhile.");
+                AetherControls.StatusLine(AetherTone.Info, "Downloading artwork...");
+                EditorWidgets.Tooltip("The live view fills in as it arrives. You can carry on meanwhile.");
                 break;
 
             case ArtNeedKind.Failed:
             case ArtNeedKind.Unavailable:
             {
                 ImGui.Spacing();
-                AetherControls.Callout(AetherTone.Warning, "This look's artwork couldn't be downloaded, so the live view shows its colors only. Try again, or use a simple look that needs no download.");
+                AetherControls.Callout(AetherTone.Warning, "The artwork couldn't download.");
+                EditorWidgets.Tooltip("The live view shows this look's colors only until it does.");
                 if (summary.Kind == ArtNeedKind.Failed && AetherControls.SecondaryButton("Try again##GuidedArtTryAgain"))
                 {
                     previewArt.TryAgain(renderResources.ArtStore);
@@ -359,10 +342,10 @@ internal sealed partial class BasicProfileEditorWindow
     private void DrawMakeItYours(ProfileDocument profile)
     {
         AetherControls.SectionHeader("Make it yours", topSpacing: 0f);
-        AetherControls.Secondary("Add your name, and a portrait and message if you like. Everything here is optional and can be changed later.");
+        AetherControls.Secondary("Everything here is optional.");
 
-        // ---- name
-        Subheading("Character name");
+        // ---- name (each control's explanation is its tooltip)
+        Subheading("Name");
         var identity = basicEditorSession.Identity;
         if (BasicIdentitySession.HasNoHeader(profile))
         {
@@ -382,6 +365,12 @@ internal sealed partial class BasicProfileEditorWindow
                 identity.SetNameText(buffer);
             }
 
+            // Explanations as tooltips, out of the way while typing.
+            if (!ImGui.IsItemActive())
+            {
+                ToolTip("Shown large at the top of your Plate.");
+            }
+
             if (ImGui.IsItemDeactivatedAfterEdit())
             {
                 identity.Commit();
@@ -389,18 +378,17 @@ internal sealed partial class BasicProfileEditorWindow
 
             if (name is { Visible: false })
             {
-                Hint("Your name is hidden on this Plate.");
-                if (ImGui.SmallButton("Show it##GuidedShowName"))
+                if (ImGui.SmallButton("Show the name on my Plate##GuidedShowName"))
                 {
                     identity.SetNameVisible(true);
                 }
+
+                ToolTip("Your name is hidden on this Plate.");
             }
         }
 
-        Hint("Shown large at the top of your Plate.");
-
         // ---- portrait
-        Subheading("Portrait (optional)");
+        Subheading("Portrait");
         var portrait = basicEditorSession.Portrait;
         if (portrait is null)
         {
@@ -409,7 +397,7 @@ internal sealed partial class BasicProfileEditorWindow
                 OpenImageFileDialog("Choose a Portrait", basicEditorSession.SetPortrait);
             }
 
-            Hint("A screenshot or any picture on your PC. Skip it if you like.");
+            ToolTip("A screenshot or any picture on your PC.");
         }
         else
         {
@@ -443,7 +431,7 @@ internal sealed partial class BasicProfileEditorWindow
         }
 
         // ---- message
-        Subheading("Message (optional)");
+        Subheading("Message");
         var message = BasicSections.FindText(profile, ProfileElementRole.BasicMessage)?.Text ?? string.Empty;
         var height = Math.Max(90f * ImGuiHelpers.GlobalScale, ImGui.GetTextLineHeightWithSpacing() * 4f);
         using (AetherChild.WhilePicking())
@@ -454,12 +442,15 @@ internal sealed partial class BasicProfileEditorWindow
             }
         }
 
+        if (!ImGui.IsItemActive())
+        {
+            ToolTip("A greeting, when you play, what you're looking for: anything.");
+        }
+
         if (ImGui.IsItemDeactivatedAfterEdit())
         {
             basicEditorSession.CommitTextEdit();
         }
-
-        Hint("A greeting, when you play, what you're looking for: anything.");
     }
 
     // ---------------------------------------------------------------- step 3
@@ -467,7 +458,7 @@ internal sealed partial class BasicProfileEditorWindow
     private void DrawSaveStep(ProfileDocument profile, GuidedCreation guided)
     {
         AetherControls.SectionHeader("Save", topSpacing: 0f);
-        AetherControls.Secondary("Check your Plate in the live view, then save it. It's kept on your PC, in My Plates.");
+        AetherControls.Secondary("Check the live view, then save.");
         ImGui.Spacing();
 
         var name = BasicIdentitySession.Find(profile, ProfileElementRole.BasicName) is { Visible: true, Text: { Length: > 0 } text } ? text : "No name";
@@ -493,8 +484,8 @@ internal sealed partial class BasicProfileEditorWindow
     }
 
     /// <summary>
-    /// The footer: Back (secondary) at the left, the step's one primary action at the right (Next, or
-    /// Save on the Save step). Outside the panel's scrolling, so it's always in reach.
+    /// The footer: Back (secondary) at the left, the step's one primary action at the right (Continue,
+    /// or Save on the Save step). Outside the panel's scrolling, so it's always in reach.
     /// </summary>
     private void DrawGuidedFooter(ProfileDocument profile, GuidedCreation guided)
     {
@@ -512,9 +503,9 @@ internal sealed partial class BasicProfileEditorWindow
 
         var (label, tooltip) = guided.Stage switch
         {
-            GuidedStage.ChooseLook => ("Next: Make It Yours", "Your look is kept; you can come back to change it."),
-            GuidedStage.MakeItYours => ("Next: Save", "Name, portrait and message are all optional."),
-            _ => (guided.IsSaving ? "Saving..." : "Save Plate", "Saves your Plate to My Plates (Ctrl+S)."),
+            GuidedStage.ChooseLook => ("Continue", "On to your name, portrait and message. Your look is kept."),
+            GuidedStage.MakeItYours => ("Continue", "On to Save. Anything left empty can be added later."),
+            _ => (guided.IsSaving ? "Saving..." : "Save", "Saves your Plate to My Plates, on your PC (Ctrl+S)."),
         };
         var width = Math.Max(160f * scale, ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 4f));
         ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetContentRegionMax().X - width));
@@ -537,7 +528,10 @@ internal sealed partial class BasicProfileEditorWindow
 
     // ---------------------------------------------------------------- saved
 
-    /// <summary>The saved state: what happened, how the Plate becomes Active, and View Plate (primary) or Keep Editing.</summary>
+    /// <summary>
+    /// The saved state: "Saved to My Plates", one line on how the Plate becomes Active (the rest, and
+    /// that sharing is separate, in its tooltip), and View Plate (primary) or Keep Editing.
+    /// </summary>
     private void DrawGuidedSaved(ProfileDocument profile, GuidedCreation guided)
     {
         var scale = ImGuiHelpers.GlobalScale;
@@ -553,16 +547,17 @@ internal sealed partial class BasicProfileEditorWindow
         var active = IsActivePlate?.Invoke(plateId);
         AetherControls.Secondary(active switch
         {
-            true => "It's your current character's Active Plate: the one AetherFrame shows for them, and what /af view opens.",
-            false => "To make it your current character's Active Plate, right-click it in My Plates and choose Set Active.",
-            null => "To make it a character's Active Plate, log in to that character, then right-click the Plate in My Plates and choose Set Active.",
+            true => "It's your character's Active Plate.",
+            false => "Set it Active in My Plates to use it.",
+            null => "Log in, then set it Active in My Plates.",
         });
-
-        if (SharingAvailable)
+        var sharing = SharingAvailable ? "\nSharing is separate and optional: Sharing, in My Plates, turns it on." : string.Empty;
+        ToolTip(active switch
         {
-            ImGui.Spacing();
-            AetherControls.Muted("Sharing is optional and separate: Sharing, in My Plates, turns it on for a character when you want others to see your Active Plate.");
-        }
+            true => "The Plate AetherFrame shows for this character, and what /af view opens." + sharing,
+            false => "Right-click it in My Plates and choose Set Active: the Plate AetherFrame shows for this character." + sharing,
+            null => "Log in to the character, then right-click the Plate in My Plates and choose Set Active." + sharing,
+        });
 
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceSm * scale));
         var half = new Vector2(Math.Max(120f * scale, (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2f), 0f);

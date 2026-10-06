@@ -624,13 +624,6 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 break;
         }
 
-        // The Simple view keeps the way to everything else in sight.
-        if (Simple)
-        {
-            ImGui.Spacing();
-            Hint("Want layers, free placement or your own elements? Choose Advanced in the bar above. Your Plate stays as it is.");
-        }
-
         // The page that holds the clicked Component's slot has been drawn once: if the slot wasn't on
         // it (its group is hidden, or the page returned early), the request lapses rather than
         // scrolling the page later, when the slot comes back for some other reason.
@@ -1068,6 +1061,40 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     }
 
     private static void Hint(string text) => EditorWidgets.Hint(text);
+
+    // The Simple view shows labelled controls and keeps explanations for hovering (Rich's rules for
+    // onboarding, October 6, 2026); the Detailed view shows them as it always has.
+
+    /// <summary>An explanation drawn before its control: a hint in the Detailed view, nothing in the Simple view (pair with <see cref="SimpleTooltip"/>).</summary>
+    private void DetailedHint(string text)
+    {
+        if (!Simple)
+        {
+            Hint(text);
+        }
+    }
+
+    /// <summary>The explanation of the control just drawn, as its tooltip in the Simple view (not while it's being typed in).</summary>
+    private void SimpleTooltip(string text)
+    {
+        if (Simple && !ImGui.IsItemActive())
+        {
+            ToolTip(text);
+        }
+    }
+
+    /// <summary>An explanation drawn after its control: a hint below it in the Detailed view, its tooltip in the Simple view.</summary>
+    private void Explain(string text)
+    {
+        if (Simple)
+        {
+            SimpleTooltip(text);
+        }
+        else
+        {
+            Hint(text);
+        }
+    }
 
     private static void ToolTip(string text) => EditorWidgets.Tooltip(text);
 }

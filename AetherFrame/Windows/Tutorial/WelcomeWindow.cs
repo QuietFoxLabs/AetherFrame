@@ -17,7 +17,8 @@ namespace AetherFrame.Windows.Tutorial;
 /// character is logged in and no recovery offer waits for an answer
 /// (<see cref="GuidedCreation.WelcomeMayShow"/>): kept unsaved changes always come first. Not Now,
 /// or closing it, asks again on a later load while there is still no Plate, a few times at most.
-/// The full tutorial is mentioned, not offered: it waits under Help as reference.
+/// One line and the three steps' names; everything else (where Plates are kept, that sharing stays
+/// off, the full tutorial under Help) is in the buttons' tooltips.
 /// </summary>
 internal sealed class WelcomeWindow : Window
 {
@@ -88,12 +89,10 @@ internal sealed class WelcomeWindow : Window
 
         using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + width))
         {
-            ImGui.TextWrapped("Make your first Plate, a character card in the style of the Adventure Plate, in three short steps:");
+            ImGui.TextWrapped("Make your first Plate in three short steps.");
             using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextSecondary))
             {
-                ImGui.TextWrapped("1. Choose a look\n2. Add your name, and a portrait and message if you like\n3. Save");
-                ImGui.Spacing();
-                ImGui.TextWrapped("It takes a few minutes. Your Plates stay on your PC, and sharing stays off unless you turn it on.");
+                ImGui.TextWrapped("1. Choose a look     2. Make it yours     3. Save");
             }
         }
 
@@ -108,7 +107,7 @@ internal sealed class WelcomeWindow : Window
         var busy = creating && guided.IsStarting;
         using (ImRaii.Disabled(busy))
         {
-            if (AetherControls.PrimaryButton(busy ? "Creating your Plate...##WelcomeCreate" : "Create My First Plate##WelcomeCreate", new Vector2(width, 0f), "Makes a new Plate and opens it on the first step."))
+            if (AetherControls.PrimaryButton(busy ? "Creating your Plate...##WelcomeCreate" : "Create My First Plate##WelcomeCreate", new Vector2(width, 0f), "Makes a new Plate and opens it on the first step.\nYour Plates stay on your PC, and sharing stays off unless you turn it on."))
             {
                 creating = true;
                 startError = null;
@@ -120,7 +119,7 @@ internal sealed class WelcomeWindow : Window
         var half = (width - ImGui.GetStyle().ItemSpacing.X) / 2f;
         using (ImRaii.Disabled(busy))
         {
-            if (AetherControls.SecondaryButton("Not Now", new Vector2(half, 0f), "Close this for now. It may ask again when AetherFrame next loads, while you have no Plate.\nMy Plates can start your first Plate whenever you like."))
+            if (AetherControls.SecondaryButton("Not Now", new Vector2(half, 0f), "Close this for now. It may ask again when AetherFrame next loads, while you have no Plate.\nType /af any time to open My Plates; the full tutorial is under Help there."))
             {
                 guided.AnswerWelcome(WelcomeAnswer.NotNow);
                 IsOpen = false;
@@ -135,9 +134,6 @@ internal sealed class WelcomeWindow : Window
         }
 
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceSm * scale));
-        using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + width))
-        {
-            AetherControls.Muted("Type /af any time to open My Plates. Prefer a tour of every control? The full tutorial is under Help there.");
-        }
+        AetherControls.Muted("Type /af any time to open My Plates.");
     }
 }

@@ -443,9 +443,11 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         if (AetherControls.EmptyState(
                 FontAwesomeIcon.IdCard,
                 "You don't have any Plates yet.",
-                "A Plate is a complete Adventure Plate style design. Make as many as you like; each character can choose one to be its Active Plate.",
+                guided is null
+                    ? "A Plate is a complete Adventure Plate style design. Make as many as you like; each character can choose one to be its Active Plate."
+                    : "Make your first one in three short steps.",
                 guided is null ? "Create Your First Plate" : guided.IsStarting ? "Creating your Plate..." : "Create My First Plate",
-                guided is null ? "Start a new Plate from a Template." : "Three short steps: choose a look, make it yours, save."))
+                guided is null ? "Start a new Plate from a Template." : "Choose a look, make it yours, save.\nA Plate is your character's card; each character can have one Active Plate."))
         {
             if (guided is null)
             {

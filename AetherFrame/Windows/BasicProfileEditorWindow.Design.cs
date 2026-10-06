@@ -28,15 +28,23 @@ internal sealed partial class BasicProfileEditorWindow
         // The look first: the two first-class visual pickers, the style browser (an Art Style, or a
         // Simple Theme), then Pattern (the background's procedural texture) — both discoverable
         // without first opening Customize Background.
-        Subheading("Look");
+        // The Simple view's category is called Look already, and shows the styles with no explanation.
+        if (!Simple)
+        {
+            Subheading("Look");
+        }
+
         using (ImRaii.PushId("Theme"))
         {
             backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme);
         }
 
-        Hint(backgroundPanel.ShowingArtStyles
-            ? "An Art Style is a whole look: background, frames, corners, name plaque, divider and section headers, with text colors to match. Each piece stays yours to change under Frame & Decorations."
-            : "A Simple Theme sets the background and every Basic text color at once. Each value stays editable.");
+        if (!Simple)
+        {
+            Hint(backgroundPanel.ShowingArtStyles
+                ? "An Art Style is a whole look: background, frames, corners, name plaque, divider and section headers, with text colors to match. Each piece stays yours to change under Frame & Decorations."
+                : "A Simple Theme sets the background and every Basic text color at once. Each value stays editable.");
+        }
 
         ImGui.Spacing();
 

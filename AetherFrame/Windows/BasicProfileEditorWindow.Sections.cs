@@ -59,11 +59,13 @@ internal sealed partial class BasicProfileEditorWindow
 
         if (portrait is null)
         {
-            Hint("Choose a portrait to show beside your details.");
+            DetailedHint("Choose a portrait to show beside your details.");
             if (ImGui.Button("Choose a Portrait...", new Vector2(-1, 0f)))
             {
                 OpenImageFileDialog("Choose a Portrait", basicEditorSession.SetPortrait);
             }
+
+            SimpleTooltip("A screenshot or any picture on your PC, shown beside your details.");
         }
         else
         {
@@ -139,7 +141,7 @@ internal sealed partial class BasicProfileEditorWindow
     private void DrawDetailsCategory(ProfileDocument profile)
     {
         var info = basicEditorSession.CharacterInfo.CurrentInfo;
-        Hint(info is null
+        DetailedHint(info is null
             ? "No character loaded. You can still type any value."
             : "Use the buttons to fill in current details; nothing changes on its own.");
 
@@ -162,7 +164,7 @@ internal sealed partial class BasicProfileEditorWindow
         DrawValueInput(profile, ProfileElementRole.BasicFreeCompany, notInOne ? "Not in a Free Company" : "Free Company name", MaxFreeCompanyLength);
         if (notInOne)
         {
-            Hint("Not in a Free Company. You can hide this section, or type any name.");
+            Explain("Not in a Free Company. You can hide this section, or type any name.");
         }
         else if (info?.FreeCompanyTag is { Length: > 0 } tag)
         {
@@ -172,7 +174,7 @@ internal sealed partial class BasicProfileEditorWindow
                 basicEditorSession.UseCurrentFreeCompany();
             }
 
-            Hint("The game provides the Free Company's tag; type its full name if you prefer.");
+            Explain("The game provides the Free Company's tag; type its full name if you prefer.");
         }
 
         DrawPlaystyleEntries(profile);
@@ -315,7 +317,7 @@ internal sealed partial class BasicProfileEditorWindow
             basicEditorSession.UseCurrentJob();
         }
 
-        Hint("Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).");
+        DetailedHint("Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).");
     }
 
     // ---------------------------------------------------------------- playstyle and active hours (in Details)
@@ -407,11 +409,13 @@ internal sealed partial class BasicProfileEditorWindow
 
         if (profile.BasicPlate?.ActiveHours is not { } stored)
         {
-            Hint("When you're usually around. Only shown on your Plate; never connected to anything online.");
+            DetailedHint("When you're usually around. Only shown on your Plate; never connected to anything online.");
             if (ImGui.Button("Set Active Hours", new Vector2(-1, 0f)))
             {
                 basicEditorSession.SetActiveHours(new BasicActiveHours { Days = BasicWeekdays.Everyday });
             }
+
+            SimpleTooltip("When you're usually around. Only shown on your Plate; never connected to anything online.");
 
             return;
         }
@@ -521,9 +525,10 @@ internal sealed partial class BasicProfileEditorWindow
 
         // Shown even before the message exists: the first keystroke creates it (one undo step).
         var buffer = BasicSections.FindText(profile, ProfileElementRole.BasicMessage)?.Text ?? string.Empty;
-        if (buffer.Length == 0)
+        var empty = buffer.Length == 0;
+        if (empty)
         {
-            Hint("Add a message: a greeting, what you're looking for, anything.");
+            DetailedHint("Add a message: a greeting, what you're looking for, anything.");
         }
 
         var height = Math.Max(110f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().Y * 0.4f);
@@ -533,6 +538,11 @@ internal sealed partial class BasicProfileEditorWindow
             {
                 basicEditorSession.SetText(ProfileElementRole.BasicMessage, buffer);
             }
+        }
+
+        if (empty)
+        {
+            SimpleTooltip("Add a message: a greeting, what you're looking for, anything.");
         }
 
         if (ImGui.IsItemDeactivatedAfterEdit())

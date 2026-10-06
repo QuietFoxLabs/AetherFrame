@@ -911,6 +911,37 @@ public class GuidedCreationTests
         }
     }
 
+    [Fact]
+    public void EachStep_HasOneShortLineOfGuidance_AndContinueOrSaveAsItsOnePrimaryButton()
+    {
+        // Rich's rules for onboarding (October 6, 2026): one decision per step with a short heading
+        // and at most one short guidance sentence, labelled controls instead of paragraphs, one
+        // obvious primary button (Continue or Save), extra explanations behind tooltips or Help.
+        var root = RepositoryPaths.Root().FullName;
+        var steps = System.IO.File.ReadAllText(System.IO.Path.Combine(root, "AetherFrame", "Windows", "BasicProfileEditorWindow.Guided.cs"));
+
+        Assert.DoesNotMatch(@"\bHint\(", steps);
+        var guidance = System.Text.RegularExpressions.Regex.Matches(steps, @"AetherControls\.Secondary\(""(?<text>[^""]*)""\)")
+            .Select(match => match.Groups["text"].Value)
+            .ToList();
+        Assert.Equal(3, guidance.Count);
+        Assert.All(guidance, line =>
+        {
+            Assert.True(line.Length <= 40, line);
+            Assert.DoesNotContain(". ", line, StringComparison.Ordinal);
+        });
+
+        // The footer's one primary button, and the saved state's View Plate: nothing else is primary.
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(steps, @"AetherControls\.PrimaryButton\(").Count);
+        Assert.Contains("GuidedStage.ChooseLook => (\"Continue\"", steps, StringComparison.Ordinal);
+        Assert.Contains("GuidedStage.MakeItYours => (\"Continue\"", steps, StringComparison.Ordinal);
+        Assert.Contains("guided.IsSaving ? \"Saving...\" : \"Save\"", steps, StringComparison.Ordinal);
+
+        // The welcome: one line and the steps' names; the rest is in its buttons' tooltips.
+        var welcome = System.IO.File.ReadAllText(System.IO.Path.Combine(root, "AetherFrame", "Windows", "Tutorial", "WelcomeWindow.cs"));
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(welcome, @"ImGui\.TextWrapped\(").Count);
+    }
+
     // ---------------------------------------------------------------- the curated looks
 
     [Fact]
