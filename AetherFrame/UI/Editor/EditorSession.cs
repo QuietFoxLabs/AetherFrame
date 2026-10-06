@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Assets;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Diagnostics;
@@ -110,14 +111,17 @@ internal sealed partial class EditorSession
     internal const string SaveFailedMessage = "The Plate couldn't be saved.";
     internal const string BaselineFailedMessage = "The Plate's saved state couldn't be read, so Revert to Saved isn't available.";
 
-    internal Guid? SelectedElementId { get; private set; }
+    /// <summary>The selected element, when exactly one element is selected (and nothing else); see
+    /// <see cref="SelectedItems"/> for a selection of several.</summary>
+    internal Guid? SelectedElementId => selection.Count == 1 && !selection[0].IsComponent ? selection[0].Id : null;
 
     /// <summary>
     /// The Component selected instead of an element (issue #115): from a click on it on either
-    /// editor's canvas, or from a list. At most one of this and <see cref="SelectedElementId"/> is
-    /// set. Selection is editor state only: it never changes the Plate, its history or its dirty state.
+    /// editor's canvas, or from a list, when it is the only thing selected. At most one of this and
+    /// <see cref="SelectedElementId"/> is set. Selection is editor state only: it never changes the
+    /// Plate, its history or its dirty state.
     /// </summary>
-    internal Guid? SelectedComponentId { get; private set; }
+    internal Guid? SelectedComponentId => selection.Count == 1 && selection[0].IsComponent ? selection[0].Id : null;
 
     internal bool CanUndo => undoStack.Count > 0;
 
@@ -312,10 +316,7 @@ internal sealed partial class EditorSession
             var index = profileService.CurrentProfile?.Elements.FindIndex(e => e.Id == elementId);
             profileService.RemoveElement(elementId);
 
-            if (SelectedElementId == elementId)
-            {
-                SelectedElementId = null;
-            }
+            Deselect(CanvasItemRef.Element(elementId));
 
             RecordHistory(
                 undo: () =>
@@ -326,10 +327,7 @@ internal sealed partial class EditorSession
                 redo: () =>
                 {
                     profileService.RemoveElement(snapshot.Id);
-                    if (SelectedElementId == snapshot.Id)
-                    {
-                        SelectedElementId = null;
-                    }
+                    Deselect(CanvasItemRef.Element(snapshot.Id));
                 });
         }
         catch (Exception ex)
@@ -357,10 +355,7 @@ internal sealed partial class EditorSession
                 undo: () =>
                 {
                     profileService.RemoveElement(snapshot.Id);
-                    if (SelectedElementId == snapshot.Id)
-                    {
-                        SelectedElementId = null;
-                    }
+                    Deselect(CanvasItemRef.Element(snapshot.Id));
                 },
                 redo: () =>
                 {
@@ -660,16 +655,8 @@ internal sealed partial class EditorSession
     // ---------------------------------------------------------------- selection / history
 
     /// <summary>Selects an element, or clears the selection (a Component's too) when null.</summary>
-    internal void Select(Guid? elementId)
-    {
-        if (SelectedElementId != elementId)
-        {
-            CommitPendingEdits();
-        }
-
-        SelectedElementId = elementId;
-        SelectedComponentId = null;
-    }
+    internal void Select(Guid? elementId) =>
+        SetSelection(elementId is { } id ? [CanvasItemRef.Element(id)] : []);
 
     /// <summary>Selects a Component of the open Plate (which deselects any element), or clears the
     /// selection when null. An id the Plate doesn't hold clears it.</summary>
@@ -680,13 +667,7 @@ internal sealed partial class EditorSession
             componentId = null;
         }
 
-        if (SelectedElementId is not null || SelectedComponentId != componentId)
-        {
-            CommitPendingEdits();
-        }
-
-        SelectedElementId = null;
-        SelectedComponentId = componentId;
+        SetSelection(componentId is { } selected ? [CanvasItemRef.Component(selected)] : []);
     }
 
     /// <summary>Reverts the most recent recorded action, if any.</summary>
@@ -762,10 +743,7 @@ internal sealed partial class EditorSession
             undo: () =>
             {
                 profileService.RemoveElement(snapshot.Id);
-                if (SelectedElementId == snapshot.Id)
-                {
-                    SelectedElementId = null;
-                }
+                Deselect(CanvasItemRef.Element(snapshot.Id));
             },
             redo: () => profileService.InsertElement(snapshot.Clone()));
     }
@@ -865,15 +843,8 @@ internal sealed partial class EditorSession
 
     private void DropSelectionIfMissing()
     {
-        if (SelectedElementId is { } id && profileService.CurrentProfile?.Elements.Exists(e => e.Id == id) != true)
-        {
-            SelectedElementId = null;
-        }
-
-        if (SelectedComponentId is { } componentId && profileService.CurrentProfile?.Components?.Exists(c => c.Id == componentId) != true)
-        {
-            SelectedComponentId = null;
-        }
+        var profile = profileService.CurrentProfile;
+        selection.RemoveAll(item => profile is null || !LinkedGroups.Exists(profile, item));
     }
 
     private void ResetTransientState()
@@ -884,8 +855,10 @@ internal sealed partial class EditorSession
         pendingBackgroundBefore = null;
         pendingDocumentBefore = null;
         lastDocumentEdit = null;
-        SelectedElementId = null;
-        SelectedComponentId = null;
+        selection.Clear();
+
+        // The Plate may already be another one: a gesture's snapshot is dropped, never restored onto it.
+        itemsGestureBefore = null;
         CancelInteraction();
         ErrorMessage = null;
         InvalidateDirtyMemo();

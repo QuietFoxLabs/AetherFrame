@@ -14,11 +14,12 @@ namespace AetherFrame.Windows;
 /// editor's slots choose, with the Advanced refinements on top — style (including image styles),
 /// color (where it tints: see <see cref="AppearanceControls.ColorApplies"/>), opacity, offset, scale,
 /// rotation, and order within the Component's layer. Components are
-/// placed by their layer and anchor (see <see cref="ComponentPaintPlan"/>), so they aren't canvas
-/// elements: they have no resize handles, and element Z order never moves them out of their layer.
-/// They are selected like elements, though (issue #115): by a click on the canvas, from their own
-/// entries in the Layers panel, or by opening a row here, and all three stay in step through
-/// <see cref="UI.Editor.EditorSession.SelectedComponentId"/>.
+/// placed by their layer and anchor (see <see cref="ComponentPaintPlan"/>), so element Z order never
+/// moves them out of their layer. On the canvas they move and resize like elements, through their
+/// Offset and Size (<see cref="UI.Editor.CanvasGesture"/>), unless locked. A Portrait Frame or Overlay
+/// can be attached to any picture instead of the Basic portrait. They are selected like elements
+/// (issue #115): by a click on the canvas, from their own entries in the Layers panel, or by opening a
+/// row here, and all three stay in step through <see cref="UI.Editor.EditorSession.SelectedComponentId"/>.
 /// </summary>
 internal sealed partial class ProfileEditorWindow
 {
@@ -251,6 +252,32 @@ internal sealed partial class ProfileEditorWindow
             }
         }
 
+        // Portrait Frames and Overlays: the picture they're drawn on, by its identity, or the Basic portrait.
+        if (PlateComponentEditor.CanTarget(component.Kind))
+        {
+            DrawComponentTarget(profile, component);
+        }
+
+        var locked = component.Locked;
+        EditorWidgets.PropertyLabel("Locked");
+        if (ImGui.Checkbox("##Locked", ref locked))
+        {
+            editorSession.SetComponentLocked(componentId, locked);
+        }
+
+        EditorWidgets.Tooltip("Locked: it can't be moved or resized on the canvas. Its settings here stay editable.");
+
+        if (editorSession.GroupOf(Domain.Components.CanvasItemRef.Component(componentId)) is { } groupId)
+        {
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + EditorWidgets.LabelColumnWidth);
+            if (ImGui.Button("Select Linked Group##ComponentGroup", new Vector2(-1, 0f)))
+            {
+                editorSession.SelectGroup(groupId);
+            }
+
+            EditorWidgets.Tooltip("It's linked with other things: they move and resize together. Click any of them on the canvas to select the group.");
+        }
+
         // Corners (Corner Ornaments): this instance's own selection; another instance can take other corners.
         if (component.Kind == PlateComponentKind.CornerOrnament)
         {
@@ -367,8 +394,60 @@ internal sealed partial class ProfileEditorWindow
 
         EditorWidgets.Tooltip("Back to the default placement, full opacity, and the theme color. Style and image are kept.");
 
-        var placedBy = ComponentPaintPlan.FixedAnchorOf(component) is null ? AnchorDescription(component.Kind) : "its own spot on the Plate (it no longer follows the name)";
+        var placedBy = ComponentPaintPlan.FixedAnchorOf(component) is not null ? "its own spot on the Plate (it no longer follows the name)"
+            : ComponentPaintPlan.TargetOf(component) is not null ? "the picture it's attached to (it follows that picture's position, size, and rotation)"
+            : AnchorDescription(component.Kind);
         EditorWidgets.Hint($"Layer: {PlateComponentEditor.KindLabel(component.Kind)}. Placed by {placedBy}.");
+    }
+
+    /// <summary>The "Attached to" choice of a Portrait Frame or Overlay: the Basic portrait, or any picture on
+    /// the Plate, by its identity (so two frames can sit on two pictures).</summary>
+    private void DrawComponentTarget(ProfileDocument profile, PlateComponent component)
+    {
+        var componentId = component.Id;
+        var target = ComponentPaintPlan.TargetOf(component);
+        var targetElement = target is { } targetId ? profile.Elements.Find(e => e.Id == targetId) : null;
+        var preview = target is null ? "The portrait" : targetElement is not null ? ProfileElementNames.GetDisplayName(targetElement) : "A deleted picture";
+
+        EditorWidgets.PropertyLabel("Attached to");
+        using (var combo = ImRaii.Combo("##AttachedTo", preview))
+        {
+            if (combo.Success)
+            {
+                if (ImGui.Selectable("The portrait##AttachPortrait", target is null) && target is not null)
+                {
+                    editorSession.SetComponentTarget(componentId, null);
+                }
+
+                EditorWidgets.Tooltip("Follows the Basic editor's portrait, as every frame always has.");
+
+                foreach (var element in profile.Elements)
+                {
+                    // The Basic portrait is "The portrait" above.
+                    if (element is not ImageProfileElement || element.Role == ProfileElementRole.BasicPortrait)
+                    {
+                        continue;
+                    }
+
+                    var isCurrent = target == element.Id;
+                    if (ImGui.Selectable($"{ProfileElementNames.GetDisplayName(element)}##Attach{element.Id:N}", isCurrent) && !isCurrent)
+                    {
+                        editorSession.SetComponentTarget(componentId, element.Id);
+                    }
+                }
+            }
+        }
+
+        EditorWidgets.Tooltip("The picture this is drawn on. It follows that picture when it moves, resizes, or turns.");
+
+        if (target is not null && targetElement is null)
+        {
+            EditorWidgets.Hint("Its picture was deleted, so it isn't shown. Attach it to another picture or the portrait, or undo the deletion.");
+        }
+        else if (targetElement is { Visible: false })
+        {
+            EditorWidgets.Hint("Its picture is hidden, so it's hidden too.");
+        }
     }
 
     private void CommitComponentOnRelease()

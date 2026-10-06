@@ -33,7 +33,10 @@ internal sealed class SnapEngine
     internal IReadOnlyList<SnapGuide> Guides => guides;
 
     /// <summary>Collects snap targets for an interaction on <paramref name="movingElementId"/>.</summary>
-    internal void Begin(ProfileDocument profile, Guid movingElementId)
+    internal void Begin(ProfileDocument profile, Guid movingElementId) => Begin(profile, id => id == movingElementId);
+
+    /// <summary>Collects snap targets for an interaction moving every element <paramref name="isMoving"/> accepts.</summary>
+    internal void Begin(ProfileDocument profile, Func<Guid, bool> isMoving)
     {
         Clear();
 
@@ -50,7 +53,7 @@ internal sealed class SnapEngine
 
         foreach (var element in profile.Elements)
         {
-            if (!element.Visible || element.Id == movingElementId)
+            if (!element.Visible || isMoving(element.Id))
             {
                 continue;
             }

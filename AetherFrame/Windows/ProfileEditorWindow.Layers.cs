@@ -30,6 +30,7 @@ internal sealed partial class ProfileEditorWindow
     private static readonly string LockOpenIcon = FontAwesomeIcon.LockOpen.ToIconString();
     private static readonly string TextTypeIcon = FontAwesomeIcon.Font.ToIconString();
     private static readonly string ImageTypeIcon = FontAwesomeIcon.Image.ToIconString();
+    private static readonly string LinkIcon = FontAwesomeIcon.Link.ToIconString();
 
     private static readonly byte[] LayerDragPayload = [1];
 
@@ -119,7 +120,8 @@ internal sealed partial class ProfileEditorWindow
 
         using var pushId = ImRaii.PushId(id);
 
-        var isSelected = editorSession.SelectedElementId == element.Id;
+        var item = CanvasItemRef.Element(element.Id);
+        var isSelected = editorSession.IsSelected(item);
         var isRenaming = renamingElementId == element.Id;
         var rowHeight = ImGui.GetFrameHeight();
         var rowStart = ImGui.GetCursorPos();
@@ -133,7 +135,15 @@ internal sealed partial class ProfileEditorWindow
 
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
-            SelectFromLayers(element.Id);
+            // A row is always the element itself, even in a linked group (to edit it on its own); Ctrl+click adds it.
+            if (ImGui.GetIO().KeyCtrl)
+            {
+                editorSession.SelectFromList(item, additive: true);
+            }
+            else
+            {
+                SelectFromLayers(element.Id);
+            }
         }
 
         if (rowHovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
@@ -221,6 +231,18 @@ internal sealed partial class ProfileEditorWindow
             ImGui.TextUnformatted(element is ImageProfileElement ? ImageTypeIcon : TextTypeIcon);
         }
 
+        if (editorSession.GroupOf(item) is not null)
+        {
+            ImGui.SameLine(0f, 4f);
+            using (DalamudServices.PluginInterface.UiBuilder.IconFontHandle.Push())
+            using (ImRaii.PushColor(ImGuiCol.Text, LinkedGroupColor))
+            {
+                ImGui.TextUnformatted(LinkIcon);
+            }
+
+            EditorWidgets.Tooltip("Linked: moves and resizes with its group on the canvas. Pick it here to edit it on its own.");
+        }
+
         ImGui.SameLine(0f, 6f);
 
         if (isRenaming)
@@ -264,7 +286,7 @@ internal sealed partial class ProfileEditorWindow
             ImGui.TextDisabled(preview.Replace('\n', ' '));
         }
 
-        ImGui.TextDisabled("Double-click to rename. Drag to reorder.");
+        ImGui.TextDisabled("Double-click to rename. Drag to reorder. Ctrl+click to select several.");
     }
 
     /// <summary>
@@ -299,9 +321,12 @@ internal sealed partial class ProfileEditorWindow
             }
 
             using var pushId = ImRaii.PushId(componentId.ToString("N"));
-            var isSelected = editorSession.SelectedComponentId == componentId;
+            var item = CanvasItemRef.Component(componentId);
+            var isSelected = editorSession.IsSelected(item);
             var status = ComponentPaintPlan.Resolve(component, BuiltInComponentCatalog.Instance, out var definition);
-            var name = $"{PlateComponentEditor.KindLabel(component.Kind)}: {definition?.Name ?? "Unavailable"}{(component.Visible ? string.Empty : " (hidden)")}";
+            var linked = editorSession.GroupOf(item) is not null;
+            var name = $"{PlateComponentEditor.KindLabel(component.Kind)}: {definition?.Name ?? "Unavailable"}"
+                + $"{(component.Visible ? string.Empty : " (hidden)")}{(component.Locked ? " (locked)" : string.Empty)}{(linked ? " (linked)" : string.Empty)}";
             var dim = !component.Visible || status is not (ComponentStatus.Ready or ComponentStatus.MissingImage);
             bool clicked;
             using (ImRaii.PushColor(ImGuiCol.Text, EditorWidgets.DimTextColor, dim))
@@ -311,7 +336,7 @@ internal sealed partial class ProfileEditorWindow
 
             if (clicked)
             {
-                editorSession.SelectComponent(componentId);
+                editorSession.SelectFromList(item, additive: ImGui.GetIO().KeyCtrl);
                 lastScrolledToComponent = componentId;
             }
 
@@ -411,11 +436,40 @@ internal sealed partial class ProfileEditorWindow
                 editorSession.SendToBack(id);
             }
 
+        }
+
+        // Link and Unlink: the selection (Ctrl+click several) into one group, or its groups apart.
+        ImGui.SameLine(0f, 6f);
+        var linkBlocked = editorSession.LinkSelectionBlockedReason;
+        using (ImRaii.Disabled(linkBlocked is not null))
+        {
+            if (EditorWidgets.IconButton("LayerLink", FontAwesomeIcon.Link, "Link Elements: move and resize them together", size))
+            {
+                editorSession.LinkSelection();
+            }
+        }
+
+        if (linkBlocked is not null && editorSession.SelectedItems.Count > 1)
+        {
+            EditorWidgets.Tooltip(linkBlocked);
+        }
+
+        ImGui.SameLine(0f, 2f);
+        using (ImRaii.Disabled(!editorSession.SelectionHasLinks))
+        {
+            if (EditorWidgets.IconButton("LayerUnlink", FontAwesomeIcon.Unlink, "Unlink: each moves on its own again, where it is", size))
+            {
+                editorSession.UnlinkSelection();
+            }
+        }
+
+        using (ImRaii.Disabled(editorSession.SelectedItems.Count == 0))
+        {
             var rightX = ImGui.GetWindowContentRegionMax().X - (size * 2f) - 2f;
             ImGui.SameLine(rightX);
             if (EditorWidgets.IconButton("LayerDuplicate", FontAwesomeIcon.Clone, "Duplicate (Ctrl+D)", size))
             {
-                editorSession.DuplicateElement(id);
+                editorSession.DuplicateSelection();
             }
 
             ImGui.SameLine(0f, 2f);
@@ -423,7 +477,7 @@ internal sealed partial class ProfileEditorWindow
             {
                 if (EditorWidgets.IconButton("LayerDelete", FontAwesomeIcon.TrashAlt, "Delete (Del)", size))
                 {
-                    editorSession.RemoveElement(id);
+                    editorSession.DeleteSelection();
                 }
             }
         }
@@ -439,7 +493,8 @@ internal sealed partial class ProfileEditorWindow
     /// </summary>
     private void RequestElementContextMenu(Guid elementId)
     {
-        if (editorSession.SelectedElementId != elementId)
+        // A right-click inside a selection of several keeps it, so the menu can link or unlink it.
+        if (!editorSession.IsSelected(CanvasItemRef.Element(elementId)))
         {
             editorSession.Select(elementId);
         }
@@ -511,8 +566,10 @@ internal sealed partial class ProfileEditorWindow
 
         if (ImGui.MenuItem("Duplicate", "Ctrl+D"))
         {
-            editorSession.DuplicateElement(element.Id);
+            editorSession.DuplicateSelection();
         }
+
+        DrawLinkMenuItems(element);
 
         ImGui.Separator();
 
@@ -609,9 +666,9 @@ internal sealed partial class ProfileEditorWindow
         // the same casual click that would land on Duplicate or a toggle above it.
         using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(1f, 0.45f, 0.45f, 1f)))
         {
-            if (ImGui.MenuItem("Delete", "Del"))
+            if (ImGui.MenuItem(editorSession.SelectedItems.Count > 1 ? "Delete Selection" : "Delete", "Del"))
             {
-                editorSession.RemoveElement(element.Id);
+                editorSession.DeleteSelection();
             }
         }
 
@@ -621,6 +678,41 @@ internal sealed partial class ProfileEditorWindow
             {
                 editorSession.AlignSelected(alignment);
             }
+        }
+    }
+
+    /// <summary>Link, Unlink, and moving between a linked group and one of its members.</summary>
+    private void DrawLinkMenuItems(ProfileElement element)
+    {
+        var item = CanvasItemRef.Element(element.Id);
+        var group = editorSession.GroupOf(item);
+        if (editorSession.SelectedItems.Count > 1 && editorSession.SelectedGroupId is null)
+        {
+            if (ImGui.MenuItem("Link Elements", string.Empty, false, editorSession.LinkSelectionBlockedReason is null))
+            {
+                editorSession.LinkSelection();
+            }
+        }
+
+        if (group is { } groupId)
+        {
+            if (editorSession.SelectedGroupId == groupId)
+            {
+                if (ImGui.MenuItem("Edit This Only"))
+                {
+                    editorSession.SelectFromList(item, additive: false);
+                    selectElementTabPending = true;
+                }
+            }
+            else if (ImGui.MenuItem("Select Linked Group"))
+            {
+                editorSession.SelectGroup(groupId);
+            }
+        }
+
+        if (editorSession.SelectionHasLinks && ImGui.MenuItem("Unlink"))
+        {
+            editorSession.UnlinkSelection();
         }
     }
 

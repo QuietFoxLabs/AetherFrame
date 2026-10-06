@@ -71,6 +71,16 @@ public abstract class ProfileElement
     public ProfileElementRole Role { get; set; } = ProfileElementRole.None;
 
     /// <summary>
+    /// The linked group this element belongs to in the Advanced editor (see <c>LinkedGroups</c>), or
+    /// null, the default and every Plate saved before groups existed. Editor metadata only: it never
+    /// changes how the Plate is drawn, so a Plate draws the same with or without it (a shared Plate
+    /// is drawn from its resolved layout, which doesn't carry it). A group is every element and
+    /// Component with the same id; one with fewer than two members is no group.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? LinkGroupId { get; set; }
+
+    /// <summary>
     /// Properties of this element that this build doesn't know (e.g. written by a newer compatible
     /// build), carried through clone, undo, and save unchanged so they're never silently dropped.
     /// Not editable, so deliberately not part of <see cref="ContentEquals"/>.
@@ -128,6 +138,7 @@ public abstract class ProfileElement
         Size = source.Size;
         ZIndex = source.ZIndex;
         Role = source.Role;
+        LinkGroupId = source.LinkGroupId;
         ExtensionData = CopyExtensionData(source.ExtensionData);
     }
 
@@ -145,7 +156,8 @@ public abstract class ProfileElement
         && Position == other.Position
         && Size == other.Size
         && ZIndex == other.ZIndex
-        && Role == other.Role;
+        && Role == other.Role
+        && LinkGroupId == other.LinkGroupId;
 
     /// <summary>Copies the base properties into a freshly constructed clone.</summary>
     private protected T CloneBaseInto<T>(T clone)
@@ -159,6 +171,7 @@ public abstract class ProfileElement
         clone.Size = Size;
         clone.ZIndex = ZIndex;
         clone.Role = Role;
+        clone.LinkGroupId = LinkGroupId;
         clone.ExtensionData = CopyExtensionData(ExtensionData);
         return clone;
     }
