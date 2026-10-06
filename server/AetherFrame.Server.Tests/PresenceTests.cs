@@ -294,25 +294,32 @@ public class PresenceTests
 
         Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
 
-        // A heartbeat too soon after the last names no session that counts, and takes from it too.
-        using (var early = await aria.PostRawAsync("/v1/presence/beat", token))
-        {
-            Assert.Equal(HttpStatusCode.TooManyRequests, early.StatusCode);
-        }
-
         // Signed requests from the same address go on: a challenge, and a presence start with it.
         var (again, online) = await StartedAsync(aria);
         Assert.Equal(PresenceStore.Reported(1), online);
         Assert.Equal(1, server.Services.GetRequiredService<PresenceStore>().Online());
 
-        // A minute later there is room again.
+        // A minute later there is room again. A heartbeat too soon after the last names no session
+        // that counts, so it takes from the limit too: after 119 that name none, it takes the last
+        // place, and the next is refused. (The rechecks of beaea99: this was tested only with the
+        // limit already used up, where the answer is the same whether it takes from it or not.)
         server.Time.Advance(TimeSpan.FromSeconds(61));
-        using (var room = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength]))
+        Assert.Equal(PresenceStore.Reported(1), await BeatOnlineAsync(aria, again));
+        for (var beat = 1; beat < ServerLimits.PresenceBeatsPerAddress.Count; beat++)
         {
+            using var room = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength]);
             Assert.Equal(HttpStatusCode.NotFound, room.StatusCode);
         }
 
-        Assert.Equal(PresenceStore.Reported(1), await BeatOnlineAsync(aria, again));
+        using (var early = await aria.PostRawAsync("/v1/presence/beat", again))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, early.StatusCode);
+        }
+
+        using (var full = await aria.PostRawAsync("/v1/presence/beat", new byte[PresenceStore.TokenLength]))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, full.StatusCode);
+        }
     }
 
     [Fact]
@@ -491,6 +498,31 @@ public class PresenceTests
         time.Advance(AetherFrame.Server.Storage.ChallengeStore.Lifetime);
         store.SweepExpired();
         Assert.Equal(0, store.Challenges);
+    }
+
+    [Fact]
+    public void ALeave_TakesNothingFromTheLimit_OnlyForASessionStillCounted()
+    {
+        // The rechecks of beaea99: a leave for a session that had expired, before the sweep dropped
+        // it, was taken as one for a live session, and took nothing from the address group's limit
+        // though the server no longer counted it.
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        var live = store.Start(KeyOf(1), Aria, Issued(store)).Token!;
+        var expired = store.Start(KeyOf(2), Bram, Issued(store)).Token!;
+        time.Advance(PresenceStore.Expiry - TimeSpan.FromSeconds(1));
+        Assert.Equal(BeatResult.Counted, store.Beat(live).Result);
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        // Expired and still held until the sweep: its leave drops it, as naming no session counted.
+        Assert.Equal(2, store.Sessions);
+        Assert.False(store.Leave(expired));
+        Assert.Equal(1, store.Sessions);
+        Assert.False(store.Leave(expired));
+
+        // A session still counted leaves as one.
+        Assert.True(store.Leave(live));
+        Assert.Equal(0, store.Sessions);
     }
 
     [Fact]
@@ -724,6 +756,58 @@ public class PresenceTests
 
         // And the fifth began with no one.
         time.Advance(TimeSpan.FromSeconds(200));
+        Assert.Equal(0, store.Snapshot());
+    }
+
+    [Fact]
+    public void ALeaveOrARevocation_AsAWindowsFirstRequest_LeavesTheWindowAsItBegan()
+    {
+        // The rechecks of 28be0e2: a session ended before anything took the window's snapshot was
+        // left out of it, though it was live as the window began. Every operation takes the snapshot
+        // first, so whichever comes first, the window shows the sessions as it began.
+        var time = new ManualTime(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
+        var store = new PresenceStore(time);
+        var tokens = new byte[3][];
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            tokens[index] = store.Start(KeyOf(index), 1_000 + index, Issued(store)).Token!;
+        }
+
+        // Before each window begins, the sessions still held beat, so all are live as it begins.
+        void BeatTheRest(int from)
+        {
+            for (var beat = 0; beat < 3; beat++)
+            {
+                time.Advance(TimeSpan.FromSeconds(90));
+                for (var index = from; index < tokens.Length; index++)
+                {
+                    Assert.Equal(BeatResult.Counted, store.Beat(tokens[index]).Result);
+                }
+            }
+
+            time.Advance(TimeSpan.FromSeconds(30));
+        }
+
+        // The second window's first request is a leave.
+        BeatTheRest(0);
+        Assert.True(store.Leave(tokens[0]));
+        Assert.Equal(3, store.Snapshot());
+        Assert.Equal(2, store.Online());
+
+        // The third's is a pause.
+        BeatTheRest(1);
+        store.ForgetKey(KeyOf(1));
+        Assert.Equal(2, store.Snapshot());
+        Assert.Equal(1, store.Online());
+
+        // The fourth's is a takeover.
+        BeatTheRest(2);
+        store.ForgetOtherKeys(1_002, KeyOf(9));
+        Assert.Equal(1, store.Snapshot());
+        Assert.Equal(0, store.Online());
+
+        // And the fifth began with no one.
+        time.Advance(PresenceStore.SnapshotWindow);
         Assert.Equal(0, store.Snapshot());
     }
 

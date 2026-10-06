@@ -211,6 +211,76 @@ public class OnlineCountTests
     }
 
     [Fact]
+    public async Task AClockSetBackByLessThanTheSessionsAge_StillRenewsItAtOnce()
+    {
+        // The rechecks of beaea99: only a clock set back to before the session's start made its
+        // renewal due, so one set back 10 minutes at minute 45 put the renewal after the hour.
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.Now += TimeSpan.FromMinutes(45);
+        var beats = harness.Server.Beats.Count;
+        await harness.WaitFor(() => harness.Server.Beats.Count >= beats + 2);
+        Assert.Single(harness.Server.Tokens);
+
+        harness.Now -= TimeSpan.FromMinutes(10);
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 2);
+        beats = harness.Server.Beats.Count;
+        await harness.WaitFor(() => harness.Server.Beats.Count >= beats + 3);
+        Assert.Equal(2, harness.Server.Tokens.Count);
+        Assert.Equal(0, harness.Server.UnknownBeats);
+    }
+
+    [Fact]
+    public async Task ASessionWhoseHeartbeatWasRefused_IsLeftWhenTheRunStops_UnlessANewStartReplacedIt()
+    {
+        // The rechecks of beaea99: past its hour the server refuses a session's heartbeats and still
+        // counts it until its expiry, but the run let go of its token, so a logout before a new start
+        // was made left the character counted for up to 3 minutes more.
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        var first = harness.Server.Tokens.Single();
+        harness.Server.StartStatus = HttpStatusCode.ServiceUnavailable;
+        harness.Server.EndHour(first);
+        await harness.WaitFor(() => harness.Server.UnknownBeats >= 1 && harness.Server.StartTimes.Count >= 3);
+        Assert.True(harness.Server.IsLive(first));
+        harness.Count.Update(null);
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        Assert.Equal(first, harness.Server.Leaves.Single());
+        Assert.False(harness.Server.IsLive(first));
+
+        // When a new start does replace it, only the new session is left.
+        harness.Server.StartStatus = HttpStatusCode.OK;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 2 && harness.Server.Beats.Count(beat => beat.SequenceEqual(harness.Server.Tokens[1])) >= 1);
+        var second = harness.Server.Tokens[1];
+        harness.Server.EndHour(second);
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 3 && harness.Server.Beats.Count(beat => beat.SequenceEqual(harness.Server.Tokens[2])) >= 1);
+        Assert.False(harness.Server.IsLive(second));
+        harness.Count.Update(null);
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 2);
+        Assert.Equal(harness.Server.Tokens[2], harness.Server.Leaves[1]);
+        await Task.Delay(200);
+        Assert.Equal(2, harness.Server.Leaves.Count);
+    }
+
+    [Fact]
+    public async Task ANewStartRefusedForATakeover_AfterARefusedHeartbeat_LeavesNotEvenTheRefusedSession()
+    {
+        // The takeover ended every session of the key's, the refused one with them.
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.Server.StartStatus = HttpStatusCode.Gone;
+        harness.Server.EndHour(harness.Server.Tokens.Single());
+        await harness.WaitFor(() => harness.Server.StartTimes.Count == 2);
+        await Task.Delay(300);
+        Assert.Equal("/v1/presence", harness.Server.Paths[^1]);
+        Assert.Empty(harness.Server.Leaves);
+    }
+
+    [Fact]
     public async Task AServerWithoutTheEndpoint_ReadsUnavailable_NeverZero_AndBacksOff()
     {
         using var harness = new Harness();
@@ -473,7 +543,7 @@ public class OnlineCountTests
 
         // The retention details are there for whoever opens them, and none of them is a visible point.
         var details = string.Join(" ", SharingText.OnlineCountDetails);
-        foreach (var said in new[] { "memory only", "about 3 minutes after the last signal", "counts each character once", "Apart from its rate limits (below), it keeps no record of who was online", "the same to everyone for each 5 minutes", "aren't logged", "14 days", "never whose", "network address", "never writes down or logs", "up to an hour", "adds no characters of their own" })
+        foreach (var said in new[] { "memory only", "about 3 minutes after the last signal", "counts each character once", "Apart from its rate limits (below), it keeps no record of who was online", "the same to everyone for each 5 minutes", "aren't logged", "14 days", "never whose", "network address", "never writes down or logs", "up to an hour", "adds no characters of their own", "about every 52 minutes while it plays", "use those limits up on purpose", "to the second" })
         {
             Assert.Contains(said, details, StringComparison.Ordinal);
         }
@@ -616,8 +686,8 @@ public class OnlineCountTests
 
     /// <summary>
     /// The presence endpoints, answered in memory: starts checked as section 14.5 says for kind 9,
-    /// tokens it issued, a key's new start replacing its earlier session as the server's does, and
-    /// what each request carried.
+    /// tokens it issued, a key's new start replacing its earlier session as the server's does, a
+    /// session past its hour, and what each request carried.
     /// </summary>
     private sealed class PresenceServer : HttpMessageHandler
     {
@@ -627,6 +697,7 @@ public class OnlineCountTests
         private readonly HashSet<string> live = new();
         private readonly Dictionary<PersonaId, string> bySigner = new();
         private readonly Dictionary<string, TimeSpan> lastSeen = new();
+        private readonly HashSet<string> pastTheHour = new();
         private int unknownBeats;
         private TimeSpan shortestGap = TimeSpan.MaxValue;
 
@@ -771,6 +842,19 @@ public class OnlineCountTests
             }
         }
 
+        /// <summary>
+        /// The session with <paramref name="token"/> is past its hour, as the server sees it: its
+        /// heartbeats are answered 404, and it is counted until a leave ends it or a new start of its
+        /// key's replaces it.
+        /// </summary>
+        internal void EndHour(byte[] token)
+        {
+            lock (this)
+            {
+                pastTheHour.Add(Convert.ToHexString(token));
+            }
+        }
+
         /// <summary>A restart: every session is forgotten.</summary>
         internal void Forget()
         {
@@ -864,7 +948,7 @@ public class OnlineCountTests
                     lock (this)
                     {
                         beats.Add(body);
-                        if (!live.Contains(Convert.ToHexString(body)))
+                        if (!live.Contains(Convert.ToHexString(body)) || pastTheHour.Contains(Convert.ToHexString(body)))
                         {
                             unknownBeats++;
                             return new HttpResponseMessage(HttpStatusCode.NotFound);

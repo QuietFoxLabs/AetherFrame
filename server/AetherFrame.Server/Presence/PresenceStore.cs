@@ -66,7 +66,8 @@ internal readonly record struct Admission(long Sequence, TimeSpan IssuedAt);
 /// every session, and the plugins start new ones at their next heartbeat. Outside the store, a
 /// presence request that succeeds leaves no line in the request log, and one that fails leaves
 /// its one line (decision S5: its route, status, duration, failure kind and time, no identifier);
-/// the rate limiter keeps the time of each start under the key's identity for its hour.
+/// the rate limiter keeps the time of each start, a renewal included, under the key's identity and
+/// its address group, and of each presence challenge under its address group, for an hour.
 /// <para>
 /// The count is the number of distinct Lodestone ids with a live session, so a character is
 /// counted once however many sessions name it (a takeover's two PCs, say). What an answer gives is
@@ -316,9 +317,10 @@ internal sealed class PresenceStore(TimeProvider time)
     }
 
     /// <summary>
-    /// Ends the session with <paramref name="token"/> at once, if there is one: whether there was.
-    /// The leave is answered the same either way; this tells the endpoint only whether the request
-    /// takes from the address group's limit.
+    /// Ends the session with <paramref name="token"/> at once, if there is one: whether it was still
+    /// counted. One that expired and wasn't swept yet goes too, but counted for nothing, so its leave
+    /// takes from the limit as an unknown token's does. The leave is answered the same either way;
+    /// this tells the endpoint only whether the request takes from the address group's limit.
     /// </summary>
     public bool Leave(ReadOnlySpan<byte> token)
     {
@@ -330,14 +332,14 @@ internal sealed class PresenceStore(TimeProvider time)
         var id = IdOf(token);
         lock (gate)
         {
-            Enter();
+            var now = Enter();
             if (!byToken.TryGetValue(id, out var session))
             {
                 return false;
             }
 
             Remove(id, session);
-            return true;
+            return Live(session, now);
         }
     }
 
