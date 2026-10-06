@@ -275,6 +275,13 @@ internal sealed class EditorActionBar
         }
     }
 
+    private (string Text, Vector4 Color) SaveState() =>
+        commands.IsSaving ? (SavingText, SavingColor)
+        : commands.IsDirty ? (UnsavedText, EditorWidgets.WarningColor)
+        : (SavedText, EditorWidgets.SuccessColor with { W = 0.75f });
+
+    private static float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f);
+
     /// <summary>
     /// The save state as the bar shows it (Saving..., Unsaved changes or Saved), for a view that draws
     /// the commands its own way: guided creation's header.
@@ -284,11 +291,4 @@ internal sealed class EditorActionBar
     /// <summary>The widest the save state gets, so what follows it never shifts as it changes.</summary>
     internal static float WidestSaveState() =>
         Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
-
-    private (string Text, Vector4 Color) SaveState() =>
-        commands.IsSaving ? (SavingText, SavingColor)
-        : commands.IsDirty ? (UnsavedText, EditorWidgets.WarningColor)
-        : (SavedText, EditorWidgets.SuccessColor with { W = 0.75f });
-
-    private static float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f);
 }
