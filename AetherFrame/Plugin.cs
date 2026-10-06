@@ -100,6 +100,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly DraftStore keptChangesFiles;
     private readonly KeptChangesOffer keptChanges;
     private readonly KeptChangesWindow keptChangesWindow;
+
+    // Continuous crash recovery (October 5, 2026): checkpoints of the open Plate's unsaved changes,
+    // written while editing to this run's folder under Drafts/Sessions and offered with the drafts.
+    private readonly RecoveryCheckpointStore recoveryCheckpoints;
+    private readonly ContinuousRecovery continuousRecovery;
     private readonly IAetherFrameLog log;
 
     // The interface's typography, the tutorial (its state, and the overlay windows that show it),
@@ -111,6 +116,14 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private readonly TutorialOverlay tutorialOverlay;
     private readonly bool configurationFound;
     private readonly bool configurationUnreadable;
+
+    // Guided creation (the introductory route: a personalized, saved Plate in three steps), its
+    // welcome, and whether the kept unsaved changes and recovery checkpoints were all read: a recovery
+    // offer always comes before the welcome. Set only by LoadKeptChangesAsync, once every one of them
+    // was read and what they hold is on offer; while that is unknown (a failure, anything unread, the
+    // Plate Library not loaded) it stays false and the welcome waits for a later load.
+    private readonly GuidedCreation guidedCreation;
+    private volatile bool keptChangesRead;
 
     // Every file-writing operation the plugin owns (Library, Templates, package import/export),
     // so unloading can let running ones finish before disposing what they use.
@@ -244,8 +257,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 editorSession.CommitPendingEdits();
                 editorSession.EndInteraction();
             });
+            recoveryCheckpoints = new RecoveryCheckpointStore(paths, SystemRecoveryFiles.Instance, Guid.NewGuid(), log);
+            var recoveryClock = System.Diagnostics.Stopwatch.StartNew();
+            continuousRecovery = new ContinuousRecovery(
+                profileService, editorSession, () => editorSurfaces.ActiveSurface, recoveryCheckpoints, AetherFrameBuildInfo.Current.Describe(), log, () => recoveryClock.Elapsed);
             unsavedChangesKeeper = new UnsavedChangesKeeper(
-                editorSession, () => editorSurfaces.ActiveSurface, paths, stores, AetherFrameBuildInfo.Current.Describe(), log);
+                editorSession, () => editorSurfaces.ActiveSurface, paths, stores, AetherFrameBuildInfo.Current.Describe(), log, editingOf: continuousRecovery.EditingOf);
             var gameTitleCatalog = new GameTitleCatalog();
             var textMeasurer = new ProfileTextMeasurer(fontService);
             editorSession.IdentityMeasurer = textMeasurer;
@@ -262,7 +279,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 operations: ownedOperations);
 
             // Undo, Redo, Save and Revert as both editors' shared action bar offers them.
-            var documentCommands = new EditorDocumentCommands(profileService, editorSession);
+            var documentCommands = new EditorDocumentCommands(profileService, editorSession) { Recovery = continuousRecovery };
 
             // The Plate menu both editors' action bar shares (interface task 1): My Plates' card menu's
             // actions, run and reported where the Plate is being edited, with its own Export dialog.
@@ -272,16 +289,28 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             var editorPlateActions = new PlateActions(plateLibrary, templateLibrary, packageService, profileService, editorSession, new PlateOperationRunner(log), log);
             var editorPlates = new PlateMenu(
                 editorPlateActions, plateLibrary, templateLibrary, profileService, editorSession, characterIdentityService, thumbnailService, renderResources, editorPlateFileDialogs);
-            editorPlates.AttachSwitcher(new PlateSwitcher(
+            var plateSwitcher = new PlateSwitcher(
                 plateLibrary, profileService, editorSession, editorPlateActions,
                 () => characterIdentityService.CurrentCharacter, () => new PlateStarterContent(characterIdentityService.CurrentInfo),
-                ShowEditor, editorPlates.AskBeforeOpening, log));
+                ShowEditor, editorPlates.AskBeforeOpening, log);
+            editorPlates.AttachSwitcher(plateSwitcher);
             editorPlateMenu = new EditorPlateMenu(
                 editorPlates, plateLibrary, characterIdentityService, documentCommands, editorPlateFileDialogs, plateId => profileViewWindow!.ShowPlate(plateId));
 
             basicProfileEditorWindow = new BasicProfileEditorWindow(
                 profileService, editorSession, basicEditorSession, imageTextureCache, renderResources, basicFileDialogManager, gameTitleCatalog, jobCatalog,
                 OpenAdvancedEditor, OpenMyPlates, editorSurfaces, documentCommands, keyboardShortcutService, editorPlateMenu);
+
+            // Guided creation: the Plate is made by the editors' New Plate (through the switcher, which
+            // asks first about unsaved changes), edited and saved in the Basic editor, which shows the
+            // steps while the guided Plate is open. Its state lives in the configuration.
+            guidedCreation = new GuidedCreation(
+                new ConfigurationGuidedStore(Configuration, log), plateLibrary, profileService, documentCommands, editorSession, plateSwitcher, ShowEditor,
+                () => basicProfileEditorWindow.IsOpen);
+            basicProfileEditorWindow.Guided = guidedCreation;
+            basicProfileEditorWindow.SharingAvailable = AetherFrameBuildInfo.NetworkPreview;
+            basicProfileEditorWindow.IsActivePlate = plateId => characterIdentityService.CurrentCharacter is { } who ? plateLibrary.GetActivePlateId(who.ContentId) == plateId : null;
+            editorPlates.Chooser.CreateStepByStep = guidedCreation.StartNew;
             profileEditorWindow = new ProfileEditorWindow(
                 profileService, editorSession, keyboardShortcutService, renderResources, fileDialogManager, OpenBasicEditor, OpenMyPlates, editorSurfaces, documentCommands, editorPlateMenu);
             editorSurfaces.Attach(basicProfileEditorWindow, profileEditorWindow);
@@ -303,9 +332,14 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // Libraries' own store, offered once both Libraries have loaded and a character is logged
             // in (see LoadAsync), and restored into the editor that had them.
             keptChangesFiles = new DraftStore(paths, fileStore, log);
-            keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowEditor, log);
+            keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowEditor, log, recoveryCheckpoints);
             keptChangesWindow = new KeptChangesWindow(keptChanges);
+            var recoveryOffer = keptChanges;
+            guidedCreation.RecoveryWaits = recoveryOffer.AwaitsAnswerFor;
+            guidedCreation.RecoveryWaitsForLogin = () => recoveryOffer.WaitsForLogin;
             plateLibraryWindow.KeptChanges = keptChanges;
+            plateLibraryWindow.Guided = guidedCreation;
+            basicProfileEditorWindow.ViewPlate = profileViewWindow.ShowPlate;
 
             WindowSystem.AddWindow(plateLibraryWindow);
             WindowSystem.AddWindow(basicProfileEditorWindow);
@@ -336,7 +370,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // A player taking the tour is being shown both editors: the one-time Basic suggestion
             // would only get in the way of a step, so it counts as handled once the tour starts.
             onboarding.Started += basicGuidance.MarkHandled;
-            var helpMenu = new HelpMenu(onboarding, tutorialHost);
+
+            // The tutorial points at the editor's real bar and rail: while it runs, the guided Plate shows them.
+            basicProfileEditorWindow.TutorialRunning = () => onboarding.IsTutorialActive;
+            var helpMenu = new HelpMenu(onboarding, tutorialHost) { Guided = guidedCreation };
             var fontLicencesWindow = new FontLicencesWindow();
             WindowSystem.AddWindow(fontLicencesWindow);
             helpMenu.OpenFontLicences = () =>
@@ -492,6 +529,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
                 WindowSystem.AddWindow(window);
             }
 
+            // The welcome: guided creation for a new player, once no recovery offer waits for an answer.
+            var welcomeWindow = new WelcomeWindow(
+                guidedCreation, () => GuidedCreation.WelcomeMayShow(ClientState.IsLoggedIn, keptChangesRead, keptChanges.AwaitsAnswer, keptChangesWindow.IsOpen));
+            WindowSystem.AddWindow(welcomeWindow);
+
             // Drawing starts last: the plugin is created off the framework thread, so a frame can
             // run while this constructor does, and every frame's work must find all it uses made.
             PluginInterface.UiBuilder.Draw += DrawUi;
@@ -553,10 +595,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             Log.Error(LogPrivacy.ForLog(ex), "AetherFrame could not load the Template Library.");
         }
 
-        // Now that the Library's state is known: is this a new player (offer the tutorial) or an
-        // established install (never offer unasked)? Decided on the framework thread, where the
-        // tutorial's state is read while drawing; reads the Library's counts only, changes nothing
-        // in it, and can never fail the load.
+        // Now that the Library's state is known: is this a new player (welcome them with guided
+        // creation) or an established install (never offer anything unasked)? Decided on the
+        // framework thread, where the tutorial's state is read while drawing; reads the Library's
+        // counts only, changes nothing in it, and can never fail the load.
         try
         {
             await Framework.RunOnTick(ResolveFirstRun, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -566,12 +608,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // A stopped load tears the plugin down here, like the Library loads above; any other
             // failure only means the offer isn't made this launch.
             await ThrowIfLoadStoppedAsync(ex, cancellationToken).ConfigureAwait(false);
-            Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not decide whether to offer the tutorial.");
+            Log.Warning(LogPrivacy.ForLog(ex), "AetherFrame could not decide whether to welcome a new player.");
         }
 
         // The unsaved changes an editor had when AetherFrame last unloaded: read and judged against
         // the Library now that both have loaded, and offered once a character is logged in. A
-        // failure only means they aren't offered this time; they stay kept.
+        // failure only means they aren't offered this time; they stay kept, and the welcome waits.
         try
         {
             await LoadKeptChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -587,7 +629,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     /// Reads the kept unsaved changes off the framework thread, as an owned operation (unloading waits
     /// for it, and it stops between files once abandoned), retires those a save already covers, and
     /// hands the rest to the offer on the framework thread. With the Plate Library not loaded, nothing
-    /// is touched and nothing offered.
+    /// is touched and nothing offered. Records that recovery was read (<see cref="keptChangesRead"/>)
+    /// only once every kept draft and checkpoint was read and the offer holds what they hold.
     /// </summary>
     private async Task LoadKeptChangesAsync(CancellationToken cancellationToken)
     {
@@ -596,16 +639,27 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             return;
         }
 
-        IReadOnlyList<KeptDraft> found;
+        KeptChangesScan scan;
         using (operation)
         {
-            found = await Task.Run(() => KeptChangesReview.LoadAsync(keptChangesFiles, plateLibrary, log), cancellationToken).ConfigureAwait(false);
+            scan = await Task.Run(() =>
+            {
+                recoveryCheckpoints.Sweep();
+                return KeptChangesReview.ReviewAsync(keptChangesFiles, plateLibrary, log, recoveryCheckpoints);
+            }, cancellationToken).ConfigureAwait(false);
         }
 
-        if (found.Count > 0)
+        if (scan.Offers.Count > 0)
         {
-            await Framework.RunOnTick(() => keptChanges.Present(found, ClientState.IsLoggedIn), cancellationToken: cancellationToken).ConfigureAwait(false);
+            await Framework.RunOnTick(() => keptChanges.Present(scan.Offers, ClientState.IsLoggedIn), cancellationToken: cancellationToken).ConfigureAwait(false);
         }
+
+        if (!scan.Complete)
+        {
+            Log.Warning("AetherFrame couldn't read every kept change and recovery checkpoint; they are left as they are, and no first-run welcome shows until they can be read.");
+        }
+
+        keptChangesRead = scan.Complete;
     }
 
     private void ResolveFirstRun()
@@ -627,7 +681,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         }
 
         onboarding.ResolveFirstRun(configurationFound, configurationUnreadable, libraryLoaded, plateCount, userTemplateCount);
-        Log.Information($"AetherFrame tutorial: {onboarding.LastDecision} (install {onboarding.Preferences.Install}, status {onboarding.Preferences.Status}).");
+        guidedCreation.ResolveWelcome(onboarding.IsNewPlayer, libraryLoaded, plateCount);
+        Log.Information($"AetherFrame tutorial: {onboarding.LastDecision} (install {onboarding.Preferences.Install}, status {onboarding.Preferences.Status}); welcome {(guidedCreation.WelcomeRequested ? "waits" : "not offered")}.");
     }
 
     /// <summary>
@@ -642,11 +697,15 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         {
             tutorialOverlay.Update();
             keptChanges.Advance();
+            guidedCreation.Advance();
 #if AETHERFRAME_NETWORK_PREVIEW
             livePublisher.OnFrame();
             plateViewing.OnFrame();
 #endif
             WindowSystem.Draw();
+
+            // After the windows drew, so this frame's edits are in what it samples.
+            continuousRecovery.Tick();
             ScreenEyedropper.Draw();
             editorPlateMenu.EndFrame();
         }
@@ -706,7 +765,13 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // Then the open editor's unsaved changes, read as the UI stopped, are kept beside the Library
         // for the next load to offer back: written before anything waits on running operations, for
         // a few seconds at most, and never failing the unload.
-        await unsavedChangesKeeper.WriteAsync(UnsavedChangesKeeper.WriteTimeout).ConfigureAwait(false);
+        // Recovery retirements already asked for (a save or discard just before unloading) finish
+        // alongside, so no checkpoint of saved or discarded work is left to be offered; then this
+        // run's recovery folder is unlocked, and what is left in it is offered next time.
+        await Task.WhenAll(
+            unsavedChangesKeeper.WriteAsync(UnsavedChangesKeeper.WriteTimeout),
+            continuousRecovery.Writer.WaitIdleAsync(UnsavedChangesKeeper.WriteTimeout)).ConfigureAwait(false);
+        recoveryCheckpoints.CloseSession();
 
         // Then any save, rename, import, export, … already running finishes before anything it uses
         // is disposed (see PluginShutdown for what happens if one outlasts the timeout).
@@ -729,6 +794,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // Nothing draws any more, and the windows are still there: the open Plate's unsaved changes,
         // and the editor showing them, are read now, for DisposeAsync to keep.
         unsavedChangesKeeper.Capture();
+        continuousRecovery.Stop();
 
         // A running tutorial is remembered where it stopped; nothing else of it needs the game.
         onboarding.Suspend();
@@ -911,6 +977,32 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         public TutorialPreferences Preferences => configuration.Tutorial ??= new TutorialPreferences();
 
         /// <summary>Never throws: failing to remember only means the offer may be shown again.</summary>
+        public void Save()
+        {
+            configuration.Version = Math.Max(configuration.Version, PluginConfiguration.CurrentVersion);
+            try
+            {
+                PluginInterface.SavePluginConfig(configuration);
+            }
+            catch (Exception ex)
+            {
+                log.Error(ex, "AetherFrame could not save its configuration.");
+            }
+        }
+    }
+
+    /// <summary>Guided creation's state and the Basic editor's view, persisted in the plugin configuration beside the tutorial's.</summary>
+    private sealed class ConfigurationGuidedStore(PluginConfiguration configuration, IAetherFrameLog log) : IGuidedCreationStore
+    {
+        public GuidedCreationPreferences Preferences => configuration.GuidedCreation ??= new GuidedCreationPreferences();
+
+        public BasicWorkspaceMode Workspace
+        {
+            get => configuration.BasicWorkspace;
+            set => configuration.BasicWorkspace = value;
+        }
+
+        /// <summary>Never throws: failing to remember only means a choice may be asked again.</summary>
         public void Save()
         {
             configuration.Version = Math.Max(configuration.Version, PluginConfiguration.CurrentVersion);

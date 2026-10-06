@@ -26,6 +26,35 @@ internal sealed class EditorDocumentCommands
 
     internal bool HasPlate => profileService.CurrentProfile is not null;
 
+    /// <summary>Continuous recovery, for the bar's checkpoint indicator; null where there is none (the plugin attaches it).</summary>
+    internal ContinuousRecovery? Recovery { get; set; }
+
+    /// <summary>How recovery stands for the open Plate (nothing to show without unsaved changes).</summary>
+    internal RecoveryIndicator RecoveryIndicator =>
+        Recovery is { } recovery && IsDirty ? recovery.Indicator : new RecoveryIndicator(RecoveryIndicatorKind.None, null, null);
+
+    /// <summary>What the indicator's tooltip says: the last checkpoint that finished, never one still being written.</summary>
+    internal static string RecoveryText(RecoveryIndicator indicator)
+    {
+        var last = indicator.LastCheckpointUtc is { } utc
+            ? $"Last recovery checkpoint: {utc.ToLocalTime().ToString("T", System.Globalization.CultureInfo.CurrentCulture)}."
+            : "No recovery checkpoint yet.";
+        return indicator.Kind switch
+        {
+            RecoveryIndicatorKind.Protected => $"{last} If the game closes unexpectedly, these unsaved changes are offered back next time. Only Save changes the Plate.",
+            RecoveryIndicatorKind.Pending => $"{last} The newest changes are kept a few seconds after you pause.",
+            RecoveryIndicatorKind.Failing => $"{last} The newest changes couldn't be kept for recovery. Save keeps them in the Plate.",
+            _ => string.Empty,
+        };
+    }
+
+    /// <summary>The restrained warning shown while recovery fails, with when it tries again; null otherwise.</summary>
+    internal static string? RecoveryWarning(RecoveryIndicator indicator) =>
+        indicator.Kind != RecoveryIndicatorKind.Failing ? null
+        : indicator.RetryIn is { } wait && wait > System.TimeSpan.Zero
+            ? $"Recovery checkpoint couldn't be written. Trying again in {System.Math.Ceiling(wait.TotalSeconds):0}s."
+            : "Recovery checkpoint couldn't be written. Trying again now.";
+
     /// <summary>A save is being written.</summary>
     internal bool IsSaving => profileService.IsBusy;
 

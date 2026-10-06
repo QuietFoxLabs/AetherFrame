@@ -30,6 +30,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public TutorialPreferences? Tutorial { get; set; }
 
     /// <summary>
+    /// Guided creation's own state (the welcome's answer, the Plate a guided creation made and the
+    /// step it reached, whether it was completed). Null in a configuration written before guided
+    /// creation existed. Kept apart from every Plate.
+    /// </summary>
+    public GuidedCreationPreferences? GuidedCreation { get; set; }
+
+    /// <summary>
+    /// Which view the Basic editor shows. Unset in a configuration written before the Simple view
+    /// existed, which keeps the Detailed view an existing player always had; a new player starts in
+    /// the Simple view. Either is the player's to switch.
+    /// </summary>
+    public BasicWorkspaceMode BasicWorkspace { get; set; }
+
+    /// <summary>
     /// Whatever a newer version of AetherFrame stored here and this one doesn't know: kept as it
     /// is and written back unchanged, so going back to this version never loses a newer one's
     /// settings (the same forward compatibility every Plate and Template file has).

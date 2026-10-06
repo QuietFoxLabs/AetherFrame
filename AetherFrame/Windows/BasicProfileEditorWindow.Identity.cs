@@ -61,18 +61,30 @@ internal sealed partial class BasicProfileEditorWindow
 
         if (BasicIdentitySession.HasNoHeader(profile))
         {
-            Hint("Your character's name and title, designed as one header.");
-            if (ImGui.Button("Add Identity Header"))
+            DetailedHint("Your character's name and title, designed as one header.");
+            if (ImGui.Button(Simple ? "Add a Name" : "Add Identity Header"))
             {
                 identity.CreateHeader();
             }
+
+            SimpleTooltip("Your character's name and title, designed as one header.");
 
             DrawTitlePickerPopup(profile);
             return;
         }
 
         DrawNameControls(profile, identity);
-        DrawTitleControls(profile, identity);
+        if (MoreControls("Title"))
+        {
+            DrawTitleControls(profile, identity);
+        }
+
+        if (!MoreControls("Style and Layout", holdsComponentSlots: true))
+        {
+            DrawTitlePickerPopup(profile);
+            return;
+        }
+
         DrawIdentityLayoutChoice(profile, identity);
 
         ImGui.Spacing();

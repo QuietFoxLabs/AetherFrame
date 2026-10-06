@@ -154,6 +154,26 @@ internal static class AetherControls
         }
     }
 
+    /// <summary>
+    /// Before a row of <paramref name="rowWidth"/> that ends at the content's right edge: on the last
+    /// item's line when it fits after that item, otherwise on a line of its own, right-aligned there
+    /// when that line can hold it, so it never draws over what came before. Returns whether it shares
+    /// the last item's line.
+    /// </summary>
+    internal static bool AlignRightAfterItem(float rowWidth)
+    {
+        var x = ImGui.GetWindowContentRegionMax().X - rowWidth;
+        var lastItemEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
+        if (x >= lastItemEnd + ImGui.GetStyle().ItemSpacing.X)
+        {
+            ImGui.SameLine(x);
+            return true;
+        }
+
+        AlignRight(rowWidth);
+        return false;
+    }
+
     // ---------------------------------------------------------------- small pieces
 
     /// <summary>A keycap for a shortcut ("Ctrl+S").</summary>
@@ -204,8 +224,12 @@ internal static class AetherControls
         _ => (AetherPalette.Info, AetherPalette.InfoTint, FontAwesomeIcon.InfoCircle),
     };
 
-    /// <summary>A one-line status (saved, working, an error) with its icon; nothing when <paramref name="text"/> is null.</summary>
-    internal static void StatusLine(AetherTone tone, string? text)
+    /// <summary>
+    /// A one-line status (saved, working, an error) with its icon; nothing when <paramref name="text"/>
+    /// is null. With <paramref name="wrap"/>, a text longer than the window wraps at its edge instead
+    /// of running past it.
+    /// </summary>
+    internal static void StatusLine(AetherTone tone, string? text, bool wrap = false)
     {
         if (text is null)
         {
@@ -219,7 +243,14 @@ internal static class AetherControls
         ImGui.PushStyleColor(ImGuiCol.Text, color);
         try
         {
-            ImGui.TextUnformatted(text);
+            if (wrap)
+            {
+                ImGui.TextWrapped(text);
+            }
+            else
+            {
+                ImGui.TextUnformatted(text);
+            }
         }
         finally
         {
@@ -287,10 +318,10 @@ internal static class AetherControls
 
     /// <summary>
     /// An empty state, centered in the remaining region: a large muted icon, a title, an
-    /// explanation, and optionally the one action that fills the emptiness. Returns true when
-    /// that action was clicked.
+    /// explanation, and optionally the one action that fills the emptiness, with why it last failed
+    /// (<paramref name="actionError"/>) just under it. Returns true when that action was clicked.
     /// </summary>
-    internal static bool EmptyState(FontAwesomeIcon icon, string title, string description, string? actionLabel = null, string? actionTooltip = null)
+    internal static bool EmptyState(FontAwesomeIcon icon, string title, string description, string? actionLabel = null, string? actionTooltip = null, string? actionError = null)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var available = ImGui.GetContentRegionAvail();
@@ -313,7 +344,8 @@ internal static class AetherControls
 
         var descriptionHeight = ImGui.CalcTextSize(description, false, textWidth).Y;
         var buttonHeight = actionLabel is null ? 0f : ImGui.GetFrameHeight() + (AetherMetrics.SpaceMd * scale);
-        var blockHeight = (iconHeight * 2.2f) + (AetherMetrics.SpaceMd * scale) + titleHeight + (AetherMetrics.SpaceXs * scale) + descriptionHeight + buttonHeight;
+        var errorHeight = actionLabel is null || actionError is null ? 0f : ImGui.CalcTextSize(actionError, false, textWidth).Y + (AetherMetrics.SpaceSm * scale);
+        var blockHeight = (iconHeight * 2.2f) + (AetherMetrics.SpaceMd * scale) + titleHeight + (AetherMetrics.SpaceXs * scale) + descriptionHeight + buttonHeight + errorHeight;
 
         var origin = ImGui.GetCursorScreenPos();
         var top = origin.Y + Math.Max(0f, (available.Y - blockHeight) / 2f);
@@ -350,6 +382,14 @@ internal static class AetherControls
             ImGui.SetCursorScreenPos(new Vector2(centerX - (buttonWidth / 2f), y));
             clicked = PrimaryButton(actionLabel, new Vector2(buttonWidth, 0f), actionTooltip);
             y += ImGui.GetFrameHeight();
+
+            if (actionError is not null)
+            {
+                y += AetherMetrics.SpaceSm * scale;
+                var errorSize = ImGui.CalcTextSize(actionError, false, textWidth);
+                drawList.AddText(ImGui.GetFont(), ImGui.GetFontSize(), new Vector2(centerX - (errorSize.X / 2f), y), ImGui.GetColorU32(AetherPalette.Danger), actionError, textWidth);
+                y += errorSize.Y;
+            }
         }
 
         ImGui.SetCursorScreenPos(new Vector2(origin.X, Math.Max(y, origin.Y)));

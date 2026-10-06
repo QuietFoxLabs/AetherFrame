@@ -122,8 +122,32 @@ internal static class BasicEditorView
 {
     internal static readonly BasicEditorCategory[] Categories = Enum.GetValues<BasicEditorCategory>();
 
-    /// <summary>The window's minimum size, in unscaled pixels (Dalamud scales it).</summary>
-    internal static readonly Vector2 MinimumWindowSize = new(520f, 560f);
+    /// <summary>
+    /// The Simple view's categories: the everyday ones first (the look, the name, the portrait, the
+    /// message), then everything else about the character.
+    /// </summary>
+    internal static readonly BasicEditorCategory[] SimpleCategories =
+    [
+        BasicEditorCategory.Style, BasicEditorCategory.Identity, BasicEditorCategory.Portrait, BasicEditorCategory.Message, BasicEditorCategory.Details,
+    ];
+
+    /// <summary>The categories in navigator order for the Simple or the Detailed view.</summary>
+    internal static IReadOnlyList<BasicEditorCategory> CategoriesFor(bool simple) => simple ? SimpleCategories : Categories;
+
+    /// <summary>A category's name in the Simple view, in everyday words, or in the Detailed view as always.</summary>
+    internal static string Title(BasicEditorCategory category, bool simple) => !simple ? Title(category) : category switch
+    {
+        BasicEditorCategory.Style => "Look",
+        BasicEditorCategory.Identity => "Name",
+        BasicEditorCategory.Details => "More Details",
+        _ => Title(category),
+    };
+
+    /// <summary>
+    /// The window's minimum size, in unscaled pixels (Dalamud scales it). Short enough that at 200%
+    /// it fits a 1080p screen (960 of 972 pixels), since the guided steps keep Continue at the bottom.
+    /// </summary>
+    internal static readonly Vector2 MinimumWindowSize = new(520f, 480f);
 
     /// <summary>
     /// The window's size the first time it opens, in unscaled pixels, kept within the screen (see
@@ -344,6 +368,35 @@ internal static class BasicEditorView
     /// <summary>Where the drawn Plate starts within the preview area: centered while it fits, else at the scrolled origin.</summary>
     internal static Vector2 PreviewOffset(Vector2 available, Vector2 size) =>
         new(Math.Max(0f, (available.X - size.X) / 2f), Math.Max(0f, (available.Y - size.Y) / 2f));
+
+    /// <summary>The live view's largest share of the height above the inspector, in the Basic editor's stacked layout.</summary>
+    internal const float StackedPreviewShare = 0.45f;
+
+    /// <summary>The live view's largest share of the height above the step, in guided creation's narrow layout.</summary>
+    internal const float GuidedPreviewShare = 0.42f;
+
+    /// <summary>
+    /// How tall the live view is where it sits above the controls (the Basic editor's stacked layout,
+    /// and guided creation in a narrow window): the canvas' own shape at <paramref name="width"/> plus
+    /// <paramref name="toolbarHeight"/>, never more than <paramref name="share"/> of the
+    /// <paramref name="available"/> height nor so tall that the controls below get less than
+    /// <paramref name="keepBelow"/> (their own minimum and the spacing before them), and at least
+    /// <paramref name="preferredMinimum"/> while both allow it. However little room a short window
+    /// leaves (wrapped error and recovery warning lines above take some), the live view gives way
+    /// first: the result is never negative, never above the share, and never throws. Room no taller
+    /// than the toolbar would show nothing of the Plate, so it is 0 then: no live view, which the
+    /// caller doesn't draw (a child window 0 tall would take all the height left instead).
+    /// </summary>
+    internal static float StackedPreviewHeight(float width, float canvasWidth, float canvasHeight, float toolbarHeight, float available, float share, float preferredMinimum, float keepBelow)
+    {
+        var ceiling = float.IsFinite(available) && float.IsFinite(share) && float.IsFinite(keepBelow)
+            ? Math.Max(0f, Math.Min(available * share, available - Math.Max(0f, keepBelow)))
+            : 0f;
+        var floor = Math.Min(float.IsFinite(preferredMinimum) ? Math.Max(0f, preferredMinimum) : 0f, ceiling);
+        var natural = (Math.Max(0f, width) * canvasHeight / Math.Max(1f, canvasWidth)) + toolbarHeight;
+        var height = float.IsFinite(natural) ? Math.Clamp(natural, floor, ceiling) : floor;
+        return height > Math.Max(0f, float.IsFinite(toolbarHeight) ? toolbarHeight : 0f) ? height : 0f;
+    }
 
     /// <summary>
     /// The category a click at a point on the Plate (logical canvas coordinates) opens, or null: what

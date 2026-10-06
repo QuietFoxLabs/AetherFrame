@@ -21,6 +21,9 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>AetherFrame.Tests</RootNamespace>
+    <!-- Program.Main (RecoveryCrashHost.cs) runs a disposable editing session for the process
+         termination tests; the test runner never calls it. -->
+    <GenerateProgramFile>false</GenerateProgramFile>
     <!-- The linked sources' XML docs reference Dalamud-side types that aren't compiled here. -->
     <NoWarn>$(NoWarn);CS1574;CS1584;CS1580;CS1591</NoWarn>
   </PropertyGroup>

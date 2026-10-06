@@ -59,11 +59,13 @@ internal sealed partial class BasicProfileEditorWindow
 
         if (portrait is null)
         {
-            Hint("Choose a portrait to show beside your details.");
+            DetailedHint("Choose a portrait to show beside your details.");
             if (ImGui.Button("Choose a Portrait...", new Vector2(-1, 0f)))
             {
                 OpenImageFileDialog("Choose a Portrait", basicEditorSession.SetPortrait);
             }
+
+            SimpleTooltip("A screenshot or any picture on your PC, shown beside your details.");
         }
         else
         {
@@ -95,7 +97,15 @@ internal sealed partial class BasicProfileEditorWindow
 
                 ToolTip("Removes the portrait from this Plate (undoable). The image stays in your library.");
             }
+        }
 
+        if (!MoreControls("Fit, Frame and Layout", holdsComponentSlots: true))
+        {
+            return;
+        }
+
+        if (portrait is not null)
+        {
             Subheading("Image Fit");
             var fitClicked = EditorWidgets.Segmented("PortraitFit", PortraitFitLabels, Array.IndexOf(PortraitFitOrder, portrait.DisplayMode));
             if (fitClicked >= 0)
@@ -131,13 +141,15 @@ internal sealed partial class BasicProfileEditorWindow
     private void DrawDetailsCategory(ProfileDocument profile)
     {
         var info = basicEditorSession.CharacterInfo.CurrentInfo;
-        Hint(info is null
+        var detailsHint = info is null
             ? "No character loaded. You can still type any value."
-            : "Use the buttons to fill in current details; nothing changes on its own.");
+            : "Use the buttons to fill in current details; nothing changes on its own.";
+        DetailedHint(detailsHint);
 
         // Home World
         FieldHeader(profile, "Home World", BasicSection.World);
         DrawValueInput(profile, ProfileElementRole.BasicWorld, "Home World [Data Center]", MaxWorldLength);
+        SimpleTooltip(detailsHint);
         if (info is not null
             && BasicPlateText.World(info.HomeWorld, info.DataCenter) is { Length: > 0 } world
             && BasicSections.FindText(profile, ProfileElementRole.BasicWorld)?.Text != world
@@ -154,7 +166,7 @@ internal sealed partial class BasicProfileEditorWindow
         DrawValueInput(profile, ProfileElementRole.BasicFreeCompany, notInOne ? "Not in a Free Company" : "Free Company name", MaxFreeCompanyLength);
         if (notInOne)
         {
-            Hint("Not in a Free Company. You can hide this section, or type any name.");
+            Explain("Not in a Free Company. You can hide this section, or type any name.");
         }
         else if (info?.FreeCompanyTag is { Length: > 0 } tag)
         {
@@ -164,11 +176,16 @@ internal sealed partial class BasicProfileEditorWindow
                 basicEditorSession.UseCurrentFreeCompany();
             }
 
-            Hint("The game provides the Free Company's tag; type its full name if you prefer.");
+            Explain("The game provides the Free Company's tag; type its full name if you prefer.");
         }
 
         DrawPlaystyleEntries(profile);
         DrawActiveHours(profile);
+
+        if (!MoreControls("Style and Layout"))
+        {
+            return;
+        }
 
         ImGui.Spacing();
         var targets = new[]
@@ -204,7 +221,7 @@ internal sealed partial class BasicProfileEditorWindow
         ImGui.TextDisabled($"{ids.Count} of {BasicFavoriteJobs.MaxJobs}");
         if (ids.Count == 0)
         {
-            Hint("None yet. Add your favorites; the first one leads.");
+            Explain("None yet. Add your favorites; the first one leads.");
         }
 
         var buttonSize = ImGui.GetFrameHeight();
@@ -295,6 +312,10 @@ internal sealed partial class BasicProfileEditorWindow
             }
         }
 
+        // In the Simple view the explanation is the Add a job... list's tooltip, so it never lands on Add current.
+        const string jobNamesHint = "Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).";
+        SimpleTooltip(jobNamesHint);
+
         // From the logged-in character, only on request.
         if (info is { JobId: > 0, JobName.Length: > 0 } current && BasicEditorSession.CanAddFavoriteJob(profile, current.JobId)
             && ImGui.SmallButton($"Add current: {current.JobName}"))
@@ -302,7 +323,7 @@ internal sealed partial class BasicProfileEditorWindow
             basicEditorSession.UseCurrentJob();
         }
 
-        Hint("Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).");
+        DetailedHint(jobNamesHint);
     }
 
     // ---------------------------------------------------------------- playstyle and active hours (in Details)
@@ -315,7 +336,7 @@ internal sealed partial class BasicProfileEditorWindow
         ImGui.TextDisabled($"{entries.Count} of {BasicPlateSettings.MaxPlaystyles}");
         if (entries.Count == 0)
         {
-            Hint("None yet. Pick from the list or type your own.");
+            Explain("None yet. Pick from the list or type your own.");
         }
 
         var buttonSize = ImGui.GetFrameHeight();
@@ -394,11 +415,13 @@ internal sealed partial class BasicProfileEditorWindow
 
         if (profile.BasicPlate?.ActiveHours is not { } stored)
         {
-            Hint("When you're usually around. Only shown on your Plate; never connected to anything online.");
+            DetailedHint("When you're usually around. Only shown on your Plate; never connected to anything online.");
             if (ImGui.Button("Set Active Hours", new Vector2(-1, 0f)))
             {
                 basicEditorSession.SetActiveHours(new BasicActiveHours { Days = BasicWeekdays.Everyday });
             }
+
+            SimpleTooltip("When you're usually around. Only shown on your Plate; never connected to anything online.");
 
             return;
         }
@@ -508,9 +531,10 @@ internal sealed partial class BasicProfileEditorWindow
 
         // Shown even before the message exists: the first keystroke creates it (one undo step).
         var buffer = BasicSections.FindText(profile, ProfileElementRole.BasicMessage)?.Text ?? string.Empty;
-        if (buffer.Length == 0)
+        var empty = buffer.Length == 0;
+        if (empty)
         {
-            Hint("Add a message: a greeting, what you're looking for, anything.");
+            DetailedHint("Add a message: a greeting, what you're looking for, anything.");
         }
 
         var height = Math.Max(110f * ImGuiHelpers.GlobalScale, ImGui.GetContentRegionAvail().Y * 0.4f);
@@ -522,9 +546,19 @@ internal sealed partial class BasicProfileEditorWindow
             }
         }
 
+        if (empty)
+        {
+            SimpleTooltip("Add a message: a greeting, what you're looking for, anything.");
+        }
+
         if (ImGui.IsItemDeactivatedAfterEdit())
         {
             basicEditorSession.CommitTextEdit();
+        }
+
+        if (!MoreControls("Style and Layout"))
+        {
+            return;
         }
 
         ImGui.Spacing();
