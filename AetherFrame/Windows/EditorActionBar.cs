@@ -39,6 +39,7 @@ internal sealed class EditorActionBar
     private const string SavingText = "Saving...";
     private const string UnsavedText = "Unsaved changes";
     private const string SavedText = "Saved";
+    private const string RetryLabel = "Retry now";
 
     private static readonly Vector4 SavingColor = new(0.85f, 0.85f, 0.4f, 1f);
 
@@ -74,6 +75,12 @@ internal sealed class EditorActionBar
     internal EditorDocumentCommands Commands => commands;
 
     internal EditorPlateMenu PlateMenu => plateMenu;
+
+    /// <summary>
+    /// Whether Save, while it can save, is the screen's one primary (accent-filled) button: the Basic
+    /// editor's Simple view sets it. Otherwise Save is tinted like a selected toggle, as before.
+    /// </summary>
+    internal bool EmphasizeSave { get; set; }
 
     /// <summary>Asks to revert to the last saved version (confirmed by <see cref="DrawPopups"/>); ignored when there's nothing to revert.</summary>
     internal void RequestRevert()
@@ -123,11 +130,10 @@ internal sealed class EditorActionBar
         var recovery = commands.RecoveryIndicator;
 
         // The recovery checkpoint's mark beside the save state: always measured, so the bar never shifts when it appears.
-        var recoveryMarkWidth = commands.Recovery is null ? 0f : ImGui.GetFrameHeight() + style.ItemSpacing.X;
-        var buttonsWidth = recoveryMarkWidth + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
+        var buttonsWidth = RecoveryMarkWidth + ButtonWidth(PreviewLabel) + ButtonWidth(RevertLabel) + ButtonWidth(SaveLabel)
             + (style.ItemSpacing.X * 3f)
             + (Help is null ? 0f : HelpMenu.ButtonWidth + style.ItemSpacing.X);
-        var widestState = Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
+        var widestState = WidestSaveState();
 
         var rows = EditorActionBarLayout.ArrangeRows(
             ImGui.GetWindowContentRegionMin().X, ImGui.GetWindowContentRegionMax().X, controlStart, controlMinimum, centerWidth,
@@ -198,10 +204,11 @@ internal sealed class EditorActionBar
 
         ImGui.SameLine();
         var canSave = commands.CanSave;
+        var emphasized = canSave && EmphasizeSave;
         using (ImRaii.Disabled(!canSave))
-        using (ImRaii.PushColor(ImGuiCol.Button, EditorWidgets.ActiveToggleColor, canSave))
+        using (ImRaii.PushColor(ImGuiCol.Button, EditorWidgets.ActiveToggleColor, canSave && !emphasized))
         {
-            if (ImGui.Button(SaveLabel))
+            if (emphasized ? AetherControls.PrimaryButton(SaveLabel) : ImGui.Button(SaveLabel))
             {
                 commands.Save();
             }
@@ -219,9 +226,13 @@ internal sealed class EditorActionBar
         plateMenu.DrawResult(profile.ProfileId);
         DrawRecoveryWarning(recovery);
 
+        // Wrapped at the window's edge, so a long reason (a save the system refused, say) stays readable in a narrow window.
         if (errorMessage is { } error)
         {
-            ImGui.TextColored(EditorWidgets.ErrorColor, error);
+            using (ImRaii.TextWrapPos(0f))
+            {
+                ImGui.TextColored(EditorWidgets.ErrorColor, error);
+            }
         }
     }
 
@@ -282,6 +293,13 @@ internal sealed class EditorActionBar
     }
 
     /// <summary>
+    /// The room the recovery mark takes after the save state, with the spacing before what follows it:
+    /// the same whether the mark shows or not, and nothing where recovery doesn't run. Guided creation's
+    /// header reserves it too.
+    /// </summary>
+    internal float RecoveryMarkWidth => commands.Recovery is null ? 0f : ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X;
+
+    /// <summary>
     /// A small shield after the save state while there are unsaved changes: muted once the last recovery
     /// checkpoint holds them, dimmer while newer changes wait for one, the warning colour while writing
     /// fails. Its tooltip names the last checkpoint that finished. Takes its room even when hidden.
@@ -294,6 +312,20 @@ internal sealed class EditorActionBar
         }
 
         ImGui.SameLine();
+        DrawRecoveryMarkHere(recovery);
+    }
+
+    /// <summary>
+    /// The recovery mark where the cursor stands (<see cref="DrawRecoveryMark"/>), in its frame-height
+    /// room shown or hidden; the next <c>SameLine</c> follows that room. Nothing where recovery doesn't run.
+    /// </summary>
+    internal void DrawRecoveryMarkHere(RecoveryIndicator recovery)
+    {
+        if (commands.Recovery is null)
+        {
+            return;
+        }
+
         var start = ImGui.GetCursorPosX();
         var room = ImGui.GetFrameHeight();
         if (recovery.Kind == RecoveryIndicatorKind.None)
@@ -316,18 +348,29 @@ internal sealed class EditorActionBar
         ImGui.Dummy(Vector2.Zero);
     }
 
-    /// <summary>While recovery checkpoints fail: one restrained line under the bar, with Retry now.</summary>
-    private void DrawRecoveryWarning(RecoveryIndicator recovery)
+    /// <summary>
+    /// While recovery checkpoints fail: one restrained line under the bar (or guided creation's header),
+    /// with Retry now at its right. In a window too narrow for both on one line the text wraps beside
+    /// the button, so neither runs past the window's edge.
+    /// </summary>
+    internal void DrawRecoveryWarning(RecoveryIndicator recovery)
     {
         if (EditorDocumentCommands.RecoveryWarning(recovery) is not { } warning)
         {
             return;
         }
 
+        var style = ImGui.GetStyle();
+        var retryWidth = ImGui.CalcTextSize(RetryLabel).X + (style.FramePadding.X * 2f);
+        var textRoom = Math.Max(ImGui.GetFontSize() * 4f, ImGui.GetContentRegionAvail().X - retryWidth - style.ItemSpacing.X);
         ImGui.AlignTextToFramePadding();
-        ImGui.TextColored(EditorWidgets.WarningColor, warning);
+        using (ImRaii.TextWrapPos(ImGui.GetCursorPosX() + textRoom))
+        {
+            ImGui.TextColored(EditorWidgets.WarningColor, warning);
+        }
+
         ImGui.SameLine();
-        if (ImGui.SmallButton("Retry now##RecoveryRetry"))
+        if (ImGui.SmallButton(RetryLabel + "##RecoveryRetry"))
         {
             commands.Recovery?.RetryNow();
         }
@@ -341,4 +384,14 @@ internal sealed class EditorActionBar
         : (SavedText, EditorWidgets.SuccessColor with { W = 0.75f });
 
     private static float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f);
+
+    /// <summary>
+    /// The save state as the bar shows it (Saving..., Unsaved changes or Saved), for a view that draws
+    /// the commands its own way: guided creation's header.
+    /// </summary>
+    internal (string Text, Vector4 Color) CurrentSaveState => SaveState();
+
+    /// <summary>The widest the save state gets, so what follows it never shifts as it changes.</summary>
+    internal static float WidestSaveState() =>
+        Math.Max(ImGui.CalcTextSize(UnsavedText).X, Math.Max(ImGui.CalcTextSize(SavingText).X, ImGui.CalcTextSize(SavedText).X));
 }

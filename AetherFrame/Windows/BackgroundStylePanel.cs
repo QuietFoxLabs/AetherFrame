@@ -35,6 +35,13 @@ internal sealed class BackgroundStylePanel
     private static readonly string[] ImageFitLabels = ["Fit", "Fill", "Stretch"];
     private static readonly ProfileImageFit[] ImageFitOrder = [ProfileImageFit.Fit, ProfileImageFit.Fill, ProfileImageFit.Stretch];
 
+    /// <summary>What each style system is, on hover over its toggle where explanations are tooltips.</summary>
+    private static readonly string[] SystemTooltips =
+    [
+        "A whole look with artwork: background, frames, corners, name plaque, divider and section headers,\nwith text colors to match. Each piece stays yours to change.",
+        "Colors only: the background and every Basic text color at once, nothing to download.\nEach value stays editable.",
+    ];
+
     private readonly EditorSession editorSession;
     private readonly ProfileRenderResources renderResources;
     private readonly Action<string, Action<string>> openImageFileDialog;
@@ -195,20 +202,26 @@ internal sealed class BackgroundStylePanel
     /// taller than a few rows. The system's choice is marked and scrolled into view when a Plate opens
     /// or the system changes. Clicking a card chooses it (<paramref name="applyTheme"/>, by its stable
     /// id), which switches the Plate to that card's system. Filtering is <see cref="ThemeBrowser"/>'s;
-    /// the system shown, the search and the filter are view state only.
+    /// the system shown, the search and the filter are view state only. With
+    /// <paramref name="explainOnHover"/> (the Simple view and guided creation), what each system is,
+    /// and what choosing from the other one does, are tooltips instead of lines of text.
     /// </summary>
-    internal void DrawThemeBrowser(ProfileDocument profile, Action<ProfileThemePreset> applyTheme)
+    internal void DrawThemeBrowser(ProfileDocument profile, Action<ProfileThemePreset> applyTheme, bool explainOnHover = false)
     {
         // Each Plate, and each system, opens unfiltered, on its own choice when it has one.
         themeBrowser.ShowPlate(profile);
-        var shown = EditorWidgets.Segmented("StyleSystem", [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)], (int)themeBrowser.Showing);
+        var shown = EditorWidgets.Segmented(
+            "StyleSystem",
+            [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)],
+            (int)themeBrowser.Showing,
+            explainOnHover ? SystemTooltips : default);
         if (shown >= 0)
         {
             themeBrowser.ShowSystem(profile, (StyleSystem)shown);
         }
 
         var showing = themeBrowser.Showing;
-        DrawStyleInUse(profile, showing);
+        DrawStyleInUse(profile, showing, explainOnHover);
 
         // Search, with a clear button while it holds anything.
         var search = themeBrowser.Search;
@@ -284,33 +297,45 @@ internal sealed class BackgroundStylePanel
 
     /// <summary>
     /// The style in use, always named whatever is browsed, and, while the other system is browsed,
-    /// what choosing from it does: the system in use keeps its choice for later.
+    /// what choosing from it does: the system in use keeps its choice for later. With
+    /// <paramref name="explainOnHover"/>, that is a wrapped tooltip over the whole In use line
+    /// (swatch, name and kind, grouped) instead of a line of text under it.
     /// </summary>
-    private static void DrawStyleInUse(ProfileDocument profile, StyleSystem showing)
+    private static void DrawStyleInUse(ProfileDocument profile, StyleSystem showing, bool explainOnHover)
     {
         EditorWidgets.PropertyLabel("In use", 0f);
-        if (PlateStyle.InUse(profile) is { } chosen)
+        using (ImRaii.Group())
         {
-            var swatch = ImGui.GetTextLineHeight();
-            var min = ImGui.GetCursorScreenPos() + new Vector2(0f, (ImGui.GetFrameHeight() - swatch) / 2f);
-            ImGui.GetWindowDrawList().AddRectFilledMultiColor(
-                min, min + new Vector2(swatch * 1.6f, swatch),
-                ImGui.GetColorU32(chosen.PrimaryColor), ImGui.GetColorU32(chosen.SecondaryColor),
-                ImGui.GetColorU32(chosen.SecondaryColor), ImGui.GetColorU32(chosen.PrimaryColor));
-            ImGui.Dummy(new Vector2(swatch * 1.6f, ImGui.GetFrameHeight()));
-            ImGui.SameLine();
-            ImGui.TextUnformatted(chosen.Name);
-            ImGui.SameLine();
-            ImGui.TextDisabled(chosen.IsArtStyle ? "Art Style" : "Simple Theme");
-        }
-        else
-        {
-            ImGui.TextDisabled("None chosen yet");
+            if (PlateStyle.InUse(profile) is { } chosen)
+            {
+                var swatch = ImGui.GetTextLineHeight();
+                var min = ImGui.GetCursorScreenPos() + new Vector2(0f, (ImGui.GetFrameHeight() - swatch) / 2f);
+                ImGui.GetWindowDrawList().AddRectFilledMultiColor(
+                    min, min + new Vector2(swatch * 1.6f, swatch),
+                    ImGui.GetColorU32(chosen.PrimaryColor), ImGui.GetColorU32(chosen.SecondaryColor),
+                    ImGui.GetColorU32(chosen.SecondaryColor), ImGui.GetColorU32(chosen.PrimaryColor));
+                ImGui.Dummy(new Vector2(swatch * 1.6f, ImGui.GetFrameHeight()));
+                ImGui.SameLine();
+                ImGui.TextUnformatted(chosen.Name);
+                ImGui.SameLine();
+                ImGui.TextDisabled(chosen.IsArtStyle ? "Art Style" : "Simple Theme");
+            }
+            else
+            {
+                ImGui.TextDisabled("None chosen yet");
+            }
         }
 
         if (ThemeBrowser.SwitchHint(profile, showing) is { } hint)
         {
-            EditorWidgets.Hint(hint);
+            if (explainOnHover)
+            {
+                AetherControls.Tooltip(hint);
+            }
+            else
+            {
+                EditorWidgets.Hint(hint);
+            }
         }
     }
 
@@ -363,6 +388,21 @@ internal sealed class BackgroundStylePanel
 
     private static float ThemeCardHeight(ProfileDocument profile, ThemeFamily family, float cardWidth) =>
         PreviewHeight(profile, family == ThemeFamily.ArtStyle, cardWidth) + (ThemeCardPadding * 3f) + ImGui.GetTextLineHeight();
+
+    /// <summary>
+    /// Guided creation's Choose a Look: <paramref name="looks"/> as the style browser's own cards
+    /// (bundled previews, so nothing downloads until one is applied), large, two to a row where they
+    /// fit and one where they don't, the Plate's current style marked. A click applies the look
+    /// through <paramref name="applyTheme"/>, the Basic editor's own Apply Theme.
+    /// </summary>
+    internal void DrawLooks(ProfileDocument profile, IReadOnlyList<ProfileThemePreset> looks, Action<ProfileThemePreset> applyTheme)
+    {
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var available = ImGui.GetContentRegionAvail().X;
+        var twoAcross = (available - spacing) / 2f >= EditorWidgets.Scaled(150f);
+        var cardWidth = MathF.Floor(Math.Min(twoAcross ? (available - spacing) / 2f : available, EditorWidgets.Scaled(320f)));
+        DrawThemeCardGrid(profile, looks, ThemeBrowser.Current(profile), applyTheme, cardWidth);
+    }
 
     private void DrawThemeCardGrid(ProfileDocument profile, IReadOnlyList<ProfileThemePreset> members, ProfileThemePreset? current, Action<ProfileThemePreset> applyTheme, float cardWidth)
     {

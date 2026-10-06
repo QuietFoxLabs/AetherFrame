@@ -105,6 +105,9 @@ internal sealed class TemplateChooser
     /// <summary>The footer's Manage Templates...: My Plates' Templates view. The link shows only when set.</summary>
     internal Action? ManageTemplates { get; set; }
 
+    /// <summary>The footer's Step by Step...: guided creation, for a player who'd rather be guided. The link shows only when set.</summary>
+    internal Action? CreateStepByStep { get; set; }
+
     /// <summary>A row menu's Duplicate made this copy (My Plates: Manage Templates' selection follows it).</summary>
     internal Action<Guid>? TemplateDuplicated { get; set; }
 
@@ -203,6 +206,12 @@ internal sealed class TemplateChooser
         }
 
         var footerHeight = (ImGui.GetFrameHeightWithSpacing() * 2f) + ImGui.GetStyle().ItemSpacing.Y + (4f * ImGuiHelpers.GlobalScale);
+        if (FooterButtonsWrap())
+        {
+            // Cancel and Use Template take a row of their own below the footer's links.
+            footerHeight += ImGui.GetFrameHeightWithSpacing();
+        }
+
         var bodyHeight = -footerHeight;
         var leftWidth = ChooserLeftPaneWidth * ImGuiHelpers.GlobalScale;
 
@@ -458,6 +467,32 @@ internal sealed class TemplateChooser
         ProfileRenderer.Draw(drawList, document, canvasOrigin, fit.Scale, renderResources, ProfileRenderOptions.Finished);
     }
 
+    private static Vector2 FooterButtonSize => new Vector2(130f, 0f) * ImGuiHelpers.GlobalScale;
+
+    /// <summary>Whether the footer's Cancel and Use Template go on a row of their own (as <see cref="AetherControls.AlignRightAfterItem"/> decides), measured before anything is drawn.</summary>
+    private bool FooterButtonsWrap()
+    {
+        if (ManageTemplates is null && CreateStepByStep is null)
+        {
+            return false;
+        }
+
+        var style = ImGui.GetStyle();
+        var left = 0f;
+        if (ManageTemplates is not null)
+        {
+            left += ImGui.CalcTextSize("Manage Templates...").X;
+        }
+
+        if (CreateStepByStep is not null)
+        {
+            left += (ManageTemplates is not null ? style.ItemSpacing.X : 0f) + ImGui.CalcTextSize("Create Step by Step...").X + (style.FramePadding.X * 2f);
+        }
+
+        var rightWidth = (FooterButtonSize.X * 2f) + style.ItemSpacing.X;
+        return ImGui.GetWindowContentRegionMax().X - rightWidth < ImGui.GetWindowContentRegionMin().X + left + style.ItemSpacing.X;
+    }
+
     private void DrawTemplateChooserFooter()
     {
         var character = characterIdentity.CurrentCharacter;
@@ -483,10 +518,34 @@ internal sealed class TemplateChooser
             EditorWidgets.Tooltip("Preview, rename, duplicate, or delete your saved Templates.");
         }
 
-        // Right side: Cancel, then Use Template as the primary (accent-colored) action.
-        var buttonSize = new Vector2(130f, 0f) * ImGuiHelpers.GlobalScale;
+        if (CreateStepByStep is { } stepByStep)
+        {
+            if (ManageTemplates is not null)
+            {
+                ImGui.SameLine();
+            }
+
+            if (AetherControls.SecondaryButton("Create Step by Step..."))
+            {
+                stepByStep();
+                ImGui.CloseCurrentPopup();
+            }
+
+            EditorWidgets.Tooltip("Always a new Plate, in three short steps: your look, name, portrait and message. The easiest start.");
+        }
+
+        // Right side: Cancel, then Use Template as the primary (accent-colored) action; on a row of
+        // their own when the left side leaves no room for them.
+        var buttonSize = FooterButtonSize;
         var rightWidth = (buttonSize.X * 2f) + ImGui.GetStyle().ItemSpacing.X;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - rightWidth));
+        if (ManageTemplates is not null || CreateStepByStep is not null)
+        {
+            AetherControls.AlignRightAfterItem(rightWidth);
+        }
+        else
+        {
+            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - rightWidth));
+        }
 
         if (ImGui.Button("Cancel", buttonSize) || PopupEscapeGuard.CancelsPrompt())
         {

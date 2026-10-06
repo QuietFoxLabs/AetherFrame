@@ -159,6 +159,58 @@ internal sealed class KeptChangesOffer
     /// <summary>A draft is on offer (or being acted on): the window shows it.</summary>
     internal bool HasCurrent => Current is not null;
 
+    /// <summary>
+    /// Kept changes wait for the player's answer: one is on offer or being acted on, or one is still
+    /// to be offered (at the next login, say). Changes left for later (Decide Later, or the window
+    /// closed) don't count: the player has answered for now. The welcome waits while this holds.
+    /// </summary>
+    internal bool AwaitsAnswer => creating is not null || entries.Any(e => e.State is EntryState.Pending or EntryState.Acting);
+
+    /// <summary>
+    /// Whether opening Plate <paramref name="plateId"/> as saved should wait for this offer: kept changes
+    /// of that Plate wait for the player's answer (see <see cref="AwaitsAnswer"/>), or an answer is being
+    /// acted on, which may open a Plate itself. Asked every frame, so it allocates nothing.
+    /// </summary>
+    internal bool AwaitsAnswerFor(Guid plateId)
+    {
+        if (creating is not null)
+        {
+            return true;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (entry.State == EntryState.Acting || (entry.State == EntryState.Pending && entry.PlateId == plateId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Kept changes wait to be offered at the next login: read before one, and not offered yet (see <see cref="OnLogin"/>).</summary>
+    internal bool WaitsForLogin
+    {
+        get
+        {
+            if (presented)
+            {
+                return false;
+            }
+
+            foreach (var entry in entries)
+            {
+                if (entry.State == EntryState.Pending)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     internal KeptChangesVariant? CurrentVariant => Current is { } entry ? VariantOf(entry.Choice) : null;
 
     internal Guid? CurrentPlateId => Current?.PlateId;

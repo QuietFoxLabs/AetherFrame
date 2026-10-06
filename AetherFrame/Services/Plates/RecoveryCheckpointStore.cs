@@ -158,14 +158,19 @@ internal sealed class RecoveryCheckpointStore
     }
 
     /// <summary>
-    /// Every checkpoint of runs that have ended (their lock not held), and, separately, how many runs
-    /// are still going: their folders are left alone. This run's own folder is never listed.
+    /// Every checkpoint of runs that have ended (their lock not held), and, separately, the runs still
+    /// going: their folders are left alone. This run's own folder is never listed. <c>Unlisted</c>
+    /// names the runs whose folder couldn't be listed, or whose lock couldn't be told held or not: what
+    /// they hold is unknown, and a later load looks again. It is null when the Sessions folder itself
+    /// couldn't be listed, so no run is known. <c>Complete</c> is true only when no run is unknown.
     /// </summary>
-    internal (IReadOnlyList<CheckpointFile> Files, int RunningSessions) ListEndedSessions()
+    internal (IReadOnlyList<CheckpointFile> Files, IReadOnlySet<Guid> Running, IReadOnlySet<Guid>? Unlisted, bool Complete) ListEndedSessions()
     {
         var found = new List<CheckpointFile>();
-        var running = 0;
-        foreach (var directory in ListRunFolders())
+        var running = new HashSet<Guid>();
+        var folders = ListRunFolders();
+        var unlisted = folders is null ? null : new HashSet<Guid>();
+        foreach (var directory in folders ?? [])
         {
             if (!PlateStoragePaths.TryParseRecoverySessionDirectoryName(directory, out var sessionId) || sessionId == SessionId)
             {
@@ -176,7 +181,7 @@ internal sealed class RecoveryCheckpointStore
             {
                 if (files.IsLockHeld(PlateStoragePaths.GetRecoverySessionLockPath(directory)))
                 {
-                    running++;
+                    running.Add(sessionId);
                     continue;
                 }
 
@@ -186,10 +191,11 @@ internal sealed class RecoveryCheckpointStore
             {
                 // Another game client removed it as it unloaded, or it can't be listed now: a later load looks again.
                 log.Warning($"AetherFrame couldn't list a recovery folder: {ex.GetType().Name}.");
+                unlisted!.Add(sessionId);
             }
         }
 
-        return (found, running);
+        return (found, running, unlisted, unlisted is { Count: 0 });
     }
 
     /// <summary>
@@ -225,7 +231,7 @@ internal sealed class RecoveryCheckpointStore
     internal void Sweep()
     {
         var now = utcNow();
-        foreach (var directory in ListRunFolders())
+        foreach (var directory in ListRunFolders() ?? [])
         {
             try
             {
@@ -289,8 +295,8 @@ internal sealed class RecoveryCheckpointStore
         }
     }
 
-    // Every run's folder; none, logged, when the Sessions folder can't be listed now (a later load looks again).
-    private IReadOnlyList<string> ListRunFolders()
+    // Every run's folder; null, logged, when the Sessions folder can't be listed now (a later load looks again).
+    private IReadOnlyList<string>? ListRunFolders()
     {
         try
         {
@@ -299,7 +305,7 @@ internal sealed class RecoveryCheckpointStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.Warning($"AetherFrame couldn't list its recovery folders: {ex.GetType().Name}.");
-            return [];
+            return null;
         }
     }
 

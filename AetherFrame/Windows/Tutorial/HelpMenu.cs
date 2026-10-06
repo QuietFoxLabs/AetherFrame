@@ -13,11 +13,12 @@ using Dalamud.Interface.Utility.Raii;
 namespace AetherFrame.Windows.Tutorial;
 
 /// <summary>
-/// The Help menu behind the Help button in My Plates and both editors: the tutorial (start,
-/// resume, restart, a chapter to jump to), the keyboard shortcuts, the chat commands and the
-/// running build. One instance, shared by every window that shows the button; each window draws
-/// the button (and the popup right after it, in the same id scope) with <see cref="DrawButton"/>.
-/// The quiet "take the tour" reminder for a player who said Maybe Later is
+/// The Help menu behind the Help button in My Plates and both editors: guided creation (create, or
+/// continue, a Plate step by step), the full tutorial as optional reference (start, resume, restart,
+/// a chapter to jump to), the keyboard shortcuts, the chat commands and the running build. One
+/// instance, shared by every window that shows the button; each window draws the button (and the
+/// popup right after it, in the same id scope) with <see cref="DrawButton"/>. My Plates' quiet
+/// reminders (create your first Plate, continue it, or an earlier version's "take the tour") are
 /// <see cref="DrawReminder"/>, drawn by My Plates alone.
 /// </summary>
 internal sealed class HelpMenu
@@ -44,6 +45,9 @@ internal sealed class HelpMenu
 
     /// <summary>Opens the fonts' licences (<see cref="FontLicencesWindow"/>).</summary>
     internal Action? OpenFontLicences { get; set; }
+
+    /// <summary>Guided creation, set by the plugin: the menu's first entry and My Plates' reminder.</summary>
+    internal GuidedCreation? Guided { get; set; }
 
     internal HelpMenu(OnboardingCoordinator coordinator, ITutorialHost host)
     {
@@ -85,12 +89,25 @@ internal sealed class HelpMenu
     }
 
     /// <summary>
-    /// The reminder left by Maybe Later: one line with Take the tour and a dismiss, until the
-    /// player takes the tour or dismisses it. Draws nothing otherwise.
+    /// My Plates' quiet reminder, one at most: continue a guided creation left partway; or, for a
+    /// player who said Maybe Later to the tour an earlier version offered, take the tour. Each until
+    /// it is taken or dismissed. Draws nothing otherwise. (A new player with no Plate needs no
+    /// reminder: the empty My Plates itself offers the steps.)
     /// </summary>
     internal void DrawReminder()
     {
-        if (!coordinator.ShowReminder || coordinator.IsTutorialActive)
+        if (coordinator.IsTutorialActive)
+        {
+            return;
+        }
+
+        if (Guided is { ShowsResumeReminder: true } guided)
+        {
+            DrawGuidedReminder(guided);
+            return;
+        }
+
+        if (!coordinator.ShowReminder)
         {
             return;
         }
@@ -128,6 +145,66 @@ internal sealed class HelpMenu
         ImGui.SetCursorScreenPos(new Vector2(min.X, min.Y + height + (AetherMetrics.SpaceXs * scale)));
     }
 
+    /// <summary>
+    /// The guided creation reminder, in the tutorial reminder's style: its buttons on the text's row,
+    /// or on a row of their own beneath it when My Plates is too narrow for one.
+    /// </summary>
+    private static void DrawGuidedReminder(GuidedCreation guided)
+    {
+        const string text = "Your Plate isn't finished yet.";
+        const string continueLabel = "Continue Step by Step";
+        const string notNowLabel = "Not Now";
+
+        var scale = ImGuiHelpers.GlobalScale;
+        var style = ImGui.GetStyle();
+        using var id = ImRaii.PushId("GuidedReminder");
+        var drawList = ImGui.GetWindowDrawList();
+        var min = ImGui.GetCursorScreenPos();
+        var width = ImGui.GetContentRegionAvail().X;
+        var inset = AetherMetrics.SpaceMd * scale;
+        float ButtonWidth(string label) => ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2f);
+        var buttonsWidth = ButtonWidth(continueLabel) + style.ItemSpacing.X + ButtonWidth(notNowLabel);
+        var textWidth = ImGui.GetFrameHeight() + style.ItemSpacing.X + ImGui.CalcTextSize(text).X;
+        var oneRow = inset + textWidth + style.ItemSpacing.X + buttonsWidth + inset <= width;
+        var height = (oneRow ? ImGui.GetFrameHeight() : (ImGui.GetFrameHeight() * 2f) + style.ItemSpacing.Y) + (AetherMetrics.SpaceSm * scale);
+        drawList.AddRectFilled(min, min + new Vector2(width, height), ImGui.GetColorU32(AetherPalette.InfoTint), AetherMetrics.RadiusMd * scale);
+        drawList.AddRectFilled(min, new Vector2(min.X + (AetherMetrics.AccentBarWidth * scale), min.Y + height), ImGui.GetColorU32(AetherPalette.Glow), AetherMetrics.RadiusMd * scale, ImDrawFlags.RoundCornersLeft);
+
+        ImGui.SetCursorScreenPos(min + new Vector2(inset, AetherMetrics.SpaceXs * scale));
+        EditorWidgets.IconText(FontAwesomeIcon.PencilAlt, AetherPalette.Glow);
+        ImGui.SameLine();
+        ImGui.AlignTextToFramePadding();
+        using (ImRaii.PushColor(ImGuiCol.Text, AetherPalette.TextSecondary))
+        {
+            ImGui.TextUnformatted(text);
+        }
+
+        if (oneRow)
+        {
+            ImGui.SameLine();
+        }
+        else
+        {
+            ImGui.SetCursorScreenPos(new Vector2(min.X + inset, ImGui.GetCursorScreenPos().Y));
+        }
+
+        if (AetherControls.PrimaryButton(continueLabel, tooltip: "Opens the Plate you were creating, on the step you reached."))
+        {
+            guided.Start();
+        }
+
+        ImGui.SameLine();
+        if (AetherControls.GhostButton(notNowLabel, tooltip: "Hide this until AetherFrame next loads. Help can continue it any time."))
+        {
+            guided.DismissReminder();
+        }
+
+        ImGui.SetCursorScreenPos(new Vector2(min.X, min.Y + height + (AetherMetrics.SpaceXs * scale)));
+
+        // Why Continue Step by Step couldn't open the Plate, until the next try.
+        AetherControls.StatusLine(AetherTone.Danger, guided.StartError);
+    }
+
     private void DrawContents()
     {
         var scale = ImGuiHelpers.GlobalScale;
@@ -137,8 +214,38 @@ internal sealed class HelpMenu
         AetherBrand.Header("Help", buildDescription);
         ImGui.Dummy(new Vector2(width, 0f));
 
+        // ---- guided creation, the introductory route
+        if (Guided is { } guided)
+        {
+            AetherControls.SectionHeader("Get started", topSpacing: 0f);
+            var onSteps = guided.StepsOnScreen;
+            var waitsForRecovery = guided.ContinueWaitsForRecovery;
+            using (ImRaii.Disabled(guided.IsStarting || onSteps || waitsForRecovery))
+            {
+                if (ImGui.MenuItem(guided.CanContinue ? "Continue Step by Step" : "Create Step by Step"))
+                {
+                    guided.Start();
+                }
+            }
+
+            AetherControls.Tooltip(onSteps
+                ? "The steps are open in the Basic editor."
+                : waitsForRecovery
+                ? guided.RecoveryWaitsForLogin()
+                    ? "Log in first: AetherFrame then offers the unsaved changes it kept for this Plate."
+                    : "Answer Unsaved Changes Kept first: it may hold this Plate's changes."
+                : guided.CanContinue
+                    ? "Opens the Plate you were creating, on the step you reached."
+                    : "A new Plate in three short steps: choose a look, make it yours, save.");
+            if (guided.StartError is { } startError)
+            {
+                AetherControls.MutedInline(startError);
+            }
+        }
+
         // ---- the tutorial
-        AetherControls.SectionHeader("Tutorial", topSpacing: 0f);
+        AetherControls.SectionHeader("Full tutorial", topSpacing: Guided is null ? 0f : AetherMetrics.SpaceSm);
+        AetherControls.MutedInline("A tour of every control, for reference.");
         var prefs = coordinator.Preferences;
         if (coordinator.IsTutorialActive)
         {

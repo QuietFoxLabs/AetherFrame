@@ -7,7 +7,8 @@ namespace AetherFrame.Windows.Tutorial;
 /// <summary>
 /// The tutorial's windows, in the order they must be added to the window system after every
 /// other AetherFrame window: the driver (computes the frame's overlay from the anchors those
-/// windows marked), the five shades, the card, and the first-run offer. Shades and card open
+/// windows marked), the five shades, and the card. (The welcome is guided creation's own
+/// window, <see cref="WelcomeWindow"/>; the tutorial is never offered on its own.) Shades and card open
 /// and close with the tutorial; the plugin asks <see cref="Update"/> once per frame for that.
 /// </summary>
 internal sealed class TutorialOverlay
@@ -17,7 +18,6 @@ internal sealed class TutorialOverlay
     private readonly TutorialOverlayWindow driver;
     private readonly TutorialShadeWindow[] shades;
     private readonly TutorialCardWindow card;
-    private readonly FirstRunPromptWindow offer;
     private bool wasActive;
 
     /// <param name="coordinator">The tutorial's state.</param>
@@ -33,7 +33,6 @@ internal sealed class TutorialOverlay
         }
 
         card = new TutorialCardWindow(coordinator, host, frame);
-        offer = new FirstRunPromptWindow(coordinator, host);
 
         // The driver keeps the shades, then the card, in front of whatever window a step points into.
         var inFront = new List<Window>(shades.Length + 1);
@@ -54,7 +53,6 @@ internal sealed class TutorialOverlay
             }
 
             yield return card;
-            yield return offer;
         }
     }
 
