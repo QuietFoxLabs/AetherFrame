@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using AetherFrame.Protocol.Identity;
+using AetherFrame.Services.Network.Transport;
 
 namespace AetherFrame.Services.Network.Sharing;
 
@@ -205,6 +206,46 @@ internal static class SharingWire
 
         var number = Array.ConvertAll(parts, part => int.Parse(part, System.Globalization.CultureInfo.InvariantCulture));
         return (protocolVersion, apiVersion, new Version(number[0], number[1], number[2]));
+    }
+
+    /// <summary>
+    /// A presence start's answer ("The online count"): the session's token, exactly 32 bytes in
+    /// base64, and the count, a whole number from 0 to <see cref="MaxOnline"/>.
+    /// </summary>
+    /// <exception cref="InvalidDataException">The answer isn't one.</exception>
+    internal static (byte[] Token, int Online) ReadPresenceStart(byte[] body)
+    {
+        using var document = Parse(body, ["session", "online"]);
+        var text = String(document.RootElement, "session");
+        var token = new byte[SharingClient.PresenceTokenLength];
+        if (text.Length != 44 || !Convert.TryFromBase64String(text, token, out var written) || written != SharingClient.PresenceTokenLength)
+        {
+            throw new InvalidDataException("The server's presence session isn't one.");
+        }
+
+        return (token, Online(document.RootElement));
+    }
+
+    /// <summary>A heartbeat's answer: the count alone.</summary>
+    /// <exception cref="InvalidDataException">The answer isn't one.</exception>
+    internal static int ReadPresenceBeat(byte[] body)
+    {
+        using var document = Parse(body, ["online"]);
+        return Online(document.RootElement);
+    }
+
+    /// <summary>The largest count a presence answer may carry: the server holds at most 100,000 sessions.</summary>
+    internal const int MaxOnline = 100_000;
+
+    private static int Online(JsonElement root)
+    {
+        var online = root.GetProperty("online");
+        if (online.ValueKind != JsonValueKind.Number || !online.TryGetInt32(out var count) || count is < 0 or > MaxOnline)
+        {
+            throw new InvalidDataException("The server's online count isn't one.");
+        }
+
+        return count;
     }
 
     private static byte[] Write(Action<Utf8JsonWriter> properties)

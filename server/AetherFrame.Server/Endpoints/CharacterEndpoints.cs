@@ -2,6 +2,7 @@ using AetherFrame.Protocol;
 using AetherFrame.Protocol.Requests;
 using AetherFrame.Server.Hosting;
 using AetherFrame.Server.Limits;
+using AetherFrame.Server.Presence;
 using AetherFrame.Server.Requests;
 using AetherFrame.Server.Storage;
 using Microsoft.AspNetCore.Builder;
@@ -76,7 +77,7 @@ internal static class CharacterEndpoints
 
         // Opting out (C4) is {}; pausing (C3) is {"mode":"pause"}: the Plate is deleted and the
         // binding kept, so the next publish shares again without a new check.
-        app.MapPost("/v1/opt-out", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings, ContentStore content) =>
+        app.MapPost("/v1/opt-out", (HttpContext http, SignedRequests requests, RateLimiter limiter, BindingStore bindings, ContentStore content, PresenceStore presence) =>
             requests.RunActionAsync(http, RequestProofKind.OptOut, ServerLimits.OptOutsPerAddress, async call =>
             {
                 var pause = ActionBody.Read(call.Action.Body, PauseFields);
@@ -99,6 +100,8 @@ internal static class CharacterEndpoints
                     await bindings.OptOutAsync(call.Persona, http.RequestAborted);
                 }
 
+                // A paused or opted-out character stops counting as online at once ("The online count").
+                presence.ForgetKey(call.Persona);
                 return Results.NoContent();
             }));
     }

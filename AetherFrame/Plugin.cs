@@ -148,6 +148,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     // drawing, the Sharing window that shows it, and the small window that follows each share.
     private readonly LivePublisher livePublisher;
     private readonly SharingWindow sharingWindow;
+
+    // The online count ("The online count" in the decision register): while the logged-in
+    // character shares, a heartbeat in the background keeps it counted, and My Plates shows the
+    // count. Each frame only says whose presence is wanted; every request runs off the frame.
+    private readonly OnlineCount onlineCount;
+    private readonly PresenceDriver presenceDriver;
     private readonly SharingProgressWindow sharingProgressWindow;
 
     // Viewing other players' Plates (N2-10): looked up only while one of the player's characters
@@ -458,6 +464,12 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             // time, and hands it to the sharing service.
             livePublisher = new LivePublisher(characterSharing, NewShareCheck(), () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, () => plateLibrary.IsLoaded);
             plateLibrary.PlateSaved += livePublisher.PlateSaved;
+            onlineCount = new OnlineCount(sharingConnection.Client, personaSession.TryRun, () => DateTimeOffset.UtcNow, ownedOperations.Stopping, log.Information);
+            presenceDriver = new PresenceDriver(
+                onlineCount, () => ClientState.IsLoggedIn, () => OnlineCount.TargetOf(characterSharing.View, characterIdentityService.CurrentCharacter?.ContentId));
+            var onlineCountFooter = new OnlineCountFooter(
+                onlineCount, () => OnlineCountFooter.WaitsForNotice(characterSharing.View, characterIdentityService.CurrentCharacter?.ContentId), () => DateTimeOffset.UtcNow);
+            plateLibraryWindow.OnlineCountItem = onlineCountFooter.Item;
             sharingWindow = new SharingWindow(characterSharing, livePublisher, personaSession, () => characterIdentityService.CurrentCharacter, plateLibrary.GetActivePlateId, System.IO.Path.Combine(PersonaSessionHost.PersonasDirectory(configDirectory), SharingStateFile.FileName));
             WindowSystem.AddWindow(sharingWindow);
             plateLibraryWindow.OpenSharing = () => sharingWindow.IsOpen = true;
@@ -539,11 +551,23 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             PluginInterface.UiBuilder.Draw += DrawUi;
             PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
             PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
+#if AETHERFRAME_NETWORK_PREVIEW
+            // The online count follows the game's own tick, not drawing: Dalamud draws no plugin
+            // window while it hides them (a hidden game UI, a cutscene, gpose), and a logout then
+            // still has to stop the heartbeats ("The online count").
+            Framework.Update += OnFrameworkTick;
+#endif
             startup.OnFailure("drawing", () =>
             {
                 PluginInterface.UiBuilder.Draw -= DrawUi;
                 PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
                 PluginInterface.UiBuilder.OpenConfigUi -= ToggleMainUi;
+#if AETHERFRAME_NETWORK_PREVIEW
+                Framework.Update -= OnFrameworkTick;
+
+                // A tick may have started a run already: it stops and leaves, in the background.
+                _ = onlineCount.StopAsync(TimeSpan.FromSeconds(5));
+#endif
             });
 
             // Names the exact build in dalamud.log, so a stale dev DLL is obvious.
@@ -757,6 +781,10 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         // or as soon as its own work in flight ends: never tied to the plugin's other operations,
         // so a reloaded AetherFrame finds the lock free as early as possible (P3).
         personaSession.Close();
+
+        // The online count stops sending and ends its session on the server (a leave, within a few
+        // seconds), before anything it uses is disposed.
+        await onlineCount.StopAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 #endif
 
         // First, nothing new can start: no drawing, menus, commands, login events or shortcuts.
@@ -790,6 +818,9 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     private void StopNewWork()
     {
         PluginInterface.UiBuilder.Draw -= DrawUi;
+#if AETHERFRAME_NETWORK_PREVIEW
+        Framework.Update -= OnFrameworkTick;
+#endif
 
         // Nothing draws any more, and the windows are still there: the open Plate's unsaved changes,
         // and the editor showing them, are read now, for DisposeAsync to keep.
@@ -849,6 +880,11 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
         sharingConnection.Dispose();
 #endif
     }
+
+#if AETHERFRAME_NETWORK_PREVIEW
+    /// <summary>Every tick of the game, drawn or not: whose presence the online count sends.</summary>
+    private void OnFrameworkTick(IFramework framework) => presenceDriver.Tick();
+#endif
 
     private void OnLogin()
     {

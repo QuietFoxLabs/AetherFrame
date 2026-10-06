@@ -30,4 +30,10 @@ public enum RequestProofKind : byte
 
     /// <summary>An action: reporting a Plate to the operator (C5).</summary>
     Report = 8,
+
+    /// <summary>
+    /// An action: counting the signer's bound character as online, and starting the presence session
+    /// whose heartbeats keep it counted ("The online count" in the decision register).
+    /// </summary>
+    Presence = 9,
 }

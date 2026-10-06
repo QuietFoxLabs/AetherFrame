@@ -58,6 +58,36 @@ internal static class ServerLimits
     public static readonly Limit ReportsPerKey = new("report/key", 20, TimeSpan.FromDays(1));
 
     public static readonly Limit ReportsPerAddress = new("report/address", 60, TimeSpan.FromDays(1));
+
+    /// <summary>
+    /// Signed starts of a presence session for one key ("The online count"): one at login, then a
+    /// renewal about every 52 minutes while the character plays, is the plugin's normal pace, so 12
+    /// leaves room for restarts of the server or the game without letting a key churn sessions.
+    /// </summary>
+    public static readonly Limit PresenceStartsPerKey = new("presence-start/key", 12, TimeSpan.FromHours(1));
+
+    /// <summary>
+    /// Presence challenges (<c>/v1/presence/challenge</c>) issued to one address group, and signed
+    /// starts of a presence session from it, each counted on its own: some 100 players behind one
+    /// IPv4 address at the plugin's pace, a start about every 52 minutes each, with room for all of
+    /// them to start again after a server restart. Presence challenges are its own, so presence never
+    /// takes from <see cref="ChallengesPerAddress"/>, which publishing, looking up and checking from
+    /// the same network need.
+    /// </summary>
+    public static readonly Limit PresenceChallengesPerAddress = new("presence-challenge/address", 240, TimeSpan.FromHours(1));
+
+    /// <inheritdoc cref="PresenceChallengesPerAddress"/>
+    public static readonly Limit PresenceStartsPerAddress = new("presence-start/address", 240, TimeSpan.FromHours(1));
+
+    /// <summary>
+    /// Heartbeats and leaves from one address group that name no session the server counts: only
+    /// those take from it, so a counted heartbeat is never refused for it. At the plugin's pace that
+    /// is a restart's or an hour's 404, once a session, and a leave for a session the server already
+    /// ended or forgot (after a pause, turning sharing off, a takeover, a binding removed, an expiry
+    /// or a restart); counted in a minute so the counter holds few events. Its own counter, so they
+    /// never take from any other limit.
+    /// </summary>
+    public static readonly Limit PresenceBeatsPerAddress = new("presence/address", 120, TimeSpan.FromMinutes(1));
 }
 
 /// <summary>
@@ -164,10 +194,17 @@ internal sealed class RateLimiter(TimeProvider time)
     /// <summary>How many counters are held: for tests of the memory bound.</summary>
     internal int Count => counters.Count;
 
+    /// <summary>
+    /// Drops every counter whose events have all left its window, now rather than when the next
+    /// request happens to come in: so a server nobody is asking holds no counter, and none of the
+    /// times it counted events at, past the window the limit itself needs them for.
+    /// </summary>
+    public void SweepNow() => Sweep(time.GetUtcNow(), always: true);
+
     /// <summary>Drops every counter whose events have all left its window, at most once a minute.</summary>
-    private void Sweep(DateTimeOffset now)
+    private void Sweep(DateTimeOffset now, bool always = false)
     {
-        if (now - lastSweep < TimeSpan.FromMinutes(1))
+        if (!always && now - lastSweep < TimeSpan.FromMinutes(1))
         {
             return;
         }

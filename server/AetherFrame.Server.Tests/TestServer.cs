@@ -290,14 +290,30 @@ internal sealed class FakeImages : AetherFrame.Server.Images.IImageProcessor
     }
 }
 
-/// <summary>A clock the tests move by hand.</summary>
+/// <summary>
+/// A clock the tests move by hand. <see cref="Advance"/> moves the wall clock and the monotonic
+/// timestamp together, as time passing does; setting <see cref="Now"/> moves the wall clock alone,
+/// as an operator setting it does.
+/// </summary>
 internal sealed class ManualTime(DateTimeOffset start) : TimeProvider
 {
+    private long elapsed;
+
     public DateTimeOffset Now { get; set; } = start;
+
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
 
     public override DateTimeOffset GetUtcNow() => Now;
 
-    public void Advance(TimeSpan by) => Now += by;
+    public override long GetTimestamp() => Interlocked.Read(ref elapsed);
+
+    public void Advance(TimeSpan by)
+    {
+        // Time passing never goes back: a test sets Now for that.
+        ArgumentOutOfRangeException.ThrowIfLessThan(by, TimeSpan.Zero);
+        Now += by;
+        Interlocked.Add(ref elapsed, by.Ticks);
+    }
 }
 
 /// <summary>
