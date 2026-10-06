@@ -107,7 +107,7 @@ internal sealed class WelcomeWindow : Window
         var busy = creating && guided.IsStarting;
         using (ImRaii.Disabled(busy))
         {
-            if (AetherControls.PrimaryButton(busy ? "Creating your Plate...##WelcomeCreate" : "Create My First Plate##WelcomeCreate", new Vector2(width, 0f), "Makes a new Plate and opens it on the first step.\nYour Plates stay on your PC, and sharing stays off unless you turn it on."))
+            if (AetherControls.PrimaryButton(busy ? "Creating your Plate...##WelcomeCreate" : "Create My First Plate##WelcomeCreate", new Vector2(width, 0f), "A Plate is your character's card. This makes one and opens it on the first step.\nYour Plates stay on your PC, and sharing stays off unless you turn it on."))
             {
                 creating = true;
                 startError = null;

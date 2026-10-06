@@ -28,7 +28,8 @@ internal sealed partial class BasicProfileEditorWindow
         // The look first: the two first-class visual pickers, the style browser (an Art Style, or a
         // Simple Theme), then Pattern (the background's procedural texture) — both discoverable
         // without first opening Customize Background.
-        // The Simple view's category is called Look already, and shows the styles with no explanation.
+        // The Simple view's category is called Look already; what each style system is shows on
+        // hover over its toggle there, instead of the line below.
         if (!Simple)
         {
             Subheading("Look");
@@ -36,7 +37,7 @@ internal sealed partial class BasicProfileEditorWindow
 
         using (ImRaii.PushId("Theme"))
         {
-            backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme);
+            backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme, explainOnHover: Simple);
         }
 
         if (!Simple)

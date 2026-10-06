@@ -366,7 +366,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             switch (action.Kind)
             {
                 case EditorShortcutActionKind.Save:
-                    // On guided creation's Save step, Ctrl+S is its Save Plate, so a save there completes the steps.
+                    // On guided creation's Save step, Ctrl+S is its Save, so a save there completes the steps.
                     if (Guided is { Stage: GuidedStage.Save } guided && guided.IsGuiding(profileService.CurrentProfile?.ProfileId))
                     {
                         guided.Save();
@@ -964,7 +964,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         ToolTip(touring
             ? "The tutorial shows every control while it runs.\nYour view comes back when it ends."
-            : "Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way.");
+            : "Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way. For layers and free placement, choose Advanced in the bar above.");
     }
 
     /// <summary>
@@ -1062,7 +1062,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     private static void Hint(string text) => EditorWidgets.Hint(text);
 
-    // The Simple view shows labelled controls and keeps explanations for hovering (Rich's rules for
+    // The Simple view shows labelled controls and keeps explanations for hovering (the owner's rules for
     // onboarding, October 6, 2026); the Detailed view shows them as it always has.
 
     /// <summary>An explanation drawn before its control: a hint in the Detailed view, nothing in the Simple view (pair with <see cref="SimpleTooltip"/>).</summary>

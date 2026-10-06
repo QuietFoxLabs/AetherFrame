@@ -141,13 +141,15 @@ internal sealed partial class BasicProfileEditorWindow
     private void DrawDetailsCategory(ProfileDocument profile)
     {
         var info = basicEditorSession.CharacterInfo.CurrentInfo;
-        DetailedHint(info is null
+        var detailsHint = info is null
             ? "No character loaded. You can still type any value."
-            : "Use the buttons to fill in current details; nothing changes on its own.");
+            : "Use the buttons to fill in current details; nothing changes on its own.";
+        DetailedHint(detailsHint);
 
         // Home World
         FieldHeader(profile, "Home World", BasicSection.World);
         DrawValueInput(profile, ProfileElementRole.BasicWorld, "Home World [Data Center]", MaxWorldLength);
+        SimpleTooltip(detailsHint);
         if (info is not null
             && BasicPlateText.World(info.HomeWorld, info.DataCenter) is { Length: > 0 } world
             && BasicSections.FindText(profile, ProfileElementRole.BasicWorld)?.Text != world
@@ -219,7 +221,7 @@ internal sealed partial class BasicProfileEditorWindow
         ImGui.TextDisabled($"{ids.Count} of {BasicFavoriteJobs.MaxJobs}");
         if (ids.Count == 0)
         {
-            Hint("None yet. Add your favorites; the first one leads.");
+            Explain("None yet. Add your favorites; the first one leads.");
         }
 
         var buttonSize = ImGui.GetFrameHeight();
@@ -317,7 +319,7 @@ internal sealed partial class BasicProfileEditorWindow
             basicEditorSession.UseCurrentJob();
         }
 
-        DetailedHint("Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).");
+        Explain("Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).");
     }
 
     // ---------------------------------------------------------------- playstyle and active hours (in Details)
@@ -330,7 +332,7 @@ internal sealed partial class BasicProfileEditorWindow
         ImGui.TextDisabled($"{entries.Count} of {BasicPlateSettings.MaxPlaystyles}");
         if (entries.Count == 0)
         {
-            Hint("None yet. Pick from the list or type your own.");
+            Explain("None yet. Pick from the list or type your own.");
         }
 
         var buttonSize = ImGui.GetFrameHeight();

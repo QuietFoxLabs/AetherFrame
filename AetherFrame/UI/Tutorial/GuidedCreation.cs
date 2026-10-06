@@ -350,7 +350,7 @@ internal sealed class GuidedCreation
         }
 
         // Saved: complete only while the steps still stand where Save was pressed, and only when
-        // nothing changed during the save (an Undo then leaves unsaved changes, so Save Plate stays).
+        // nothing changed during the save (an Undo then leaves unsaved changes, so Save stays).
         if (plateId is { } saved && IsGuiding(saved) && profiles.OpenPlateId == saved && !commands.IsDirty)
         {
             Complete(saved);

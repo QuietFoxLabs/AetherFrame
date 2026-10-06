@@ -35,6 +35,13 @@ internal sealed class BackgroundStylePanel
     private static readonly string[] ImageFitLabels = ["Fit", "Fill", "Stretch"];
     private static readonly ProfileImageFit[] ImageFitOrder = [ProfileImageFit.Fit, ProfileImageFit.Fill, ProfileImageFit.Stretch];
 
+    /// <summary>What each style system is, on hover over its toggle where explanations are tooltips.</summary>
+    private static readonly string[] SystemTooltips =
+    [
+        "A whole look with artwork: background, frames, corners, name plaque, divider and section headers,\nwith text colors to match. Each piece stays yours to change.",
+        "Colors only: the background and every Basic text color at once, nothing to download.\nEach value stays editable.",
+    ];
+
     private readonly EditorSession editorSession;
     private readonly ProfileRenderResources renderResources;
     private readonly Action<string, Action<string>> openImageFileDialog;
@@ -195,20 +202,26 @@ internal sealed class BackgroundStylePanel
     /// taller than a few rows. The system's choice is marked and scrolled into view when a Plate opens
     /// or the system changes. Clicking a card chooses it (<paramref name="applyTheme"/>, by its stable
     /// id), which switches the Plate to that card's system. Filtering is <see cref="ThemeBrowser"/>'s;
-    /// the system shown, the search and the filter are view state only.
+    /// the system shown, the search and the filter are view state only. With
+    /// <paramref name="explainOnHover"/> (the Simple view and guided creation), what each system is,
+    /// and what choosing from the other one does, are tooltips instead of lines of text.
     /// </summary>
-    internal void DrawThemeBrowser(ProfileDocument profile, Action<ProfileThemePreset> applyTheme)
+    internal void DrawThemeBrowser(ProfileDocument profile, Action<ProfileThemePreset> applyTheme, bool explainOnHover = false)
     {
         // Each Plate, and each system, opens unfiltered, on its own choice when it has one.
         themeBrowser.ShowPlate(profile);
-        var shown = EditorWidgets.Segmented("StyleSystem", [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)], (int)themeBrowser.Showing);
+        var shown = EditorWidgets.Segmented(
+            "StyleSystem",
+            [ThemeBrowser.SystemLabel(StyleSystem.ArtStyle), ThemeBrowser.SystemLabel(StyleSystem.SimpleTheme)],
+            (int)themeBrowser.Showing,
+            explainOnHover ? SystemTooltips : default);
         if (shown >= 0)
         {
             themeBrowser.ShowSystem(profile, (StyleSystem)shown);
         }
 
         var showing = themeBrowser.Showing;
-        DrawStyleInUse(profile, showing);
+        DrawStyleInUse(profile, showing, explainOnHover);
 
         // Search, with a clear button while it holds anything.
         var search = themeBrowser.Search;
@@ -286,7 +299,7 @@ internal sealed class BackgroundStylePanel
     /// The style in use, always named whatever is browsed, and, while the other system is browsed,
     /// what choosing from it does: the system in use keeps its choice for later.
     /// </summary>
-    private static void DrawStyleInUse(ProfileDocument profile, StyleSystem showing)
+    private static void DrawStyleInUse(ProfileDocument profile, StyleSystem showing, bool explainOnHover)
     {
         EditorWidgets.PropertyLabel("In use", 0f);
         if (PlateStyle.InUse(profile) is { } chosen)
@@ -310,7 +323,14 @@ internal sealed class BackgroundStylePanel
 
         if (ThemeBrowser.SwitchHint(profile, showing) is { } hint)
         {
-            EditorWidgets.Hint(hint);
+            if (explainOnHover)
+            {
+                EditorWidgets.Tooltip(hint);
+            }
+            else
+            {
+                EditorWidgets.Hint(hint);
+            }
         }
     }
 

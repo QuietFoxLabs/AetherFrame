@@ -820,7 +820,7 @@ public class GuidedCreationTests
         Assert.Null(harness.Guided.SaveError);
         Assert.True(harness.Guided.CanEdit);
 
-        // Save Plate again saves what is shown, and completes.
+        // Save again saves what is shown, and completes.
         await harness.SaveAsync();
         Assert.Equal(GuidedRunStatus.Completed, harness.Store.Preferences.Run);
         Assert.False(harness.Commands.IsDirty);
@@ -914,13 +914,14 @@ public class GuidedCreationTests
     [Fact]
     public void EachStep_HasOneShortLineOfGuidance_AndContinueOrSaveAsItsOnePrimaryButton()
     {
-        // Rich's rules for onboarding (October 6, 2026): one decision per step with a short heading
+        // The owner's rules for onboarding (October 6, 2026): one decision per step with a short heading
         // and at most one short guidance sentence, labelled controls instead of paragraphs, one
         // obvious primary button (Continue or Save), extra explanations behind tooltips or Help.
         var root = RepositoryPaths.Root().FullName;
         var steps = System.IO.File.ReadAllText(System.IO.Path.Combine(root, "AetherFrame", "Windows", "BasicProfileEditorWindow.Guided.cs"));
 
         Assert.DoesNotMatch(@"\bHint\(", steps);
+        Assert.DoesNotContain("AetherControls.Muted(", steps, StringComparison.Ordinal);
         var guidance = System.Text.RegularExpressions.Regex.Matches(steps, @"AetherControls\.Secondary\(""(?<text>[^""]*)""\)")
             .Select(match => match.Groups["text"].Value)
             .ToList();
@@ -940,6 +941,7 @@ public class GuidedCreationTests
         // The welcome: one line and the steps' names; the rest is in its buttons' tooltips.
         var welcome = System.IO.File.ReadAllText(System.IO.Path.Combine(root, "AetherFrame", "Windows", "Tutorial", "WelcomeWindow.cs"));
         Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(welcome, @"ImGui\.TextWrapped\(").Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(welcome, @"AetherControls\.(Muted|Secondary)\("));
     }
 
     // ---------------------------------------------------------------- the curated looks

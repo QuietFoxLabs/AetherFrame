@@ -116,7 +116,7 @@ internal sealed partial class BasicProfileEditorWindow
         using (AetherFonts.Heading())
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted("Create your Plate");
+            ImGui.TextUnformatted(success ? "Your Plate" : "Create your Plate");
         }
 
         var commands = actionBar.Commands;
@@ -287,7 +287,7 @@ internal sealed partial class BasicProfileEditorWindow
         if (browse)
         {
             using var id = ImRaii.PushId("AllLooks");
-            backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme);
+            backgroundPanel.DrawThemeBrowser(profile, basicEditorSession.ApplyTheme, explainOnHover: true);
         }
     }
 
