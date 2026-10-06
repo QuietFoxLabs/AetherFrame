@@ -265,7 +265,11 @@ public class GuidedReviewFixesTests
         // Before the login that offers them, no offer window can show, so the tooltip says what comes first.
         Assert.Contains("Answer Unsaved Changes Kept first: it may hold this Plate's changes.", help, StringComparison.Ordinal);
         Assert.Contains("Log in first: AetherFrame then offers the unsaved changes it kept for this Plate.", help, StringComparison.Ordinal);
-        Assert.Contains("guided.RecoveryWaitsForLogin()", help, StringComparison.Ordinal);
+        // In that order: the login question picks "Log in first", otherwise "Answer ... first".
+        var asks = help.IndexOf("guided.RecoveryWaitsForLogin()", StringComparison.Ordinal);
+        var logIn = help.IndexOf("Log in first: AetherFrame then offers", StringComparison.Ordinal);
+        var answer = help.IndexOf("Answer Unsaved Changes Kept first: it may hold", StringComparison.Ordinal);
+        Assert.True(asks >= 0 && asks < logIn && logIn < answer);
     }
 
     [Theory]
