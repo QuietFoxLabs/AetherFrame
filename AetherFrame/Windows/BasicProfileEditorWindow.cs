@@ -356,7 +356,16 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             switch (action.Kind)
             {
                 case EditorShortcutActionKind.Save:
-                    actionBar.Commands.Save();
+                    // On guided creation's Save step, Ctrl+S is its Save Plate, so a save there completes the steps.
+                    if (Guided is { Stage: GuidedStage.Save } guided && guided.IsGuiding(profileService.CurrentProfile?.ProfileId))
+                    {
+                        guided.Save();
+                    }
+                    else
+                    {
+                        actionBar.Commands.Save();
+                    }
+
                     break;
                 case EditorShortcutActionKind.Undo:
                     actionBar.Commands.Undo();
