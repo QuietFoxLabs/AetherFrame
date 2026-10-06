@@ -30,6 +30,7 @@ internal static class SharingText
         "To prove the character is yours, you'll paste a short code into its Lodestone profile. While the code is there, anyone reading the profile can see that you use AetherFrame, so delete it once the check passes.",
         ReadsThroughYourConnection,
         ThirtyDays,
+        OnlineCountSends,
     ];
 
     /// <summary>What reading the Lodestone page through the player's own connection means: in the consent, and in the one-time notice.</summary>
@@ -39,6 +40,19 @@ internal static class SharingText
     /// <summary>The 30 days after which a character not read again stops showing its Plate.</summary>
     internal const string ThirtyDays =
         "If this character's Lodestone page isn't read for 30 days, other players stop seeing its Plate until you next use sharing with it. Nothing is deleted.";
+
+    /// <summary>What the online count sends and keeps ("The online count"): in the consent, and in the one-time notice.</summary>
+    internal const string OnlineCountSends =
+        "While this character is logged in with sharing on, AetherFrame tells the sharing server about once a minute that it is online, so My Plates can show how many sharing characters are online. The server holds this in memory only, for 3 minutes after the last signal, counts each character once, and only ever gives out the total, as \"fewer than 5\" while it is under 5. That total still moves by one when a sharing character logs in or out once 5 or more are online, and below 5 for a player who adds characters of their own, so another sharing player who watches it closely can sometimes tell when this character logs in or out. The server keeps no record of who was online: its log notes when each signal came, never whose, for 14 days, and its rate limits remember, in memory for up to an hour, when this character started being counted. Logging out, pausing or turning off sharing, or closing the game stops it, and the server stops counting the character at once, or within about 3 minutes if the game crashes or its last message doesn't get through. Characters that don't share send nothing.";
+
+    internal const string OnlineNoticeTitle = "My Plates now shows how many are online";
+
+    /// <summary>The one-time notice for players who shared before the online count: nothing of it is sent until they dismiss it.</summary>
+    internal static readonly string[] OnlineNotice =
+    [
+        OnlineCountSends,
+        "Each signal shows the server your network address, which it never writes down or logs, and holds in memory only for its rate limits. Nothing is sent until you choose Got it.",
+    ];
 
     internal const string ConnectionNoticeTitle = "Checks now use your own connection";
 

@@ -1,0 +1,677 @@
+using System;
+using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using AetherFrame.Personas;
+using AetherFrame.Personas.Storage;
+using AetherFrame.Protocol.Identity;
+using AetherFrame.Protocol.Requests;
+using AetherFrame.Services.Network.Sharing;
+using AetherFrame.Services.Network.Transport;
+using Xunit;
+
+namespace AetherFrame.Tests;
+
+/// <summary>
+/// The online count's client ("The online count" in the decision register): whose presence is
+/// sent, the signed start, heartbeats, the restart after a server restart, the leave, what My
+/// Plates is shown (never a zero for a failure), and that nothing is sent for anyone who doesn't
+/// share or after the run stopped.
+/// </summary>
+public class OnlineCountTests
+{
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
+    private static readonly OnlineCountPace Quick = new(
+        TimeSpan.FromMilliseconds(60), TimeSpan.Zero, TimeSpan.FromMilliseconds(240), TimeSpan.FromMilliseconds(20), TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+
+    [Fact]
+    public void ATarget_IsOnlyTheLoggedInCharacterThatShares_OnceTheNoticeIsSeen()
+    {
+        var key = PersonaSlotId.NewId();
+        var keyId = PersonaId.Parse("psn_" + new string('1', 64));
+        var shared = new SharingCharacter(7, key, keyId, SharingStage.Shared, "12345678", ProfileId.Parse("prf_" + new string('2', 32)), "Aria Starfall", "Gilgamesh");
+        CharacterSharingView View(SharingCharacter character, bool loaded = true, bool unreadable = false, bool notice = false) =>
+            new(loaded, unreadable, false, [character], null, null, null, onlineNotice: notice);
+
+        Assert.Equal(new PresenceTarget(key, keyId), OnlineCount.TargetOf(View(shared), 7));
+        Assert.Null(OnlineCount.TargetOf(View(shared), null));
+        Assert.Null(OnlineCount.TargetOf(View(shared), 8));
+        Assert.Null(OnlineCount.TargetOf(View(shared, loaded: false), 7));
+        Assert.Null(OnlineCount.TargetOf(View(shared, unreadable: true), 7));
+        Assert.Null(OnlineCount.TargetOf(View(shared, notice: true), 7));
+        foreach (var stage in new[] { SharingStage.Off, SharingStage.Checking, SharingStage.Paused, SharingStage.TakenOver })
+        {
+            Assert.Null(OnlineCount.TargetOf(View(shared with { Stage = stage }), 7));
+        }
+
+        Assert.Null(OnlineCount.TargetOf(View(shared with { NewSlot = PersonaSlotId.NewId(), NewKey = PersonaId.Parse("psn_" + new string('3', 64)) }), 7));
+    }
+
+    [Fact]
+    public async Task NoTarget_SendsNothing()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(null);
+        await Task.Delay(200);
+        Assert.Empty(harness.Server.Paths);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+    }
+
+    [Fact]
+    public async Task AStart_IsSignedByTheCharactersKey_ThenHeartbeatsCarryOnlyTheToken()
+    {
+        using var harness = new Harness();
+        harness.Server.Online = 4;
+        harness.Count.Update(harness.Target);
+        Assert.Equal(OnlineCountState.Connecting, harness.Count.View.State);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 2);
+
+        Assert.Equal(["/v1/presence/challenge", "/v1/presence"], harness.Server.Paths.Take(2));
+        Assert.Equal(harness.Key.PublicKey.Id, harness.Server.Signers.Single());
+        Assert.All(harness.Server.Beats, beat => Assert.Equal(harness.Server.Tokens.Single(), beat));
+        Assert.Equal(new OnlineCountView(OnlineCountState.Online, 4, harness.Now), harness.Count.View);
+    }
+
+    [Fact]
+    public async Task ASessionTheServerForgot_IsStartedAgain_Once()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.Server.Forget();
+        await harness.WaitFor(() => harness.Server.Tokens.Count == 2 && harness.Server.Beats.Count(beat => beat.SequenceEqual(harness.Server.Tokens[1])) >= 1);
+        Assert.Equal(OnlineCountState.Online, harness.Count.View.State);
+    }
+
+    [Fact]
+    public async Task AServerWithoutTheEndpoint_ReadsUnavailable_NeverZero_AndBacksOff()
+    {
+        using var harness = new Harness();
+        harness.Server.StartStatus = HttpStatusCode.NotFound;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Unavailable);
+        Assert.Equal(0, harness.Count.View.Count);
+
+        // A minute, then two, then four (scaled down here): each wait at least 80% of its step,
+        // however slowly the machine runs, so far fewer than one try a heartbeat.
+        await harness.WaitFor(() => harness.Server.StartTimes.Count >= 4);
+        var times = harness.Server.StartTimes;
+        for (var gap = 1; gap < 4; gap++)
+        {
+            var step = Quick.Beat * Math.Pow(2, gap - 1);
+            Assert.True(times[gap] - times[gap - 1] >= step * 0.8 - TimeSpan.FromMilliseconds(15), $"Try {gap + 1} came {(times[gap] - times[gap - 1]).TotalMilliseconds} ms after the one before.");
+        }
+    }
+
+    [Fact]
+    public async Task AFailedHeartbeat_KeepsAFreshCount_AndAnOldOneReadsUnavailable()
+    {
+        using var harness = new Harness();
+        harness.Server.Online = 9;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Online);
+        harness.Server.BeatStatus = HttpStatusCode.ServiceUnavailable;
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        await Task.Delay(100);
+        Assert.Equal(9, harness.Count.View.Count);
+        Assert.Equal(OnlineCountState.Online, harness.Count.View.AsOf(harness.Now).State);
+        Assert.Equal(OnlineCountState.Unavailable, harness.Count.View.AsOf(harness.Now + OnlineCount.Fresh).State);
+
+        // Once the count is old, the next failure says so too.
+        harness.Now += OnlineCount.Fresh;
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Unavailable);
+    }
+
+    [Fact]
+    public async Task ABusySession_OnlyDelaysTheStart()
+    {
+        using var harness = new Harness();
+        harness.SessionBusy = true;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Paths.Count >= 1);
+        await Task.Delay(150);
+        Assert.Equal(OnlineCountState.Connecting, harness.Count.View.State);
+        Assert.DoesNotContain("/v1/presence", harness.Server.Paths);
+
+        // Several tries at signing, under the one challenge it asked for.
+        Assert.Equal(["/v1/presence/challenge"], harness.Server.Paths);
+        harness.SessionBusy = false;
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Online);
+        Assert.Equal(1, harness.Server.Paths.Count(path => path == "/v1/presence/challenge"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ALimitsRefusal_WaitsTheLongestBackoff(bool atTheChallenge)
+    {
+        using var harness = new Harness(Quick with { LongestBackoff = TimeSpan.FromSeconds(30) });
+        if (atTheChallenge)
+        {
+            harness.Server.ChallengeStatus = HttpStatusCode.TooManyRequests;
+        }
+        else
+        {
+            harness.Server.StartStatus = HttpStatusCode.TooManyRequests;
+        }
+
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Unavailable);
+
+        // A doubling from a minute (60 ms here) would have tried again several times by now.
+        await Task.Delay(500);
+        Assert.Equal(1, harness.Server.Paths.Count(path => path == "/v1/presence/challenge"));
+    }
+
+    [Fact]
+    public async Task ATakeover_EndsTheRun_AndNothingMoreIsSent()
+    {
+        using var harness = new Harness();
+        harness.Server.StartStatus = HttpStatusCode.Gone;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Unavailable);
+        await Task.Delay(500);
+        Assert.Equal(["/v1/presence/challenge", "/v1/presence"], harness.Server.Paths);
+    }
+
+    [Fact]
+    public async Task Stopping_LeavesTheSession_AndSendsNothingMore()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        harness.Count.Update(null);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        Assert.Equal(harness.Server.Tokens.Single(), harness.Server.Leaves.Single());
+        var sent = harness.Server.Paths.Count;
+        await Task.Delay(250);
+        Assert.Equal(sent, harness.Server.Paths.Count);
+    }
+
+    [Fact]
+    public async Task AStartStoppedBeforeTheServerActed_LeavesNothingBehind()
+    {
+        // A grace shorter than the hold, so the start is cancelled before the server makes anything.
+        using var harness = new Harness(Quick with { StartGrace = TimeSpan.FromMilliseconds(50) });
+        var release = new TaskCompletionSource();
+        harness.Server.StartGate = release.Task;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Paths.Contains("/v1/presence"));
+        harness.Count.Update(null);
+        await Task.Delay(200);
+        release.SetResult();
+
+        await Task.Delay(200);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+        Assert.Empty(harness.Server.Tokens);
+        Assert.Empty(harness.Server.Leaves);
+        Assert.Empty(harness.Server.Beats);
+    }
+
+    [Fact]
+    public async Task AStartTheServerAnswered_IsLeft_EvenWhenItsRunStoppedWhileItWasInFlight()
+    {
+        // GPT's regression test, October 5, 2026: the answer comes back after the run stopped, and
+        // the session the server already made would otherwise stay counted until its expiry.
+        using var harness = new Harness();
+        var answer = new TaskCompletionSource();
+        harness.Server.StartAnswerGate = answer.Task;
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.StartAnswerHeld);
+
+        harness.Count.Update(null);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+        answer.SetResult();
+
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        var token = Assert.Single(harness.Server.Tokens);
+        Assert.Equal(token, harness.Server.Leaves.Single());
+        Assert.False(harness.Server.IsLive(token));
+        await Task.Delay(150);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+        Assert.Empty(harness.Server.Beats);
+    }
+
+    [Fact]
+    public async Task ALogout_StopsTheRun_WithNoFrameDrawn()
+    {
+        // GPT's regression test, October 5, 2026: Dalamud draws no plugin window while it hides them
+        // (a hidden interface, a cutscene, group pose), so the count follows the game's tick instead.
+        using var harness = new Harness();
+        var loggedIn = true;
+        var driver = new PresenceDriver(harness.Count, () => loggedIn, () => harness.Target);
+        driver.Tick();
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Online);
+
+        loggedIn = false;
+        driver.Tick();
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        Assert.Equal(harness.Server.Tokens.Single(), harness.Server.Leaves.Single());
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+
+        // And nothing starts again while nobody is logged in, however many ticks come.
+        var sent = harness.Server.Paths.Count;
+        driver.Tick();
+        driver.Tick();
+        await Task.Delay(150);
+        Assert.Equal(sent, harness.Server.Paths.Count);
+    }
+
+    [Fact]
+    public async Task StoppingARun_SendsItsLeaveOffTheCallersThread_AndNeverWaitsForIt()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Count.View.State == OnlineCountState.Online && harness.Server.Tokens.Count == 1);
+        await Task.Delay(150);
+
+        // The leave is held before its first await: a leave sent on the frame's own thread would
+        // hold that thread here, and a network request from the frame is what R2's rule 8 forbids.
+        using var held = new ManualResetEventSlim(false);
+        harness.Server.LeaveHold = held;
+        var frame = new Thread(() => harness.Count.Update(null)) { IsBackground = true };
+        frame.Start();
+        Assert.True(frame.Join(TimeSpan.FromSeconds(5)), "Update waited on the leave.");
+
+        held.Set();
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1);
+        Assert.NotSame(frame, harness.Server.LeaveThread);
+    }
+
+    [Fact]
+    public async Task Unloading_LeavesTheSession_AndStartsNothingAfter()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        await harness.Count.StopAsync(Patience);
+        Assert.Single(harness.Server.Leaves);
+        harness.Count.Update(harness.Target);
+        await Task.Delay(150);
+        Assert.Single(harness.Server.Tokens);
+        Assert.Equal(OnlineCountState.Off, harness.Count.View.State);
+    }
+
+    [Fact]
+    public async Task AnotherCharacter_LeavesTheFirstSession_AndStartsItsOwn()
+    {
+        using var harness = new Harness();
+        harness.Count.Update(harness.Target);
+        await harness.WaitFor(() => harness.Server.Beats.Count >= 1);
+        var other = harness.Personas.Acknowledge(harness.Personas.Create("Character key").Slot);
+        harness.Count.Update(new PresenceTarget(other.Slot, other.PublicKey.Id));
+        await harness.WaitFor(() => harness.Server.Leaves.Count == 1 && harness.Server.Signers.Count == 2);
+        Assert.Equal(other.PublicKey.Id, harness.Server.Signers[1]);
+    }
+
+    [Fact]
+    public void Update_NeverWaitsOnTheNetwork()
+    {
+        using var harness = new Harness();
+        var never = new TaskCompletionSource();
+        harness.Server.ChallengeGate = never.Task;
+        var started = DateTime.UtcNow;
+        harness.Count.Update(harness.Target);
+        harness.Count.Update(null);
+        harness.Count.Update(harness.Target);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(1));
+        never.SetResult();
+    }
+
+    [Fact]
+    public void TheWords_SayWhatIsSent_AndTheConsentHasThem()
+    {
+        Assert.Contains(SharingText.OnlineCountSends, SharingText.Consent);
+        Assert.Contains(SharingText.OnlineCountSends, SharingText.OnlineNotice);
+        Assert.Contains("only ever gives out the total", SharingText.OnlineCountSends, StringComparison.Ordinal);
+        Assert.Contains("Characters that don't share send nothing", SharingText.OnlineCountSends, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheFooter_ShowsTheCount_OrConnectingOrUnavailable_NeverAZeroForAFailure()
+    {
+        var now = DateTimeOffset.FromUnixTimeSeconds(1_790_000_000);
+        Assert.Null(OnlineCountFooter.ItemFor(OnlineCountView.Off, now, noticeDue: false));
+        Assert.Equal(OnlineCountFooter.NoticeDue, OnlineCountFooter.ItemFor(OnlineCountView.Off, now, noticeDue: true));
+        Assert.Equal(OnlineCountFooter.Connecting, OnlineCountFooter.ItemFor(OnlineCountView.Connecting, now, noticeDue: false));
+        Assert.Equal(OnlineCountFooter.Unavailable, OnlineCountFooter.ItemFor(OnlineCountView.Unavailable, now, noticeDue: false));
+
+        var counted = new OnlineCountView(OnlineCountState.Online, 1234, now);
+        Assert.Equal(new MyPlatesFooterItemProbe("1,234 online", OnlineCountFooter.Scope), Probe(OnlineCountFooter.ItemFor(counted, now + TimeSpan.FromSeconds(179), noticeDue: false)));
+        Assert.Equal(OnlineCountFooter.Unavailable, OnlineCountFooter.ItemFor(counted, now + OnlineCount.Fresh, noticeDue: false));
+        Assert.Equal("Fewer than 5 online", OnlineCountFooter.Text(0));
+        Assert.Equal("Fewer than 5 online", OnlineCountFooter.Text(OnlineCountFooter.Floor - 1));
+        Assert.Equal("5 online", OnlineCountFooter.Text(OnlineCountFooter.Floor));
+        Assert.Contains("fewer than 5", OnlineCountFooter.Scope, StringComparison.Ordinal);
+        Assert.Contains("counted once each", OnlineCountFooter.Scope, StringComparison.Ordinal);
+        Assert.All(new[] { OnlineCountFooter.Connecting, OnlineCountFooter.Unavailable, OnlineCountFooter.NoticeDue }, item => Assert.DoesNotContain("0", item.Text, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheFooter_SaysWhereToTurnItOn_OnlyForASharingCharacterWhoseNoticeIsDue()
+    {
+        var shared = new SharingCharacter(7, PersonaSlotId.NewId(), PersonaId.Parse("psn_" + new string('1', 64)), SharingStage.Shared, "12345678", ProfileId.Parse("prf_" + new string('2', 32)), "Aria Starfall", "Gilgamesh");
+        CharacterSharingView View(SharingCharacter character, bool notice) => new(true, false, false, [character], null, null, null, onlineNotice: notice);
+        Assert.True(OnlineCountFooter.WaitsForNotice(View(shared, notice: true), 7));
+        Assert.False(OnlineCountFooter.WaitsForNotice(View(shared, notice: false), 7));
+        Assert.False(OnlineCountFooter.WaitsForNotice(View(shared, notice: true), null));
+        Assert.False(OnlineCountFooter.WaitsForNotice(View(shared with { Stage = SharingStage.Paused }, notice: true), 7));
+    }
+
+    private sealed record MyPlatesFooterItemProbe(string Text, string Tooltip);
+
+    private static MyPlatesFooterItemProbe? Probe(AetherFrame.UI.Library.MyPlatesFooterItem? item) => item is null ? null : new(item.Text, item.Tooltip);
+
+    /// <summary>A persona manager over memory with one character key, a presence server answered in memory, and the count over them.</summary>
+    private sealed class Harness : IDisposable
+    {
+        internal Harness(OnlineCountPace? pace = null)
+        {
+            Personas = PersonaManager.Load(new ProtectedPersonaKeyStore(new MemoryKeyBlobs(), new MaskingProtector()), new NoBackups(), new MemoryRegistry());
+            Key = Personas.Acknowledge(Personas.Create("Character key").Slot);
+            Server = new PresenceServer();
+            Client = new SharingClient(PresenceServer.Deployment, Server, disposeHandler: false, new Version(0, 1, 9));
+            Count = new OnlineCount(Client, RunWork, () => Now, CancellationToken.None, Log.Add, pace ?? Quick);
+        }
+
+        internal PersonaManager Personas { get; }
+
+        internal PersonaRecord Key { get; }
+
+        internal PresenceTarget Target => new(Key.Slot, Key.PublicKey.Id);
+
+        internal PresenceServer Server { get; }
+
+        internal SharingClient Client { get; }
+
+        internal OnlineCount Count { get; }
+
+        internal ConcurrentBag<string> Log { get; } = new();
+
+        internal DateTimeOffset Now { get; set; } = DateTimeOffset.FromUnixTimeSeconds(1_790_000_000);
+
+        internal volatile bool SessionBusy;
+
+        internal async Task WaitFor(Func<bool> condition)
+        {
+            var deadline = DateTime.UtcNow + Patience;
+            while (!condition())
+            {
+                Assert.True(DateTime.UtcNow < deadline, "timed out");
+                await Task.Delay(5);
+            }
+        }
+
+        /// <summary>The persona session's stand-in: refused while busy, otherwise run on another thread, one at a time.</summary>
+        private bool RunWork(string name, Action<PersonaManager> work)
+        {
+            if (SessionBusy)
+            {
+                return false;
+            }
+
+            _ = Task.Run(() =>
+            {
+                lock (Personas)
+                {
+                    work(Personas);
+                }
+            });
+            return true;
+        }
+
+        public void Dispose()
+        {
+            Count.StopAsync(Patience).GetAwaiter().GetResult();
+            Client.Dispose();
+            Server.Dispose();
+        }
+    }
+
+    /// <summary>The presence endpoints, answered in memory: starts checked as section 14.5 says for kind 9, tokens it issued, and what each request carried.</summary>
+    private sealed class PresenceServer : HttpMessageHandler
+    {
+        internal static readonly DeploymentName Deployment = DeploymentName.Parse("plates.example.com");
+
+        private readonly HashSet<string> challenges = new();
+        private readonly HashSet<string> live = new();
+
+        internal int Online { get; set; } = 1;
+
+        internal HttpStatusCode StartStatus { get; set; } = HttpStatusCode.OK;
+
+        internal HttpStatusCode BeatStatus { get; set; } = HttpStatusCode.OK;
+
+        internal HttpStatusCode ChallengeStatus { get; set; } = HttpStatusCode.OK;
+
+        internal Task? StartGate { get; set; }
+
+        /// <summary>Held after the session is made and before the answer goes out: a start the server has already acted on.</summary>
+        internal Task? StartAnswerGate { get; set; }
+
+        /// <summary>Whether a start is waiting on <see cref="StartAnswerGate"/> with its session already made.</summary>
+        internal volatile bool StartAnswerHeld;
+
+        internal Task? ChallengeGate { get; set; }
+
+        /// <summary>Blocks each leave before its first await, so a leave sent on the caller's own thread would hold that thread.</summary>
+        internal ManualResetEventSlim? LeaveHold { get; set; }
+
+        /// <summary>The thread the last leave was handled on.</summary>
+        internal Thread? LeaveThread { get; set; }
+
+        /// <summary>Whether the server still counts the session with <paramref name="token"/>.</summary>
+        internal bool IsLive(byte[] token)
+        {
+            lock (this)
+            {
+                return live.Contains(Convert.ToHexString(token));
+            }
+        }
+
+        private readonly List<string> paths = new();
+
+        private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+
+        private readonly List<TimeSpan> startTimes = new();
+
+        /// <summary>When each start arrived, on a monotonic clock.</summary>
+        internal List<TimeSpan> StartTimes
+        {
+            get
+            {
+                lock (this)
+                {
+                    return startTimes.ToList();
+                }
+            }
+        }
+
+        internal List<string> Paths
+        {
+            get
+            {
+                lock (this)
+                {
+                    return paths.ToList();
+                }
+            }
+        }
+
+        private readonly List<PersonaId> signers = new();
+
+        internal List<PersonaId> Signers
+        {
+            get
+            {
+                lock (this)
+                {
+                    return signers.ToList();
+                }
+            }
+        }
+
+        private readonly List<byte[]> tokens = new();
+
+        internal List<byte[]> Tokens
+        {
+            get
+            {
+                lock (this)
+                {
+                    return tokens.ToList();
+                }
+            }
+        }
+
+        private readonly List<byte[]> beats = new();
+
+        internal List<byte[]> Beats
+        {
+            get
+            {
+                lock (this)
+                {
+                    return beats.ToList();
+                }
+            }
+        }
+
+        private readonly List<byte[]> leaves = new();
+
+        internal List<byte[]> Leaves
+        {
+            get
+            {
+                lock (this)
+                {
+                    return leaves.ToList();
+                }
+            }
+        }
+
+        /// <summary>A restart: every session is forgotten.</summary>
+        internal void Forget()
+        {
+            lock (this)
+            {
+                live.Clear();
+            }
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            Assert.Equal("https", request.RequestUri.Scheme);
+            Assert.Equal(Deployment.Value, request.RequestUri.Host);
+            Assert.Equal(HttpMethod.Post, request.Method);
+            var body = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+            lock (this)
+            {
+                paths.Add(path);
+                if (path == "/v1/presence")
+                {
+                    startTimes.Add(clock.Elapsed);
+                }
+            }
+
+            switch (path)
+            {
+                case "/v1/presence/challenge":
+                    if (ChallengeStatus != HttpStatusCode.OK)
+                    {
+                        return new HttpResponseMessage(ChallengeStatus);
+                    }
+
+                    if (ChallengeGate is { } challengeGate)
+                    {
+                        await challengeGate.WaitAsync(cancellationToken);
+                    }
+
+                    var challenge = RandomNumberGenerator.GetBytes(32);
+                    lock (this)
+                    {
+                        challenges.Add(Convert.ToHexString(challenge));
+                    }
+
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(challenge) };
+
+                case "/v1/presence":
+                    if (StartGate is { } startGate)
+                    {
+                        await startGate.WaitAsync(cancellationToken);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var length = BinaryPrimitives.ReadUInt16BigEndian(body);
+                    var verified = RequestProofCodec.VerifyAction(body.AsSpan(2, length), body.AsSpan(2 + length), Deployment, RequestProofKind.Presence);
+                    Assert.Equal("{}", Encoding.UTF8.GetString(body.AsSpan(2 + length)));
+                    if (StartStatus != HttpStatusCode.OK)
+                    {
+                        return new HttpResponseMessage(StartStatus);
+                    }
+
+                    var token = RandomNumberGenerator.GetBytes(32);
+                    lock (this)
+                    {
+                        Assert.True(challenges.Remove(Convert.ToHexString(verified.Challenge.ToArray())), "The start names a challenge this server didn't issue.");
+                        signers.Add(verified.PublicKey.Id);
+                        tokens.Add(token);
+                        live.Add(Convert.ToHexString(token));
+                    }
+
+                    // The session is made: from here the server counts the character whatever becomes
+                    // of the answer, which is what the client's grace is for.
+                    if (StartAnswerGate is { } answerGate)
+                    {
+                        StartAnswerHeld = true;
+                        await answerGate.WaitAsync(cancellationToken);
+                        StartAnswerHeld = false;
+                    }
+
+                    return Json($"{{\"session\":\"{Convert.ToBase64String(token)}\",\"online\":{Online}}}");
+
+                case "/v1/presence/beat":
+                    Assert.Equal(32, body.Length);
+                    lock (this)
+                    {
+                        beats.Add(body);
+                        if (!live.Contains(Convert.ToHexString(body)))
+                        {
+                            return new HttpResponseMessage(HttpStatusCode.NotFound);
+                        }
+                    }
+
+                    return BeatStatus == HttpStatusCode.OK ? Json($"{{\"online\":{Online}}}") : new HttpResponseMessage(BeatStatus);
+
+                case "/v1/presence/leave":
+                    LeaveThread = Thread.CurrentThread;
+                    LeaveHold?.Wait(cancellationToken);
+                    Assert.Equal(32, body.Length);
+                    lock (this)
+                    {
+                        leaves.Add(body);
+                        live.Remove(Convert.ToHexString(body));
+                    }
+
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+
+                default:
+                    throw new InvalidOperationException("Only the presence paths are expected, never the general challenge: " + path);
+            }
+        }
+
+        private static HttpResponseMessage Json(string text) =>
+            new(HttpStatusCode.OK) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
+    }
+}

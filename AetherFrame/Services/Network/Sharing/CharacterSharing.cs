@@ -87,9 +87,10 @@ internal sealed class CharacterSharingView
 {
     internal static readonly CharacterSharingView Initial = new(false, false, false, Array.Empty<SharingCharacter>(), null, null, null);
 
-    internal CharacterSharingView(bool loaded, bool unreadable, bool busy, IReadOnlyList<SharingCharacter> characters, IssuedCode? code, SharingNotice? notice, PublishStatus? publish, bool connectionNotice = false)
+    internal CharacterSharingView(bool loaded, bool unreadable, bool busy, IReadOnlyList<SharingCharacter> characters, IssuedCode? code, SharingNotice? notice, PublishStatus? publish, bool connectionNotice = false, bool onlineNotice = false)
     {
         ConnectionNotice = connectionNotice;
+        OnlineNotice = onlineNotice;
         Loaded = loaded;
         Unreadable = unreadable;
         Busy = busy;
@@ -125,6 +126,13 @@ internal sealed class CharacterSharingView
     /// </summary>
     internal bool ConnectionNotice { get; }
 
+    /// <summary>
+    /// Whether the one-time notice about the online count is due: a character was already shared
+    /// from this PC when this build first read the sharing file, and the player hasn't dismissed
+    /// it. Until it is, nothing of the online count is sent ("The online count").
+    /// </summary>
+    internal bool OnlineNotice { get; }
+
     /// <summary>The character with <paramref name="contentId"/>, if the file names it.</summary>
     internal SharingCharacter? Find(ulong contentId)
     {
@@ -139,8 +147,8 @@ internal sealed class CharacterSharingView
         return null;
     }
 
-    internal CharacterSharingView With(bool? busy = null, IReadOnlyList<SharingCharacter>? characters = null, IssuedCode? code = null, bool clearCode = false, SharingNotice? notice = null, bool clearNotice = false, bool? loaded = null, bool? unreadable = null, PublishStatus? publish = null, bool? connectionNotice = null) =>
-        new(loaded ?? Loaded, unreadable ?? Unreadable, busy ?? Busy, characters ?? Characters, clearCode ? null : code ?? Code, clearNotice ? null : notice ?? Notice, publish ?? Publish, connectionNotice ?? ConnectionNotice);
+    internal CharacterSharingView With(bool? busy = null, IReadOnlyList<SharingCharacter>? characters = null, IssuedCode? code = null, bool clearCode = false, SharingNotice? notice = null, bool clearNotice = false, bool? loaded = null, bool? unreadable = null, PublishStatus? publish = null, bool? connectionNotice = null, bool? onlineNotice = null) =>
+        new(loaded ?? Loaded, unreadable ?? Unreadable, busy ?? Busy, characters ?? Characters, clearCode ? null : code ?? Code, clearNotice ? null : notice ?? Notice, publish ?? Publish, connectionNotice ?? ConnectionNotice, onlineNotice ?? OnlineNotice);
 }
 
 /// <summary>
@@ -174,6 +182,9 @@ internal sealed class CharacterSharing
 
     /// <summary>The marker, in the persona folder, that the one-time notice about the player's own connection was seen or isn't needed.</summary>
     internal const string ConnectionNoticeFileName = "lodestone-connection-notice.afsh";
+
+    /// <summary>The marker, in the persona folder, that the one-time notice about the online count was seen or isn't needed.</summary>
+    internal const string OnlineNoticeFileName = "online-count-notice.afsh";
 
     /// <summary>The server API version this build speaks (ServerApi-v1.md).</summary>
     private const int Api = 1;
@@ -246,13 +257,19 @@ internal sealed class CharacterSharing
     {
         var characters = file.Read();
         var noticeDue = false;
+        var checking = false;
         foreach (var character in characters)
         {
             noticeDue |= character.IsBound;
+
+            // A check a build before the online count started counts too: its consent never said
+            // what the count sends, so the notice is due before that check can pass (K4).
+            checking |= character.Checking;
         }
 
+        var onlineDue = (noticeDue || checking) && !File.Exists(OnlineNoticePath);
         noticeDue &= !File.Exists(ConnectionNoticePath);
-        Update(v => v.With(characters: characters, loaded: true, unreadable: false, connectionNotice: noticeDue));
+        Update(v => v.With(characters: characters, loaded: true, unreadable: false, connectionNotice: noticeDue, onlineNotice: onlineDue));
 
         var keys = new HashSet<PersonaSlotId>();
         foreach (var character in characters)
@@ -344,6 +361,11 @@ internal sealed class CharacterSharing
             : new SharingCharacter(contentId, persona.Slot, persona.PublicKey.Id, SharingStage.Checking);
         if (Save(Replaced(entry), contentId))
         {
+            // The consent the player just agreed to says what the online count sends, so the
+            // one-time notice about it is seen. It is dismissed here and not when the check passes:
+            // a check already under way when this build arrived agreed to a consent that never
+            // mentioned the count, and its player still has to choose Got it (K4).
+            DismissOnlineNotice();
             RequestCode(manager, entry);
         }
     });
@@ -414,7 +436,9 @@ internal sealed class CharacterSharing
         {
             Read(contentId, response);
 
-            // The consent the player just gave says what the one-time notice says.
+            // The check just read the Lodestone page through the player's own connection, which is
+            // what that notice is about. The online count's notice is dismissed by the consent in
+            // TryStart instead, since a check started before this build never saw it.
             DismissConnectionNotice();
             Update(v => v.With(clearCode: true, notice: new SharingNotice(contentId, SharingNoticeKind.CheckPassed)));
         }
@@ -422,6 +446,9 @@ internal sealed class CharacterSharing
 
     /// <summary>The player dismissed the one-time notice about checking through their own connection: it isn't shown again on this PC.</summary>
     internal bool TryDismissConnectionNotice() => Run("sharing notice", _ => DismissConnectionNotice(), keepNotice: true);
+
+    /// <summary>The player dismissed the one-time notice about the online count: it isn't shown again on this PC, and the count may be sent from now on.</summary>
+    internal bool TryDismissOnlineNotice() => Run("sharing notice", _ => DismissOnlineNotice(), keepNotice: true);
 
     /// <summary>
     /// Stops a check under way: a new key that was replacing one that can't be opened is dropped
@@ -1212,6 +1239,8 @@ internal sealed class CharacterSharing
 
     private string ConnectionNoticePath => Path.Combine(file.Folder, ConnectionNoticeFileName);
 
+    private string OnlineNoticePath => Path.Combine(file.Folder, OnlineNoticeFileName);
+
     /// <summary>The UTC day of <paramref name="time"/>, in days since the Unix epoch, as the server counts a binding's last read.</summary>
     internal static long DayOf(DateTimeOffset time) => (long)Math.Floor(time.ToUnixTimeSeconds() / 86400.0);
 
@@ -1239,6 +1268,25 @@ internal sealed class CharacterSharing
         }
 
         Update(v => v.With(connectionNotice: false));
+    }
+
+    /// <summary>
+    /// Marks the one-time notice about the online count as seen. A marker that can't be written only
+    /// means it shows again next time, and nothing of the count is sent until it is seen again.
+    /// </summary>
+    private void DismissOnlineNotice()
+    {
+        try
+        {
+            Directory.CreateDirectory(file.Folder);
+            File.WriteAllBytes(OnlineNoticePath, []);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            log($"Sharing: the online count notice's marker couldn't be written ({exception.GetType().Name}).");
+        }
+
+        Update(v => v.With(onlineNotice: false));
     }
 
     private void Notify(ulong contentId, SharingNoticeKind kind, string? detail = null, Guid plate = default) => Update(v => v.With(notice: new SharingNotice(contentId, kind, detail, plate)));
@@ -1352,7 +1400,10 @@ internal sealed class CharacterSharing
     }
 
     /// <summary>Puts back the selection an operation found: the persona it named, or none.</summary>
-    private void Reselect(PersonaManager manager, PersonaSlotId? selected)
+    private void Reselect(PersonaManager manager, PersonaSlotId? selected) => Reselect(manager, selected, log);
+
+    /// <summary>Puts back the selection an operation found, for any persona-session operation of sharing's (the online count's too): the persona it named, or none.</summary>
+    internal static void Reselect(PersonaManager manager, PersonaSlotId? selected, Action<string> log)
     {
         try
         {

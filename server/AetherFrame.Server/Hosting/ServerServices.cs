@@ -124,7 +124,7 @@ internal sealed class DatabaseStartup(ServerDatabase database) : IHostedService
 /// connection"): without one, players' own re-reads keep names current, and a binding not read within
 /// 30 days stops answering lookups.
 /// </summary>
-internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, Allowlist allowlist, IOptions<ServerOptions> options, TimeProvider time, ILogger<Rereads> logger) : BackgroundService
+internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, Allowlist allowlist, AetherFrame.Server.Presence.PresenceStore presence, IOptions<ServerOptions> options, TimeProvider time, ILogger<Rereads> logger) : BackgroundService
 {
     /// <summary>The shortest pause between two re-reads.</summary>
     public static readonly TimeSpan MinimumPause = TimeSpan.FromMinutes(2);
@@ -179,9 +179,16 @@ internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, 
         }
 
         var read = await lodestone.ReadAsync(binding.LodestoneId, reread: true, cancellation);
-        if (read.Outcome is LodestoneOutcome.Found or LodestoneOutcome.NotFound)
+        if (read.Outcome is not (LodestoneOutcome.Found or LodestoneOutcome.NotFound))
         {
-            await bindings.ApplyRereadAsync(persona, binding.LodestoneId, read.Character, cancellation);
+            return;
+        }
+
+        if (await bindings.ApplyRereadAsync(persona, binding.LodestoneId, read.Character, cancellation) == RereadResult.Removed)
+        {
+            // The binding is gone: the character stops counting as online at once, instead of
+            // staying counted while its heartbeats keep a session the start's check passed.
+            presence.ForgetKey(persona);
         }
     }
 }

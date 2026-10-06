@@ -55,6 +55,9 @@ internal sealed class SharingClient : IDisposable
     /// <summary>The largest image read (section 8.2).</summary>
     public const int MaxImageBytes = (int)ProtocolLimits.MaxImageBytes;
 
+    /// <summary>A presence session's token, as the server issues it: 32 random bytes ("The online count").</summary>
+    public const int PresenceTokenLength = 32;
+
     private readonly HttpClient client;
     private readonly DeploymentName deployment;
     private readonly LodestonePipe pipe;
@@ -129,6 +132,7 @@ internal sealed class SharingClient : IDisposable
         RequestProofKind.Lookup => "v1/lookup",
         RequestProofKind.Image => "v1/image",
         RequestProofKind.Report => "v1/report",
+        RequestProofKind.Presence => "v1/presence",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), "Only an action has a path of its own."),
     };
 
@@ -150,6 +154,17 @@ internal sealed class SharingClient : IDisposable
     {
         var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post, "v1/challenge") { Content = new ByteArrayContent([]) }, ProtocolConstants.ChallengeLength, RequestTimeout, cancellation).ConfigureAwait(false);
         return ChallengeFrom(response, HttpStatusCode.OK) ?? throw new SharingException(response.Status, "The server didn't answer with a challenge.");
+    }
+
+    /// <summary>
+    /// A challenge for a presence start alone (<c>POST /v1/presence/challenge</c>), under presence's
+    /// own limit: no other action accepts it, and it takes nothing from <c>/v1/challenge</c>'s.
+    /// </summary>
+    /// <exception cref="SharingException">The server answered with anything but a challenge.</exception>
+    public async Task<RequestChallenge> PresenceChallengeAsync(CancellationToken cancellation)
+    {
+        var response = await SendAsync(() => Post("v1/presence/challenge", new ByteArrayContent([])), ProtocolConstants.ChallengeLength, PresenceTimeout, cancellation).ConfigureAwait(false);
+        return ChallengeFrom(response, HttpStatusCode.OK) ?? throw new SharingException(response.Status, "The server didn't answer with a presence challenge.");
     }
 
     /// <summary>
@@ -183,6 +198,42 @@ internal sealed class SharingClient : IDisposable
             challenge = fresh;
         }
     }
+
+    /// <summary>
+    /// How long a presence request may take, from sending it to reading the answer ("The online
+    /// count"): short, so a heartbeat that can't get through gives up well before the next one.
+    /// </summary>
+    public TimeSpan PresenceTimeout { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Sends an action already signed into <paramref name="envelope"/> (<see cref="SignedEnvelope"/>)
+    /// to its kind's path, within <see cref="PresenceTimeout"/>, with no retry: for the presence
+    /// start, whose signature is made under the persona session while the request is sent outside
+    /// it, so a heartbeat never holds the session publishing needs.
+    /// </summary>
+    public Task<SharingResponse> SignedActionAsync(RequestProofKind kind, byte[] envelope, CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        return SendAsync(() => Post(PathOf(kind), new ByteArrayContent(envelope)), AnswerBoundOf(kind), PresenceTimeout, cancellation);
+    }
+
+    /// <summary>An action's signed body: the proof of <paramref name="body"/> as <paramref name="kind"/> under <paramref name="challenge"/>, then the body.</summary>
+    public byte[] SignedEnvelope(RequestProofKind kind, byte[] body, RequestChallenge challenge, IPersonaSigner signer)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        if (body.Length > ProtocolLimits.MaxActionBodyBytes)
+        {
+            throw new ArgumentException("An action's body is at most 4,096 bytes.", nameof(body));
+        }
+
+        return Envelope(RequestProofCodec.SignAction(kind, body, deployment, challenge, signer), body);
+    }
+
+    /// <summary>A presence heartbeat (<c>POST /v1/presence/beat</c>): the session's token and nothing else.</summary>
+    public Task<SharingResponse> PresenceBeatAsync(byte[] token, CancellationToken cancellation) => PresenceTokenAsync("v1/presence/beat", token, cancellation);
+
+    /// <summary>Ends a presence session (<c>POST /v1/presence/leave</c>): the session's token and nothing else.</summary>
+    public Task<SharingResponse> PresenceLeaveAsync(byte[] token, CancellationToken cancellation) => PresenceTokenAsync("v1/presence/leave", token, cancellation);
 
     /// <summary>
     /// Sends the Lodestone check or re-read as <see cref="ActionAsync"/> does, but as a WebSocket
@@ -249,6 +300,17 @@ internal sealed class SharingClient : IDisposable
     {
         pipe.Dispose();
         client.Dispose();
+    }
+
+    private Task<SharingResponse> PresenceTokenAsync(string path, byte[] token, CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        if (token.Length != PresenceTokenLength)
+        {
+            throw new ArgumentException("A presence token is 32 bytes.", nameof(token));
+        }
+
+        return SendAsync(() => Post(path, new ByteArrayContent(token)), MaxJsonAnswerBytes, PresenceTimeout, cancellation);
     }
 
     /// <summary>A signed request's body: a <c>u16</c> proof length, the proof, then the payload.</summary>

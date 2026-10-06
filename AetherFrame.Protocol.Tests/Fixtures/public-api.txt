@@ -469,6 +469,7 @@ enum AetherFrame.Protocol.Requests.RequestProofKind
     const RequestProofKind LodestoneReread
     const RequestProofKind Lookup
     const RequestProofKind OptOut
+    const RequestProofKind Presence
     const RequestProofKind Report
 sealed class AetherFrame.Protocol.Requests.VerifiedAction
     PersonaPublicKey PublicKey { get; }

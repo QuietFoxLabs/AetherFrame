@@ -7,6 +7,7 @@ using AetherFrame.Protocol.Requests;
 using AetherFrame.Server.Hosting;
 using AetherFrame.Server.Limits;
 using AetherFrame.Server.Lodestone;
+using AetherFrame.Server.Presence;
 using AetherFrame.Server.Requests;
 using AetherFrame.Server.Storage;
 using Microsoft.AspNetCore.Http;
@@ -22,7 +23,7 @@ namespace AetherFrame.Server.Endpoints;
 /// sets: for a check, the page is read before the allowlist and the second-character rule, so
 /// whether the pipe opens tells nothing about an id (ServerApi-v1.md, sections 2.1 and 2.3).
 /// </summary>
-internal sealed class LodestoneActions(RateLimiter limiter, BindingStore bindings, Allowlist allowlist, LodestoneReader lodestone, LodestoneBudget budget, IOptions<ServerOptions> options)
+internal sealed class LodestoneActions(RateLimiter limiter, BindingStore bindings, Allowlist allowlist, LodestoneReader lodestone, LodestoneBudget budget, IOptions<ServerOptions> options, PresenceStore presence)
 {
     /// <summary>The reason a <c>503</c> carries when the Lodestone turned the player's own connection away.</summary>
     public const string RefusedReason = "lodestone:refused";
@@ -150,6 +151,9 @@ internal sealed class LodestoneActions(RateLimiter limiter, BindingStore binding
             return await CheckFailedAsync("check:second-character");
         }
 
+        // A takeover (C1): the old key's presence sessions stop counting the character at once.
+        presence.ForgetOtherKeys(lodestoneId, persona);
+
         // The day as the binding's own transaction stored it; a POST's body never carries it.
         return ActionAnswer.Ok(new CharacterEndpoints.CheckAnswer(bound.ProfileId.ToString(), character.Name, character.World)) with { ReadDay = bound.ReadDay };
     }
@@ -209,6 +213,9 @@ internal sealed class LodestoneActions(RateLimiter limiter, BindingStore binding
 
         if (applied.Result is RereadResult.Removed or RereadResult.NotBound)
         {
+            // A character with no binding any more stops counting as online at once, instead of
+            // being counted while its heartbeats keep a session the start's binding check passed.
+            presence.ForgetKey(persona);
             return ActionAnswer.Fail(StatusCodes.Status404NotFound, "reread:" + applied.Result);
         }
 
