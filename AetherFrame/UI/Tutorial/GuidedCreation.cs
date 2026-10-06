@@ -217,7 +217,7 @@ internal sealed class GuidedCreation
     /// <param name="starting">The welcome's own start is under way.</param>
     /// <param name="showsStartError">The welcome shows why its last start failed.</param>
     /// <param name="hasPlate">My Plates holds a Plate (<see cref="HasPlate"/>).</param>
-    /// <param name="guidedPlateExists">A guided creation is under way and its Plate exists (<see cref="CanContinue"/>).</param>
+    /// <param name="guidedPlateExists">A guided creation is under way, its Plate exists and its steps aren't on screen (<see cref="CanContinue"/>, <see cref="StepsOnScreen"/>): once they are, however they were opened, the welcome has nothing left to offer.</param>
     /// <param name="mayShow">Nothing stands in front of the welcome (<see cref="WelcomeMayShow"/>).</param>
     internal static WelcomeOnScreen WelcomeOnScreenNow(bool starting, bool showsStartError, bool hasPlate, bool guidedPlateExists, bool mayShow)
     {
@@ -283,7 +283,17 @@ internal sealed class GuidedCreation
     /// it for this load.
     /// </summary>
     internal bool ShowsResumeReminder =>
-        !resumeHidden && !starting && CanContinue && !StepsOnScreen;
+        !resumeHidden && !starting && CanContinue && !StepsOnScreen && !RecoveryWaits();
+
+    /// <summary>
+    /// Whether a recovery offer waits for an answer (<see cref="KeptChangesOffer.AwaitsAnswer"/>, set
+    /// by the plugin). Its kept changes may be the guided Plate's, so continuing the steps, which opens
+    /// that Plate as saved, waits for it: My Plates' reminder hides and Help's item is greyed out.
+    /// </summary>
+    internal Func<bool> RecoveryWaits { get; set; } = static () => false;
+
+    /// <summary>Whether Continue Step by Step waits for a recovery offer's answer (<see cref="RecoveryWaits"/>).</summary>
+    internal bool ContinueWaitsForRecovery => CanContinue && RecoveryWaits();
 
     /// <summary>Whether the Basic editor is showing the steps now: continuing them has nothing to do.</summary>
     internal bool StepsOnScreen => IsGuiding(profiles.OpenPlateId) && basicEditorOpen();

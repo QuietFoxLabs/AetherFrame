@@ -46,7 +46,7 @@ public class GuidedReviewFixesTests
         var welcome = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "Tutorial", "WelcomeWindow.cs"));
         var check = welcome[welcome.IndexOf("public override void PreOpenCheck()", StringComparison.Ordinal)..welcome.IndexOf("public override void PreDraw()", StringComparison.Ordinal)];
 
-        Assert.Contains("GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue, mayShow())", check, StringComparison.Ordinal);
+        Assert.Contains("GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue && !guided.StepsOnScreen, mayShow())", check, StringComparison.Ordinal);
         var refresh = check.IndexOf("startError = GuidedCreation.WelcomeErrorNow(startError, guided.StartError);", StringComparison.Ordinal);
         Assert.True(refresh > 0 && refresh < check.IndexOf("GuidedCreation.WelcomeOnScreenNow(", StringComparison.Ordinal));
         Assert.DoesNotContain("startError is null)", check.Replace("startError is null && guided.CanContinue", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
@@ -54,9 +54,11 @@ public class GuidedReviewFixesTests
     }
 
     [Fact]
-    public async Task AFailedStart_ThenALogoutOrARecoveryOffer_StepsTheWelcomeAside()
+    public async Task AStartThatFails_ReportsWhy_AndTheRuleStillStepsTheWelcomeAsideFromIt()
     {
-        // A start that fails: the guided Plate is gone by the time its open runs, so the welcome says why.
+        // A start that fails reports why (the guided Plate is gone by the time its open runs), and the
+        // welcome's rule for that state: it stays to be read, but steps aside on a logout or a recovery
+        // offer. The window itself asks the rule every frame with no error gate (the source check above).
         using var harness = await GuidedHarness.CreateAsync();
         var made = await harness.StartAndOpenAsync();
         harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
@@ -158,6 +160,61 @@ public class GuidedReviewFixesTests
         shown = GuidedCreation.WelcomeErrorNow(shown, harness.Guided.StartError);
         Assert.Null(shown);
         Assert.Equal(WelcomeOnScreen.Closes, GuidedCreation.WelcomeOnScreenNow(false, shown is not null, harness.Guided.HasPlate, harness.Guided.CanContinue, mayShow: true));
+    }
+
+    [Fact]
+    public async Task AWelcomeShowingWhyItsPlateDidntOpen_Closes_OnceThatPlatesStepsAreOnScreen_HoweverOpened()
+    {
+        // The welcome's start made the guided Plate but it didn't open: the welcome stays, saying why,
+        // since Create My First Plate opens that Plate again.
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+        await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+        Assert.False(harness.Guided.StepsOnScreen);
+        Assert.Equal(WelcomeOnScreen.Stays, GuidedCreation.WelcomeOnScreenNow(false, true, harness.Guided.HasPlate, harness.Guided.CanContinue && !harness.Guided.StepsOnScreen, mayShow: true));
+
+        // The player opens that Plate from its card instead (no start, so the reason is still reported):
+        // its steps are on screen, so the welcome has nothing left to offer and closes.
+        harness.Switcher.Switcher.Open(made);
+        await harness.FramesUntilAsync(() => harness.OpenId == made);
+        Assert.True(harness.Guided.StepsOnScreen);
+        Assert.Equal(WelcomeOnScreen.Closes, GuidedCreation.WelcomeOnScreenNow(false, true, harness.Guided.HasPlate, harness.Guided.CanContinue && !harness.Guided.StepsOnScreen, mayShow: true));
+    }
+
+    [Fact]
+    public async Task ContinueStepByStep_WaitsWhileARecoveryOfferAwaitsAnAnswer()
+    {
+        // A guided creation left partway, its Plate not open: My Plates' reminder and Help offer to continue.
+        using var harness = await GuidedHarness.CreateAsync();
+        await harness.StartAndOpenAsync();
+        harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+        await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+        Assert.True(harness.Guided.ShowsResumeReminder);
+        Assert.False(harness.Guided.ContinueWaitsForRecovery);
+
+        // A recovery offer waits (its kept changes may be this Plate's): continuing, which opens the Plate
+        // as saved, waits for its answer; the reminder hides and Help's item is greyed out.
+        var waits = true;
+        harness.Guided.RecoveryWaits = () => waits;
+        Assert.False(harness.Guided.ShowsResumeReminder);
+        Assert.True(harness.Guided.ContinueWaitsForRecovery);
+
+        waits = false;
+        Assert.True(harness.Guided.ShowsResumeReminder);
+        Assert.False(harness.Guided.ContinueWaitsForRecovery);
+    }
+
+    [Fact]
+    public void ThePlugin_TellsGuidedCreationWhenRecoveryWaits_AndHelpGreysContinue()
+    {
+        var root = RepositoryPaths.Root().FullName;
+        var plugin = File.ReadAllText(Path.Combine(root, "AetherFrame", "Plugin.cs"));
+        var help = File.ReadAllText(Path.Combine(root, "AetherFrame", "Windows", "Tutorial", "HelpMenu.cs"));
+
+        Assert.Contains("guidedCreation.RecoveryWaits = () => recoveryOffer.AwaitsAnswer;", plugin, StringComparison.Ordinal);
+        Assert.Contains("using (ImRaii.Disabled(guided.IsStarting || onSteps || waitsForRecovery))", help, StringComparison.Ordinal);
+        Assert.Contains("Answer Unsaved Changes Kept first: it may hold this Plate's changes.", help, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -369,7 +426,9 @@ public class GuidedReviewFixesTests
         var crashed = await CrashAsync(fixture, "crashed");
         var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
 
-        // Neither held nor free as far as this load can tell: unknown, never a running client's.
+        // Neither held nor free as far as this load can tell: unknown, never a running client's. This
+        // covers the store's handling of a probe that can't tell; that the real probe reports it, rather
+        // than answering "held", is TheLockProbe_NeverTakesCantTellForHeld's.
         var next = await GameSession.StartAsync(fixture);
         next.Recovery.Files.CantTellLock = path => path.EndsWith("session.lock", StringComparison.OrdinalIgnoreCase);
         next.Recovery.Store.Sweep();
@@ -388,10 +447,18 @@ public class GuidedReviewFixesTests
     [Fact]
     public void TheLockProbe_NeverTakesCantTellForHeld()
     {
-        var files = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Services", "Plates", "RecoveryFiles.cs"));
-        var probe = files[files.IndexOf("public bool IsLockHeld(string lockPath)", StringComparison.Ordinal)..];
+        // The real probe lets "can't tell" (UnauthorizedAccessException) reach its callers: no catch in
+        // it may cover that exception, nor SystemException or Exception, which include it.
+        var files = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Services", "Plates", "RecoveryFiles.cs"))
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        var start = files.IndexOf("public bool IsLockHeld(string lockPath)", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        var probe = files[start..files.IndexOf("\n    }\n", start, StringComparison.Ordinal)];
 
-        Assert.DoesNotContain("catch (UnauthorizedAccessException)", probe, StringComparison.Ordinal);
+        Assert.Contains("catch (IOException)", probe, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"catch\s*\(\s*(System\.)?(UnauthorizedAccessException|SystemException|Exception)\b", probe);
+        Assert.DoesNotMatch(@"catch\s*(\{|when)", probe);
+        Assert.DoesNotMatch(@"when\s*\(", probe);
     }
 
     [Fact]
@@ -405,7 +472,8 @@ public class GuidedReviewFixesTests
 
         // Set after the offer has what was found, and never by a failure's handler.
         var load = plugin[plugin.IndexOf("private async Task LoadKeptChangesAsync(", StringComparison.Ordinal)..];
-        Assert.True(load.IndexOf("keptChanges.Present(scan.Offers", StringComparison.Ordinal) < load.IndexOf("keptChangesRead = scan.Complete;", StringComparison.Ordinal));
+        var present = load.IndexOf("keptChanges.Present(scan.Offers", StringComparison.Ordinal);
+        Assert.True(present >= 0 && present < load.IndexOf("keptChangesRead = scan.Complete;", StringComparison.Ordinal));
         Assert.DoesNotContain("finally", plugin[plugin.IndexOf("await LoadKeptChangesAsync(cancellationToken)", StringComparison.Ordinal)..plugin.IndexOf("private async Task LoadKeptChangesAsync(", StringComparison.Ordinal)], StringComparison.Ordinal);
     }
 
@@ -516,7 +584,7 @@ public class GuidedReviewFixesTests
         foreach (var code in new[] { basic, steps })
         {
             Assert.Matches(@"if \(previewHeight > 0f\)\s*\{\s*DrawPreview\(profile, new Vector2\(-1f, previewHeight\)\);", code);
-            Assert.Equal(1, Regex.Matches(code, @"DrawPreview\(profile, new Vector2\(-1f, previewHeight\)\)").Count);
+            Assert.Single(Regex.Matches(code, @"DrawPreview\(profile, new Vector2\(-1f, previewHeight\)\)"));
         }
 
         Assert.Contains("DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining)), withCategoryStrip: false);", basic, StringComparison.Ordinal);
@@ -531,7 +599,13 @@ public class GuidedReviewFixesTests
 
         Assert.True(error > 0);
         var wrap = bar.LastIndexOf("using (ImRaii.TextWrapPos(0f))", error, StringComparison.Ordinal);
-        Assert.True(wrap > 0 && bar.IndexOf("if (errorMessage is { } error)", StringComparison.Ordinal) < wrap);
+        var guard = bar.IndexOf("if (errorMessage is { } error)", StringComparison.Ordinal);
+        Assert.True(guard >= 0 && guard < wrap);
+
+        // The Plate menu's result line above it: right-aligned when it fits, otherwise from the left and wrapped.
+        var menu = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "EditorPlateMenu.cs"));
+        Assert.Contains("var fits = rowEnd - ImGui.GetCursorPosX() >= width;", menu, StringComparison.Ordinal);
+        Assert.Contains("AetherControls.StatusLine(error is null ? AetherTone.Success : AetherTone.Danger, text, wrap: !fits);", menu, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------- 4. crash recovery in the guided header
@@ -549,7 +623,8 @@ public class GuidedReviewFixesTests
         Assert.Contains("var markWidth = actionBar.RecoveryMarkWidth;", header, StringComparison.Ordinal);
         Assert.Contains("stateWidth + markWidth + Width(\"Undo\")", header, StringComparison.Ordinal);
         var mark = header.IndexOf("actionBar.DrawRecoveryMarkHere(commands.RecoveryIndicator);", StringComparison.Ordinal);
-        Assert.True(header.IndexOf("ImGui.SameLine(stateStart + stateWidth + style.ItemSpacing.X);", StringComparison.Ordinal) < mark);
+        var stateRoom = header.IndexOf("ImGui.SameLine(stateStart + stateWidth + style.ItemSpacing.X);", StringComparison.Ordinal);
+        Assert.True(stateRoom >= 0 && stateRoom < mark);
         Assert.True(mark < header.IndexOf("ImGui.Button(\"Undo##GuidedUndo\")", StringComparison.Ordinal));
         Assert.Contains("EditorWidgets.Tooltip(EditorDocumentCommands.RecoveryText(recovery));", bar, StringComparison.Ordinal);
 
@@ -557,7 +632,8 @@ public class GuidedReviewFixesTests
         // separator, so the steps' height is measured after it; it wraps beside Retry now in a narrow window.
         var body = steps[steps.IndexOf("private void DrawGuidedBody(", StringComparison.Ordinal)..steps.IndexOf("private void DrawGuidedHeader(", StringComparison.Ordinal)];
         var warning = body.IndexOf("actionBar.DrawRecoveryWarning(actionBar.Commands.RecoveryIndicator);", StringComparison.Ordinal);
-        Assert.True(body.IndexOf("DrawGuidedHeader(guided, success);", StringComparison.Ordinal) < warning);
+        var headerCall = body.IndexOf("DrawGuidedHeader(guided, success);", StringComparison.Ordinal);
+        Assert.True(headerCall >= 0 && headerCall < warning);
         Assert.True(warning < body.IndexOf("AetherControls.StatusLine(AetherTone.Danger, error, wrap: true);", StringComparison.Ordinal));
         Assert.True(warning < body.IndexOf("ImGui.Separator();", StringComparison.Ordinal));
         Assert.True(warning < body.IndexOf("var body = ImGui.GetContentRegionAvail();", StringComparison.Ordinal));

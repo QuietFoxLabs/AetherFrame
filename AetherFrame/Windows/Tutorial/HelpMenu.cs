@@ -219,7 +219,8 @@ internal sealed class HelpMenu
         {
             AetherControls.SectionHeader("Get started", topSpacing: 0f);
             var onSteps = guided.StepsOnScreen;
-            using (ImRaii.Disabled(guided.IsStarting || onSteps))
+            var waitsForRecovery = guided.ContinueWaitsForRecovery;
+            using (ImRaii.Disabled(guided.IsStarting || onSteps || waitsForRecovery))
             {
                 if (ImGui.MenuItem(guided.CanContinue ? "Continue Step by Step" : "Create Step by Step"))
                 {
@@ -229,6 +230,8 @@ internal sealed class HelpMenu
 
             AetherControls.Tooltip(onSteps
                 ? "The steps are open in the Basic editor."
+                : waitsForRecovery
+                ? "Answer Unsaved Changes Kept first: it may hold this Plate's changes."
                 : guided.CanContinue
                     ? "Opens the Plate you were creating, on the step you reached."
                     : "A new Plate in three short steps: choose a look, make it yours, save.");

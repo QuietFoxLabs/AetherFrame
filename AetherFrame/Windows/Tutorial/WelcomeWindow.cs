@@ -82,7 +82,7 @@ internal sealed class WelcomeWindow : Window
             startError = GuidedCreation.WelcomeErrorNow(startError, guided.StartError);
         }
 
-        switch (GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue, mayShow()))
+        switch (GuidedCreation.WelcomeOnScreenNow(creating, startError is not null, guided.HasPlate, guided.CanContinue && !guided.StepsOnScreen, mayShow()))
         {
             case WelcomeOnScreen.Closes:
                 IsOpen = false;
