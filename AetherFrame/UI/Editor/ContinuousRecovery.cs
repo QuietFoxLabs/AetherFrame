@@ -83,6 +83,12 @@ internal sealed class ContinuousRecovery
     /// <summary>Pauses before retrying after the first, second, ... failure in a row; the last repeats.</summary>
     internal static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60)];
 
+    /// <summary>Logged once when a frame fails inside recovery; recovery never throws out of a frame.</summary>
+    internal const string TickFailureMessage = "AetherFrame's continuous recovery failed while following the open Plate.";
+
+    /// <summary>Logged when unloading fails to settle what it can; unloading goes on.</summary>
+    internal const string StopFailureMessage = "AetherFrame couldn't settle its recovery checkpoints as it unloaded.";
+
     private readonly ProfileService profiles;
     private readonly EditorSession session;
     private readonly Func<EditorSurfaceKind?> activeSurface;
@@ -187,7 +193,7 @@ internal sealed class ContinuousRecovery
             if (!tickFailureLogged)
             {
                 tickFailureLogged = true;
-                log.Error(ex, "AetherFrame's continuous recovery failed while following the open Plate.");
+                log.Error(ex, TickFailureMessage);
             }
         }
     }
@@ -232,7 +238,7 @@ internal sealed class ContinuousRecovery
         }
         catch (Exception ex)
         {
-            log.Error(ex, "AetherFrame couldn't settle its recovery checkpoints as it unloaded.");
+            log.Error(ex, StopFailureMessage);
         }
 
         stopped = true;

@@ -14,7 +14,8 @@ namespace AetherFrame.Tests;
 /// <c>ContinuousRecovery.Reconcile</c> at every frame from the game's start until a Plate was opened,
 /// and again once the open Plate closed (its Plate deleted), so nothing ended was finished meanwhile:
 /// a final checkpoint or a retirement that failed was never tried again, and unloading settled
-/// nothing. Every case here failed on 89c392d.
+/// nothing. On 89c392d every case here fails except the two that close the editor window: closing
+/// an editor never closes the Plate, so those two guard that path rather than the null state.
 /// </summary>
 public class RecoveryNoOpenPlateTests
 {
@@ -63,7 +64,8 @@ public class RecoveryNoOpenPlateTests
         await game.Recovery.RunAsync(6);
         Assert.Single(game.Recovery.OwnCheckpoints());
 
-        // The close is refused while the changes are unsaved, then Discard answers the question.
+        // Closing the window never closes the Plate: the guard refuses the close while the changes
+        // are unsaved, then Discard answers its question and the window goes.
         var guard = new EditorCloseGuard(game.Session, new EditorDocumentCommands(game.Profiles, game.Session));
         Assert.True(guard.PreOpenCheck(true));
         Assert.True(guard.PreOpenCheck(false));
@@ -117,7 +119,9 @@ public class RecoveryNoOpenPlateTests
         await game.Recovery.RunAsync(1);
         Assert.Single(game.Recovery.OwnCheckpoints());
 
-        // The final checkpoint's first write fails as the Plate closes.
+        // The final checkpoint's first write fails as the Plate closes. CloseDocument stands for
+        // any way the open Plate goes with nothing in its place; in the game that is its deletion
+        // (see AnotherPlateOpened_ThenDeleted_RetriesTheFirstPlatesFinalCheckpointWhileNoPlateIsOpen).
         game.Recovery.Files.FailWrite = _ => true;
         game.Profiles.CloseDocument();
         game.ActiveSurface = null;
@@ -190,6 +194,44 @@ public class RecoveryNoOpenPlateTests
     }
 
     [Fact]
+    public async Task AnotherPlateOpened_ThenDeleted_RetriesTheFirstPlatesFinalCheckpointWhileNoPlateIsOpen()
+    {
+        // The game's own way to no open Plate with a final checkpoint still owed: Plate A edited,
+        // Plate B opened in its place while A's final checkpoint fails, then B deleted.
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        var a = await game.CreatePlateAsync(name: "A");
+        var b = await game.CreatePlateAsync(name: "B");
+        game.Open(a);
+        await game.Recovery.FrameAsync();
+        game.Edit("first");
+        await game.Recovery.RunAsync(6);
+        game.Edit("pending when B opened");
+        fixture.Clock.Tick();
+        await game.Recovery.RunAsync(1);
+        Assert.Single(game.Recovery.OwnCheckpoints());
+
+        game.Recovery.Files.FailWrite = _ => true;
+        game.Open(b);
+        await game.Recovery.FrameAsync(0.1);
+        Assert.Single(game.Recovery.OwnCheckpoints());
+
+        game.Recovery.Files.FailWrite = null;
+        await game.Library.DeletePlateAsync(b);
+        await game.Recovery.RunAsync(10, step: 0.5);
+        Assert.Null(game.Profiles.CurrentProfile);
+        Assert.Equal(2, game.Recovery.OwnCheckpoints().Length);
+
+        game.Recovery.Files.Crash();
+        var next = await GameSession.StartAsync(fixture);
+        var offered = Assert.Single(await next.LoadKeptChangesAsync());
+        Assert.Equal(a, offered.PlateId);
+        next.Offer.Choose();
+        Assert.Null(next.Offer.Error);
+        Assert.Equal(new[] { "first", "pending when B opened" }, next.Document.Elements.OfType<TextProfileElement>().Select(t => t.Text).ToArray());
+    }
+
+    [Fact]
     public async Task Restart_WithAnExistingCheckpoint_KeepsItWhileNoPlateIsOpen_AndResumeEditingRestoresTheTextAndItsPosition()
     {
         using var fixture = new LibraryFixture();
@@ -206,9 +248,12 @@ public class RecoveryNoOpenPlateTests
         var kept = Path.GetFileName(Assert.Single(game.Recovery.OwnCheckpoints()));
         game.Recovery.Files.Crash();
 
-        // The next game: no Plate open while the player logs in, then while the offer waits.
+        // The next game: no Plate open while the player logs in, then while the offer waits. The
+        // plugin sweeps the checkpoint folder before it loads kept changes.
         var next = await GameSession.StartAsync(fixture);
         await next.Recovery.RunAsync(30, step: 0.5);
+        Assert.Equal(kept, Path.GetFileName(Assert.Single(KeptFiles.Checkpoints(fixture.Paths))));
+        next.Recovery.Store.Sweep();
         Assert.Equal(kept, Path.GetFileName(Assert.Single(KeptFiles.Checkpoints(fixture.Paths))));
         var offered = Assert.Single(await next.LoadKeptChangesAsync());
         Assert.True(offered.IsCheckpoint);

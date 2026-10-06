@@ -57,7 +57,8 @@ internal sealed class RecoveryRig
 
     /// <summary>
     /// Recovery never throws out of a frame or out of unloading: it logs the failure once and goes on.
-    /// This fails a test whose frames or unload failed that way (build 9bfa246's null state did, unseen).
+    /// This fails a test if a frame, or an unload whose test calls this after it, failed that way
+    /// (build 9bfa246's null state did, unseen). Every <see cref="FrameAsync"/> calls it.
     /// </summary>
     internal static void AssertNoFailure(IAetherFrameLog log)
     {
@@ -65,8 +66,7 @@ internal sealed class RecoveryRig
         {
             Assert.DoesNotContain(
                 test.Messages.ToArray(),
-                m => m.StartsWith("E AetherFrame's continuous recovery failed", StringComparison.Ordinal)
-                    || m.StartsWith("E AetherFrame couldn't settle its recovery checkpoints", StringComparison.Ordinal));
+                m => m == "E " + ContinuousRecovery.TickFailureMessage || m == "E " + ContinuousRecovery.StopFailureMessage);
         }
     }
 
