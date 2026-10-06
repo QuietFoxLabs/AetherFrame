@@ -51,8 +51,9 @@ internal interface IRecoveryFiles
 
     /// <summary>
     /// Whether another open handle holds <paramref name="lockPath"/> now (a run still going); false when
-    /// there is no such file. Throws <see cref="UnauthorizedAccessException"/> when it can't tell, so a
-    /// caller leaves that run alone and counts it as unknown, never as ended or as running.
+    /// there is no such file. Throws (<see cref="UnauthorizedAccessException"/> or <see cref="IOException"/>)
+    /// when it can't tell, so a caller leaves that run alone and counts it as unknown, never as ended or
+    /// as running.
     /// </summary>
     bool IsLockHeld(string lockPath);
 }
@@ -60,6 +61,10 @@ internal interface IRecoveryFiles
 /// <summary>The recovery checkpoints' plain files (see <see cref="IRecoveryFiles"/>).</summary>
 internal sealed class SystemRecoveryFiles : IRecoveryFiles
 {
+    // ERROR_SHARING_VIOLATION and ERROR_LOCK_VIOLATION as the HRESULTs .NET gives an IOException.
+    private const int SharingViolation = unchecked((int)0x80070020);
+    private const int LockViolation = unchecked((int)0x80070021);
+
     internal static readonly SystemRecoveryFiles Instance = new();
 
     public IReadOnlyList<string> ListFiles(string directory, string pattern) =>
@@ -146,12 +151,22 @@ internal sealed class SystemRecoveryFiles : IRecoveryFiles
         {
             return false;
         }
-        catch (IOException)
+        catch (IOException ex) when (IsHeldByAnother(ex))
         {
-            // A sharing violation: a running game client holds it.
+            // A running game client holds it.
             return true;
         }
 
-        // UnauthorizedAccessException (can't tell) goes to the caller: that run is left alone, its state unknown.
+        // Any other failure (no permission, a device or network error) can't tell, so it goes to the
+        // caller: that run is left alone, its state unknown.
     }
+
+    /// <summary>
+    /// Whether opening a file failed only because another handle holds it: Windows' sharing or lock
+    /// violation (Wine reports the same), or, where the tests also run, the lock .NET takes for
+    /// <see cref="FileShare.None"/> (EWOULDBLOCK: 11 on Linux, 35 on macOS).
+    /// </summary>
+    internal static bool IsHeldByAnother(IOException ex) => OperatingSystem.IsWindows()
+        ? ex.HResult is SharingViolation or LockViolation
+        : ex.HResult == (OperatingSystem.IsLinux() ? 11 : 35);
 }

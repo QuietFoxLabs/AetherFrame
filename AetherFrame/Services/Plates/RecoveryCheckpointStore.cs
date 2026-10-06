@@ -160,16 +160,17 @@ internal sealed class RecoveryCheckpointStore
     /// <summary>
     /// Every checkpoint of runs that have ended (their lock not held), and, separately, how many runs
     /// are still going: their folders are left alone. This run's own folder is never listed.
-    /// <c>Complete</c> is false when the Sessions folder or an ended run's folder couldn't be listed, or
-    /// whether a run's lock is held couldn't be told: what it holds is then unknown, and a later load
-    /// looks again.
+    /// <c>Unlisted</c> names the runs whose folder couldn't be listed, or whose lock couldn't be told
+    /// held or not: what they hold is unknown, and a later load looks again. It is null when the
+    /// Sessions folder itself couldn't be listed, so no run is known. <c>Complete</c> is true only when
+    /// no run is unknown.
     /// </summary>
-    internal (IReadOnlyList<CheckpointFile> Files, int RunningSessions, bool Complete) ListEndedSessions()
+    internal (IReadOnlyList<CheckpointFile> Files, int RunningSessions, IReadOnlySet<Guid>? Unlisted, bool Complete) ListEndedSessions()
     {
         var found = new List<CheckpointFile>();
         var running = 0;
         var folders = ListRunFolders();
-        var complete = folders is not null;
+        var unlisted = folders is null ? null : new HashSet<Guid>();
         foreach (var directory in folders ?? [])
         {
             if (!PlateStoragePaths.TryParseRecoverySessionDirectoryName(directory, out var sessionId) || sessionId == SessionId)
@@ -191,11 +192,11 @@ internal sealed class RecoveryCheckpointStore
             {
                 // Another game client removed it as it unloaded, or it can't be listed now: a later load looks again.
                 log.Warning($"AetherFrame couldn't list a recovery folder: {ex.GetType().Name}.");
-                complete = false;
+                unlisted!.Add(sessionId);
             }
         }
 
-        return (found, running, complete);
+        return (found, running, unlisted, unlisted is { Count: 0 });
     }
 
     /// <summary>

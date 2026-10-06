@@ -187,22 +187,53 @@ public class GuidedReviewFixesTests
     {
         // A guided creation left partway, its Plate not open: My Plates' reminder and Help offer to continue.
         using var harness = await GuidedHarness.CreateAsync();
-        await harness.StartAndOpenAsync();
+        var made = await harness.StartAndOpenAsync();
         harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
         await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
         Assert.True(harness.Guided.ShowsResumeReminder);
         Assert.False(harness.Guided.ContinueWaitsForRecovery);
 
-        // A recovery offer waits (its kept changes may be this Plate's): continuing, which opens the Plate
-        // as saved, waits for its answer; the reminder hides and Help's item is greyed out.
-        var waits = true;
-        harness.Guided.RecoveryWaits = () => waits;
+        // The recovery offer holds another Plate back: nothing of this one waits, so continuing doesn't.
+        Guid? held = harness.Switcher.OriginalId;
+        harness.Guided.RecoveryWaits = id => id == held;
+        Assert.True(harness.Guided.ShowsResumeReminder);
+        Assert.False(harness.Guided.ContinueWaitsForRecovery);
+
+        // It holds this Plate back (its kept changes wait for an answer): continuing, which opens the Plate
+        // as saved, waits for that answer; the reminder hides and Help's item is greyed out.
+        held = made;
         Assert.False(harness.Guided.ShowsResumeReminder);
         Assert.True(harness.Guided.ContinueWaitsForRecovery);
 
-        waits = false;
+        held = null;
         Assert.True(harness.Guided.ShowsResumeReminder);
         Assert.False(harness.Guided.ContinueWaitsForRecovery);
+    }
+
+    [Fact]
+    public async Task TheRecoveryOffer_HoldsBackOnlyThePlatesWhoseKeptChangesWait()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        var kept = await game.CreatePlateAsync(name: "Kept");
+        var other = await game.CreatePlateAsync(name: "Other");
+        game.Open(kept, EditorSurfaceKind.Basic);
+        game.Edit();
+        fixture.Clock.Tick();
+        await game.UnloadAsync();
+
+        // Read before a login: Kept's changes wait to be offered; Other has nothing kept.
+        var next = await GameSession.StartAsync(fixture);
+        await next.LoadKeptChangesAsync(loggedIn: false);
+        Assert.True(next.Offer.AwaitsAnswerFor(kept));
+        Assert.False(next.Offer.AwaitsAnswerFor(other));
+
+        // Left for later (the window closed): answered for now.
+        next.Offer.OnLogin();
+        Assert.True(next.Offer.ConsumeOpenRequest());
+        next.Offer.Closed();
+        Assert.False(next.Offer.AwaitsAnswerFor(kept));
+        Assert.False(next.Offer.AwaitsAnswerFor(other));
     }
 
     [Fact]
@@ -212,9 +243,14 @@ public class GuidedReviewFixesTests
         var plugin = File.ReadAllText(Path.Combine(root, "AetherFrame", "Plugin.cs"));
         var help = File.ReadAllText(Path.Combine(root, "AetherFrame", "Windows", "Tutorial", "HelpMenu.cs"));
 
-        Assert.Contains("guidedCreation.RecoveryWaits = () => recoveryOffer.AwaitsAnswer;", plugin, StringComparison.Ordinal);
+        Assert.Contains("guidedCreation.RecoveryWaits = recoveryOffer.AwaitsAnswerFor;", plugin, StringComparison.Ordinal);
+        Assert.Contains("guidedCreation.LoggedIn = () => ClientState.IsLoggedIn;", plugin, StringComparison.Ordinal);
         Assert.Contains("using (ImRaii.Disabled(guided.IsStarting || onSteps || waitsForRecovery))", help, StringComparison.Ordinal);
+
+        // Before a login no offer window can show, so the tooltip says what comes first.
         Assert.Contains("Answer Unsaved Changes Kept first: it may hold this Plate's changes.", help, StringComparison.Ordinal);
+        Assert.Contains("Log in first: AetherFrame then offers the unsaved changes it kept for this Plate.", help, StringComparison.Ordinal);
+        Assert.Contains("guided.LoggedIn()", help, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -376,28 +412,8 @@ public class GuidedReviewFixesTests
     [Fact]
     public async Task ADraftASaveAlreadyHolds_WaitsWhileRecoveryFoldersCantBeListed_ThenGoesWithItsCheckpoints()
     {
-        // An editing checkpointed once ("one"), edited again ("two") and kept at unload; the same
-        // changes then saved elsewhere, so the kept draft is the Plate's saved content.
         using var fixture = new LibraryFixture();
-        var first = await GameSession.StartAsync(fixture);
-        var plateId = await first.CreatePlateAsync();
-        first.Open(plateId);
-        await first.Recovery.FrameAsync();
-        first.Edit("one");
-        fixture.Clock.Tick();
-        await first.Recovery.RunAsync(6);
-        Assert.Single(first.Recovery.OwnCheckpoints());
-        first.Edit("two");
-        await EndAsync(first, unload: true);
-        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
-        Assert.Single(KeptFiles.Checkpoints(fixture.Paths));
-
-        var drafted = DraftDocuments.Parse(File.ReadAllText(draft)).Draft!;
-        var other = await GameSession.StartAsync(fixture);
-        other.Open(plateId);
-        Assert.True(other.Session.ApplyRecoveredState(ProfileService.DocumentState.Capture(drafted.Document)));
-        Assert.True(await other.Session.SaveProfileAsync());
-        await EndAsync(other, unload: false);
+        await KeepWhatASaveHoldsAsync(fixture);
 
         // A load that can't list the recovery folders: the draft isn't retired without its checkpoint
         // (which a later load would otherwise offer alone, behind the save); every file stays.
@@ -417,6 +433,38 @@ public class GuidedReviewFixesTests
         Assert.Empty(scan.Offers);
         Assert.Empty(KeptFiles.Drafts(fixture.Paths));
         Assert.Empty(KeptFiles.Checkpoints(fixture.Paths));
+    }
+
+    [Fact]
+    public async Task ADraftASaveAlreadyHolds_WaitsOnlyForItsOwnRunsFolder_NotAnotherRunsItCantTell()
+    {
+        using var fixture = new LibraryFixture();
+        var run = await KeepWhatASaveHoldsAsync(fixture);
+        var crashed = await CrashAsync(fixture, "crashed");
+        var unrelated = Path.GetFileName(Path.GetDirectoryName(crashed[0]))!;
+        var editing = Assert.Single(KeptFiles.Checkpoints(fixture.Paths), f => !crashed.Contains(f, StringComparer.OrdinalIgnoreCase));
+
+        // Its own run's lock can't be probed: the editing's checkpoints are unknown, so it waits, untouched.
+        // The crashed run, listed, is offered.
+        var before = KeptFiles.Snapshot(fixture.Paths.DraftsDirectory);
+        var next = await GameSession.StartAsync(fixture);
+        next.Recovery.Files.CantTellLock = path => RunOf(path) == run;
+        var scan = await Review(next);
+        Assert.False(scan.Complete);
+        Assert.Equal(crashed[0], Assert.Single(scan.Offers).Path, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(before, KeptFiles.Snapshot(fixture.Paths.DraftsDirectory));
+
+        // Only the crashed run can't be told: the draft's editing was read whole, so it retires with its
+        // checkpoint, and the crashed run's checkpoints stay for a later load.
+        next.Recovery.Files.CantTellLock = path => RunOf(path) == unrelated;
+        scan = await Review(next);
+        Assert.False(scan.Complete);
+        Assert.Empty(scan.Offers);
+        Assert.Empty(KeptFiles.Drafts(fixture.Paths));
+        Assert.False(File.Exists(editing));
+        Assert.All(crashed, f => Assert.True(File.Exists(f)));
+
+        static string? RunOf(string lockPath) => Path.GetFileName(Path.GetDirectoryName(lockPath));
     }
 
     [Fact]
@@ -447,18 +495,46 @@ public class GuidedReviewFixesTests
     [Fact]
     public void TheLockProbe_NeverTakesCantTellForHeld()
     {
-        // The real probe lets "can't tell" (UnauthorizedAccessException) reach its callers: no catch in
-        // it may cover that exception, nor SystemException or Exception, which include it.
+        // The real probe lets "can't tell" reach its callers: only a sharing violation means held. No
+        // catch in it may cover UnauthorizedAccessException, SystemException or Exception, nor every IOException.
         var files = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Services", "Plates", "RecoveryFiles.cs"))
             .Replace("\r\n", "\n", StringComparison.Ordinal);
         var start = files.IndexOf("public bool IsLockHeld(string lockPath)", StringComparison.Ordinal);
         Assert.True(start >= 0);
         var probe = files[start..files.IndexOf("\n    }\n", start, StringComparison.Ordinal)];
 
-        Assert.Contains("catch (IOException)", probe, StringComparison.Ordinal);
+        Assert.Contains("catch (IOException ex) when (IsHeldByAnother(ex))", probe, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(probe, @"\bwhen\s*\("));
         Assert.DoesNotMatch(@"catch\s*\(\s*(System\.)?(UnauthorizedAccessException|SystemException|Exception)\b", probe);
+        Assert.DoesNotMatch(@"catch\s*\(\s*(System\.IO\.)?IOException(\s+\w+)?\s*\)\s*\{", probe);
         Assert.DoesNotMatch(@"catch\s*(\{|when)", probe);
-        Assert.DoesNotMatch(@"when\s*\(", probe);
+    }
+
+    [Fact]
+    public void TheLockProbe_TellsAHeldLock_AndTakesNoOtherFailureForOne()
+    {
+        // A real lock, held as a running game client holds it, then let go.
+        var folder = Directory.CreateTempSubdirectory("aetherframe-lock-");
+        try
+        {
+            var lockPath = Path.Combine(folder.FullName, "session.lock");
+            var files = new SystemRecoveryFiles();
+            Assert.False(files.IsLockHeld(lockPath));
+            using (files.HoldLock(lockPath))
+            {
+                Assert.True(files.IsLockHeld(lockPath));
+            }
+
+            Assert.False(files.IsLockHeld(lockPath));
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+
+        // Any other failure to open it (a device error, a drive not ready) can't tell.
+        Assert.False(SystemRecoveryFiles.IsHeldByAnother(new IOException("A device error.")));
+        Assert.False(SystemRecoveryFiles.IsHeldByAnother(new IOException("The device is not ready.", unchecked((int)0x80070015))));
     }
 
     [Fact]
@@ -667,6 +743,35 @@ public class GuidedReviewFixesTests
         Assert.True(await game.Recovery.Recovery.Writer.WaitIdleAsync(TimeSpan.FromSeconds(10)));
         game.Recovery.Store.CloseSession();
         fixture.Clock.Tick(60);
+    }
+
+    /// <summary>
+    /// An editing checkpointed once ("one"), edited again ("two") and kept at unload; the same changes
+    /// then saved by another game, so the kept draft is the Plate's saved content. Returns the name of
+    /// the editing's run folder.
+    /// </summary>
+    private static async Task<string> KeepWhatASaveHoldsAsync(LibraryFixture fixture)
+    {
+        var first = await GameSession.StartAsync(fixture);
+        var plateId = await first.CreatePlateAsync();
+        first.Open(plateId);
+        await first.Recovery.FrameAsync();
+        first.Edit("one");
+        fixture.Clock.Tick();
+        await first.Recovery.RunAsync(6);
+        Assert.Single(first.Recovery.OwnCheckpoints());
+        first.Edit("two");
+        await EndAsync(first, unload: true);
+        var draft = Assert.Single(KeptFiles.Drafts(fixture.Paths));
+        Assert.Single(KeptFiles.Checkpoints(fixture.Paths));
+
+        var drafted = DraftDocuments.Parse(File.ReadAllText(draft)).Draft!;
+        var other = await GameSession.StartAsync(fixture);
+        other.Open(plateId);
+        Assert.True(other.Session.ApplyRecoveredState(ProfileService.DocumentState.Capture(drafted.Document)));
+        Assert.True(await other.Session.SaveProfileAsync());
+        await EndAsync(other, unload: false);
+        return Path.GetFileName(first.Recovery.Store.SessionDirectory);
     }
 
     /// <summary>A game ends: as it unloads (keeping a draft of unsaved changes) or just its recovery settled, its folder closed.</summary>

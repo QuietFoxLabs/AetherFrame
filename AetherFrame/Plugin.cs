@@ -335,7 +335,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             keptChanges = new KeptChangesOffer(keptChangesFiles, plateLibrary, profileService, editorSession, ShowEditor, log, recoveryCheckpoints);
             keptChangesWindow = new KeptChangesWindow(keptChanges);
             var recoveryOffer = keptChanges;
-            guidedCreation.RecoveryWaits = () => recoveryOffer.AwaitsAnswer;
+            guidedCreation.RecoveryWaits = recoveryOffer.AwaitsAnswerFor;
+            guidedCreation.LoggedIn = () => ClientState.IsLoggedIn;
             plateLibraryWindow.KeptChanges = keptChanges;
             plateLibraryWindow.Guided = guidedCreation;
             basicProfileEditorWindow.ViewPlate = profileViewWindow.ShowPlate;

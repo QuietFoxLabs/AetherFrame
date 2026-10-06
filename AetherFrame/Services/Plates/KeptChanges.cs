@@ -104,9 +104,9 @@ internal static class KeptChangesReview
     /// <summary>
     /// Reads the newest drafts (see <see cref="DraftStore.ReadNewestAsync"/>) and judges each against
     /// the Library, newest first. A draft identical to its Plate's saved content is retired (moved
-    /// intact to the trash, its editing's checkpoints removed) and not returned, unless the recovery
-    /// folders couldn't all be listed: some of its editing's checkpoints may then be missing from what
-    /// was read, so it waits, untouched, for a load that sees the whole editing. One that can't be
+    /// intact to the trash, its editing's checkpoints removed) and not returned, unless its run's
+    /// recovery folder couldn't be listed: some of its editing's checkpoints may then be missing from
+    /// what was read, so it waits, untouched, for a load that sees the whole editing. One that can't be
     /// read is left as it is and not returned; the rest are what to offer. With the Library not loaded, nothing is touched and
     /// nothing is offered: no draft can be judged against a Library that failed to load. Says whether
     /// everything was read (<see cref="KeptChangesScan.Complete"/>); a Drafts folder that can't be
@@ -123,10 +123,10 @@ internal static class KeptChangesReview
         var complete = listing.Unread == 0;
         var groups = new List<Group>();
         var byEdit = new Dictionary<(Guid Session, Guid Edit), Group>();
-        var listed = true;
+        IReadOnlySet<Guid>? unlisted = new HashSet<Guid>();
         if (checkpoints is not null)
         {
-            complete &= ReadCheckpoints(checkpoints, groups, byEdit, log, out listed);
+            complete &= ReadCheckpoints(checkpoints, groups, byEdit, log, out unlisted);
         }
 
         // A draft kept at unload is its editing's last word: the newest point of its checkpoints' group.
@@ -180,9 +180,9 @@ internal static class KeptChangesReview
             }
 
             // Its newest point is the Plate's saved content: a save already holds it, and every older point is behind that save.
-            // With a recovery folder unlisted, checkpoints of this editing may be missing here: retired now,
-            // they would be offered alone later, so the whole editing waits for a load that lists them all.
-            if (!listed)
+            // With its run's recovery folder unlisted, checkpoints of this editing may be missing here: retired
+            // now, they would be offered alone later, so the whole editing waits for a load that lists them all.
+            if (MayMissCheckpoints(newest.Draft, unlisted))
             {
                 waiting++;
                 continue;
@@ -208,6 +208,14 @@ internal static class KeptChangesReview
 
         return new KeptChangesScan(offers, complete);
     }
+
+    /// <summary>
+    /// Whether some of <paramref name="draft"/>'s editing's checkpoints may be missing from what was read:
+    /// its run's folder is one of <paramref name="unlisted"/>, or no run is known (null). An editing's
+    /// checkpoints are only ever in its own run's folder; a draft with no run has none.
+    /// </summary>
+    private static bool MayMissCheckpoints(PlateDraft draft, IReadOnlySet<Guid>? unlisted) =>
+        draft.SessionId is { } session && (unlisted is null || unlisted.Contains(session));
 
     /// <summary>
     /// Removes an answered editing's other checkpoint files (see <see cref="KeptDraft.OtherFiles"/>).
@@ -251,13 +259,14 @@ internal static class KeptChangesReview
     /// answering its editing) holds the whole editing back, untouched, for a later load. Returns
     /// whether every checkpoint was listed and read, or goes with an editing on offer: false when a
     /// folder couldn't be listed, a checkpoint couldn't be opened, names another Plate or is a newer
-    /// version's, or an editing has no intact checkpoint left to offer. <paramref name="listed"/> says
-    /// whether every ended run's folder was listed (see <see cref="RecoveryCheckpointStore.ListEndedSessions"/>).
+    /// version's, or an editing has no intact checkpoint left to offer. <paramref name="unlisted"/> names
+    /// the runs whose folder couldn't be listed, or is null when none is known (see
+    /// <see cref="RecoveryCheckpointStore.ListEndedSessions"/>).
     /// </summary>
-    private static bool ReadCheckpoints(RecoveryCheckpointStore checkpoints, List<Group> groups, Dictionary<(Guid Session, Guid Edit), Group> byEdit, IAetherFrameLog log, out bool listed)
+    private static bool ReadCheckpoints(RecoveryCheckpointStore checkpoints, List<Group> groups, Dictionary<(Guid Session, Guid Edit), Group> byEdit, IAetherFrameLog log, out IReadOnlySet<Guid>? unlisted)
     {
-        var (found, running, complete) = checkpoints.ListEndedSessions();
-        listed = complete;
+        var (found, running, unlistedRuns, complete) = checkpoints.ListEndedSessions();
+        unlisted = unlistedRuns;
         if (running > 0)
         {
             log.Information($"AetherFrame left the recovery checkpoints of {running} other running game client(s) alone.");

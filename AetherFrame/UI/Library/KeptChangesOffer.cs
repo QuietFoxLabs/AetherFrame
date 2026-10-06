@@ -166,6 +166,14 @@ internal sealed class KeptChangesOffer
     /// </summary>
     internal bool AwaitsAnswer => creating is not null || entries.Any(e => e.State is EntryState.Pending or EntryState.Acting);
 
+    /// <summary>
+    /// Whether opening Plate <paramref name="plateId"/> as saved should wait for this offer: kept changes
+    /// of that Plate wait for the player's answer (see <see cref="AwaitsAnswer"/>), or an answer is being
+    /// acted on, which may open a Plate itself.
+    /// </summary>
+    internal bool AwaitsAnswerFor(Guid plateId) =>
+        creating is not null || entries.Any(e => e.State == EntryState.Acting || (e.State == EntryState.Pending && e.PlateId == plateId));
+
     internal KeptChangesVariant? CurrentVariant => Current is { } entry ? VariantOf(entry.Choice) : null;
 
     internal Guid? CurrentPlateId => Current?.PlateId;

@@ -283,17 +283,21 @@ internal sealed class GuidedCreation
     /// it for this load.
     /// </summary>
     internal bool ShowsResumeReminder =>
-        !resumeHidden && !starting && CanContinue && !StepsOnScreen && !RecoveryWaits();
+        !resumeHidden && !starting && CanContinue && !StepsOnScreen && !ContinueWaitsForRecovery;
 
     /// <summary>
-    /// Whether a recovery offer waits for an answer (<see cref="KeptChangesOffer.AwaitsAnswer"/>, set
-    /// by the plugin). Its kept changes may be the guided Plate's, so continuing the steps, which opens
-    /// that Plate as saved, waits for it: My Plates' reminder hides and Help's item is greyed out.
+    /// Whether the recovery offer holds a Plate back (<see cref="KeptChangesOffer.AwaitsAnswerFor"/>, set
+    /// by the plugin): kept changes of that Plate wait for an answer, or an answer is being acted on.
+    /// Continuing the steps opens the guided Plate as saved, so it waits for that answer: My Plates'
+    /// reminder hides and Help's item is greyed out.
     /// </summary>
-    internal Func<bool> RecoveryWaits { get; set; } = static () => false;
+    internal Func<Guid, bool> RecoveryWaits { get; set; } = static _ => false;
 
-    /// <summary>Whether Continue Step by Step waits for a recovery offer's answer (<see cref="RecoveryWaits"/>).</summary>
-    internal bool ContinueWaitsForRecovery => CanContinue && RecoveryWaits();
+    /// <summary>Whether a character is logged in (set by the plugin): kept changes are offered only then.</summary>
+    internal Func<bool> LoggedIn { get; set; } = static () => true;
+
+    /// <summary>Whether Continue Step by Step waits for the recovery offer's answer about the guided Plate (<see cref="RecoveryWaits"/>).</summary>
+    internal bool ContinueWaitsForRecovery => CanContinue && Preferences.PlateId is { } plateId && RecoveryWaits(plateId);
 
     /// <summary>Whether the Basic editor is showing the steps now: continuing them has nothing to do.</summary>
     internal bool StepsOnScreen => IsGuiding(profiles.OpenPlateId) && basicEditorOpen();
