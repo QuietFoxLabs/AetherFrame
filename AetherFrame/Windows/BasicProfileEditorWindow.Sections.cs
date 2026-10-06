@@ -312,6 +312,10 @@ internal sealed partial class BasicProfileEditorWindow
             }
         }
 
+        // In the Simple view the explanation is the Add a job... list's tooltip, so it never lands on Add current.
+        const string jobNamesHint = "Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).";
+        SimpleTooltip(jobNamesHint);
+
         // From the logged-in character, only on request.
         if (info is { JobId: > 0, JobName.Length: > 0 } current && BasicEditorSession.CanAddFavoriteJob(profile, current.JobId)
             && ImGui.SmallButton($"Add current: {current.JobName}"))
@@ -319,7 +323,7 @@ internal sealed partial class BasicProfileEditorWindow
             basicEditorSession.UseCurrentJob();
         }
 
-        Explain("Shown as full names when they fit, otherwise as job abbreviations (AST, WHM...).");
+        DetailedHint(jobNamesHint);
     }
 
     // ---------------------------------------------------------------- playstyle and active hours (in Details)

@@ -206,6 +206,12 @@ internal sealed class TemplateChooser
         }
 
         var footerHeight = (ImGui.GetFrameHeightWithSpacing() * 2f) + ImGui.GetStyle().ItemSpacing.Y + (4f * ImGuiHelpers.GlobalScale);
+        if (FooterButtonsWrap())
+        {
+            // Cancel and Use Template take a row of their own below the footer's links.
+            footerHeight += ImGui.GetFrameHeightWithSpacing();
+        }
+
         var bodyHeight = -footerHeight;
         var leftWidth = ChooserLeftPaneWidth * ImGuiHelpers.GlobalScale;
 
@@ -461,6 +467,32 @@ internal sealed class TemplateChooser
         ProfileRenderer.Draw(drawList, document, canvasOrigin, fit.Scale, renderResources, ProfileRenderOptions.Finished);
     }
 
+    private static Vector2 FooterButtonSize => new Vector2(130f, 0f) * ImGuiHelpers.GlobalScale;
+
+    /// <summary>Whether the footer's Cancel and Use Template go on a row of their own (as <see cref="AetherControls.AlignRightAfterItem"/> decides), measured before anything is drawn.</summary>
+    private bool FooterButtonsWrap()
+    {
+        if (ManageTemplates is null && CreateStepByStep is null)
+        {
+            return false;
+        }
+
+        var style = ImGui.GetStyle();
+        var left = 0f;
+        if (ManageTemplates is not null)
+        {
+            left += ImGui.CalcTextSize("Manage Templates...").X;
+        }
+
+        if (CreateStepByStep is not null)
+        {
+            left += (ManageTemplates is not null ? style.ItemSpacing.X : 0f) + ImGui.CalcTextSize("Create Step by Step...").X + (style.FramePadding.X * 2f);
+        }
+
+        var rightWidth = (FooterButtonSize.X * 2f) + style.ItemSpacing.X;
+        return ImGui.GetWindowContentRegionMax().X - rightWidth < ImGui.GetWindowContentRegionMin().X + left + style.ItemSpacing.X;
+    }
+
     private void DrawTemplateChooserFooter()
     {
         var character = characterIdentity.CurrentCharacter;
@@ -504,7 +536,7 @@ internal sealed class TemplateChooser
 
         // Right side: Cancel, then Use Template as the primary (accent-colored) action; on a row of
         // their own when the left side leaves no room for them.
-        var buttonSize = new Vector2(130f, 0f) * ImGuiHelpers.GlobalScale;
+        var buttonSize = FooterButtonSize;
         var rightWidth = (buttonSize.X * 2f) + ImGui.GetStyle().ItemSpacing.X;
         if (ManageTemplates is not null || CreateStepByStep is not null)
         {

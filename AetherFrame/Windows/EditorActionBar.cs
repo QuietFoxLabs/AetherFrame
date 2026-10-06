@@ -75,6 +75,12 @@ internal sealed class EditorActionBar
 
     internal EditorPlateMenu PlateMenu => plateMenu;
 
+    /// <summary>
+    /// Whether Save, while it can save, is the screen's one primary (accent-filled) button: the Basic
+    /// editor's Simple view sets it. Otherwise Save is tinted like a selected toggle, as before.
+    /// </summary>
+    internal bool EmphasizeSave { get; set; }
+
     /// <summary>Asks to revert to the last saved version (confirmed by <see cref="DrawPopups"/>); ignored when there's nothing to revert.</summary>
     internal void RequestRevert()
     {
@@ -193,10 +199,11 @@ internal sealed class EditorActionBar
 
         ImGui.SameLine();
         var canSave = commands.CanSave;
+        var emphasized = canSave && EmphasizeSave;
         using (ImRaii.Disabled(!canSave))
-        using (ImRaii.PushColor(ImGuiCol.Button, EditorWidgets.ActiveToggleColor, canSave))
+        using (ImRaii.PushColor(ImGuiCol.Button, EditorWidgets.ActiveToggleColor, canSave && !emphasized))
         {
-            if (ImGui.Button(SaveLabel))
+            if (emphasized ? AetherControls.PrimaryButton(SaveLabel) : ImGui.Button(SaveLabel))
             {
                 commands.Save();
             }

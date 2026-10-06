@@ -233,6 +233,42 @@ public class KeptChangesOfferTests
     }
 
     [Fact]
+    public async Task AwaitsAnswer_HoldsTheWelcome_FromBeforeTheLogin_UntilEveryDraftIsAnsweredOrLeftForLater()
+    {
+        using var fixture = new LibraryFixture();
+        await KeepEditsAsync(fixture, "First", "Second");
+        var game = await GameSession.StartAsync(fixture);
+
+        // Read before a login: still to be offered, so the welcome waits.
+        await game.LoadKeptChangesAsync(loggedIn: false);
+        Assert.True(game.Offer.AwaitsAnswer);
+        game.Offer.OnLogin();
+        Assert.True(game.Offer.ConsumeOpenRequest());
+        Assert.True(game.Offer.AwaitsAnswer);
+
+        // Closed without an answer (Decide Later): answered for now.
+        game.Offer.Closed();
+        Assert.False(game.Offer.AwaitsAnswer);
+
+        // Review offers them again; each one waits until it is answered.
+        game.Offer.Review();
+        Assert.True(game.Offer.AwaitsAnswer);
+        game.Offer.Discard();
+        Assert.True(game.Offer.AwaitsAnswer);
+        game.Offer.Discard();
+        Assert.False(game.Offer.AwaitsAnswer);
+    }
+
+    [Fact]
+    public async Task AwaitsAnswer_IsFalse_WithNothingKept()
+    {
+        using var fixture = new LibraryFixture();
+        var game = await GameSession.StartAsync(fixture);
+        await game.LoadKeptChangesAsync();
+        Assert.False(game.Offer.AwaitsAnswer);
+    }
+
+    [Fact]
     public async Task Discard_MovesTheDraftToTheTrash_AndTheSavedPlateStaysAsItIs()
     {
         using var fixture = new LibraryFixture();

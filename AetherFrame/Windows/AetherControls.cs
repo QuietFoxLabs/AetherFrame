@@ -307,10 +307,10 @@ internal static class AetherControls
 
     /// <summary>
     /// An empty state, centered in the remaining region: a large muted icon, a title, an
-    /// explanation, and optionally the one action that fills the emptiness. Returns true when
-    /// that action was clicked.
+    /// explanation, and optionally the one action that fills the emptiness, with why it last failed
+    /// (<paramref name="actionError"/>) just under it. Returns true when that action was clicked.
     /// </summary>
-    internal static bool EmptyState(FontAwesomeIcon icon, string title, string description, string? actionLabel = null, string? actionTooltip = null)
+    internal static bool EmptyState(FontAwesomeIcon icon, string title, string description, string? actionLabel = null, string? actionTooltip = null, string? actionError = null)
     {
         var scale = ImGuiHelpers.GlobalScale;
         var available = ImGui.GetContentRegionAvail();
@@ -333,7 +333,8 @@ internal static class AetherControls
 
         var descriptionHeight = ImGui.CalcTextSize(description, false, textWidth).Y;
         var buttonHeight = actionLabel is null ? 0f : ImGui.GetFrameHeight() + (AetherMetrics.SpaceMd * scale);
-        var blockHeight = (iconHeight * 2.2f) + (AetherMetrics.SpaceMd * scale) + titleHeight + (AetherMetrics.SpaceXs * scale) + descriptionHeight + buttonHeight;
+        var errorHeight = actionLabel is null || actionError is null ? 0f : ImGui.CalcTextSize(actionError, false, textWidth).Y + (AetherMetrics.SpaceSm * scale);
+        var blockHeight = (iconHeight * 2.2f) + (AetherMetrics.SpaceMd * scale) + titleHeight + (AetherMetrics.SpaceXs * scale) + descriptionHeight + buttonHeight + errorHeight;
 
         var origin = ImGui.GetCursorScreenPos();
         var top = origin.Y + Math.Max(0f, (available.Y - blockHeight) / 2f);
@@ -370,6 +371,14 @@ internal static class AetherControls
             ImGui.SetCursorScreenPos(new Vector2(centerX - (buttonWidth / 2f), y));
             clicked = PrimaryButton(actionLabel, new Vector2(buttonWidth, 0f), actionTooltip);
             y += ImGui.GetFrameHeight();
+
+            if (actionError is not null)
+            {
+                y += AetherMetrics.SpaceSm * scale;
+                var errorSize = ImGui.CalcTextSize(actionError, false, textWidth);
+                drawList.AddText(ImGui.GetFont(), ImGui.GetFontSize(), new Vector2(centerX - (errorSize.X / 2f), y), ImGui.GetColorU32(AetherPalette.Danger), actionError, textWidth);
+                y += errorSize.Y;
+            }
         }
 
         ImGui.SetCursorScreenPos(new Vector2(origin.X, Math.Max(y, origin.Y)));

@@ -198,6 +198,9 @@ internal sealed class PlateSwitcher
         queued = request;
     }
 
+    /// <summary>Whether a Plate waits to open at the start of the next frame (<see cref="Advance"/>).</summary>
+    internal bool OpenQueued => queued is not null;
+
     /// <summary>
     /// Once a frame, at the start of an editor's Draw before it reads the open Plate (and once a frame
     /// when no editor drew): after the question's Save, the open goes ahead, or why the save failed

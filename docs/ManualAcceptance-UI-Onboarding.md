@@ -22,8 +22,9 @@ Since guided creation became the introductory route, a new player is offered it,
 7. **Close without answering** (X or Escape): it disappears and My Plates, still empty, offers Create My First Plate; reload: welcomed again; after the third showing it is not shown again.
 8. **Not Now.** The same as closing it: My Plates offers Create My First Plate, no reminder row; reload: welcomed again, within the same three showings.
 9. **Don't Show Again.** Reload: not welcomed, no reminder; Help still offers Create Step by Step and the full tutorial.
-10. **Create My First Plate**: the welcome closes, an Adventure Plate Classic is made and opens in the Basic editor on step 1, Choose a Look.
-10b. **Recovery first.** With kept unsaved changes or a recovery checkpoint waiting, load a new install: the "Unsaved changes kept" window comes first, and the welcome appears only once it has been answered (Decide Later counts).
+10. **Create My First Plate**: the welcome closes, an Adventure Plate Classic is made and opens in the Basic editor on step 1, Choose a look.
+10b. **Recovery first.** With kept unsaved changes waiting for a Plate that is no longer in My Plates (so My Plates is empty), load: the "Unsaved changes kept" window comes first, and the welcome appears only once it has been answered (Decide Later counts). Recovery checkpoints join this once crash recovery (#141) is in.
+10c. **Made another way.** With the welcome open, make a Plate from My Plates' Create Plate: the welcome closes. With it open again on a new install, log out: it closes, comes back after the next login, and that showing isn't counted twice.
 
 ## C. The spotlight
 

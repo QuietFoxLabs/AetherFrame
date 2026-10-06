@@ -324,7 +324,13 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     private void DrawHeader(CharacterContext? character, int plateCount)
     {
         var headerMin = ImGui.GetCursorScreenPos();
-        if (AetherControls.PrimaryButton("Create Plate", tooltip: "Start a new Plate from a Template."))
+
+        // One primary action at a time: while the empty My Plates offers the steps, or the reminder
+        // offers to continue them, Create Plate (the Template chooser) is an ordinary button.
+        var guidedLeads = Guided is { } steps && (plateCount == 0 || steps.ShowsResumeReminder);
+        if (guidedLeads
+                ? AetherControls.SecondaryButton("Create Plate", tooltip: "Start a new Plate from a Template.")
+                : AetherControls.PrimaryButton("Create Plate", tooltip: "Start a new Plate from a Template."))
         {
             plateMenu.Chooser.Open();
         }
@@ -447,7 +453,8 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
                     ? "A Plate is a complete Adventure Plate style design. Make as many as you like; each character can choose one to be its Active Plate."
                     : "Make your first one in three short steps.",
                 guided is null ? "Create Your First Plate" : guided.IsStarting ? "Creating your Plate..." : "Create My First Plate",
-                guided is null ? "Start a new Plate from a Template." : "Choose a look, make it yours, save.\nA Plate is your character's card; each character can have one Active Plate."))
+                guided is null ? "Start a new Plate from a Template." : "Choose a look, make it yours, save.\nA Plate is your character's card; each character can have one Active Plate.",
+                guided?.StartError))
         {
             if (guided is null)
             {
@@ -457,11 +464,6 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             {
                 guided.Start();
             }
-        }
-
-        if (guided?.StartError is { } error)
-        {
-            AetherControls.StatusLine(AetherTone.Danger, error);
         }
     }
 

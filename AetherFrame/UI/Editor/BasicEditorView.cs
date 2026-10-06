@@ -143,8 +143,11 @@ internal static class BasicEditorView
         _ => Title(category),
     };
 
-    /// <summary>The window's minimum size, in unscaled pixels (Dalamud scales it).</summary>
-    internal static readonly Vector2 MinimumWindowSize = new(520f, 560f);
+    /// <summary>
+    /// The window's minimum size, in unscaled pixels (Dalamud scales it). Short enough that at 200%
+    /// it fits a 1080p screen (960 of 972 pixels), since the guided steps keep Continue at the bottom.
+    /// </summary>
+    internal static readonly Vector2 MinimumWindowSize = new(520f, 480f);
 
     /// <summary>
     /// The window's size the first time it opens, in unscaled pixels, kept within the screen (see

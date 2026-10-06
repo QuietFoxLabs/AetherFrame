@@ -58,7 +58,8 @@ public class WindowScaleTests
     [Theory]
     [InlineData(1f, 1920f, 1080f, 1180f, 760f)] // fits: the preferred size as is
     [InlineData(1.5f, 1920f, 1080f, 1728f, 972f)] // 1770 x 1140 wouldn't fit: held to 90% of the screen
-    [InlineData(2f, 1920f, 1080f, 1728f, 1120f)] // 2360 x 1520: held to the screen, but never below the minimum (1040 x 1120)
+    [InlineData(2f, 1920f, 1080f, 1728f, 972f)] // 2360 x 1520: held to 90% of the screen, which the minimum (1040 x 960) fits
+    [InlineData(2f, 1280f, 720f, 1152f, 960f)] // even the minimum doesn't fit: never below it
     [InlineData(1.5f, 0f, 0f, 1770f, 1140f)] // screen size unknown: the preferred size
     public void BasicEditor_FirstUseSize_FitsTheScreen_ButNeverBelowTheMinimum(float scale, float screenWidth, float screenHeight, float expectedWidth, float expectedHeight)
     {
@@ -79,5 +80,18 @@ public class WindowScaleTests
         var size = FirstUseWindowSize.Compute(BasicEditorView.FirstUseSize, BasicEditorView.MinimumWindowSize, screen, 1.5f);
         Assert.True(size.X <= screen.X && size.Y <= screen.Y);
         Assert.True(size.X >= BasicEditorView.MinimumWindowSize.X * 1.5f && size.Y >= BasicEditorView.MinimumWindowSize.Y * 1.5f);
+    }
+
+    // The guided steps draw Back and Continue at the window's bottom edge, so at 200% the whole
+    // window has to fit a 1080p screen, below the first-use position ImGui gives it (60, 60).
+    [Fact]
+    public void BasicEditor_AtTwoHundredPercent_KeepsTheGuidedFooterOnA1080pScreen()
+    {
+        var screen = new Vector2(1920f, 1080f);
+
+        Assert.True(BasicEditorView.MinimumWindowSize.Y * 2f <= screen.Y * FirstUseWindowSize.MaxWorkAreaFraction);
+
+        var size = FirstUseWindowSize.Compute(BasicEditorView.FirstUseSize, BasicEditorView.MinimumWindowSize, screen, 2f);
+        Assert.True(60f + size.Y <= screen.Y);
     }
 }

@@ -177,6 +177,24 @@ internal sealed class GuidedCreation
         return true;
     }
 
+    /// <summary>Whether My Plates holds a Plate: a welcome on screen then has nothing left to offer.</summary>
+    internal bool HasPlate => library.GetOrderedPlates().Count > 0;
+
+    /// <summary>
+    /// The welcome on screen closed unanswered because something now stands in front of it (the
+    /// character logged out, or a recovery offer came up): it waits to show again, and that showing
+    /// isn't counted twice.
+    /// </summary>
+    internal void WithdrawWelcome()
+    {
+        offerRequested = true;
+        if (Preferences.OfferCount > 0)
+        {
+            Preferences.OfferCount--;
+            store.Save();
+        }
+    }
+
     /// <summary>The player answered the welcome.</summary>
     internal void AnswerWelcome(WelcomeAnswer answer)
     {
@@ -205,7 +223,10 @@ internal sealed class GuidedCreation
     /// it for this load.
     /// </summary>
     internal bool ShowsResumeReminder =>
-        !resumeHidden && !starting && CanContinue && !(IsGuiding(profiles.OpenPlateId) && basicEditorOpen());
+        !resumeHidden && !starting && CanContinue && !StepsOnScreen;
+
+    /// <summary>Whether the Basic editor is showing the steps now: continuing them has nothing to do.</summary>
+    internal bool StepsOnScreen => IsGuiding(profiles.OpenPlateId) && basicEditorOpen();
 
     /// <summary>The reminder's Not Now: hidden until AetherFrame next loads. Help can still continue.</summary>
     internal void DismissReminder() => resumeHidden = true;
@@ -277,17 +298,19 @@ internal sealed class GuidedCreation
         store.Save();
     }
 
-    private bool PlateExists(Guid plateId)
+    private bool PlateExists(Guid plateId) => FindPlate(plateId) is not null;
+
+    private PlateSummary? FindPlate(Guid plateId)
     {
         foreach (var plate in library.GetOrderedPlates())
         {
             if (plate.PlateId == plateId)
             {
-                return true;
+                return plate;
             }
         }
 
-        return false;
+        return null;
     }
 
     private void OpenGuidedPlate(Guid plateId)
@@ -298,16 +321,24 @@ internal sealed class GuidedCreation
             return;
         }
 
-        // Opened now (a failure says why at once), or once the unsaved-changes question is answered:
-        // the start stays under way until then, so a failure after the answer is reported too (Advance).
-        var decision = switcher.Open(plateId);
-        if (decision == PlateOpenDecision.Ask)
+        // A Plate My Plates lists but can't open (damaged, locked, or saved by a newer version) says
+        // why at once, before any question about unsaved changes.
+        if (FindPlate(plateId) is { } plate && switcher.WhyNotOpen(plate) is { } why)
         {
-            starting = true;
+            StartError = why;
             return;
         }
 
-        StartError = decision == PlateOpenDecision.Refused ? switcher.Runner.Error ?? PlateSwitcher.CannotOpenNote : switcher.Runner.Error;
+        // Opened at the start of the next frame, or once the unsaved-changes question is answered: the
+        // start stays under way until the open has run, so its failure is reported too (Advance).
+        var decision = switcher.Open(plateId);
+        if (decision == PlateOpenDecision.Refused)
+        {
+            StartError = switcher.Runner.Error ?? PlateSwitcher.CannotOpenNote;
+            return;
+        }
+
+        starting = true;
     }
 
     /// <summary>
@@ -317,7 +348,7 @@ internal sealed class GuidedCreation
     /// </summary>
     internal void Advance()
     {
-        if (starting && !switcher.Runner.IsBusy && switcher.Guard.Pending is null && !switcher.Guard.IsSaving)
+        if (starting && !switcher.Runner.IsBusy && switcher.Guard.Pending is null && !switcher.Guard.IsSaving && !switcher.OpenQueued)
         {
             starting = false;
             StartError = switcher.Runner.Error;
@@ -332,6 +363,13 @@ internal sealed class GuidedCreation
         if (successPlateId is { } shown && (profiles.OpenPlateId != shown || commands.IsDirty || !basicEditorOpen()))
         {
             successPlateId = null;
+        }
+
+        // A failed Save's "Not saved" stands only while what it kept is still unsaved in the steps: a
+        // later save or Discard (the editor's close question, or another Plate's open) ends it.
+        if (SaveError is not null && (!commands.IsDirty || !IsGuiding(profiles.OpenPlateId)))
+        {
+            SaveError = null;
         }
 
         if (saving is not { IsCompleted: true } finished)

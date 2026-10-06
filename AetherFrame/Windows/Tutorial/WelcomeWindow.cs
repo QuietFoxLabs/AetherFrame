@@ -45,7 +45,9 @@ internal sealed class WelcomeWindow : Window
     /// <summary>
     /// Opens when a welcome waits and nothing stands in front of it; closes once the Plate it started
     /// is made and open. A start that made nothing (the unsaved-changes question's Cancel, or a
-    /// failure, which it shows) leaves the welcome open to answer again.
+    /// failure, which it shows) leaves the welcome open to answer again. Closes unanswered once a
+    /// Plate is made another way (My Plates, Help, Create Plate), and steps aside, to come back, when
+    /// the character logs out or a recovery offer comes up.
     /// </summary>
     public override void PreOpenCheck()
     {
@@ -65,6 +67,19 @@ internal sealed class WelcomeWindow : Window
             {
                 // The Plate is made and open in the Basic editor, on its first step.
                 IsOpen = false;
+            }
+        }
+
+        if (IsOpen && !creating && startError is null)
+        {
+            if (guided.HasPlate)
+            {
+                IsOpen = false;
+            }
+            else if (!mayShow())
+            {
+                IsOpen = false;
+                guided.WithdrawWelcome();
             }
         }
     }
@@ -132,8 +147,5 @@ internal sealed class WelcomeWindow : Window
                 IsOpen = false;
             }
         }
-
-        ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceSm * scale));
-        AetherControls.Muted("Type /af any time to open My Plates.");
     }
 }

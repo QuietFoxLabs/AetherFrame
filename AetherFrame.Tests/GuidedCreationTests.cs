@@ -259,6 +259,13 @@ public class GuidedCreationTests
         // With the Plate Library not loaded, kept changes aren't read, so nothing may follow them.
         Assert.Contains("keptChangesRead = plateLibrary.IsLoaded;", plugin, StringComparison.Ordinal);
         Assert.DoesNotContain("keptChangesRead = true;", plugin, StringComparison.Ordinal);
+
+        // The welcome waits on the real recovery gate: a login, kept changes read, none awaiting an
+        // answer (KeptChangesOfferTests covers AwaitsAnswer) and their window not on screen.
+        Assert.Contains(
+            "guidedCreation, () => GuidedCreation.WelcomeMayShow(ClientState.IsLoggedIn, keptChangesRead, keptChanges.AwaitsAnswer, keptChangesWindow.IsOpen));",
+            plugin,
+            StringComparison.Ordinal);
     }
 
     [Theory]
@@ -508,6 +515,74 @@ public class GuidedCreationTests
         Assert.Equal([EditorSurfaceKind.Basic], harness.Shown);
         Assert.True(harness.Guided.IsGuiding(made));
         Assert.Equal(GuidedStage.MakeItYours, harness.Guided.Stage);
+    }
+
+    [Fact]
+    public async Task Continue_StaysUnderWayUntilThePlateHasOpened_AndSaysWhyItCouldnt()
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        var made = await harness.StartAndOpenAsync();
+        harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+        await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+
+        // Nothing unsaved: the Plate opens at the start of the next frame, and the start waits for it.
+        harness.Guided.Start();
+        Assert.True(harness.Guided.IsStarting);
+        Assert.False(harness.Guided.ShowsResumeReminder);
+        harness.Frame();
+        Assert.False(harness.Guided.IsStarting);
+        Assert.Null(harness.Guided.StartError);
+        Assert.Equal(made, harness.OpenId);
+
+        // The Plate is gone by the time its open runs: why reaches the reminder, Help and the welcome.
+        harness.Switcher.Switcher.Open(harness.Switcher.OriginalId);
+        await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+        harness.Guided.Start();
+        Assert.True(harness.Guided.IsStarting);
+        await harness.Library.DeletePlateAsync(made);
+        harness.Frame();
+
+        Assert.False(harness.Guided.IsStarting);
+        Assert.NotNull(harness.Guided.StartError);
+        Assert.Equal(harness.Switcher.OriginalId, harness.OpenId);
+    }
+
+    [Fact]
+    public async Task StepsOnScreen_OnlyWhileTheBasicEditorShowsTheGuidedPlate()
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        Assert.False(harness.Guided.StepsOnScreen);
+        await harness.StartAndOpenAsync();
+        Assert.True(harness.Guided.StepsOnScreen);
+
+        // Help's Continue Step by Step would have nothing to do, so it waits until the editor closes.
+        harness.BasicEditorOpen = false;
+        Assert.False(harness.Guided.StepsOnScreen);
+        Assert.True(harness.Guided.ShowsResumeReminder);
+    }
+
+    [Fact]
+    public async Task AWelcomeWithdrawnUnanswered_ShowsAgainLater_WithoutCountingTwice_AndKnowsWhenAPlateExists()
+    {
+        using var harness = await GuidedHarness.CreateAsync();
+        await harness.EmptyLibraryAsync();
+        harness.Guided.ResolveWelcome(newPlayer: true, librariesLoaded: true, plateCount: 0);
+        Assert.True(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.Equal(1, harness.Store.Preferences.OfferCount);
+        Assert.False(harness.Guided.HasPlate);
+
+        // Logged out (or a recovery offer came up) while it was on screen: it waits, and isn't counted twice.
+        harness.Guided.WithdrawWelcome();
+        Assert.True(harness.Guided.WelcomeRequested);
+        Assert.Equal(0, harness.Store.Preferences.OfferCount);
+        Assert.False(harness.Guided.ConsumeWelcome(mayShow: false));
+        Assert.True(harness.Guided.ConsumeWelcome(mayShow: true));
+        Assert.Equal(1, harness.Store.Preferences.OfferCount);
+        Assert.Equal(GuidedOfferAnswer.Undecided, harness.Store.Preferences.Offer);
+
+        // A Plate made another way (My Plates, Help, Create Plate) leaves the welcome nothing to offer.
+        await harness.StartAndOpenAsync();
+        Assert.True(harness.Guided.HasPlate);
     }
 
     [Fact]
@@ -793,6 +868,50 @@ public class GuidedCreationTests
         Assert.Equal("Lyra Moonfall", BasicIdentitySession.Find(harness.Library.GetSavedDocument(made)!, ProfileElementRole.BasicName)!.Text);
     }
 
+    [Theory]
+    [InlineData("discard")]
+    [InlineData("save")]
+    [InlineData("open another")]
+    public async Task AFailedSavesMessage_IsForgotten_OnceItsChangesAreSavedOrDiscardedAnotherWay(string then)
+    {
+        var store = new FaultInjectingStore();
+        using var harness = await GuidedHarness.CreateAsync(store);
+        var made = await harness.StartAndOpenAsync();
+        harness.Editor.Basic.SetText(ProfileElementRole.BasicMessage, "Find me in Limsa.");
+        harness.Editor.Basic.CommitTextEdit();
+        harness.Guided.Next();
+        harness.Guided.Next();
+        store.FailWrite = path => path.Contains(made.ToString(), StringComparison.OrdinalIgnoreCase);
+        await harness.SaveAsync();
+        Assert.NotNull(harness.Guided.SaveError);
+        harness.Frame();
+        Assert.NotNull(harness.Guided.SaveError); // still unsaved: the message stands
+        store.FailWrite = null;
+
+        switch (then)
+        {
+            case "discard":
+                // The Basic editor's close question, answered Discard: the Plate stays open, as saved.
+                Assert.True(harness.Editor.Session.DiscardChanges());
+                break;
+            case "save":
+                Assert.True(await harness.Commands.SaveAsync());
+                break;
+            default:
+                Assert.Equal(PlateOpenDecision.Ask, harness.Switcher.Switcher.Open(harness.Switcher.OriginalId));
+                var request = harness.Switcher.Switcher.Discard();
+                Assert.NotNull(request);
+                harness.Switcher.Switcher.Proceed(request!.Value);
+                await harness.FramesUntilAsync(() => harness.OpenId == harness.Switcher.OriginalId);
+                break;
+        }
+
+        harness.Frame();
+        Assert.Null(harness.Guided.SaveError);
+        Assert.Equal(GuidedRunStatus.InProgress, harness.Store.Preferences.Run);
+        Assert.Equal(GuidedStage.Save, harness.Guided.Stage);
+    }
+
     [Fact]
     public async Task AnUndoWhileTheSaveIsWritten_LeavesItUnsaved_AndCompletesNothing()
     {
@@ -890,8 +1009,9 @@ public class GuidedCreationTests
     [Fact]
     public async Task NothingInGuidedCreation_TouchesTheTutorialOrAnyConsent()
     {
-        // Guided creation's state lives in its own block; sharing and the online count are never
-        // part of it (the source names neither).
+        // Guided creation's state lives in its own block; sharing, the online count and the tutorial
+        // are never part of it, and the steps' code names none of them (the saved state only asks
+        // whether this build can share, to say that sharing is separate).
         using var harness = await GuidedHarness.CreateAsync();
         await harness.StartAndOpenAsync();
         harness.Guided.Next();
@@ -900,11 +1020,15 @@ public class GuidedCreationTests
 
         Assert.Equal(GuidedRunStatus.Completed, harness.Store.Preferences.Run);
         var root = RepositoryPaths.Root().FullName;
-        foreach (var relative in new[] { "AetherFrame/UI/Tutorial/GuidedCreation.cs", "AetherFrame/UI/Tutorial/GuidedCreationPreferences.cs", "AetherFrame/Windows/Tutorial/WelcomeWindow.cs" })
+        foreach (var relative in new[] { "AetherFrame/UI/Tutorial/GuidedCreation.cs", "AetherFrame/UI/Tutorial/GuidedCreationPreferences.cs", "AetherFrame/Windows/Tutorial/WelcomeWindow.cs", "AetherFrame/Windows/BasicProfileEditorWindow.Guided.cs" })
         {
             var code = System.IO.File.ReadAllLines(System.IO.Path.Combine(root, relative))
-                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal));
-            foreach (var forbidden in new[] { "Sharing", "Consent", "Acknowledge", "OnlineCount", "Network" })
+                .Select(line => line.TrimStart())
+                .Where(line => !line.StartsWith("//", StringComparison.Ordinal) && !line.StartsWith("using ", StringComparison.Ordinal) && !line.StartsWith("namespace ", StringComparison.Ordinal))
+                .Select(line => System.Text.RegularExpressions.Regex.Replace(line, @"""(?:[^""\\]|\\.)*""", "\"\"")) // words shown to the player aren't code
+                .Select(line => line.Replace("SharingAvailable", string.Empty, StringComparison.Ordinal)) // only words the saved state's tooltip
+                .ToList();
+            foreach (var forbidden in new[] { "Sharing", "Consent", "Acknowledge", "OnlineCount", "Network", "Tutorial" })
             {
                 Assert.DoesNotContain(code, line => line.Contains(forbidden, StringComparison.Ordinal));
             }
@@ -922,6 +1046,14 @@ public class GuidedCreationTests
 
         Assert.DoesNotMatch(@"\bHint\(", steps);
         Assert.DoesNotContain("AetherControls.Muted(", steps, StringComparison.Ordinal);
+
+        // No paragraph by any other route: no wrapped text at all, plain text only for the header's
+        // title, the Save step's summary values and "Saved to My Plates", and callouts only for the
+        // two failures (artwork, Save), never an explanation.
+        Assert.DoesNotMatch(@"ImGui\.(TextWrapped|Text|BulletText)\(", steps);
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(steps, @"ImGui\.TextUnformatted\(").Count);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(steps, @"AetherControls\.Callout\(").Count);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(steps, @"AetherControls\.Callout\(AetherTone\.(Warning|Danger)").Count);
         var guidance = System.Text.RegularExpressions.Regex.Matches(steps, @"AetherControls\.Secondary\(""(?<text>[^""]*)""\)")
             .Select(match => match.Groups["text"].Value)
             .ToList();
@@ -938,10 +1070,11 @@ public class GuidedCreationTests
         Assert.Contains("GuidedStage.MakeItYours => (\"Continue\"", steps, StringComparison.Ordinal);
         Assert.Contains("guided.IsSaving ? \"Saving...\" : \"Save\"", steps, StringComparison.Ordinal);
 
-        // The welcome: one line and the steps' names; the rest is in its buttons' tooltips.
+        // The welcome: one line and the steps' names; the rest (/af, the full tutorial) is in its buttons' tooltips.
         var welcome = System.IO.File.ReadAllText(System.IO.Path.Combine(root, "AetherFrame", "Windows", "Tutorial", "WelcomeWindow.cs"));
         Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(welcome, @"ImGui\.TextWrapped\(").Count);
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(welcome, @"AetherControls\.(Muted|Secondary)\("));
+        Assert.DoesNotMatch(@"AetherControls\.(Muted|Secondary|MutedInline)\(", welcome);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(welcome, @"AetherControls\.PrimaryButton\("));
     }
 
     // ---------------------------------------------------------------- the curated looks
@@ -957,6 +1090,16 @@ public class GuidedCreationTests
         foreach (var style in styles)
         {
             Assert.True(style.IsArtStyle, style.Id);
+
+            // Its card is the bundled preview, inside the plugin: choosing among the four downloads nothing.
+            var preview = AetherFrame.Domain.Components.ArtSets.PreviewArt(style);
+            Assert.NotNull(preview);
+            using (var stream = typeof(CuratedLooks).Assembly.GetManifestResourceStream(preview!.ResourceName))
+            {
+                Assert.NotNull(stream);
+                Assert.True(stream!.Length > 0, style.Id);
+            }
+
             var fallback = CuratedLooks.FallbackFor(style);
             Assert.NotNull(fallback);
             Assert.False(fallback!.IsArtStyle);

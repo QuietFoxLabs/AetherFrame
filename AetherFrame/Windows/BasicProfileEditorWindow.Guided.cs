@@ -36,9 +36,14 @@ internal sealed partial class BasicProfileEditorWindow
     private const float GuidedPanelMaxWidth = 460f;
     private const float GuidedSideBySideMinWidth = 700f;
 
-    private static readonly string[] StepTitles = ["Choose a Look", "Make It Yours", "Save"];
+    // Spelled as the steps' headings and the welcome spell them.
+    private static readonly string[] StepTitles = ["Choose a look", "Make it yours", "Save"];
+    private static readonly string[] StepNumbers = ["1", "2", "3"];
 
     private bool drawingGuided;
+
+    // Choose a Look shows the artwork's download state itself, so the live view's toolbar leaves it out.
+    private bool artStatusInSteps;
 
     /// <summary>Whether a saved Plate is the logged-in character's Active Plate: null with no character logged in. Set by the plugin.</summary>
     internal Func<Guid, bool?>? IsActivePlate { get; set; }
@@ -59,6 +64,7 @@ internal sealed partial class BasicProfileEditorWindow
         finally
         {
             drawingGuided = false;
+            artStatusInSteps = false;
         }
     }
 
@@ -66,6 +72,7 @@ internal sealed partial class BasicProfileEditorWindow
     {
         var scale = ImGuiHelpers.GlobalScale;
         var success = guided.ShowsSuccess(profile.ProfileId);
+        artStatusInSteps = !success && guided.Stage == GuidedStage.ChooseLook;
         DrawGuidedHeader(guided, success);
 
         // The editor's error line, except a failed Save the Save step already explains (or did, before Back).
@@ -76,8 +83,10 @@ internal sealed partial class BasicProfileEditorWindow
 
         ImGui.Separator();
 
+        // Exactly what the footer draws (DrawGuidedFooter): the row's spacing, its separator, a gap and
+        // the button row, so the steps never give the window a scrollbar.
         var style = ImGui.GetStyle();
-        var footerHeight = success ? 0f : ImGui.GetFrameHeight() + (style.ItemSpacing.Y * 2f) + (AetherMetrics.SpaceSm * scale);
+        var footerHeight = success ? 0f : ImGui.GetFrameHeight() + (style.ItemSpacing.Y * 3f) + (AetherMetrics.SpaceXs * scale) + 1f;
         var body = ImGui.GetContentRegionAvail();
         body.Y = Math.Max(body.Y - footerHeight, 160f * scale);
 
@@ -222,6 +231,16 @@ internal sealed partial class BasicProfileEditorWindow
         var height = (radius * 2f) + (AetherMetrics.SpaceXs * scale);
         var origin = ImGui.GetCursorScreenPos();
         var slot = available / StepTitles.Length;
+
+        // Every step's name beside its number, or none when one doesn't fit (the heading below names
+        // the current step), so a later step is never named while the current one isn't.
+        var room = slot - (radius * 2f) - 1f - (AetherMetrics.SpaceXs * scale * 2f);
+        var titled = true;
+        foreach (var title in StepTitles)
+        {
+            titled &= ImGui.CalcTextSize(title).X <= room;
+        }
+
         for (var i = 0; i < StepTitles.Length; i++)
         {
             var center = new Vector2(origin.X + (slot * i) + radius + 1f, origin.Y + radius);
@@ -249,17 +268,14 @@ internal sealed partial class BasicProfileEditorWindow
             }
             else
             {
-                var number = (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var number = StepNumbers[i];
                 drawList.AddText(center - (ImGui.CalcTextSize(number) / 2f), numberColor, number);
             }
 
-            // The step's name beside its number, when there's room for it.
-            var title = StepTitles[i];
-            var textPos = new Vector2(center.X + radius + (AetherMetrics.SpaceXs * scale), origin.Y + radius - (ImGui.GetTextLineHeight() / 2f));
-            var room = (origin.X + (slot * (i + 1))) - textPos.X - (AetherMetrics.SpaceXs * scale);
-            if (ImGui.CalcTextSize(title).X <= room)
+            if (titled)
             {
-                drawList.AddText(textPos, ImGui.GetColorU32(current ? AetherPalette.TextPrimary : EditorWidgets.DimTextColor), title);
+                var textPos = new Vector2(center.X + radius + (AetherMetrics.SpaceXs * scale), origin.Y + radius - (ImGui.GetTextLineHeight() / 2f));
+                drawList.AddText(textPos, ImGui.GetColorU32(current ? AetherPalette.TextPrimary : EditorWidgets.DimTextColor), StepTitles[i]);
             }
         }
 
@@ -310,8 +326,8 @@ internal sealed partial class BasicProfileEditorWindow
             case ArtNeedKind.Unavailable:
             {
                 ImGui.Spacing();
-                AetherControls.Callout(AetherTone.Warning, "The artwork couldn't download.");
-                EditorWidgets.Tooltip("The live view shows this look's colors only until it does.");
+                AetherControls.Callout(AetherTone.Warning, summary.Kind == ArtNeedKind.Failed ? "The artwork couldn't download." : "This build can't download artwork.");
+                EditorWidgets.Tooltip(summary.Kind == ArtNeedKind.Failed ? "The live view shows this look's colors only until it does." : "The live view shows this look's colors only.");
                 if (summary.Kind == ArtNeedKind.Failed && AetherControls.SecondaryButton("Try again##GuidedArtTryAgain"))
                 {
                     previewArt.TryAgain(renderResources.ArtStore);

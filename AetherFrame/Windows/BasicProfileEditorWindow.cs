@@ -299,6 +299,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         // The shared action bar (My Plates, Basic | Advanced, Undo/Redo, Preview/Revert/Save),
         // outside every scrolling region so it's always in view.
+        // The Simple view's one primary button is Save, as the steps' is.
+        actionBar.EmphasizeSave = Simple;
         actionBar.Draw(profile, () => EditorPreview.Show(editorSession, profile.ProfileId, actionBar.PlateMenu.View), EditorPreview.Tooltip, basicEditorSession.ErrorMessage);
         EditorWidgets.UnsupportedElementsNotice(profile);
         ImGui.Separator();
@@ -932,7 +934,11 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         TutorialAnchorMarks.MarkRect(TutorialTarget.BasicPreviewZoom, zoomMin, ImGui.GetItemRectMax());
-        ArtDownloadStatus.DrawInline(previewArt, renderResources.ArtStore);
+        if (!artStatusInSteps)
+        {
+            ArtDownloadStatus.DrawInline(previewArt, renderResources.ArtStore);
+        }
+
         DrawViewChoice();
     }
 

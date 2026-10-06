@@ -200,6 +200,9 @@ internal sealed class HelpMenu
         }
 
         ImGui.SetCursorScreenPos(new Vector2(min.X, min.Y + height + (AetherMetrics.SpaceXs * scale)));
+
+        // Why Continue Step by Step couldn't open the Plate, until the next try.
+        AetherControls.StatusLine(AetherTone.Danger, guided.StartError);
     }
 
     private void DrawContents()
@@ -215,7 +218,8 @@ internal sealed class HelpMenu
         if (Guided is { } guided)
         {
             AetherControls.SectionHeader("Get started", topSpacing: 0f);
-            using (ImRaii.Disabled(guided.IsStarting))
+            var onSteps = guided.StepsOnScreen;
+            using (ImRaii.Disabled(guided.IsStarting || onSteps))
             {
                 if (ImGui.MenuItem(guided.CanContinue ? "Continue Step by Step" : "Create Step by Step"))
                 {
@@ -223,9 +227,11 @@ internal sealed class HelpMenu
                 }
             }
 
-            AetherControls.Tooltip(guided.CanContinue
-                ? "Opens the Plate you were creating, on the step you reached."
-                : "A new Plate in three short steps: choose a look, make it yours, save.");
+            AetherControls.Tooltip(onSteps
+                ? "The steps are open in the Basic editor."
+                : guided.CanContinue
+                    ? "Opens the Plate you were creating, on the step you reached."
+                    : "A new Plate in three short steps: choose a look, make it yours, save.");
             if (guided.StartError is { } startError)
             {
                 AetherControls.MutedInline(startError);
