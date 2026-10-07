@@ -835,7 +835,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         // The guided steps have no slot controls and show the finished Plate, so no outline there
         // (a selection made in Advanced or during the tutorial stays for those editors). Nor does a
         // frame attached to a picture get one: no slot here edits it, and it stays selected for Advanced.
-        if (!drawingGuided && BasicEditorView.OutlinedComponent(profile, editorSession.SelectedComponentId) is { } selected)
+        if (!drawingGuided && editorSession.SelectedComponentId is { } selectedId && BasicEditorView.OutlinedComponent(profile, selectedId) is { } selected)
         {
             ProfileRenderer.BuildPaintPlan(profile, renderResources, ProfileRenderOptions.Finished, previewPlanBuffer);
             CanvasHitTest.Outlines(previewPlanBuffer, selected, previewOutlineBuffer);
