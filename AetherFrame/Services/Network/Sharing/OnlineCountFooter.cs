@@ -14,7 +14,7 @@ namespace AetherFrame.Services.Network.Sharing;
 internal sealed class OnlineCountFooter
 {
     internal const string Scope =
-        "Sharing characters whose AetherFrame says they are logged in right now, counted once each across every player. Characters that don't share aren't counted. Below 5, the server says only that there are fewer than 5. Updated about once a minute.";
+        "Sharing characters logged in with AetherFrame, counted once each across every player. Characters that don't share aren't counted. Below 5, the server says only that there are fewer than 5. The server refreshes this total every 5 minutes, so it can be a few minutes behind; for the first 5 minutes after the server restarts, it says fewer than 5.";
 
     /// <summary>
     /// The smallest count the server answers as itself; below it, it answers 0, "fewer than this".

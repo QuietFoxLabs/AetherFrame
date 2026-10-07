@@ -58,18 +58,34 @@ internal sealed record OnlineCountPace(TimeSpan Beat, TimeSpan Jitter, TimeSpan 
     /// longer knows is started again within 10 seconds, so a restarted server isn't met by every
     /// plugin at once; a leave gets 3 seconds; and a start already sent gets 1.5 seconds more after
     /// the run stops, so a session the server has made is read and then left (the two together stay
-    /// inside the unload's 5 seconds).
+    /// inside the unload's 5 seconds). Each session's renewal is due 50 to 54 minutes after its start,
+    /// and goes in place of the next heartbeat (<see cref="Renewal"/>).
     /// </summary>
     internal static readonly OnlineCountPace Default = new(
         TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(15), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(1.5));
+
+    /// <summary>
+    /// How long after a session's start a new start is due to replace it, give or take
+    /// <see cref="RenewalJitter"/>. It goes in place of the next heartbeat, so by about 55 minutes:
+    /// inside the hour the server counts a session's heartbeats for, with room for a few tries more,
+    /// so the server never has to refuse a heartbeat at the hour, and the character is never missing
+    /// from the count over the change. Measured on the plugin's clock, and due at once if that clock
+    /// reads earlier than it did at the heartbeat before.
+    /// </summary>
+    internal TimeSpan Renewal { get; init; } = TimeSpan.FromMinutes(52);
+
+    /// <inheritdoc cref="Renewal"/>
+    internal TimeSpan RenewalJitter { get; init; } = TimeSpan.FromMinutes(2);
 }
 
 /// <summary>
 /// The online count ("The online count" in docs/networking/DecisionRegister.md, the one exception
 /// to R2's "no background traffic"): while a character is logged in and shares, a signed start,
 /// then a small heartbeat about once a minute, keep it counted, and each answer carries the count
-/// of sharing characters online, which My Plates shows. Nothing is sent for a character that
-/// doesn't share, or while nobody is logged in.
+/// of sharing characters online, which My Plates shows. The server counts a session's heartbeats
+/// for an hour, so a new signed start replaces the session before then
+/// (<see cref="OnlineCountPace.Renewal"/>). Nothing is sent for a character that doesn't share, or
+/// while nobody is logged in.
 /// <para>
 /// <see cref="Update"/> runs on the framework thread and only compares and hands over: every
 /// request runs in a background task, never in a frame. The start's challenge and request are sent
@@ -78,10 +94,10 @@ internal sealed record OnlineCountPace(TimeSpan Beat, TimeSpan Jitter, TimeSpan 
 /// presence's own (<c>/v1/presence/challenge</c>), and heartbeats carry the session's token alone,
 /// so presence never takes from the challenges or limits publishing needs; a limit's refusal waits
 /// the longest backoff. A takeover's 410 ends the run. A logout, a pause, turning sharing off, a takeover, another character or
-/// unloading stops the run, which then ends its session with a leave; a crash leaves it to expire
-/// on the server. An answer that comes back after its run stopped changes nothing. The log gets
-/// outcome kinds only: never a token, a key or a count. Compiled only in the networking preview
-/// flavour.
+/// unloading stops the run, which then ends its session with a leave, a session whose heartbeat the
+/// server refused included until a new start replaces it; a crash leaves it to expire on the
+/// server. An answer that comes back after its run stopped changes nothing. The log gets outcome
+/// kinds only: never a token, a key or a count. Compiled only in the networking preview flavour.
 /// </para>
 /// </summary>
 internal sealed class OnlineCount
@@ -259,10 +275,17 @@ internal sealed class OnlineCount
         }
     }
 
-    /// <summary>One run: a start, heartbeats until it stops, then a leave for a session it holds.</summary>
+    /// <summary>
+    /// One run: a start, heartbeats until it stops, then a leave for a session it holds. Each
+    /// session is renewed before its hour by a new start in place of a heartbeat.
+    /// </summary>
     private async Task RunAsync(Run run)
     {
         byte[]? token = null;
+
+        // The session whose heartbeat the server last refused: past its hour the server still counts
+        // it until its expiry, so the run's end leaves it while no new start has replaced it.
+        byte[]? refused = null;
         var failures = 0;
         var restarted = false;
         try
@@ -274,14 +297,24 @@ internal sealed class OnlineCount
                 if (token is null)
                 {
                     (outcome, token) = await StartAsync(run).ConfigureAwait(false);
+                    run.Renewal = token is null ? null : NextRenewal();
+                }
+                else if (await RenewAsync(run).ConfigureAwait(false) is { } renewed)
+                {
+                    // A new session in place of the one held, or none after a takeover: no
+                    // heartbeat this time.
+                    (outcome, token) = renewed;
+                    run.Renewal = token is null ? null : NextRenewal();
                 }
                 else
                 {
                     outcome = await BeatAsync(run, token).ConfigureAwait(false);
                     if (outcome == Outcome.Gone)
                     {
-                        // The server no longer knows the session (it restarted, the session's hour
-                        // ended, or it expired): one new start, spread out, before it counts as a failure.
+                        // The server no longer counts the session's heartbeats (it restarted, the
+                        // session's hour ended unrenewed, it was replaced, or it expired): one new
+                        // start, spread out, before it counts as a failure.
+                        refused = token;
                         token = null;
                         if (!restarted)
                         {
@@ -300,7 +333,9 @@ internal sealed class OnlineCount
 
                 if (outcome == Outcome.Ended)
                 {
-                    // Another key took the character over: nothing more is sent for this target.
+                    // Another key took the character over, which ended its sessions: nothing more is
+                    // sent for this target, not even a leave.
+                    refused = null;
                     Failed(run);
                     return;
                 }
@@ -343,7 +378,8 @@ internal sealed class OnlineCount
         }
         finally
         {
-            if (token is { } held)
+            // A session held was started after any refused one, and replaced it.
+            if ((token ?? refused) is { } held)
             {
                 // Never on the thread that stopped the run: whatever cancelled it, the game's own
                 // thread makes no request (requirement 8).
@@ -352,6 +388,44 @@ internal sealed class OnlineCount
 
             Finished(run);
         }
+    }
+
+    /// <summary>
+    /// The session's renewal, once it is due (<see cref="OnlineCountPace.Renewal"/>) and while the
+    /// session is still live: a new start, which replaces the session on the server, so no heartbeat
+    /// of it is refused at its hour. The new session's token with its outcome, or no token for the
+    /// takeover that refused it, which ended the session too, so there is nothing to leave. Nothing
+    /// when it isn't due or wasn't made, and then the heartbeat goes as usual: a renewal the persona
+    /// session was too busy for, or whose challenge was refused, is tried again at the next
+    /// heartbeat, and one that failed otherwise isn't, so the hour's refusal starts the session
+    /// again, as after a restart of the server.
+    /// </summary>
+    private async Task<(Outcome Outcome, byte[]? Token)?> RenewAsync(Run run)
+    {
+        var now = utcNow();
+        if (run.Renewal is not { } due)
+        {
+            return null;
+        }
+
+        if (!due.DueAt(now))
+        {
+            run.Renewal = due with { Seen = now };
+            return null;
+        }
+
+        var (renewed, token) = await StartAsync(run).ConfigureAwait(false);
+        if (token is not null || renewed == Outcome.Ended)
+        {
+            return (renewed, token);
+        }
+
+        if (renewed != Outcome.Busy)
+        {
+            run.Renewal = null;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -562,6 +636,13 @@ internal sealed class OnlineCount
         }
     }
 
+    /// <summary>The renewal of a session started now: due 50 to 54 minutes on, by default.</summary>
+    private Renewal NextRenewal()
+    {
+        var now = utcNow();
+        return new(now, Between(pace.Renewal - pace.RenewalJitter, pace.Renewal + pace.RenewalJitter), now);
+    }
+
     private TimeSpan Backoff(int failures)
     {
         var longest = pace.LongestBackoff.Ticks;
@@ -609,6 +690,18 @@ internal sealed class OnlineCount
         Ended,
     }
 
+    /// <summary>
+    /// When the session held was started, by the plugin's clock, how long after that a new start
+    /// replaces it, and the clock's reading when it was last found not yet due: due once that long has
+    /// passed, or at once if the clock reads earlier than that, so a clock set back renews the session
+    /// early rather than after its hour. A step back shorter than the time between two heartbeats can
+    /// go unseen, and delays the renewal by no more than itself.
+    /// </summary>
+    private readonly record struct Renewal(DateTimeOffset Since, TimeSpan After, DateTimeOffset Seen)
+    {
+        internal bool DueAt(DateTimeOffset now) => now - Since >= After || now < Seen;
+    }
+
     private sealed class Run(PresenceTarget target, CancellationTokenSource stop)
     {
         internal PresenceTarget Target { get; } = target;
@@ -622,5 +715,8 @@ internal sealed class OnlineCount
         internal RequestChallenge? Challenge { get; set; }
 
         internal DateTimeOffset ChallengeAt { get; set; }
+
+        /// <summary>When the session held is renewed; none while no session is held or after a renewal failed. Only the run's own task touches it.</summary>
+        internal Renewal? Renewal { get; set; }
     }
 }
