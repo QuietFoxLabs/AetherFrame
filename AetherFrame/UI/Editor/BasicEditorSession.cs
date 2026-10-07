@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AetherFrame.Domain.Basic;
+using AetherFrame.Domain.Components;
 using AetherFrame.Domain.Profiles;
 using AetherFrame.Services;
 using AetherFrame.Services.Diagnostics;
@@ -396,6 +397,27 @@ internal sealed class BasicEditorSession
     {
         localErrorMessage = null;
         Identity.EditPlateLayout(editor => editor.ResetLayout(), onlyIfManaged: false);
+    }
+
+    // ---------------------------------------------------------------- live view
+
+    /// <summary>
+    /// A click on the live view (issue #115) on <paramref name="clicked"/>, the Component
+    /// <see cref="BasicEditorView.TargetAt"/> found there (null on a section or on nothing): that
+    /// Component is selected, or else the outlined one (<see cref="BasicEditorView.OutlinedComponent"/>)
+    /// is let go. Anything else selected, such as a frame attached to a picture or several things
+    /// selected in the Advanced editor, stays selected for that editor. Selecting never changes the Plate.
+    /// </summary>
+    internal void SelectFromLiveView(PlateComponent? clicked)
+    {
+        if (clicked is not null)
+        {
+            editorSession.SelectComponent(clicked.Id);
+        }
+        else if (profileService.CurrentProfile is { } profile && BasicEditorView.OutlinedComponent(profile, editorSession.SelectedComponentId) is not null)
+        {
+            editorSession.SelectComponent(null);
+        }
     }
 
     // ---------------------------------------------------------------- internals

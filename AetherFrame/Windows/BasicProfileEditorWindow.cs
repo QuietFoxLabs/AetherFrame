@@ -833,8 +833,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         // The one editor overlay on the live view: the selected Component's outline, each place it
         // is drawn (every corner of a Corner Ornament), so it's clear what the slot's controls change.
         // The guided steps have no slot controls and show the finished Plate, so no outline there
-        // (a selection made in Advanced or during the tutorial stays for those editors).
-        if (!drawingGuided && editorSession.SelectedComponentId is { } selectedId && Domain.Components.PlateComponentEditor.Find(profile, selectedId) is { } selected)
+        // (a selection made in Advanced or during the tutorial stays for those editors). Nor does a
+        // frame attached to a picture get one: no slot here edits it, and it stays selected for Advanced.
+        if (!drawingGuided && editorSession.SelectedComponentId is { } selectedId && BasicEditorView.OutlinedComponent(profile, selectedId) is { } selected)
         {
             ProfileRenderer.BuildPaintPlan(profile, renderResources, ProfileRenderOptions.Finished, previewPlanBuffer);
             CanvasHitTest.Outlines(previewPlanBuffer, selected, previewOutlineBuffer);
@@ -897,15 +898,11 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             }
 
             // A Component is selected, and its slot brought into view; a section, or nothing, lets go
-            // of a selected Component. Selection never changes the Plate.
+            // of the outlined Component. Selection never changes the Plate.
+            basicEditorSession.SelectFromLiveView(component);
             if (component is not null)
             {
-                editorSession.SelectComponent(component.Id);
                 revealComponentSlot = component.Kind;
-            }
-            else if (editorSession.SelectedComponentId is not null)
-            {
-                editorSession.SelectComponent(null);
             }
         }
 
