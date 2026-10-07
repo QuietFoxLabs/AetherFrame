@@ -44,7 +44,16 @@ public enum PlateLayer
 /// <summary>Where one component instance is drawn: a logical canvas rectangle (already including
 /// the component's own offset and scale), its rotation around the rectangle's center, and whether
 /// the shape is mirrored (Corner Ornaments are drawn once per corner).</summary>
-public readonly record struct ComponentPlacement(ElementRect Rect, float RotationDegrees, bool MirrorX, bool MirrorY);
+public readonly record struct ComponentPlacement(ElementRect Rect, float RotationDegrees, bool MirrorX, bool MirrorY)
+{
+    /// <summary>True when the Component's <see cref="PlateComponent.Offset"/> moves this placement the
+    /// other way along X (a right-hand Corner Ornament, a Background on a Mirrored Plate): what an
+    /// editor turns a drag on the canvas into an Offset by. False draws nothing differently.</summary>
+    public bool OffsetFlipX { get; init; }
+
+    /// <summary>As <see cref="OffsetFlipX"/>, along Y (a bottom Corner Ornament).</summary>
+    public bool OffsetFlipY { get; init; }
+}
 
 /// <summary>One step of a Plate's paint sequence: an element, or one placement of a component.</summary>
 public readonly record struct PaintStep(PlateLayer Layer, ProfileElement? Element, PlateComponent? Component, ComponentDefinition? Definition, ComponentPlacement Placement)
@@ -196,6 +205,8 @@ public static class ComponentPaintPlan
         var decorationBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
         var artFrameBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
         var frameBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
+        var targetedBand = new List<(PlateComponent Component, ComponentDefinition Definition, int Index)>();
+        var targetIds = new HashSet<Guid>();
 
         for (var i = 0; i < components.Count && i < PlateComponentLimits.MaxComponentCount; i++)
         {
@@ -206,6 +217,14 @@ public static class ComponentPaintPlan
             }
 
             var entry = (component, definition!, i);
+            if (TargetOf(component) is { } target)
+            {
+                // Drawn on its own picture, wherever that is painted (and not at all without it).
+                targetedBand.Add(entry);
+                targetIds.Add(target);
+                continue;
+            }
+
             switch (LayerOf(component.Kind))
             {
                 case PlateLayer.Background:
@@ -239,6 +258,7 @@ public static class ComponentPaintPlan
         SortBand(decorationBand);
         SortBand(artFrameBand);
         SortBand(frameBand);
+        SortBand(targetedBand);
 
         var unit = Unit(profile);
         var canvasWidth = CanvasRect(profile).Size.X;
@@ -374,6 +394,21 @@ public static class ComponentPaintPlan
             {
                 AddBand(output, portraitBand, PictureRect(element, imageSize), RotationGeometry.GetRotationDegrees(element), canvasWidth);
             }
+
+            if (targetIds.Contains(element.Id))
+            {
+                // Frames and overlays attached to this picture by its id, in their layer order (frames,
+                // then overlays, as on the Basic portrait).
+                var picture = PictureRect(element, imageSize);
+                var rotation = RotationGeometry.GetRotationDegrees(element);
+                foreach (var (component, definition, _) in targetedBand)
+                {
+                    if (component.TargetElementId == element.Id)
+                    {
+                        output.Add(ComponentStep(component, definition, ArtBand(picture, definition, canvasWidth), rotation, false, false));
+                    }
+                }
+            }
         }
     }
 
@@ -477,6 +512,11 @@ public static class ComponentPaintPlan
         var identity = IdentityExtent(drawnElements, measureText, out _) ?? AdventurePlateClassicLayout.GetGroupBounds(BasicSection.Identity, orientation, profile);
         return kind == PlateComponentKind.NameBacking ? Pad(identity, unit) : DividerBox(identity, unit);
     }
+
+    /// <summary>The picture a Portrait Frame or Overlay is attached to by id (<see cref="PlateComponent.TargetElementId"/>),
+    /// or null when it follows the Basic portrait: every other kind, and an empty id.</summary>
+    public static Guid? TargetOf(PlateComponent component) =>
+        PlateComponentEditor.CanTarget(component.Kind) && component.TargetElementId is { } target && target != Guid.Empty ? target : null;
 
     /// <summary>A Name Backing's or Divider's fixed anchor (<see cref="PlateComponent.FixedAnchorPosition"/>),
     /// when it has a usable one: both halves set, finite, with a positive size. Null otherwise — it follows.</summary>
@@ -710,7 +750,9 @@ public static class ComponentPaintPlan
         var rect = new ElementRect(center - (size / 2f), size);
         var rotation = anchorRotation + PlateComponentLimits.ClampRotation(component.RotationDegrees);
 
-        return new PaintStep(LayerOf(component.Kind), null, component, definition, new ComponentPlacement(rect, rotation, mirrorShape && mirrorX, mirrorShape && mirrorY));
+        return new PaintStep(
+            LayerOf(component.Kind), null, component, definition,
+            new ComponentPlacement(rect, rotation, mirrorShape && mirrorX, mirrorShape && mirrorY) { OffsetFlipX = mirrorX, OffsetFlipY = mirrorY });
     }
 
     /// <summary>The largest size with width/height <paramref name="aspect"/> that fits inside

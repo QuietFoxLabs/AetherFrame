@@ -13,7 +13,9 @@ namespace AetherFrame.Windows;
 /// <summary>
 /// The canvas panel: viewport (fit, wheel zoom around the cursor, middle-drag pan), the shared
 /// profile rendering, editor-only chrome on top of it (canvas border, hover/selection outlines,
-/// resize handles, snap guides), and mouse input (select, drag, resize, context menu).
+/// resize handles, snap guides), and mouse input (select, Ctrl+click to add, drag, resize, context
+/// menu). Elements resize from their own corners as always; a Component, a selection of several things
+/// and a linked group move and resize through one box (<see cref="CanvasGesture"/>).
 /// </summary>
 internal sealed partial class ProfileEditorWindow
 {
@@ -32,6 +34,7 @@ internal sealed partial class ProfileEditorWindow
 
     private static readonly Vector4 SelectionColor = new(1f, 0.85f, 0.2f, 1f);
     private static readonly Vector4 HoverColor = new(0.45f, 0.72f, 1f, 0.75f);
+    private static readonly Vector4 LinkedGroupColor = new(0.35f, 0.9f, 0.75f, 1f);
     private static readonly Vector4 SnapGuideColor = new(1f, 0.28f, 0.62f, 0.95f);
     private static readonly Vector4 CanvasBorderColor = new(0.4f, 0.4f, 0.4f, 1f);
 
@@ -40,6 +43,10 @@ internal sealed partial class ProfileEditorWindow
     // Fit's size-change check always fires once on the first Draw after (re)opening.
     private Vector2 lastCanvasPanelSize = new(-1f, -1f);
     private bool isPanning;
+
+    // Which of the selected Component's placements its handles are on (a Corner Ornament has one per
+    // corner): the one last clicked. Runtime only.
+    private int selectedPlacementIndex;
 
     /// <summary>Fit: re-enable Auto Fit and fit the canvas to the panel right away (button, F key).</summary>
     private void FitCanvas()
@@ -109,6 +116,16 @@ internal sealed partial class ProfileEditorWindow
         var selectedComponent = editorSession.SelectedComponentId is { } selectedComponentId ? Domain.Components.PlateComponentEditor.Find(profile, selectedComponentId) : null;
         Vector2[]? selectedScreenCorners = null;
 
+        // A Component, or several things: one gesture box with uniform-resize handles (see CanvasGesture).
+        if (selectedComponent is null)
+        {
+            selectedPlacementIndex = 0;
+        }
+
+        var selectionGesture = editorSession.PreviewSelectionGesture(canvasPlanBuffer, selectedPlacementIndex) is { HasHandles: true } previewGesture ? previewGesture : null;
+        var selectionMovable = selectionGesture is not null && editorSession.SelectionTransformBlockedReason is null;
+        Vector2[]? gestureScreenCorners = null;
+
         var logicalMouse = (ImGui.GetMousePos() - canvasOrigin) / zoom;
         var hover = panelHovered && editorSession.ActiveInteraction == ElementInteractionKind.None && !isPanning
             ? CanvasHitTest.Find(canvasPlanBuffer, logicalMouse, Domain.Components.ComponentPaintPlan.Unit(profile))
@@ -121,8 +138,8 @@ internal sealed partial class ProfileEditorWindow
             drawList.AddQuad(hoverCorners[0], hoverCorners[1], hoverCorners[2], hoverCorners[3], ImGui.GetColorU32(HoverColor), 1.5f);
         }
 
-        // Components are outlined by each placement they draw (every corner of a Corner Ornament),
-        // with no resize handles: they keep their own placement rules.
+        // Components are outlined by each placement they draw (every corner of a Corner Ornament); a
+        // selected one gets handles on the placement last clicked (see selectionGesture below).
         if (showGuides && hover.Component is { } hoverComponent && !ReferenceEquals(hoverComponent, selectedComponent))
         {
             DrawComponentOutlines(drawList, hoverComponent, canvasOrigin, zoom, HoverColor);
@@ -131,6 +148,46 @@ internal sealed partial class ProfileEditorWindow
         if (selectedComponent is not null)
         {
             DrawComponentOutlines(drawList, selectedComponent, canvasOrigin, zoom, SelectionColor);
+        }
+
+        if (editorSession.SelectedItems.Count > 1)
+        {
+            // Every member's own outline, dimmer, under the box they move and resize by.
+            foreach (var item in editorSession.SelectedItems)
+            {
+                if (item.IsComponent)
+                {
+                    if (Domain.Components.PlateComponentEditor.Find(profile, item.Id) is { } member)
+                    {
+                        DrawComponentOutlines(drawList, member, canvasOrigin, zoom, SelectionColor with { W = 0.55f });
+                    }
+                }
+                else if (profile.Elements.Find(e => e.Id == item.Id) is { } member)
+                {
+                    var memberCorners = GetScreenCorners(member, canvasOrigin, zoom);
+                    drawList.AddQuad(memberCorners[0], memberCorners[1], memberCorners[2], memberCorners[3], ImGui.GetColorU32(SelectionColor with { W = 0.55f }), 1f);
+                }
+            }
+        }
+
+        if (selectionGesture is not null)
+        {
+            gestureScreenCorners = new Vector2[4];
+            for (var i = 0; i < 4; i++)
+            {
+                gestureScreenCorners[i] = canvasOrigin + (selectionGesture.Corners[i] * zoom);
+            }
+
+            if (editorSession.SelectedItems.Count > 1)
+            {
+                var boxColor = editorSession.SelectedGroupId is not null ? LinkedGroupColor : SelectionColor;
+                drawList.AddQuad(gestureScreenCorners[0], gestureScreenCorners[1], gestureScreenCorners[2], gestureScreenCorners[3], ImGui.GetColorU32(selectionMovable ? boxColor : boxColor with { W = 0.45f }), 1.5f);
+            }
+
+            if (showGuides && selectionMovable)
+            {
+                DrawResizeHandles(drawList, gestureScreenCorners);
+            }
         }
 
         if (selectedElement is not null)
@@ -159,7 +216,10 @@ internal sealed partial class ProfileEditorWindow
         // Guides off also disables resize-handle interaction (nothing is drawn to grab) by
         // simply not handing HandleCanvasInput any corners to hit-test against; plain click-to-
         // select and drag-to-move on the canvas stay fully functional either way.
-        HandleCanvasInput(selectedElement, showGuides && selectedElement is { Visible: true } ? selectedScreenCorners : null, hoverTarget, hover.Component, logicalMouse, panelHovered, zoom);
+        HandleCanvasInput(
+            selectedElement, showGuides && selectedElement is { Visible: true } ? selectedScreenCorners : null,
+            showGuides && selectionMovable ? gestureScreenCorners : null,
+            hoverTarget, hover.Component, logicalMouse, panelHovered, zoom, Domain.Components.ComponentPaintPlan.Unit(profile));
 
         canvasPlanBuffer.Clear();
     }
@@ -252,11 +312,13 @@ internal sealed partial class ProfileEditorWindow
     private void HandleCanvasInput(
         ProfileElement? selectedElement,
         Vector2[]? selectedScreenCorners,
+        Vector2[]? gestureScreenCorners,
         ProfileElement? hoverTarget,
         Domain.Components.PlateComponent? hoverComponent,
         Vector2 logicalMouse,
         bool panelHovered,
-        float zoom)
+        float zoom,
+        float unit)
     {
         var io = ImGui.GetIO();
         var mouseScreen = ImGui.GetMousePos();
@@ -291,8 +353,21 @@ internal sealed partial class ProfileEditorWindow
             return;
         }
 
+        var additive = io.KeyCtrl;
         var onHandle = false;
-        if (selectedElement is not null && !selectedElement.Locked && selectedScreenCorners is not null
+        if (!additive && gestureScreenCorners is not null && TryGetHoveredHandle(mouseScreen, gestureScreenCorners, out var gestureHandle))
+        {
+            // A Component's or a selection's handles: a uniform resize around the opposite corner.
+            onHandle = true;
+            ImGui.SetMouseCursor(GetResizeCursor(gestureScreenCorners, gestureHandle));
+
+            if (leftClicked)
+            {
+                editorSession.BeginSelectionResize(canvasPlanBuffer, CornerIndex(gestureHandle), logicalMouse, selectedPlacementIndex);
+                return;
+            }
+        }
+        else if (!additive && selectedElement is not null && !selectedElement.Locked && selectedScreenCorners is not null
             && TryGetHoveredHandle(mouseScreen, selectedScreenCorners, out var hoveredHandle))
         {
             onHandle = true;
@@ -304,7 +379,7 @@ internal sealed partial class ProfileEditorWindow
                 return;
             }
         }
-        else if (hoverTarget is { Locked: false })
+        else if (hoverTarget is { Locked: false } || hoverComponent is { Locked: false })
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeAll);
         }
@@ -313,50 +388,99 @@ internal sealed partial class ProfileEditorWindow
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         }
 
-        // A Component is selected by a click (either button), which opens its controls in the
-        // Canvas tab; it never moves from the canvas, since its layer and anchor place it. The
-        // selected element's resize handles stay its own, even over a Component.
-        if (!onHandle && hoverComponent is not null && (leftClicked || rightClicked))
-        {
-            editorSession.SelectComponent(hoverComponent.Id);
-            return;
-        }
+        Domain.Components.CanvasItemRef? hoverItem = hoverTarget is not null
+            ? Domain.Components.CanvasItemRef.Element(hoverTarget.Id)
+            : hoverComponent is not null ? Domain.Components.CanvasItemRef.Component(hoverComponent.Id) : null;
 
-        // A locked element is selected like any other (click, right-click menu), but never
-        // transformed from the canvas: BeginDrag is a no-op for it, and it gets no resize handles.
+        // A Component is selected by a right-click too, which opens its controls in the Canvas tab.
+        // The selected element's resize handles stay its own, even over a Component.
         if (rightClicked)
         {
             if (hoverTarget is not null)
             {
                 RequestElementContextMenu(hoverTarget.Id);
             }
+            else if (!onHandle && hoverItem is { } rightItem)
+            {
+                editorSession.SelectOnCanvas(rightItem, additive: false);
+            }
 
             return;
         }
 
-        if (!leftClicked)
+        if (!leftClicked || onHandle)
         {
             return;
         }
 
-        editorSession.Select(hoverTarget?.Id);
-
-        if (hoverTarget is null)
+        if (hoverItem is not { } item)
         {
+            if (!additive)
+            {
+                editorSession.Select(null);
+            }
+
             return;
         }
 
-        selectElementTabPending = true;
-
-        if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && hoverTarget is TextProfileElement)
+        // Ctrl+click adds to the selection or takes out of it (a whole linked group at once); it never drags.
+        if (additive)
         {
-            // Double-click text: jump straight to editing its content.
-            focusTextContentPending = true;
+            editorSession.SelectOnCanvas(item, additive: true);
             return;
         }
 
-        editorSession.BeginDrag(hoverTarget, logicalMouse);
+        // A double-click on a member of a linked group edits that member on its own; on text, its content too.
+        if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+        {
+            if (editorSession.GroupOf(item) is not null)
+            {
+                editorSession.SelectFromList(item, additive: false);
+                selectElementTabPending = !item.IsComponent;
+            }
+
+            if (hoverTarget is TextProfileElement && editorSession.SelectedElementId == hoverTarget.Id)
+            {
+                // Double-click text: jump straight to editing its content.
+                selectElementTabPending = true;
+                focusTextContentPending = true;
+                return;
+            }
+
+            if (editorSession.GroupOf(item) is not null)
+            {
+                return;
+            }
+        }
+
+        editorSession.SelectOnCanvas(item, additive: false);
+        if (hoverComponent is not null && editorSession.SelectedComponentId == hoverComponent.Id)
+        {
+            selectedPlacementIndex = CanvasHitTest.PlacementIndexAt(canvasPlanBuffer, hoverComponent, logicalMouse, unit);
+        }
+
+        if (editorSession.SelectionUsesGestures)
+        {
+            editorSession.BeginSelectionDrag(canvasPlanBuffer, logicalMouse, selectedPlacementIndex);
+            return;
+        }
+
+        if (hoverTarget is not null && editorSession.SelectedElementId == hoverTarget.Id)
+        {
+            selectElementTabPending = true;
+            editorSession.BeginDrag(hoverTarget, logicalMouse);
+        }
     }
+
+    /// <summary>A handle's index in <see cref="CanvasGesture.Corners"/> order (top-left, top-right,
+    /// bottom-right, bottom-left).</summary>
+    private static int CornerIndex(ResizeHandle handle) => handle switch
+    {
+        ResizeHandle.TopLeft => 0,
+        ResizeHandle.TopRight => 1,
+        ResizeHandle.BottomRight => 2,
+        _ => 3,
+    };
 
     private static void DrawResizeHandles(ImDrawListPtr drawList, Vector2[] screenCorners)
     {

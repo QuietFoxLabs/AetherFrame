@@ -56,6 +56,45 @@ public static class PlateComponentEditor
         });
     }
 
+    /// <summary>Kinds that can be attached to a picture of the player's choosing
+    /// (<see cref="PlateComponent.TargetElementId"/>) instead of the Basic portrait.</summary>
+    public static bool CanTarget(PlateComponentKind kind) => kind is PlateComponentKind.PortraitFrame or PlateComponentKind.PortraitOverlay;
+
+    /// <summary>
+    /// Attaches a Portrait Frame or Overlay to the picture <paramref name="elementId"/> (an image element
+    /// of the Plate), or back to the Basic portrait (null). Its Offset, Scale and Rotation are kept, now
+    /// relative to that picture. False when nothing changed, the kind can't be attached, or the element
+    /// isn't a picture on this Plate.
+    /// </summary>
+    public static bool SetTarget(ProfileDocument profile, Guid componentId, Guid? elementId)
+    {
+        if (Find(profile, componentId) is not { } component || !CanTarget(component.Kind) || component.TargetElementId == elementId)
+        {
+            return false;
+        }
+
+        if (elementId is { } id)
+        {
+            if (profile.Elements.Find(e => e.Id == id) is not ImageProfileElement picture)
+            {
+                return false;
+            }
+
+            // The Basic portrait is attached as "the portrait" (no id), so the frame keeps following it
+            // when Basic replaces the picture with a new one.
+            if (picture.Role == ProfileElementRole.BasicPortrait)
+            {
+                elementId = null;
+                if (component.TargetElementId is null)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return Update(profile, componentId, c => c.TargetElementId = elementId);
+    }
+
     public static string KindLabel(PlateComponentKind kind) => kind switch
     {
         PlateComponentKind.Background => "Background",
@@ -70,14 +109,15 @@ public static class PlateComponentEditor
     };
 
     /// <summary>The Component a Basic slot shows and edits: the first of that kind (consistently
-    /// everywhere, like Basic sections), or null when the slot is empty.</summary>
+    /// everywhere, like Basic sections), or null when the slot is empty. A Portrait Frame or Overlay
+    /// attached to another picture belongs to that picture, not to Basic's portrait slot.</summary>
     public static PlateComponent? FindSlot(ProfileDocument profile, PlateComponentKind kind)
     {
         if (profile.Components is { } components)
         {
             foreach (var component in components)
             {
-                if (component.Kind == kind)
+                if (component.Kind == kind && ComponentPaintPlan.TargetOf(component) is null)
                 {
                     return component;
                 }

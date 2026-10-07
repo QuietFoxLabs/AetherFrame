@@ -482,11 +482,8 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
                     actionBar.Commands.Redo();
                     break;
                 case EditorShortcutActionKind.Delete:
-                    if (editorSession.SelectedElementId is { } selectedId)
-                    {
-                        editorSession.RemoveElement(selectedId);
-                    }
-
+                    // One element as always; a selection of several, or a Component, all at once.
+                    editorSession.DeleteSelection();
                     break;
                 case EditorShortcutActionKind.Nudge:
                     editorSession.NudgeSelected(action.NudgeDelta);
@@ -495,11 +492,7 @@ internal sealed partial class ProfileEditorWindow : Window, IDisposable, IEditor
                     actionBar.Commands.Save();
                     break;
                 case EditorShortcutActionKind.Duplicate:
-                    if (editorSession.SelectedElementId is { } duplicateId)
-                    {
-                        editorSession.DuplicateElement(duplicateId);
-                    }
-
+                    editorSession.DuplicateSelection();
                     break;
                 case EditorShortcutActionKind.FitCanvas:
                     FitCanvas();
