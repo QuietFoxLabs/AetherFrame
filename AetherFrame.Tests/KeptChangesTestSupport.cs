@@ -27,7 +27,7 @@ internal sealed class GameSession
 {
     private int frame;
 
-    private GameSession(LibraryFixture fixture, PlateLibraryService library, IPlateFileStore store, OwnedOperations operations)
+    private GameSession(LibraryFixture fixture, PlateLibraryService library, IPlateFileStore store, OwnedOperations operations, TestRecoveryFiles? recoveryFiles)
     {
         Fixture = fixture;
         Library = library;
@@ -36,13 +36,14 @@ internal sealed class GameSession
         Assets = new AssetStorageService(fixture.Paths.AssetsDirectory, fixture.Paths.AssetStagingDirectory, new AssetMetadataStore(fixture.Paths.AssetMetadataDirectory));
         Session = new EditorSession(Profiles, Assets, new FakeImages(), fixture.Log, () => ++frame);
         Stores = new PluginFileStores(store, operations, fixture.Log);
-        Keeper = new UnsavedChangesKeeper(Session, () => ActiveSurface, fixture.Paths, Stores, "AetherFrame test", fixture.Log, () => fixture.Clock.Now);
+        Recovery = new RecoveryRig(fixture.Paths, Profiles, Session, () => ActiveSurface, fixture.Log, recoveryFiles, () => fixture.Clock.Now);
+        Keeper = new UnsavedChangesKeeper(Session, () => ActiveSurface, fixture.Paths, Stores, "AetherFrame test", fixture.Log, () => fixture.Clock.Now, Recovery.Recovery.EditingOf);
         Drafts = new DraftStore(fixture.Paths, Stores.Guarded, fixture.Log, () => fixture.Clock.Now);
         Offer = new KeptChangesOffer(Drafts, library, Profiles, Session, kind =>
         {
             Shown.Add(kind);
             ActiveSurface = kind;
-        }, fixture.Log);
+        }, fixture.Log, Recovery.Store);
     }
 
     internal LibraryFixture Fixture { get; }
@@ -65,6 +66,9 @@ internal sealed class GameSession
 
     internal KeptChangesOffer Offer { get; }
 
+    /// <summary>Continuous recovery over this session's editor, on a clock the test moves (see <see cref="RecoveryRig"/>).</summary>
+    internal RecoveryRig Recovery { get; }
+
     /// <summary>The editor showing the open Plate, as the editor coordinator would report it.</summary>
     internal EditorSurfaceKind? ActiveSurface { get; set; }
 
@@ -77,13 +81,14 @@ internal sealed class GameSession
     /// A session over <paramref name="fixture"/>'s folder, its Library loaded through
     /// <paramref name="store"/> (the fixture's own by default).
     /// </summary>
-    internal static async Task<GameSession> StartAsync(LibraryFixture fixture, IPlateFileStore? store = null, OwnedOperations? operations = null, Func<Func<Task>, Task>? dispatch = null)
+    internal static async Task<GameSession> StartAsync(
+        LibraryFixture fixture, IPlateFileStore? store = null, OwnedOperations? operations = null, Func<Func<Task>, Task>? dispatch = null, TestRecoveryFiles? recoveryFiles = null)
     {
         var used = store ?? fixture.Store;
         var owned = operations ?? new OwnedOperations();
         var library = new PlateLibraryService(fixture.Paths, used, fixture.Log, () => fixture.Clock.Now, dispatch, owned);
         await library.InitializeAsync();
-        return new GameSession(fixture, library, used, owned);
+        return new GameSession(fixture, library, used, owned, recoveryFiles);
     }
 
     /// <summary>A new Plate, made through My Plates (Blank unless said), and its id.</summary>
@@ -111,7 +116,7 @@ internal sealed class GameSession
     /// <summary>What the next load does: reads and judges the drafts, then offers them.</summary>
     internal async Task<IReadOnlyList<KeptDraft>> LoadKeptChangesAsync(bool loggedIn = true)
     {
-        var found = await KeptChangesReview.LoadAsync(Drafts, Library, Fixture.Log);
+        var found = await KeptChangesReview.LoadAsync(Drafts, Library, Fixture.Log, Recovery.Store);
         Offer.Present(found, loggedIn);
         return found;
     }
@@ -134,6 +139,12 @@ internal static class KeptFiles
 {
     internal static string[] Drafts(PlateStoragePaths paths) =>
         Directory.Exists(paths.DraftsDirectory) ? Directory.GetFiles(paths.DraftsDirectory).Order(StringComparer.Ordinal).ToArray() : [];
+
+    /// <summary>Every recovery checkpoint file, in every run's folder.</summary>
+    internal static string[] Checkpoints(PlateStoragePaths paths) =>
+        Directory.Exists(paths.RecoverySessionsDirectory)
+            ? Directory.GetDirectories(paths.RecoverySessionsDirectory).SelectMany(d => Directory.GetFiles(d, "*.json")).Order(StringComparer.Ordinal).ToArray()
+            : [];
 
     internal static string[] Trashed(PlateStoragePaths paths) =>
         Directory.Exists(paths.DraftTrashDirectory) ? Directory.GetFiles(paths.DraftTrashDirectory).Order(StringComparer.Ordinal).ToArray() : [];

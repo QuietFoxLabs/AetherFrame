@@ -54,6 +54,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     private const float InspectorMinWidth = 340f;
     private const float InspectorMaxWidth = 500f;
 
+
     // A press that moves further than this is a pan, not a click on a section.
     private const float PreviewClickTolerance = 4f;
 
@@ -102,6 +103,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     // Component's outline (issue #115; render thread only).
     private readonly List<Domain.Components.PaintStep> previewPlanBuffer = new(ProfileDocument.MaxElementCount + 64);
     private readonly List<Vector2[]> previewOutlineBuffer = new(8);
+
+    // The Simple view's fold labels with their ids, built once each.
+    private readonly Dictionary<string, string> moreControlsIds = [];
 
     // The Component slot to scroll into view once, after a click selected its Component on the live view.
     private Domain.Components.PlateComponentKind? revealComponentSlot;
@@ -153,6 +157,22 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
     /// <summary>The Help menu (tutorial, shortcuts, commands), set by the plugin once the tutorial exists.</summary>
     internal HelpMenu? Help { get; set; }
+
+    /// <summary>
+    /// Guided creation (its steps, shown around the live view while the guided Plate is open) and the
+    /// choice of the Simple or Detailed view, set by the plugin.
+    /// </summary>
+    internal GuidedCreation? Guided { get; set; }
+
+    /// <summary>Whether the full tutorial is running, set by the plugin: it points at the editor's bar and rail, so the steps step aside meanwhile.</summary>
+    internal Func<bool>? TutorialRunning { get; set; }
+
+    /// <summary>
+    /// Whether the Simple view shows: the everyday controls first, the detailed ones folded into
+    /// labelled sections. Never while the full tutorial runs: it is a tour of every control, in the
+    /// words of the Detailed view, and the player's view comes back when it ends.
+    /// </summary>
+    private bool Simple => Guided?.SimpleWorkspace == true && TutorialRunning?.Invoke() != true;
 
     public void Dispose()
     {
@@ -267,8 +287,21 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         // Basic settings) are only created by the first explicit edit that needs them.
         basicEditorSession.Identity.RefineLayout();
 
+        // The guided Plate: its steps (or, once saved, View Plate and Keep Editing) around the live view.
+        if (Guided is { } guided && (guided.IsGuiding(profile.ProfileId) || guided.ShowsSuccess(profile.ProfileId)) && TutorialRunning?.Invoke() != true)
+        {
+            DrawGuided(profile, guided);
+            DrawResetLayoutPopup();
+            actionBar.DrawPopups();
+            EditorClosePrompt.Draw(closeGuard, () => IsOpen = false);
+            editorSession.CommitPendingEditsIfIdle(ImGui.IsAnyItemActive());
+            return;
+        }
+
         // The shared action bar (My Plates, Basic | Advanced, Undo/Redo, Preview/Revert/Save),
         // outside every scrolling region so it's always in view.
+        // The Simple view's one primary button is Save, as the steps' is.
+        actionBar.EmphasizeSave = Simple;
         actionBar.Draw(profile, () => EditorPreview.Show(editorSession, profile.ProfileId, actionBar.PlateMenu.View), EditorPreview.Tooltip, basicEditorSession.ErrorMessage);
         EditorWidgets.UnsupportedElementsNotice(profile);
         ImGui.Separator();
@@ -306,12 +339,16 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 // canvas' own aspect, then the inspector.
                 DrawCategoryStrip(profile);
                 var remaining = ImGui.GetContentRegionAvail().Y;
-                var previewHeight = Math.Clamp(
-                    (body.X * profile.CanvasHeight / Math.Max(1f, profile.CanvasWidth)) + ImGui.GetFrameHeightWithSpacing(),
-                    140f * scale,
-                    remaining * 0.45f);
-                DrawPreview(profile, new Vector2(-1f, previewHeight));
-                DrawInspector(profile, new Vector2(-1f, Math.Max(120f * scale, remaining - previewHeight - style.ItemSpacing.Y)), withCategoryStrip: false);
+                var inspectorMinimum = 120f * scale;
+                var previewHeight = BasicEditorView.StackedPreviewHeight(
+                    body.X, profile.CanvasWidth, profile.CanvasHeight, ImGui.GetFrameHeightWithSpacing(), remaining, BasicEditorView.StackedPreviewShare, 140f * scale, inspectorMinimum + style.ItemSpacing.Y);
+                if (previewHeight > 0f)
+                {
+                    DrawPreview(profile, new Vector2(-1f, previewHeight));
+                    remaining -= previewHeight + style.ItemSpacing.Y;
+                }
+
+                DrawInspector(profile, new Vector2(-1f, Math.Max(inspectorMinimum, remaining)), withCategoryStrip: false);
                 break;
             }
         }
@@ -336,12 +373,22 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
             switch (action.Kind)
             {
                 case EditorShortcutActionKind.Save:
-                    actionBar.Commands.Save();
+                    // On guided creation's Save step, Ctrl+S is its Save, so a save there completes the steps.
+                    if (Guided is { Stage: GuidedStage.Save } guided && guided.IsGuiding(profileService.CurrentProfile?.ProfileId))
+                    {
+                        guided.Save();
+                    }
+                    else
+                    {
+                        actionBar.Commands.Save();
+                    }
+
                     break;
-                case EditorShortcutActionKind.Undo:
+                // Not while guided creation's Save is being written: completing it then would hide the undone change.
+                case EditorShortcutActionKind.Undo when Guided is not { CanEdit: false }:
                     actionBar.Commands.Undo();
                     break;
-                case EditorShortcutActionKind.Redo:
+                case EditorShortcutActionKind.Redo when Guided is not { CanEdit: false }:
                     actionBar.Commands.Redo();
                     break;
             }
@@ -390,11 +437,11 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         ImGui.SetCursorPosY(padding);
 
         using var spacing = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, RailRowGap * scale));
-        foreach (var category in BasicEditorView.Categories)
+        foreach (var category in BasicEditorView.CategoriesFor(Simple))
         {
             var status = BasicEditorView.StatusOf(profile, category);
             var selected = navigation.Selected == category;
-            var title = BasicEditorView.Title(category);
+            var title = BasicEditorView.Title(category, Simple);
 
             ImGui.SetCursorPosX(padding);
             if (ImGui.InvisibleButton($"##Nav{category}", new Vector2(rowWidth, rowHeight)))
@@ -438,9 +485,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         var stripMin = ImGui.GetCursorScreenPos();
         var stripMax = stripMin;
 
-        foreach (var category in BasicEditorView.Categories)
+        foreach (var category in BasicEditorView.CategoriesFor(Simple))
         {
-            var label = BasicEditorView.Title(category);
+            var label = BasicEditorView.Title(category, Simple);
             var width = ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2f) + (8f * ImGuiHelpers.GlobalScale);
             if (rowUsed > 0f)
             {
@@ -550,7 +597,7 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         var category = navigation.Selected;
-        AetherControls.SectionHeader(BasicEditorView.Title(category), topSpacing: 0f);
+        AetherControls.SectionHeader(BasicEditorView.Title(category, Simple), topSpacing: 0f);
         foreach (var line in BasicEditorView.SummaryOf(profile, category))
         {
             AetherControls.Secondary(line);
@@ -785,7 +832,9 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
 
         // The one editor overlay on the live view: the selected Component's outline, each place it
         // is drawn (every corner of a Corner Ornament), so it's clear what the slot's controls change.
-        if (editorSession.SelectedComponentId is { } selectedId && Domain.Components.PlateComponentEditor.Find(profile, selectedId) is { } selected)
+        // The guided steps have no slot controls and show the finished Plate, so no outline there
+        // (a selection made in Advanced or during the tutorial stays for those editors).
+        if (!drawingGuided && editorSession.SelectedComponentId is { } selectedId && Domain.Components.PlateComponentEditor.Find(profile, selectedId) is { } selected)
         {
             ProfileRenderer.BuildPaintPlan(profile, renderResources, ProfileRenderOptions.Finished, previewPlanBuffer);
             CanvasHitTest.Outlines(previewPlanBuffer, selected, previewOutlineBuffer);
@@ -820,6 +869,12 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
                 ImGui.SetScrollX(ImGui.GetScrollX() - delta.X);
                 ImGui.SetScrollY(ImGui.GetScrollY() - delta.Y);
             }
+        }
+
+        // Guided creation's steps have no categories to open: its live view only pans.
+        if (drawingGuided)
+        {
+            return;
         }
 
         var logicalMouse = (ImGui.GetMousePos() - canvasOrigin) / scale;
@@ -858,8 +913,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
             ImGui.SetTooltip(component is not null
-                ? $"Edit the {Domain.Components.PlateComponentEditor.KindLabel(component.Kind)} ({BasicEditorView.Title(hoveredCategory)})"
-                : $"Edit {BasicEditorView.Title(hoveredCategory)}");
+                ? $"Edit the {Domain.Components.PlateComponentEditor.KindLabel(component.Kind)} ({BasicEditorView.Title(hoveredCategory, Simple)})"
+                : $"Edit {BasicEditorView.Title(hoveredCategory, Simple)}");
         }
     }
 
@@ -886,7 +941,71 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
         }
 
         TutorialAnchorMarks.MarkRect(TutorialTarget.BasicPreviewZoom, zoomMin, ImGui.GetItemRectMax());
-        ArtDownloadStatus.DrawInline(previewArt, renderResources.ArtStore);
+        if (!artStatusInSteps)
+        {
+            ArtDownloadStatus.DrawInline(previewArt, renderResources.ArtStore);
+        }
+
+        DrawViewChoice();
+    }
+
+    /// <summary>
+    /// The Simple view's switch, at the right end of the live view's toolbar, where it shows in every
+    /// layout. The player's choice is kept.
+    /// </summary>
+    private void DrawViewChoice()
+    {
+        if (Guided is not { } guided || drawingGuided)
+        {
+            return;
+        }
+
+        const string label = "Simple view";
+        var width = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + ImGui.CalcTextSize(label).X;
+
+        // After the zoom and any artwork status, on a row of its own when they leave no room.
+        AetherControls.AlignRightAfterItem(width);
+        var touring = TutorialRunning?.Invoke() == true;
+        var simple = Simple;
+        using (ImRaii.Disabled(touring))
+        {
+            if (ImGui.Checkbox(label + "##BasicSimpleView", ref simple))
+            {
+                guided.SetSimpleWorkspace(simple);
+            }
+        }
+
+        ToolTip(touring
+            ? "The tutorial shows every control while it runs.\nYour view comes back when it ends."
+            : "Simple: the look, name, portrait and message first, with detailed appearance and layout\ncontrols folded into sections you can open. Untick for every control at once.\nNothing on your Plate changes either way.\nFor layers and free placement, choose Advanced in the bar above.");
+    }
+
+    /// <summary>
+    /// In the Simple view, the detailed controls that follow sit under one labelled section, closed
+    /// until opened; the Detailed view shows them as always. Returns whether to draw them. The section
+    /// that <paramref name="holdsComponentSlots"/> opens itself when a Component clicked on the live
+    /// view waits to be brought into view (each category has one such section).
+    /// </summary>
+    private bool MoreControls(string label, bool holdsComponentSlots = false)
+    {
+        if (!Simple)
+        {
+            return true;
+        }
+
+        if (!moreControlsIds.TryGetValue(label, out var id))
+        {
+            id = $"{label}##More{label}";
+            moreControlsIds[label] = id;
+        }
+
+        if (holdsComponentSlots && revealComponentSlot is not null)
+        {
+            ImGui.SetNextItemOpen(true);
+        }
+
+        ImGui.Spacing();
+        return ImGui.CollapsingHeader(id);
     }
 
     private void DrawResetLayoutPopup()
@@ -955,6 +1074,40 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     }
 
     private static void Hint(string text) => EditorWidgets.Hint(text);
+
+    // The Simple view shows labelled controls and keeps explanations for hovering (the owner's rules for
+    // onboarding, October 6, 2026); the Detailed view shows them as it always has.
+
+    /// <summary>An explanation drawn before its control: a hint in the Detailed view, nothing in the Simple view (pair with <see cref="SimpleTooltip"/>).</summary>
+    private void DetailedHint(string text)
+    {
+        if (!Simple)
+        {
+            Hint(text);
+        }
+    }
+
+    /// <summary>The explanation of the control just drawn, as its tooltip in the Simple view (not while it's being typed in).</summary>
+    private void SimpleTooltip(string text)
+    {
+        if (Simple && !ImGui.IsItemActive())
+        {
+            ToolTip(text);
+        }
+    }
+
+    /// <summary>An explanation drawn after its control: a hint below it in the Detailed view, its tooltip in the Simple view.</summary>
+    private void Explain(string text)
+    {
+        if (Simple)
+        {
+            SimpleTooltip(text);
+        }
+        else
+        {
+            Hint(text);
+        }
+    }
 
     private static void ToolTip(string text) => EditorWidgets.Tooltip(text);
 }

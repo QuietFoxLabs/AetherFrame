@@ -4,7 +4,7 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 
 **Setup.** Windows, FFXIV with Dalamud (API 15), the Release build installed as a dev plugin (see [Testing.md](Testing.md)). Keep `/xllog` open. Two data folders are needed: a copy of a real v0.1.6 folder (`%AppData%\XIVLauncher\pluginConfigs\AetherFrame`, with Plates) and an empty one. Hash the real folder before starting and compare after section A: loading, the tutorial and the redesign must never change a Plate, Template, image or binding file.
 
-"Not offered" below means the Welcome to AetherFrame window never appears on its own during the session.
+"Not offered" below means the Welcome to AetherFrame window never appears on its own during the session. The tutorial is never offered on its own: it starts from Help in My Plates.
 
 ## A. Existing installs are never treated as new
 
@@ -14,13 +14,18 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 4. **Library failed to load.** In a copy with `AetherFrame.json` deleted (the pre-0.1.6 shape), make the `Profiles` folder unreadable (deny permissions) and load: My Plates reports the failure, the log shows `Undetermined`, not offered, and `AetherFrame.json` (written for the guidance flag) holds `"Install": 3`, the pending kind, which a later launch decides from the Library. Restore permissions and load again: `ExistingInstall`, because the copy has Plates.
 5. **Second launch of an existing install.** Load again: `AlreadyDecided`, nothing written.
 
-## B. A new install is offered the tutorial, once, politely
+## B. A new install is welcomed with guided creation, once, politely
 
-6. **Empty folder.** Load with the empty folder: the Welcome to AetherFrame window appears centered once the Library has loaded, with Start Tutorial (accent), Maybe Later and Do Not Show Again. The log shows `OfferTutorial`.
-7. **Close without answering** (X or Escape): it disappears; reload: offered again; after the third unanswered showing it is not offered again and My Plates shows the quiet "Take the tour" reminder instead.
-8. **Maybe Later.** Reload: not offered; the reminder is in My Plates; its dismiss removes it for good; Help still offers Start Tutorial.
-9. **Do Not Show Again.** Reload: not offered, no reminder; Help still offers Start Tutorial.
-10. **Start Tutorial**: the offer closes and the first card appears in the middle of the screen with the interface dimmed.
+Since guided creation became the introductory route, a new player is offered it, not the tutorial; the tutorial starts from Help (section C starts it there). The guided steps themselves have their own checklist in the onboarding pull request.
+
+6. **Empty folder.** Load with the empty folder and log in: the Welcome to AetherFrame window appears centered once the Library has loaded and a character is logged in, with one line, "Create a character card in three short steps.", the steps' names, Create My First Plate (accent), Not Now and Don't Show Again. The log shows `OfferTutorial` and `welcome waits`. Loaded at the title screen, it waits for the login.
+7. **Close without answering** (X or Escape): it disappears and My Plates, still empty, offers Create My First Plate; reload: welcomed again; after the third showing it is not shown again.
+8. **Not Now.** The same as closing it: My Plates offers Create My First Plate, no reminder row; reload: welcomed again, within the same three showings.
+9. **Don't Show Again.** Reload: not welcomed, no reminder; Help still offers Create Step by Step and the full tutorial.
+10. **Create My First Plate**: the welcome closes, an Adventure Plate Classic is made and opens in the Basic editor on step 1, Choose a look.
+10b. **Recovery first.** With kept unsaved changes waiting for a Plate that is no longer in My Plates (so My Plates is empty), load: the "Unsaved changes kept" window comes first, and the welcome appears only once it has been answered (Decide Later counts). The same with a crash's recovery checkpoints instead of kept changes. With a kept changes file that can't be read (a copy of one with its middle cut out, say), load: no welcome that load, the file is left as it is, and the log says AetherFrame couldn't read every kept change and recovery checkpoint.
+10c. **Made another way.** With the welcome open, make a Plate from My Plates' Create Plate: the welcome closes. With it open again on a new install, log out: it closes, comes back after the next login, and that showing isn't counted twice; quit instead of logging back in, and the next start counts its showing as a new one. The same while it shows why Create My First Plate failed without making a Plate: a logout still moves it aside, and it comes back without the error. With the welcome showing such an error, start the steps from My Plates' Create My First Plate: the steps open and the welcome closes. (Steps opened from the guided Plate's card close it the same way; that needs a failure after the Plate was made, which the game can't easily produce, so unit tests cover it.)
+10d. **Continue waits for that Plate's kept changes.** Create a Plate step by step, change its name on Make It Yours and, without saving, turn AetherFrame off in `/xlplugins` (its kept changes are written), then log out to the title screen and turn it back on. Open My Plates from the plugin installer: no "Your Plate isn't finished yet." reminder, and Help's Continue Step by Step is greyed out, its tooltip saying to log in first. Log in: "Unsaved changes kept" offers that Plate's changes, and Continue Step by Step stays greyed out ("Answer Unsaved Changes Kept first") until they are answered. Run each answer below as its own trial from the start of this step, on a new Plate from Create Plate's **Create Step by Step...**, and before the next trial use My Plates' **Review** to Discard anything Decide Later left. Then, by answer: **Discard** brings back "Your Plate isn't finished yet.", whose Continue Step by Step opens the steps; **Decide Later** shows "Unsaved changes were kept for 1 Plate." in its place (one reminder at a time), and Help's Continue Step by Step opens the steps on the Plate as saved; **Resume Editing** opens the steps with the changes, and Help's item is greyed out because the steps are on screen. Repeat with the guided Plate left as it was and another Plate edited before turning AetherFrame off: Help's Continue Step by Step stays available throughout.
 
 ## C. The spotlight
 
@@ -45,7 +50,7 @@ These checks need a running game. Nothing about appearance, input capture, spotl
 ## D. The redesign
 
 26. **Recognizable.** Open My Plates, both editors, the Plate Viewer and the Import Preview side by side with another plugin's window: every AetherFrame window shares the same midnight surfaces, rounding, spacing and accent; My Plates opens with the brand row (the mark and the title in the Axis face); none of them changed the other plugin's look.
-27. **My Plates.** Create Plate is the one primary (accent-filled) button; Import, search and the Help button sit with it; an empty library shows the empty state with Create Your First Plate; the selected card shows the accent ring with the frame corners; the Active badge is gold; right-click menus are unchanged in content.
+27. **My Plates.** Create Plate is the one primary (accent-filled) button; Import, search and the Help button sit with it; an empty library shows the empty state with Create My First Plate (guided creation); the selected card shows the accent ring with the frame corners; the Active badge is gold; right-click menus are unchanged in content.
 28. **Basic editor.** The selected category's title is a small accent label with a rule, its summary lines are in the secondary tone, and each group inside the category (Theme, Portrait, Name…) has the same small accent label; the navigator's selected row is the accent; sliders and choices keep the tooltips they had; the live Plate renders exactly as in v0.1.6 (compare a screenshot of the same Plate).
 29. **Advanced editor.** Layers, canvas and Inspector share the themed chrome and read as one workspace; the action bar ends with the Help button; the Inspector's collapsible sections and their tooltips are unchanged in content; the canvas rendering of a saved Plate is identical to v0.1.6.
 30. **Prompts.** The unsaved-changes, open-another-Plate, revert, rename and delete prompts use the shared button row: the destructive choice red, Save or Rename accent, Cancel a quiet ghost; Escape and Enter behave as before.

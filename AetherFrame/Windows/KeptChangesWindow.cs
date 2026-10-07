@@ -13,7 +13,7 @@ namespace AetherFrame.Windows;
 
 /// <summary>
 /// "Unsaved changes kept": the offer of an editor's unsaved changes AetherFrame kept when it last
-/// unloaded, one at a time, in a small centered window like the first-run offer. Everything it says
+/// unloaded, one at a time, in a small centered window like the welcome. Everything it says
 /// and does is <see cref="KeptChangesOffer"/>'s. It opens once both Libraries have loaded and a
 /// character is logged in; closing it without an answer keeps every change, and My Plates then
 /// shows <see cref="DrawReminder"/> until they are answered.
@@ -137,6 +137,12 @@ internal sealed class KeptChangesWindow : Window
             }
         }
 
+        if (offer.CheckpointOptions is { } points)
+        {
+            ImGui.Spacing();
+            DrawCheckpointChoice(points, width);
+        }
+
         ImGui.Dummy(new Vector2(0f, AetherMetrics.SpaceMd * scale));
         if (offer.Question is { } question)
         {
@@ -148,21 +154,59 @@ internal sealed class KeptChangesWindow : Window
         }
     }
 
-    /// <summary>The three choices (two for a Plate that couldn't be opened), right-aligned.</summary>
+    /// <summary>
+    /// The editing's recovery points, newest first: the newest is what the answer acts on unless an
+    /// older one is chosen here. One window for the editing, never one per checkpoint.
+    /// </summary>
+    private void DrawCheckpointChoice(System.Collections.Generic.IReadOnlyList<string> points, float width)
+    {
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted(KeptChangesOffer.CheckpointLabel);
+        EditorWidgets.Tooltip(KeptChangesOffer.CheckpointTooltip);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(width - ImGui.CalcTextSize(KeptChangesOffer.CheckpointLabel).X - ImGui.GetStyle().ItemSpacing.X);
+        var selected = Math.Clamp(offer.SelectedCheckpoint, 0, points.Count - 1);
+        using (ImRaii.Disabled(offer.IsBusy || offer.Question is not null))
+        using (var combo = ImRaii.Combo("##KeptChangesPoint", points[selected]))
+        {
+            if (combo.Success)
+            {
+                for (var i = 0; i < points.Count; i++)
+                {
+                    if (ImGui.Selectable($"{points[i]}##Point{i}", i == selected))
+                    {
+                        offer.SelectCheckpoint(i);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>The choices (Recover as New Plate too beside Resume Editing; no Discard for a Plate that couldn't be opened), right-aligned.</summary>
     private void DrawChoices()
     {
         var primary = ButtonSize(offer.PrimaryLabel);
+        var asNew = ButtonSize(KeptChangesOffer.RestoreAsNewLabel);
         var discard = ButtonSize(KeptChangesOffer.DiscardLabel);
         var later = ButtonSize(KeptChangesOffer.DecideLaterLabel);
         var spacing = ImGui.GetStyle().ItemSpacing.X;
-        var row = primary.X + spacing + later.X + (offer.OffersDiscard ? discard.X + spacing : 0f);
+        var row = primary.X + spacing + later.X + (offer.OffersDiscard ? discard.X + spacing : 0f) + (offer.OffersNewPlateToo ? asNew.X + spacing : 0f);
         AetherControls.AlignRight(row);
 
         using (ImRaii.Disabled(offer.IsBusy))
         {
-            if (AetherControls.PrimaryButton(offer.IsBusy ? "Restoring..." : offer.PrimaryLabel, primary, offer.PrimaryTooltip))
+            if (AetherControls.PrimaryButton(offer.IsBusy ? "Recovering..." : offer.PrimaryLabel, primary, offer.PrimaryTooltip))
             {
                 offer.Choose();
+            }
+
+            if (offer.OffersNewPlateToo)
+            {
+                ImGui.SameLine();
+                if (AetherControls.GhostButton(KeptChangesOffer.RestoreAsNewLabel, asNew, KeptChangesOffer.RecoverAsNewSecondaryTooltip))
+                {
+                    offer.ChooseNewPlate();
+                }
             }
 
             if (offer.OffersDiscard)

@@ -62,16 +62,47 @@ internal sealed class Allowlist(IOptionsMonitor<ServerOptions> options, ILogger<
 }
 
 /// <summary>
+/// Marks an endpoint whose requests leave no line in the request log when they succeed (a 2xx
+/// that ran to its end): the online count's ("The online count" in the decision register), whose
+/// lines would otherwise show, minute by minute, how many were online, under the floor too. A
+/// request to it that fails, or doesn't finish, still leaves its line, which holds nothing more
+/// than any other's.
+/// </summary>
+internal sealed class UnloggedWhenSuccessful
+{
+    public static readonly UnloggedWhenSuccessful Instance = new();
+
+    private UnloggedWhenSuccessful()
+    {
+    }
+}
+
+/// <summary>
 /// The request log (decision S5): for each request, its id, the route's template, the status, the
 /// duration and a failure's kind. Never an address, a body, a proof, a challenge, a code, a marker,
-/// an identifier, a Lodestone id, a name or a World. Every response gets <c>Cache-Control: no-store</c>
-/// and <c>X-Content-Type-Options: nosniff</c> here too.
+/// an identifier, a Lodestone id, a name or a World. A successful request to an endpoint marked
+/// <see cref="UnloggedWhenSuccessful"/> leaves no line. Every response gets
+/// <c>Cache-Control: no-store</c> and <c>X-Content-Type-Options: nosniff</c> here too.
 /// </summary>
 internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logger)
 {
+    /// <summary>
+    /// A request's id: 8 random bytes in hex, its own and nothing else's. Kestrel's would be the
+    /// connection's id and the request's number on it, and behind the proxy, which carries many
+    /// players' requests over each connection it keeps open, that number would tell how many
+    /// requests came before on the connection, the unlogged ones included.
+    /// </summary>
+    internal static string NewRequestId() => Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8));
+
+    /// <summary>Whether a request that ran to its end leaves no line: a success, on an endpoint marked <see cref="UnloggedWhenSuccessful"/>.</summary>
+    internal static bool Unlogged(HttpContext http) =>
+        http.Response.StatusCode is >= 200 and < 300
+        && http.GetEndpoint()?.Metadata.GetMetadata<UnloggedWhenSuccessful>() is not null;
+
     public async Task InvokeAsync(HttpContext http)
     {
         var started = Stopwatch.GetTimestamp();
+        http.TraceIdentifier = NewRequestId();
         http.Response.OnStarting(() =>
         {
             http.Response.Headers.CacheControl = "no-store";
@@ -79,11 +110,22 @@ internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logge
             return Task.CompletedTask;
         });
 
+        // Only a request that ran to its end can go unlogged: one cut short by an exception or a
+        // cancellation still leaves its line, whatever status it was left with.
+        var finished = false;
         try
         {
             await next(http);
+            finished = true;
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        catch (OperationCanceledException) when (http.RequestAborted.IsCancellationRequested)
+        {
+            // The client went away: named, so its line isn't taken for a success. Any other
+            // cancellation, a timeout's say, is an exception like the rest, below.
+            http.Items[SignedRequests.ErrorKindItem] ??= "cancelled";
+            throw;
+        }
+        catch (Exception e)
         {
             http.Items[SignedRequests.ErrorKindItem] = "exception:" + e.GetType().Name;
             if (!http.Response.HasStarted)
@@ -94,15 +136,18 @@ internal sealed class RequestLog(RequestDelegate next, ILogger<RequestLog> logge
         }
         finally
         {
-            var route = (http.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(none)";
-            var kind = http.Items[SignedRequests.ErrorKindItem] as string ?? "-";
-            logger.LogInformation(
-                "{RequestId} {Route} {Status} {DurationMs} {ErrorKind}",
-                http.TraceIdentifier,
-                route,
-                http.Response.StatusCode,
-                (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-                kind);
+            if (!(finished && Unlogged(http)))
+            {
+                var route = (http.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(none)";
+                var kind = http.Items[SignedRequests.ErrorKindItem] as string ?? "-";
+                logger.LogInformation(
+                    "{RequestId} {Route} {Status} {DurationMs} {ErrorKind}",
+                    http.TraceIdentifier,
+                    route,
+                    http.Response.StatusCode,
+                    (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                    kind);
+            }
         }
     }
 }
@@ -124,7 +169,7 @@ internal sealed class DatabaseStartup(ServerDatabase database) : IHostedService
 /// connection"): without one, players' own re-reads keep names current, and a binding not read within
 /// 30 days stops answering lookups.
 /// </summary>
-internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, Allowlist allowlist, IOptions<ServerOptions> options, TimeProvider time, ILogger<Rereads> logger) : BackgroundService
+internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, Allowlist allowlist, AetherFrame.Server.Presence.PresenceStore presence, IOptions<ServerOptions> options, TimeProvider time, ILogger<Rereads> logger) : BackgroundService
 {
     /// <summary>The shortest pause between two re-reads.</summary>
     public static readonly TimeSpan MinimumPause = TimeSpan.FromMinutes(2);
@@ -179,9 +224,16 @@ internal sealed class Rereads(BindingStore bindings, LodestoneReader lodestone, 
         }
 
         var read = await lodestone.ReadAsync(binding.LodestoneId, reread: true, cancellation);
-        if (read.Outcome is LodestoneOutcome.Found or LodestoneOutcome.NotFound)
+        if (read.Outcome is not (LodestoneOutcome.Found or LodestoneOutcome.NotFound))
         {
-            await bindings.ApplyRereadAsync(persona, binding.LodestoneId, read.Character, cancellation);
+            return;
+        }
+
+        if (await bindings.ApplyRereadAsync(persona, binding.LodestoneId, read.Character, cancellation) == RereadResult.Removed)
+        {
+            // The binding is gone: the character stops counting as online at once, instead of
+            // staying counted while its heartbeats keep a session the start's check passed.
+            presence.ForgetKey(persona);
         }
     }
 }

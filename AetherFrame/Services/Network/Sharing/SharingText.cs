@@ -30,6 +30,7 @@ internal static class SharingText
         "To prove the character is yours, you'll paste a short code into its Lodestone profile. While the code is there, anyone reading the profile can see that you use AetherFrame, so delete it once the check passes.",
         ReadsThroughYourConnection,
         ThirtyDays,
+        OnlineCountSends,
     ];
 
     /// <summary>What reading the Lodestone page through the player's own connection means: in the consent, and in the one-time notice.</summary>
@@ -39,6 +40,43 @@ internal static class SharingText
     /// <summary>The 30 days after which a character not read again stops showing its Plate.</summary>
     internal const string ThirtyDays =
         "If this character's Lodestone page isn't read for 30 days, other players stop seeing its Plate until you next use sharing with it. Nothing is deleted.";
+
+    /// <summary>
+    /// What the online count sends ("The online count"), as one statement of the consent: what is
+    /// sent, how often the total is refreshed, what stops it and what others can still tell. What
+    /// the server keeps is in <see cref="OnlineCountDetails"/>, behind a control under the consent.
+    /// </summary>
+    internal const string OnlineCountSends =
+        "While this character is logged in with sharing on, AetherFrame tells the sharing server about once a minute that it is online, and My Plates shows how many sharing characters are online, refreshed every 5 minutes. Logging out, pausing or turning off sharing, or closing the game stops it. Another sharing player who watches the total can sometimes tell when this character logs in or out, even below 5 if they keep characters of their own counted.";
+
+    internal const string OnlineNoticeTitle = "My Plates now shows how many are online";
+
+    /// <summary>
+    /// The one-time notice for players who shared before the online count, as short points: what is
+    /// sent, the refresh, what stops it and what others can still tell. Nothing of it is sent until
+    /// they dismiss it. What the server keeps is behind a control (<see cref="OnlineCountDetails"/>).
+    /// </summary>
+    internal static readonly string[] OnlineNoticePoints =
+    [
+        "What is sent: while this character is logged in with sharing on, a small signal about once a minute that it is online. Characters that don't share send nothing.",
+        "What you see: how many sharing characters are online, in My Plates, refreshed every 5 minutes, and \"Fewer than 5\" below 5.",
+        "When it stops: when you log out, pause or turn off sharing, or close the game; after a crash, within about 3 minutes. Others see the change at the next refresh.",
+        "What others can tell: another sharing player who watches the total can sometimes tell, to within about 5 minutes, when this character logs in or out, even below 5 if they keep characters of their own counted.",
+        "Nothing is sent until you choose Got it.",
+    ];
+
+    /// <summary>The control that opens <see cref="OnlineCountDetails"/>, under the consent and the notice.</summary>
+    internal const string OnlineDetailsLabel = "Online count details: what the server keeps";
+
+    /// <summary>What the server keeps for the online count, for a player who opens the details: under the consent, and under the notice.</summary>
+    internal static readonly string[] OnlineCountDetails =
+    [
+        "The server holds who is online in memory only, for about 3 minutes after the last signal, and counts each character once. It gives out only the total, the same to everyone for each 5 minutes. Apart from its rate limits (below), it keeps no record of who was online.",
+        "Signals that get through aren't logged. One that fails leaves a line in the server's log for 14 days, saying what failed and when, never whose.",
+        "Each signal shows the server your network address, which it never writes down or logs. Its rate limits hold the address, and the time this character started being counted and each time that is renewed (about every 52 minutes while it plays), in memory for up to an hour each.",
+        "Someone using the same network address as you (at home, on a VPN or a mobile network) can use those limits up on purpose. That stops characters on the address being counted within about an hour, and shows that person, to the second, when characters on it logged in or renewed their count in the hour before, though never whose.",
+        "Below 5, the total hides who comes and goes only from a player who adds no characters of their own: someone who keeps several of their own counted can see others come and go even then.",
+    ];
 
     internal const string ConnectionNoticeTitle = "Checks now use your own connection";
 

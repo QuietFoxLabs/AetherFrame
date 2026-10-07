@@ -27,6 +27,9 @@ internal sealed class ProfileService
     private readonly PlateLibraryService library;
 
     private ProfileDocument? currentProfile;
+
+    // The document closed because its Plate was deleted here (see WasDeletedWhileOpen).
+    private ProfileDocument? deletedWhileOpen;
     private bool isBusy;
 
     internal ProfileService(PlateLibraryService library)
@@ -184,6 +187,21 @@ internal sealed class ProfileService
             return currentProfile is { } profile
                 ? new OpenDocumentCopy(profile, CloneForSave(profile, profile.Revision, profile.UpdatedAtUtc), profile.Revision, profile.UpdatedAtUtc)
                 : null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="CopyOpenDocument"/> for a document that may no longer be the open one (another Plate
+    /// was opened in its place): what recovery keeps of unsaved changes left behind that way. Null when
+    /// <paramref name="document"/> is still open (copy it with <see cref="CopyOpenDocument"/>).
+    /// </summary>
+    internal OpenDocumentCopy? CopyClosedDocument(ProfileDocument document)
+    {
+        lock (gate)
+        {
+            return ReferenceEquals(currentProfile, document)
+                ? null
+                : new OpenDocumentCopy(document, CloneForSave(document, document.Revision, document.UpdatedAtUtc), document.Revision, document.UpdatedAtUtc);
         }
     }
 
@@ -765,8 +783,21 @@ internal sealed class ProfileService
         {
             if (currentProfile?.ProfileId == plateId)
             {
+                deletedWhileOpen = currentProfile;
                 currentProfile = null;
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="document"/> was closed because its Plate was deleted in this game client,
+    /// where the player confirmed that its unsaved changes are lost: recovery retires its checkpoints.
+    /// </summary>
+    internal bool WasDeletedWhileOpen(ProfileDocument document)
+    {
+        lock (gate)
+        {
+            return ReferenceEquals(deletedWhileOpen, document);
         }
     }
 

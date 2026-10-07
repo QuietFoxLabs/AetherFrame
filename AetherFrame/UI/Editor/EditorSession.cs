@@ -576,7 +576,9 @@ internal sealed partial class EditorSession
         try
         {
             await profileService.SaveCurrentProfileAsync().ConfigureAwait(false);
-            completedSave = new CompletedSave(profile, savedState);
+            var completed = new CompletedSave(profile, savedState);
+            completedSave = completed;
+            NoteSavedForRecovery(completed);
             return true;
         }
         catch (Exception ex)
@@ -624,6 +626,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
+        NoteReplacedForRecovery();
 
         if (!undoable)
         {
@@ -642,6 +645,7 @@ internal sealed partial class EditorSession
                 profileService.RestoreDocumentState(baseline);
                 DropSelectionIfMissing();
             });
+        NoteWholeDocumentEntryForRecovery(undoStack[^1]);
         return true;
     }
 
@@ -693,6 +697,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
+        NoteHistoryStepForRecovery(entry);
     }
 
     /// <summary>Re-applies the most recently undone action, if any.</summary>
@@ -722,6 +727,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
+        NoteHistoryStepForRecovery(entry);
     }
 
     internal void ClearHistory()
@@ -952,6 +958,7 @@ internal sealed partial class EditorSession
 
         DropSelectionIfMissing();
         InvalidateDirtyMemo();
+        NoteReplacedForRecovery();
 
         // Its assets join AssetsInUse here, as every recorded edit's do.
         RecordHistory(
@@ -965,6 +972,7 @@ internal sealed partial class EditorSession
                 profileService.RestoreDocumentState(state);
                 DropSelectionIfMissing();
             });
+        NoteWholeDocumentEntryForRecovery(undoStack[^1]);
         return true;
     }
 

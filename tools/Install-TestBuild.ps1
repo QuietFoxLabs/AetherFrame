@@ -72,6 +72,10 @@ $NetworkingNamespaces = @('AetherFrame.Protocol', 'AetherFrame.Personas')
 
 # Held open with no sharing while a preview build runs (PersonaInstanceLock.cs). It holds no data.
 $LockFileName = 'instance.lock'
+# Held open with no sharing by each running game's crash recovery, in its run's folder
+# Drafts\Sessions\<run>\ (RecoveryCheckpointStore.cs). It holds no data, and a run's folder without it
+# counts as an ended run's, whose checkpoints are offered back.
+$RecoveryLockFileName = 'session.lock'
 # Downloaded artwork (art on demand): kept out of backups, since it downloads again when it is missing.
 $ArtworkCacheFolder = 'artwork-cache'
 
@@ -214,11 +218,11 @@ function Get-DalamudLoadState([string] $ConfigPath, [string] $DllPath) {
     return $state
 }
 
-# Copies the plugin's data folder file by file. It skips the preview build's lock file, and a
-# temporary file ("*.tmp") that is held open, since a save still in progress (or one Dalamud
-# left open after a failed write) has its data in the real file beside it. Any other file that
-# can't be copied, and any link (which Windows PowerShell would not follow), stops the install,
-# so no build goes in without a full backup.
+# Copies the plugin's data folder file by file. It skips the preview build's lock file, each crash
+# recovery run's lock file, and a temporary file ("*.tmp") that is held open, since a save still in
+# progress (or one Dalamud left open after a failed write) has its data in the real file beside it.
+# Any other file that can't be copied, and any link (which Windows PowerShell would not follow),
+# stops the install, so no build goes in without a full backup.
 function Backup-PluginData([string] $Source, [string] $Destination) {
     $skipped = @()
     $root = (Get-Item -LiteralPath $Source).FullName.TrimEnd('\')
@@ -240,7 +244,9 @@ function Backup-PluginData([string] $Source, [string] $Destination) {
             New-Item -ItemType Directory -Force -Path $target | Out-Null
             continue
         }
-        if ($item.Name -eq $LockFileName) {
+        $parts = $relative.Split('\')
+        if ($item.Name -eq $LockFileName -or
+            ($parts.Count -eq 4 -and $parts[0] -eq 'Drafts' -and $parts[1] -eq 'Sessions' -and $parts[3] -eq $RecoveryLockFileName)) {
             $skipped += $relative
             continue
         }

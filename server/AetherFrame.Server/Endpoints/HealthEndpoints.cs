@@ -8,7 +8,8 @@ namespace AetherFrame.Server.Endpoints;
 
 /// <summary>
 /// <c>GET /v1/health</c> (ServerApi-v1.md, section 3; known bug 14), for the operator's monitor and
-/// never the plugin, which sends nothing in the background (decision R2). It answers <c>200</c> with
+/// never the plugin, whose only background traffic is the online count's heartbeat (decision R2;
+/// <see cref="PresenceEndpoints"/>). It answers <c>200</c> with
 /// <see cref="HealthAnswer"/>'s three booleans whatever they are, so a server that answers at all is
 /// up, and one that answers <c>5xx</c> or nothing isn't. It reads only what
 /// <see cref="ServerHealth"/> holds in memory: no database, worker, Lodestone or relay work, and so

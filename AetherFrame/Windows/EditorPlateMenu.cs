@@ -249,7 +249,7 @@ internal sealed class EditorPlateMenu
             return;
         }
 
-        // Right-aligned when it fits, like the save state above it; from the left when it doesn't.
+        // Right-aligned when it fits, like the save state above it; from the left, wrapped at the window's edge, when it doesn't.
         float iconWidth;
         using (DalamudServices.PluginInterface.UiBuilder.IconFontHandle.Push())
         {
@@ -258,8 +258,9 @@ internal sealed class EditorPlateMenu
 
         var width = iconWidth + (AetherMetrics.ItemInnerSpacing * ImGuiHelpers.GlobalScale) + ImGui.CalcTextSize(text).X;
         var rowEnd = ImGui.GetWindowContentRegionMax().X;
+        var fits = rowEnd - ImGui.GetCursorPosX() >= width;
         ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), rowEnd - width));
-        AetherControls.StatusLine(error is null ? AetherTone.Success : AetherTone.Danger, text);
+        AetherControls.StatusLine(error is null ? AetherTone.Success : AetherTone.Danger, text, wrap: !fits);
     }
 
     private static float Gap => AetherMetrics.ItemInnerSpacing * ImGuiHelpers.GlobalScale;

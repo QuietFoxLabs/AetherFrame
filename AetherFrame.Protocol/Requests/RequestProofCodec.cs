@@ -283,7 +283,7 @@ public static class RequestProofCodec
     /// the range, shared with <see cref="SigningInput.CreateRequestProof"/>, so a new kind is added
     /// in one place.
     /// </summary>
-    internal static bool IsKnown(RequestProofKind kind) => kind is >= RequestProofKind.DocumentSubmission and <= RequestProofKind.Report;
+    internal static bool IsKnown(RequestProofKind kind) => kind is >= RequestProofKind.DocumentSubmission and <= RequestProofKind.Presence;
 
     /// <summary>A private copy of an action's body, taken only once its size is within the limit.</summary>
     private static byte[] CopyBody(ReadOnlySpan<byte> body)

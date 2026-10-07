@@ -137,7 +137,9 @@ public class TemplateChooserSourceTests
 
         // The editors' menu has a switcher: its chooser's Use Template is the switcher's New Plate,
         // and its question's Discard is the switcher's, which checks a new Plate's Template again.
-        Assert.Contains("editorPlates.AttachSwitcher(new PlateSwitcher(", File.ReadAllText(Path.Combine(root, "Plugin.cs")), StringComparison.Ordinal);
+        var plugin = File.ReadAllText(Path.Combine(root, "Plugin.cs"));
+        Assert.Contains("var plateSwitcher = new PlateSwitcher(", plugin, StringComparison.Ordinal);
+        Assert.Contains("editorPlates.AttachSwitcher(plateSwitcher);", plugin, StringComparison.Ordinal);
         Assert.Contains("Chooser.Use = templateId => plates.New(templateId);", menu, StringComparison.Ordinal);
         Assert.Contains("(switcher is { } editorPlates ? editorPlates.Discard() : guard.Discard())", menu, StringComparison.Ordinal);
 

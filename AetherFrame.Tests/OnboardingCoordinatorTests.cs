@@ -6,9 +6,10 @@ using Xunit;
 namespace AetherFrame.Tests;
 
 /// <summary>
-/// First-run detection and the tutorial's persisted state: a new install is offered the tutorial,
-/// an install upgrading from v0.1.6 (or with Plates) never is, every answer is remembered, a
-/// started tutorial resumes, a completed one knows its version, and nothing here reaches a Plate.
+/// First-run detection and the tutorial's persisted state: a new install is a new player (whom
+/// guided creation welcomes; the tutorial itself is never offered), an install upgrading from
+/// v0.1.6 (or with Plates) never is, an earlier version's answers are kept, a started tutorial
+/// resumes, a completed one knows its version, and nothing here reaches a Plate.
 /// </summary>
 public class OnboardingCoordinatorTests
 {
@@ -71,7 +72,7 @@ public class OnboardingCoordinatorTests
         var store = new MemoryStore { Preferences = pending };
         var coordinator = new OnboardingCoordinator(store, TutorialScript.Chapters, TutorialScript.Version);
         coordinator.ResolveFirstRun(configurationFound: true, false, true, 0, 0);
-        Assert.True(coordinator.IsOfferOpen);
+        Assert.True(coordinator.IsNewPlayer);
         Assert.Equal(TutorialInstallKind.NewInstall, store.Preferences.Install);
     }
 
@@ -89,7 +90,7 @@ public class OnboardingCoordinatorTests
         var store = new MemoryStore { Preferences = pending };
         var coordinator = Create(store);
         coordinator.ResolveFirstRun(configurationFound: false, configurationUnreadable: true, libraryLoaded: true, 0, 0);
-        Assert.False(coordinator.IsOfferOpen);
+        Assert.False(coordinator.IsNewPlayer);
         Assert.Equal(FirstRunDecision.ExistingInstall, coordinator.LastDecision);
         Assert.Equal(TutorialInstallKind.ExistingInstall, store.Preferences.Install);
         Assert.Equal(1, store.Saves);
@@ -103,7 +104,7 @@ public class OnboardingCoordinatorTests
     }
 
     [Fact]
-    public void ANewInstall_IsOfferedTheTutorial_AndTheKindIsStored()
+    public void ANewInstall_IsANewPlayer_AndTheKindIsStored_ButTheTutorialIsNotOffered()
     {
         var store = new MemoryStore();
         var coordinator = Create(store);
@@ -111,14 +112,19 @@ public class OnboardingCoordinatorTests
         coordinator.ResolveFirstRun(configurationFound: false, configurationUnreadable: false, libraryLoaded: true, plateCount: 0, userTemplateCount: 0);
 
         Assert.Equal(FirstRunDecision.OfferTutorial, coordinator.LastDecision);
-        Assert.True(coordinator.IsOfferOpen);
-        Assert.True(coordinator.ConsumeOfferRequest());
-        Assert.False(coordinator.ConsumeOfferRequest());
+        Assert.True(coordinator.IsNewPlayer);
         Assert.Equal(TutorialInstallKind.NewInstall, store.Preferences.Install);
-        Assert.Equal(1, store.Preferences.OfferCount);
+        Assert.Equal(0, store.Preferences.OfferCount);
         Assert.Equal(TutorialStatus.Undecided, store.Preferences.Status);
         Assert.Equal(1, store.Saves);
         Assert.False(coordinator.IsTutorialActive);
+        Assert.False(coordinator.ShowReminder);
+
+        // The next launch: still a new player (guided creation decides whether to welcome again), nothing written.
+        var next = Create(store);
+        next.ResolveFirstRun(configurationFound: true, false, true, 0, 0);
+        Assert.True(next.IsNewPlayer);
+        Assert.Equal(1, store.Saves);
     }
 
     [Fact]
@@ -130,8 +136,7 @@ public class OnboardingCoordinatorTests
         coordinator.ResolveFirstRun(configurationFound: true, configurationUnreadable: false, libraryLoaded: true, plateCount: 0, userTemplateCount: 0);
 
         Assert.Equal(FirstRunDecision.ExistingInstall, coordinator.LastDecision);
-        Assert.False(coordinator.IsOfferOpen);
-        Assert.False(coordinator.ConsumeOfferRequest());
+        Assert.False(coordinator.IsNewPlayer);
         Assert.Equal(TutorialInstallKind.ExistingInstall, store.Preferences.Install);
         Assert.Equal(1, store.Saves);
 
@@ -151,101 +156,55 @@ public class OnboardingCoordinatorTests
         coordinator.ResolveFirstRun(false, false, libraryLoaded: false, 0, 0);
 
         Assert.Equal(FirstRunDecision.Undetermined, coordinator.LastDecision);
-        Assert.False(coordinator.IsOfferOpen);
+        Assert.False(coordinator.IsNewPlayer);
         Assert.Equal(TutorialInstallKind.Unknown, store.Preferences.Install);
         Assert.Equal(0, store.Saves);
     }
 
-    // ---------------------------------------------------------------- answering the offer
+    // ---------------------------------------------------------------- an earlier version's answer to the tutorial offer
 
     [Fact]
-    public void Start_FromTheOffer_RunsTheTutorial_AndRecordsProgress()
+    public void AnEarlierMaybeLater_KeepsItsQuietReminder_UntilDismissed_AndIsNoLongerANewPlayer()
     {
-        var store = new MemoryStore();
+        var store = new MemoryStore { Preferences = new TutorialPreferences { Install = TutorialInstallKind.NewInstall, Status = TutorialStatus.Deferred, OfferCount = 1 } };
         var coordinator = Create(store);
-        coordinator.ResolveFirstRun(false, false, true, 0, 0);
+        coordinator.ResolveFirstRun(true, false, true, 0, 0);
 
-        coordinator.AnswerOffer(FirstRunAnswer.StartTutorial, Library);
-
-        Assert.False(coordinator.IsOfferOpen);
-        Assert.True(coordinator.IsTutorialActive);
-        Assert.Equal(TutorialStatus.InProgress, store.Preferences.Status);
-        Assert.Equal(TutorialScript.Version, store.Preferences.Version);
-        Assert.Equal(0, store.Preferences.LastChapter);
-        Assert.False(coordinator.ShowReminder);
-        Assert.NotNull(coordinator.Tick(Library, _ => true));
-    }
-
-    [Fact]
-    public void MaybeLater_Defers_AndShowsAQuietReminder_UntilDismissed()
-    {
-        var store = new MemoryStore();
-        var coordinator = Create(store);
-        coordinator.ResolveFirstRun(false, false, true, 0, 0);
-
-        coordinator.AnswerOffer(FirstRunAnswer.MaybeLater, Library);
-
-        Assert.Equal(TutorialStatus.Deferred, store.Preferences.Status);
-        Assert.False(coordinator.IsOfferOpen);
-        Assert.False(coordinator.IsTutorialActive);
+        Assert.Equal(FirstRunDecision.AlreadyDecided, coordinator.LastDecision);
+        Assert.False(coordinator.IsNewPlayer);
         Assert.True(coordinator.ShowReminder);
 
-        // Next launch: no offer again (not a nag), the reminder stays.
-        var next = Create(store);
-        next.ResolveFirstRun(true, false, true, 0, 0);
-        Assert.Equal(FirstRunDecision.AlreadyDecided, next.LastDecision);
-        Assert.False(next.IsOfferOpen);
-        Assert.True(next.ShowReminder);
-
-        next.DismissReminder();
-        Assert.False(next.ShowReminder);
+        coordinator.DismissReminder();
+        Assert.False(coordinator.ShowReminder);
         Assert.True(store.Preferences.ReminderDismissed);
     }
 
     [Fact]
-    public void DoNotShowAgain_Declines_WithNoReminder()
+    public void AnEarlierOfferLeftUnansweredEnoughTimes_KeepsItsReminder()
     {
-        var store = new MemoryStore();
+        var store = new MemoryStore { Preferences = new TutorialPreferences { Install = TutorialInstallKind.NewInstall, OfferCount = FirstRunDetector.MaxOffers } };
         var coordinator = Create(store);
-        coordinator.ResolveFirstRun(false, false, true, 0, 0);
+        coordinator.ResolveFirstRun(true, false, true, 0, 0);
 
-        coordinator.AnswerOffer(FirstRunAnswer.DoNotShowAgain, Library);
-
-        Assert.Equal(TutorialStatus.Declined, store.Preferences.Status);
-        Assert.False(coordinator.ShowReminder);
-        var next = Create(store);
-        next.ResolveFirstRun(true, false, true, 0, 0);
-        Assert.False(next.IsOfferOpen);
-        Assert.False(next.ShowReminder);
-
-        // Help can still start it.
-        next.StartTutorial(Library);
-        Assert.True(next.IsTutorialActive);
+        Assert.False(coordinator.IsNewPlayer);
+        Assert.True(coordinator.ShowReminder);
+        Assert.Equal(FirstRunDetector.MaxOffers, store.Preferences.OfferCount);
     }
 
     [Fact]
-    public void ClosingTheOffer_AsksAgainNextTime_ButOnlyAFewTimes()
+    public void AnEarlierDoNotShowAgain_HasNoReminder_ButHelpCanStillStartTheTutorial()
     {
-        var store = new MemoryStore();
-        for (var launch = 1; launch <= FirstRunDetector.MaxOffers + 2; launch++)
-        {
-            var coordinator = Create(store);
-            coordinator.ResolveFirstRun(launch > 1, false, true, 0, 0);
-            if (launch <= FirstRunDetector.MaxOffers)
-            {
-                Assert.True(coordinator.IsOfferOpen, $"launch {launch}");
-                coordinator.DismissOffer();
-                Assert.False(coordinator.IsOfferOpen);
-            }
-            else
-            {
-                Assert.False(coordinator.IsOfferOpen, $"launch {launch}");
-                Assert.True(coordinator.ShowReminder);
-            }
-        }
+        var store = new MemoryStore { Preferences = new TutorialPreferences { Install = TutorialInstallKind.NewInstall, Status = TutorialStatus.Declined } };
+        var coordinator = Create(store);
+        coordinator.ResolveFirstRun(true, false, true, 0, 0);
 
-        Assert.Equal(FirstRunDetector.MaxOffers, store.Preferences.OfferCount);
-        Assert.Equal(TutorialStatus.Undecided, store.Preferences.Status);
+        Assert.False(coordinator.IsNewPlayer);
+        Assert.False(coordinator.ShowReminder);
+
+        coordinator.StartTutorial(Library);
+        Assert.True(coordinator.IsTutorialActive);
+        Assert.Equal(TutorialStatus.InProgress, store.Preferences.Status);
+        Assert.NotNull(coordinator.Tick(Library, _ => true));
     }
 
     // ---------------------------------------------------------------- running, skipping, completing, resuming
@@ -359,7 +318,7 @@ public class OnboardingCoordinatorTests
         var newer = new OnboardingCoordinator(store, TutorialScript.Chapters, TutorialScript.Version + 1);
         Assert.True(newer.IsUpdatedSinceCompletion);
         newer.ResolveFirstRun(true, false, true, 3, 0);
-        Assert.False(newer.IsOfferOpen); // an update never re-prompts
+        Assert.False(newer.IsNewPlayer); // an update never re-welcomes
     }
 
     [Fact]

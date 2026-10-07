@@ -93,6 +93,23 @@ internal sealed class DraftStore
     internal PlateDraft Create(ProfileService.OpenDocumentCopy copy, DraftEditor editor, string build) =>
         DraftDocuments.Create(copy.Document, copy.BaseRevision, copy.BaseUpdatedAtUtc, editor, build, newId(), utcNow());
 
+    /// <summary>Moves a file into the trash as a claim does, for files claimed some other way; null, logged, when it stays.</summary>
+    internal string? MoveToTrash(string path)
+    {
+        try
+        {
+            var destination = FreeTrashPath(path);
+            store.MoveFile(path, destination);
+            MarkTrashed(destination);
+            return destination;
+        }
+        catch (Exception ex) when (!IsInterruption(ex))
+        {
+            log.Error(ex, $"AetherFrame could not move kept changes {LogPrivacy.FileName(path)} to its Trash folder.");
+            return null;
+        }
+    }
+
     /// <summary>
     /// Writes <paramref name="draft"/> to a file of its own and returns its path, or null, with
     /// nothing written and the reason logged, when its text fails the proof every Plate write passes
@@ -129,7 +146,13 @@ internal sealed class DraftStore
     /// (<see cref="VersionedJson.RequireFaithfulReadBack"/>), and parsed both layers deep. Text that
     /// wouldn't load is refused (null), logged, and never written.
     /// </summary>
-    private string? Prove(PlateDraft draft)
+    private string? Prove(PlateDraft draft) => Prove(draft, log);
+
+    /// <summary>
+    /// <see cref="Prove(PlateDraft)"/> for any writer of drafts: recovery checkpoints pass the same
+    /// proof (see <see cref="RecoveryCheckpointStore"/>).
+    /// </summary>
+    internal static string? Prove(PlateDraft draft, IAetherFrameLog log)
     {
         try
         {
@@ -265,6 +288,7 @@ internal sealed class DraftStore
 
             var destination = FreeTrashPath(draftPath);
             store.MoveFile(draftPath, destination);
+            MarkTrashed(destination);
             trashPath = destination;
             return DraftClaim.Claimed;
         }
@@ -296,6 +320,23 @@ internal sealed class DraftStore
         {
             log.Error(ex, $"AetherFrame could not put kept changes {LogPrivacy.FileName(draftPath)} back; they stay in its Trash folder.");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Dates a file just moved into the trash now, which a move doesn't do: the trash keeps its newest
+    /// files by that date (see <see cref="RecoveryCheckpointStore.Sweep"/>), so a draft answered today is
+    /// never the first to go because it was written long ago. A failure is logged and changes nothing else.
+    /// </summary>
+    private void MarkTrashed(string trashPath)
+    {
+        try
+        {
+            File.SetLastWriteTimeUtc(trashPath, DateTime.UtcNow);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            log.Warning($"AetherFrame couldn't date kept changes it moved to its Trash folder ({ex.GetType().Name}).");
         }
     }
 
