@@ -420,7 +420,8 @@ internal static class BasicEditorView
     /// see <see cref="ProfileRenderer.BuildPaintPlan"/>), either a Basic section, which opens its
     /// category as before, or a Component (a Corner Ornament, a frame, a backing...), which opens the
     /// category holding its slot and is returned so the editor can select it. Elements that aren't
-    /// Basic sections are looked through, as are Components that take no clicks (<see cref="CanvasHitTest"/>).
+    /// Basic sections are looked through, as are Components that take no clicks (<see cref="CanvasHitTest"/>)
+    /// and Components attached to a picture (<see cref="IsAttachedToPicture"/>).
     /// </summary>
     internal static (BasicEditorCategory? Category, PlateComponent? Component) TargetAt(ProfileDocument profile, IReadOnlyList<PaintStep> plan, Vector2 logicalPoint)
     {
@@ -428,7 +429,8 @@ internal static class BasicEditorView
             plan,
             logicalPoint,
             ComponentPaintPlan.Unit(profile),
-            element => BasicSections.SectionOf(element.Role) is null || !BasicSections.IsDrawnInFinishedRendering(profile, element));
+            element => BasicSections.SectionOf(element.Role) is null || !BasicSections.IsDrawnInFinishedRendering(profile, element),
+            IsAttachedToPicture);
 
         if (hit.Component is { } component)
         {
@@ -437,6 +439,24 @@ internal static class BasicEditorView
 
         return (hit.Element is { } element && BasicSections.SectionOf(element.Role) is { } section ? CategoryOf(section) : null, null);
     }
+
+    /// <summary>
+    /// True for a Portrait Frame or Overlay attached to a picture (<see cref="ComponentPaintPlan.TargetOf"/>).
+    /// It belongs to that picture, not to the Basic portrait, so no Basic slot shows or edits it
+    /// (<see cref="PlateComponentEditor.FindSlot"/>): the live view looks through it and never outlines
+    /// it, and it is selected and edited in the Advanced editor.
+    /// </summary>
+    internal static bool IsAttachedToPicture(PlateComponent component) => ComponentPaintPlan.TargetOf(component) is not null;
+
+    /// <summary>
+    /// The Component the live view outlines (issue #115), or null: the one selected on its own
+    /// (<paramref name="selectedComponentId"/>, see <see cref="EditorSession.SelectedComponentId"/>),
+    /// unless it is attached to a picture (<see cref="IsAttachedToPicture"/>). A click on a section or on
+    /// nothing lets go of this Component only, so an attached frame selected in the Advanced editor stays
+    /// selected there, as does a selection of several things.
+    /// </summary>
+    internal static PlateComponent? OutlinedComponent(ProfileDocument profile, Guid? selectedComponentId) =>
+        selectedComponentId is { } id && PlateComponentEditor.Find(profile, id) is { } component && !IsAttachedToPicture(component) ? component : null;
 
     /// <summary>The category whose page holds a Component kind's Basic slot.</summary>
     internal static BasicEditorCategory CategoryOf(PlateComponentKind kind) => kind switch
