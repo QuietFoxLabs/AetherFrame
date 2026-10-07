@@ -32,7 +32,7 @@ internal sealed partial class PlateLibraryWindow
 
     // ---------------------------------------------------------------- status footer
 
-    private const string ActionsHint = "Right click a Plate for actions";
+    private const string ActionsHint = "Plate actions: \u2026 or right click";
 
     /// <summary>The middle dot between two of the footer's right-hand items.</summary>
     private const string FooterItemSeparator = "\u00b7";

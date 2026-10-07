@@ -31,7 +31,8 @@ namespace AetherFrame.Windows;
 /// Plate Viewer. Cards show a thumbnail (or a fallback built from its saved colors),
 /// the name, and whether it's the current character's Active Plate; a card's right-click menu holds
 /// its actions (the shared <see cref="PlateMenu"/>, which the editors' Plate menu uses too, as it
-/// does Create Plate's chooser). Split across partial files: this one (lifecycle, header, card
+/// does Create Plate's chooser), and the selected card's "..." button opens that same menu
+/// (<see cref="PlateCardInput"/>). Split across partial files: this one (lifecycle, header, card
 /// grid), <c>.Actions.cs</c> (the footer and opening Plates), <c>.Templates.cs</c> (Use Template
 /// and Manage Templates), and <c>.Packages.cs</c> (Import of .aetherframe files; Export is the
 /// Plate menu's).
@@ -95,6 +96,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
     private readonly PlateOperationRunner runner;
     private readonly PlateMenu plateMenu;
     private readonly PlateOpenGuard openGuard;
+
+    // Who owns a left press on the cards: a card, or the selected card's "..." button.
+    private readonly PlateCardInput cardInput = new();
 
     private Guid? selectedPlateId;
     private string searchText = string.Empty;
@@ -428,7 +432,9 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
         // Card previews are kept only for the Plates this list shows (deleted or filtered-out ones are dropped).
         cardPreviews.Retain(listedPlateIds);
 
-        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+        var leftDown = ImGui.IsMouseDown(ImGuiMouseButton.Left);
+        cardInput.EndFrame(leftDown);
+        if (!leftDown)
         {
             dragSourcePlateId = null;
         }
@@ -488,20 +494,23 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             TutorialAnchorMarks.MarkRect(TutorialTarget.LibraryFirstPlateCard, min, max);
         }
 
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        // The selected card's "..." button lies over the card and owns every press that begins on
+        // it (PlateCardInput): it opens the card's menu and never selects, edits or drags the card.
+        PlateCardActionsLayout? actionsButton = isSelected ? PlateCardActionsLayout.For(min, max, CardPadding, ImGui.GetTextLineHeight()) : null;
+        var input = cardInput.Update(plate.PlateId, CardPointer(hovered), actionsButton, plate.IsReady, canReorder);
+        if (input.Select)
         {
             selectedPlateId = plate.PlateId;
         }
 
-        if (hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && plate.IsReady)
+        if (input.Edit)
         {
             RequestEdit(plate.PlateId);
         }
 
         var contextMenuId = $"##PlateCardMenu{plate.PlateId:N}";
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+        if (input.OpenMenu)
         {
-            selectedPlateId = plate.PlateId;
             ImGui.OpenPopup(contextMenuId);
         }
 
@@ -515,14 +524,21 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
 
         // A Ready Plate can carry both a note (text that isn't valid) and elements this build can't
         // show; the marker on its thumbnail is explained only here, so neither hides the other.
-        if (hovered && CardTooltip(plate.Problem, plate.HasUnsupportedElements, IsShared?.Invoke(plate.PlateId) == true) is { } tooltip)
+        if (input.OverButton)
+        {
+            if (dragSourcePlateId is null)
+            {
+                ImGui.SetTooltip(PlateCardActionsLayout.Tooltip);
+            }
+        }
+        else if (hovered && CardTooltip(plate.Problem, plate.HasUnsupportedElements, IsShared?.Invoke(plate.PlateId) == true) is { } tooltip)
         {
             ImGui.SetTooltip(tooltip);
         }
 
         if (canReorder)
         {
-            DrawCardDragAndDrop(plate, min, max);
+            DrawCardDragAndDrop(plate, min, max, input.MayStartDrag);
         }
 
         var drawList = ImGui.GetWindowDrawList();
@@ -553,17 +569,48 @@ internal sealed partial class PlateLibraryWindow : Window, IDisposable
             DrawCompatibilityMarker(drawList, thumbnailMin, thumbnailMax);
         }
 
-        // Name, clipped to the card.
+        // Name, clipped to the card, and short of the "..." button where it shows.
         var textPos = new Vector2(thumbnailMin.X, thumbnailMax.Y + CardPadding);
-        drawList.PushClipRect(textPos, new Vector2(thumbnailMax.X, max.Y), true);
+        drawList.PushClipRect(textPos, new Vector2(actionsButton?.NameRight ?? thumbnailMax.X, max.Y), true);
         var nameColor = plate.IsReady ? ImGui.GetColorU32(ImGuiCol.Text) : ImGui.GetColorU32(EditorWidgets.DimTextColor);
         drawList.AddText(textPos, nameColor, plate.DisplayName);
         drawList.PopClipRect();
+
+        if (actionsButton is { } button)
+        {
+            DrawActionsButton(drawList, button, input.OverButton, input.ButtonHeld);
+        }
     }
 
-    private void DrawCardDragAndDrop(PlateSummary plate, Vector2 min, Vector2 max)
+    /// <summary>The mouse over the card just drawn, for <see cref="PlateCardInput"/>.</summary>
+    private static PlateCardPointer CardPointer(bool hovered) => new(
+        ImGui.GetMousePos(),
+        hovered,
+        ImGui.IsMouseClicked(ImGuiMouseButton.Left),
+        ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left),
+        ImGui.IsMouseReleased(ImGuiMouseButton.Left),
+        ImGui.IsMouseClicked(ImGuiMouseButton.Right));
+
+    /// <summary>The selected card's "..." button: three dots on a button surface, brighter while hovered or held.</summary>
+    private static void DrawActionsButton(ImDrawListPtr drawList, PlateCardActionsLayout button, bool hovered, bool held)
     {
-        if (ImGui.BeginDragDropSource())
+        var surface = held ? ImGuiCol.ButtonActive : hovered ? ImGuiCol.ButtonHovered : ImGuiCol.Button;
+        drawList.AddRectFilled(button.ButtonMin, button.ButtonMax, ImGui.GetColorU32(surface), EditorWidgets.Scaled(4f));
+
+        var center = (button.ButtonMin + button.ButtonMax) / 2f;
+        var radius = MathF.Max(1f, EditorWidgets.Scaled(1.75f));
+        var step = EditorWidgets.Scaled(5f);
+        var dots = ImGui.GetColorU32(ImGuiCol.Text);
+        for (var i = -1; i <= 1; i++)
+        {
+            drawList.AddCircleFilled(center + new Vector2(i * step, 0f), radius, dots);
+        }
+    }
+
+    /// <param name="mayStartDrag">The card may start a drag (not while a press on its "..." button is held).</param>
+    private void DrawCardDragAndDrop(PlateSummary plate, Vector2 min, Vector2 max, bool mayStartDrag)
+    {
+        if (mayStartDrag && ImGui.BeginDragDropSource())
         {
             dragSourcePlateId = plate.PlateId;
             ImGui.SetDragDropPayload(CardDragPayloadType, CardDragPayload, ImGuiCond.None);
