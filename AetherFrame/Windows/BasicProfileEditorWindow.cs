@@ -783,7 +783,8 @@ internal sealed partial class BasicProfileEditorWindow : Window, IDisposable, IE
     /// shows, with no placeholders, guides, or other editor-only overlays. Its toolbar only changes
     /// how large the preview is drawn (Fit, 150%, 200%); the Plate itself is never touched.
     /// Clicking a section opens its category, clicking a Component also selects it (its slot is
-    /// brought into view and it is outlined); dragging while zoomed pans.
+    /// brought into view and it is outlined), and a frame attached to a picture is looked through
+    /// (<see cref="BasicEditorView.TargetAt"/>); dragging while zoomed pans.
     /// </summary>
     private void DrawPreview(ProfileDocument profile, Vector2 size)
     {
