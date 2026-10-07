@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -17,7 +18,8 @@ namespace AetherFrame.Tests;
 /// combined build, October 7, 2026). A click looks through an attached frame, so it never opens the
 /// Basic portrait's own Portrait Frame slot for it, and an attached frame selected in the Advanced
 /// editor gets no outline in Basic yet stays selected there. The Basic portrait's own frame, and the
-/// Advanced editor's selection, dragging, resizing and linking, work as before.
+/// Advanced editor's selection, dragging, resizing and linking, work as before. The window itself is
+/// ImGui code, not built here, so the last test reads its source to check it runs these rules.
 /// </summary>
 public class BasicLiveViewAttachedFrameTests
 {
@@ -157,6 +159,60 @@ public class BasicLiveViewAttachedFrameTests
     }
 
     [Fact]
+    public async Task AnAttachedFrameLyingOverThePortraitsOwnFrame_IsLookedThroughToIt()
+    {
+        var (harness, pictureB, frameA, frameB) = await PlateWithAFrameOnAnotherPictureAsync();
+        using var _h = harness;
+        var session = harness.Session;
+        var document = harness.Document;
+
+        // Picture B's left edge 10 px inside the portrait's right edge: frame B's band lies over frame A's,
+        // and frame B, added later, is drawn on top.
+        var portrait = BasicSections.Find(document, ProfileElementRole.BasicPortrait)!;
+        pictureB.Position = new Vector2(portrait.Position.X + portrait.Size.X - 10f, portrait.Position.Y);
+        var plan = FinishedPlan(document);
+        var withoutFrameB = plan.Where(s => s.Component?.Id != frameB).ToList();
+        var unit = ComponentPaintPlan.Unit(document);
+
+        // Every point where the Advanced canvas hits frame B and the live view without frame B finds frame A.
+        var rect = Assert.Single(plan, s => s.Component?.Id == frameB).Placement.Rect;
+        var overFrameA = new List<Vector2>();
+        for (var x = rect.Position.X; x <= rect.Position.X + rect.Size.X; x += 2f)
+        {
+            for (var y = rect.Position.Y; y <= rect.Position.Y + rect.Size.Y; y += 2f)
+            {
+                var point = new Vector2(x, y);
+                if (CanvasHitTest.Find(plan, point, unit).Component?.Id == frameB
+                    && BasicEditorView.TargetAt(document, withoutFrameB, point).Component?.Id == frameA)
+                {
+                    overFrameA.Add(point);
+                }
+            }
+        }
+
+        Assert.NotEmpty(overFrameA);
+
+        // A click there looks through frame B to frame A, as if frame B weren't drawn.
+        foreach (var point in overFrameA)
+        {
+            var target = BasicEditorView.TargetAt(document, plan, point);
+            Assert.Equal(BasicEditorCategory.Portrait, target.Category);
+            Assert.Equal(frameA, target.Component?.Id);
+        }
+
+        // It selects frame A, and the Portrait Frame slot it brings into view restyles frame A only.
+        var click = ClickLiveView(harness, overFrameA[0]);
+        Assert.Equal(BasicEditorCategory.Portrait, click.Category);
+        Assert.Equal(PlateComponentKind.PortraitFrame, click.Revealed);
+        Assert.Equal(frameA, session.SelectedComponentId);
+        Assert.Equal(frameA, BasicEditorView.OutlinedComponent(document, session.SelectedComponentId)?.Id);
+        session.SetComponentSlot(PlateComponentKind.PortraitFrame, BuiltInComponentCatalog.PortraitFrameDouble);
+        Assert.Equal(BuiltInComponentCatalog.PortraitFrameDouble, PlateComponentEditor.Find(document, frameA)!.DefinitionId);
+        Assert.Equal(BuiltInComponentCatalog.PortraitFrameBrackets, PlateComponentEditor.Find(document, frameB)!.DefinitionId);
+        Assert.Equal(pictureB.Id, PlateComponentEditor.Find(document, frameB)!.TargetElementId);
+    }
+
+    [Fact]
     public async Task SwitchingFromAdvancedWithAnAttachedFrameSelected_OutlinesNothingInBasic_AndKeepsItSelectedForAdvanced()
     {
         var (harness, pictureB, frameA, frameB) = await PlateWithAFrameOnAnotherPictureAsync();
@@ -170,13 +226,14 @@ public class BasicLiveViewAttachedFrameTests
         session.SelectOnCanvas(CanvasItemRef.Component(frameB), additive: false);
         Assert.Equal(frameB, session.SelectedComponentId);
 
-        // The Basic | Advanced switch keeps the selection, but the live view outlines nothing, and the
-        // Portrait Frame slot (frame A) isn't shown as selected.
+        // The Basic | Advanced switch keeps the selection, but the live view outlines nothing. (The
+        // Portrait Frame slot still shows frame A, so it isn't shown as selected: FindSlot has skipped
+        // attached frames since before this fix.)
         harness.Surfaces.Show(EditorSurfaceKind.Basic);
         Assert.Equal(EditorSurfaceKind.Basic, harness.Surfaces.ActiveSurface);
         Assert.Equal(frameB, session.SelectedComponentId);
         Assert.Null(BasicEditorView.OutlinedComponent(document, session.SelectedComponentId));
-        Assert.NotEqual(PlateComponentEditor.FindSlot(document, PlateComponentKind.PortraitFrame)!.Id, session.SelectedComponentId);
+        Assert.Equal(frameA, PlateComponentEditor.FindSlot(document, PlateComponentKind.PortraitFrame)!.Id);
 
         // Clicks on a section, on nothing, and on frame B itself leave frame B selected.
         var name = BasicSections.Find(document, ProfileElementRole.BasicName)!;
@@ -296,8 +353,9 @@ public class BasicLiveViewAttachedFrameTests
             }
         }
 
-        // A whole group selected in Advanced, or one attached member of it, gets no outline in Basic, and a
-        // click on a section leaves it selected.
+        // A whole group selected in Advanced gets no outline in Basic, and a click on a section leaves it
+        // selected, as before this fix (only one selected Component is ever outlined or let go). One
+        // attached member selected on its own, which the fix covers, gets no outline and stays selected too.
         var name = BasicSections.Find(document, ProfileElementRole.BasicName)!;
         session.SelectOnCanvas(CanvasItemRef.Component(frame1.Id), additive: false);
         Assert.Equal(group1, session.SelectedGroupId);
@@ -355,5 +413,33 @@ public class BasicLiveViewAttachedFrameTests
         Assert.Equal(image2.Id, frame2.TargetElementId);
         Assert.Equal(frameA, PlateComponentEditor.FindSlot(document, PlateComponentKind.PortraitFrame)!.Id);
         Assert.Equal(4, UndoDepth(session));
+    }
+
+    [Fact]
+    public void TheBasicWindowsLiveView_RunsTheseRules()
+    {
+        // BasicProfileEditorWindow is ImGui code, not built here, so this reads its source, as
+        // GuidedCreationTests does: a live view click goes through SelectFromLiveView, which the tests
+        // above run, and the outline through OutlinedComponent, with no selecting, letting go or
+        // outlining of its own.
+        var window = File.ReadAllText(Path.Combine(RepositoryPaths.Root().FullName, "AetherFrame", "Windows", "BasicProfileEditorWindow.cs"));
+        var preview = Between(window, "private void DrawPreview(ProfileDocument profile, Vector2 size)", "private void HandlePreviewInput(");
+        var input = Between(window, "private void HandlePreviewInput(", "private void DrawPreviewToolbar(");
+
+        Assert.Contains("BasicEditorView.OutlinedComponent(profile, selectedId) is { } selected)", preview, StringComparison.Ordinal);
+        Assert.DoesNotContain("PlateComponentEditor.Find(", preview, StringComparison.Ordinal);
+        Assert.Contains("BasicEditorView.TargetAt(profile, previewPlanBuffer, logicalMouse)", input, StringComparison.Ordinal);
+        Assert.Contains("basicEditorSession.SelectFromLiveView(component);", input, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectComponent(", input, StringComparison.Ordinal);
+    }
+
+    /// <summary>The text of <paramref name="source"/> from <paramref name="start"/> up to <paramref name="end"/>.</summary>
+    private static string Between(string source, string start, string end)
+    {
+        var from = source.IndexOf(start, StringComparison.Ordinal);
+        Assert.True(from >= 0, $"Not found: {start}");
+        var to = source.IndexOf(end, from, StringComparison.Ordinal);
+        Assert.True(to > from, $"Not found after {start}: {end}");
+        return source[from..to];
     }
 }
