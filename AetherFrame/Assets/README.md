@@ -199,6 +199,8 @@ on every other Component.
 8.4 MB of GPU memory (about 59 MB if all seven are drawn). Each is decoded, prepared and uploaded
 once, the first time a Plate draws it. That takes about 45–55 ms of CPU per piece, so it runs on
 the thread pool (`BuiltInArtLoader`), not inside Draw. The piece appears a frame or a few later.
+Once no window has drawn a piece for two minutes, its textures are released; drawn again, it loads
+again from its copy inside the plugin or on this PC, with no new download.
 If that ever matters, the Celestial Dream route is available: approved, reduced runtime copies
 made from the full-size sources.
 
@@ -244,5 +246,6 @@ file against it. The ids, Components and Art Styles are made in `ArtSets` from t
   style clears 4.5:1 (WCAG AA) on all three (`ArtSetsTests`).
 - `StylePreviews/<Folder>.png` (384 x 216) is each style's card in the theme browser: a sample
   Plate the generator draws from the runtime pieces. It is an illustration, never a Component.
-- Memory: a whole set drawn at once is about 33 MB of GPU memory with its levels, loaded once, the
-  first time a Plate draws each piece, on the thread pool.
+- Memory: a whole set drawn at once is about 33 MB of GPU memory with its levels, loaded the first
+  time a Plate draws each piece, on the thread pool, and released once no window has drawn the piece
+  for two minutes (it loads again from its local copy when drawn again).

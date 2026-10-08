@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using AetherFrame.Domain.Components;
@@ -32,11 +33,21 @@ public sealed record LoadedArt<TTexture>(IReadOnlyList<TTexture> Levels, int[] L
 /// burst the CPU and memory with a full-resolution decode each.</para>
 ///
 /// <para><b>Lifetime.</b> Every texture a load produces is disposed exactly once: by
-/// <see cref="Dispose"/> when the load has finished, or as soon as it finishes when it is still
+/// <see cref="EndFrame"/> once it is idle (below), by <see cref="Dispose"/> when the load has finished, or as soon as it finishes when it is still
 /// running then (it is cancelled too, so it usually stops early; a load still waiting its turn is
 /// cancelled before it begins). A failed load is retried only
 /// after the source's <see cref="IArtSource.Generation"/> has changed since it failed (a download
 /// finished, or a damaged copy was removed), never every frame.</para>
+///
+/// <para><b>Idle artwork is released.</b> Every request records when, and in which frame, the
+/// artwork was asked for, loading or not. The draw owner marks each frame with
+/// <see cref="BeginFrame"/> and <see cref="EndFrame"/>; at most every <see cref="SweepInterval"/>,
+/// <see cref="EndFrame"/> releases each finished, successful load not asked for in
+/// <see cref="IdleTimeout"/> (by a monotonic clock) nor in the current frame, however long that
+/// frame took. Its entry is removed first, then each of its levels is disposed once; a later request
+/// loads it again from its source, in turn like any other load. Loads still running, and failed or
+/// cancelled ones (with their wait for a new generation), are never touched. GPT's policy of
+/// October 8, 2026: each style tried held about 33 MB of GPU memory until the plugin unloaded.</para>
 /// </summary>
 public sealed class BuiltInArtLoader<TTexture> : IDisposable
     where TTexture : class, IDisposable
@@ -44,12 +55,27 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
     /// <summary>How many loads one loader runs at a time.</summary>
     internal const int MaxConcurrentLoads = 2;
 
+    /// <summary>How long a loaded artwork stays after it was last asked for.</summary>
+    internal static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>How often, at most, <see cref="EndFrame"/> looks for idle artwork.</summary>
+    internal static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(10);
+
     private readonly IArtSource source;
     private readonly Func<BuiltInArtAsset, CancellationToken, Task<LoadedArt<TTexture>>> load;
+    private readonly Func<TimeSpan> clock;
     private readonly Dictionary<string, Task<LoadedArt<TTexture>>> loads = new(StringComparer.Ordinal);
 
     // The source's generation when each failed load was found failed: retried once it differs.
     private readonly Dictionary<string, int> failedAt = new(StringComparer.Ordinal);
+
+    // When, and in which frame, each artwork was last asked for.
+    private readonly Dictionary<string, (TimeSpan At, long Frame)> lastAsked = new(StringComparer.Ordinal);
+
+    // The sweep's own list, kept so a sweep allocates nothing.
+    private readonly List<KeyValuePair<string, Task<LoadedArt<TTexture>>>> idle = new();
+    private long frame;
+    private TimeSpan nextSweep;
 
     // The releases handed to loads still running at Dispose, so a test can wait for them instead of guessing.
     private readonly List<Task> releasesAfterDispose = new();
@@ -75,12 +101,29 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
     /// <param name="load">Decodes and uploads one artwork. Always started on the thread pool, never on
     /// the caller's thread; may throw (the artwork is then not drawn until the source changes).</param>
     public BuiltInArtLoader(IArtSource source, Func<BuiltInArtAsset, CancellationToken, Task<LoadedArt<TTexture>>> load)
+        : this(source, load, StartClock())
+    {
+    }
+
+    /// <param name="load">As above, for every artwork readable at once.</param>
+    /// <param name="clock">Monotonic time since some fixed start, never the wall clock (tests supply their own).</param>
+    internal BuiltInArtLoader(Func<BuiltInArtAsset, CancellationToken, Task<LoadedArt<TTexture>>> load, Func<TimeSpan> clock)
+        : this(AlwaysReadable.Instance, load, clock)
+    {
+    }
+
+    /// <param name="source">As above.</param>
+    /// <param name="load">As above.</param>
+    /// <param name="clock">Monotonic time since some fixed start, never the wall clock (tests supply their own).</param>
+    internal BuiltInArtLoader(IArtSource source, Func<BuiltInArtAsset, CancellationToken, Task<LoadedArt<TTexture>>> load, Func<TimeSpan> clock)
     {
         this.source = source;
         this.load = load;
+        this.clock = clock;
+        nextSweep = clock() + SweepInterval;
     }
 
-    /// <summary>How many loads have been started, waiting their turn or running (one per artwork, plus one per retry).</summary>
+    /// <summary>How many loads have been started, waiting their turn or running (one per artwork, plus one per retry or reload after release).</summary>
     public int LoadsStarted { get; private set; }
 
     /// <summary>
@@ -105,11 +148,71 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
     /// <summary>Draw thread: ends the scope <see cref="BeginMisses"/> started.</summary>
     public void EndMisses() => misses = null;
 
+    /// <summary>Draw thread: a new frame starts, before it asks for any artwork. Nothing asked for
+    /// from now until the next one is released.</summary>
+    public void BeginFrame() => frame++;
+
+    /// <summary>
+    /// Draw thread: the frame has drawn everything. At most every <see cref="SweepInterval"/>, releases
+    /// each loaded artwork not asked for in <see cref="IdleTimeout"/> nor in this frame.
+    /// </summary>
+    public void EndFrame()
+    {
+        if (disposed)
+        {
+            return;
+        }
+
+        var now = clock();
+        if (now < nextSweep)
+        {
+            return;
+        }
+
+        nextSweep = now + SweepInterval;
+        foreach (var entry in loads)
+        {
+            // Only a finished, successful load: one still running is never cut short for idleness,
+            // and a failed one keeps waiting for a new generation.
+            if (entry.Value.IsCompletedSuccessfully
+                && lastAsked.TryGetValue(entry.Key, out var asked)
+                && asked.Frame != frame
+                && now - asked.At >= IdleTimeout)
+            {
+                idle.Add(entry);
+            }
+        }
+
+        if (idle.Count == 0)
+        {
+            return;
+        }
+
+        // Forgotten first, so nothing can hand out or release them again; then released, once each.
+        foreach (var entry in idle)
+        {
+            loads.Remove(entry.Key);
+            lastAsked.Remove(entry.Key);
+        }
+
+        try
+        {
+            foreach (var entry in idle)
+            {
+                Release(entry.Value);
+            }
+        }
+        finally
+        {
+            idle.Clear();
+        }
+    }
+
     /// <summary>
     /// Draw thread: the level of <paramref name="art"/> to draw <paramref name="screenPixels"/> across,
     /// or null while its bytes can't be read yet, while it is loading, after it failed, or once
     /// disposed. Never blocks and never touches pixels: the first readable call starts the load, and
-    /// every later call is a lookup.
+    /// every later call is a lookup. Every call counts as a use (<see cref="EndFrame"/>).
     /// </summary>
     public TTexture? GetLevelOrNull(BuiltInArtAsset art, float screenPixels)
     {
@@ -118,6 +221,7 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
             return null;
         }
 
+        lastAsked[art.Id] = (clock(), frame);
         if (loads.TryGetValue(art.Id, out var task))
         {
             if (task.IsCompletedSuccessfully)
@@ -188,6 +292,13 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
 
         loads.Clear();
         failedAt.Clear();
+        lastAsked.Clear();
+    }
+
+    private static Func<TimeSpan> StartClock()
+    {
+        var watch = Stopwatch.StartNew();
+        return () => watch.Elapsed;
     }
 
     /// <summary>Thread pool: waits for a turn, then runs the whole load in it. A load cancelled while
