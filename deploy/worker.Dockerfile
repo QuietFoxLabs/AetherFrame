@@ -1,14 +1,15 @@
 # The AetherFrame image worker (decision I2, N2-7c), as deployed by N2-8: one job per run, in a
 # container with no network, a read-only root, and no database, key or configuration.
-# Build from the repository root: docker build -f deploy/worker.Dockerfile .
+# Build from the repository root: docker build --secret id=sixlabors_license,env=SIXLABORS_LICENSE_KEY -f deploy/worker.Dockerfile .
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Version.props ./
 COPY server/Shared/ server/Shared/
 COPY server/AetherFrame.ImageWorker/ server/AetherFrame.ImageWorker/
-RUN dotnet restore server/AetherFrame.ImageWorker/AetherFrame.ImageWorker.csproj --locked-mode \
- && dotnet publish server/AetherFrame.ImageWorker/AetherFrame.ImageWorker.csproj -c Release --no-restore -o /out
+RUN --mount=type=secret,id=sixlabors_license,required=true \
+    dotnet restore server/AetherFrame.ImageWorker/AetherFrame.ImageWorker.csproj --locked-mode \
+ && dotnet publish server/AetherFrame.ImageWorker/AetherFrame.ImageWorker.csproj -c Release --no-restore -p:SixLaborsLicenseFile=/run/secrets/sixlabors_license -o /out
 
 FROM mcr.microsoft.com/dotnet/runtime:10.0
 WORKDIR /app

@@ -52,9 +52,10 @@ jobs:
       - name: Build the images
         env:
           COMMIT: ${{ github.event.inputs.commit }}
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         run: |
           docker build -f deploy/server.Dockerfile -t "aetherframe-server:$COMMIT" .
-          docker build -f deploy/worker.Dockerfile -t "aetherframe-worker:$COMMIT" .
+          docker build --secret id=sixlabors_license,env=SIXLABORS_LICENSE_KEY -f deploy/worker.Dockerfile -t "aetherframe-worker:$COMMIT" .
 
       - name: Sign in to the server
         env:
