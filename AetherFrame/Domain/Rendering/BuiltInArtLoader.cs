@@ -26,15 +26,24 @@ public sealed record LoadedArt<TTexture>(IReadOnlyList<TTexture> Levels, int[] L
 /// draw records it in the current miss list (<see cref="BeginMisses"/>), so the window drawing it
 /// can offer or start its download.</para>
 ///
+/// <para><b>At most two at once.</b> Each loader runs at most <see cref="MaxConcurrentLoads"/>
+/// whole loads (read, decode and upload) at a time; the rest wait their turn, off the draw thread.
+/// Applying or browsing a family requests every piece in one frame, and running them all at once
+/// burst the CPU and memory with a full-resolution decode each.</para>
+///
 /// <para><b>Lifetime.</b> Every texture a load produces is disposed exactly once: by
 /// <see cref="Dispose"/> when the load has finished, or as soon as it finishes when it is still
-/// running then (it is cancelled too, so it usually stops early). A failed load is retried only
+/// running then (it is cancelled too, so it usually stops early; a load still waiting its turn is
+/// cancelled before it begins). A failed load is retried only
 /// after the source's <see cref="IArtSource.Generation"/> has changed since it failed (a download
 /// finished, or a damaged copy was removed), never every frame.</para>
 /// </summary>
 public sealed class BuiltInArtLoader<TTexture> : IDisposable
     where TTexture : class, IDisposable
 {
+    /// <summary>How many loads one loader runs at a time.</summary>
+    internal const int MaxConcurrentLoads = 2;
+
     private readonly IArtSource source;
     private readonly Func<BuiltInArtAsset, CancellationToken, Task<LoadedArt<TTexture>>> load;
     private readonly Dictionary<string, Task<LoadedArt<TTexture>>> loads = new(StringComparer.Ordinal);
@@ -47,6 +56,11 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
 
     // Never disposed: a load still running when this is disposed keeps reading its token.
     private readonly CancellationTokenSource disposing = new();
+
+    // The turns to run a load. Never disposed, for the same reason: a load ending after Dispose
+    // still gives its turn back (it holds no handle until AvailableWaitHandle is asked for).
+    private readonly SemaphoreSlim turns = new(MaxConcurrentLoads, MaxConcurrentLoads);
+    private int waiting;
     private List<BuiltInArtAsset>? misses;
     private bool disposed;
 
@@ -66,7 +80,7 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
         this.load = load;
     }
 
-    /// <summary>How many loads have been started (one per artwork, plus one per retry).</summary>
+    /// <summary>How many loads have been started, waiting their turn or running (one per artwork, plus one per retry).</summary>
     public int LoadsStarted { get; private set; }
 
     /// <summary>
@@ -75,6 +89,10 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
     /// when nothing was running then. For tests, which otherwise could only wait a guessed time.
     /// </summary>
     internal Task ReleasesAfterDispose => Task.WhenAll(releasesAfterDispose);
+
+    /// <summary>How many loads are waiting for a turn right now. For tests, which otherwise couldn't
+    /// tell a load waiting its turn from one not yet scheduled.</summary>
+    internal int LoadsWaiting => Volatile.Read(ref waiting);
 
     /// <summary>
     /// Draw thread: from now until <see cref="EndMisses"/>, every artwork a draw asks for whose bytes
@@ -139,7 +157,7 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
         }
 
         var token = disposing.Token;
-        var started = Task.Run(() => load(art, token), token);
+        var started = Task.Run(() => LoadInTurnAsync(art, token), token);
         started.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default); // reported by the load
         loads.Add(art.Id, started);
         LoadsStarted++;
@@ -170,6 +188,31 @@ public sealed class BuiltInArtLoader<TTexture> : IDisposable
 
         loads.Clear();
         failedAt.Clear();
+    }
+
+    /// <summary>Thread pool: waits for a turn, then runs the whole load in it. A load cancelled while
+    /// it waits never begins; the turn is given back however the load ends, before its task completes.</summary>
+    private async Task<LoadedArt<TTexture>> LoadInTurnAsync(BuiltInArtAsset art, CancellationToken token)
+    {
+        Interlocked.Increment(ref waiting);
+        try
+        {
+            await turns.WaitAsync(token).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref waiting);
+        }
+
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            return await load(art, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            turns.Release();
+        }
     }
 
     private static void Release(Task<LoadedArt<TTexture>> task)
