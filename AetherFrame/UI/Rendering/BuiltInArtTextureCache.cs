@@ -17,9 +17,11 @@ namespace AetherFrame.UI.Rendering;
 /// a short chain of halved levels (see <see cref="BundledArtImage"/>) and uploaded once, the first
 /// time a Plate draws it — on the thread pool, never inside Draw (see <see cref="BuiltInArtLoader{TTexture}"/>):
 /// until it is ready the artwork simply isn't drawn, and drawing then only picks a level for the
-/// on-screen size — nothing is decoded, created or allocated per frame. Textures live until the
-/// plugin unloads (a level chain costs about 4/3 of its top level: ~1.4 MB for a 512 x 512
-/// artwork, ~8.4 MB for each full-resolution Celestial Sakura piece). Art whose bytes can't be read
+/// on-screen size — nothing is decoded, created or allocated per frame. Textures live until no
+/// window has asked for them for two minutes, or until the plugin unloads (a level chain costs about
+/// 4/3 of its top level: ~1.4 MB for a 512 x 512 artwork, ~8.4 MB for each full-resolution Celestial
+/// Sakura piece); the draw owner brackets every frame with <see cref="BeginFrame"/> and
+/// <see cref="EndFrame"/>, and a released artwork loads again from its local copy when next drawn. Art whose bytes can't be read
 /// yet isn't drawn, and the windows drawing it learn so through <see cref="BeginMisses"/>. Art that
 /// fails to read or decode is logged and not drawn until its source changes.
 /// </summary>
@@ -41,6 +43,13 @@ internal sealed class BuiltInArtTextureCache : IDisposable
 
     /// <summary>Draw thread: ends <see cref="BeginMisses"/>.</summary>
     internal void EndMisses() => loader.EndMisses();
+
+    /// <summary>Draw thread, once a frame before any window draws (see <see cref="BuiltInArtLoader{TTexture}.BeginFrame"/>).</summary>
+    internal void BeginFrame() => loader.BeginFrame();
+
+    /// <summary>Draw thread, once a frame after every window drew: releases idle artwork (see
+    /// <see cref="BuiltInArtLoader{TTexture}.EndFrame"/>). Dalamud defers a wrap's release until after rendering.</summary>
+    internal void EndFrame() => loader.EndFrame();
 
     /// <summary>The level of <paramref name="art"/> to draw <paramref name="screenPixels"/> across, or null
     /// while it is loading or when it can't be loaded.</summary>

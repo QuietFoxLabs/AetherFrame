@@ -719,6 +719,8 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
     {
         try
         {
+            // Every artwork request this frame, from any window, counts as a use (released after two idle minutes).
+            builtInArtTextureCache.BeginFrame();
             tutorialOverlay.Update();
             keptChanges.Advance();
             guidedCreation.Advance();
@@ -732,6 +734,7 @@ public sealed class Plugin : IAsyncDalamudPlugin, IAsyncDisposable
             continuousRecovery.Tick();
             ScreenEyedropper.Draw();
             editorPlateMenu.EndFrame();
+            builtInArtTextureCache.EndFrame();
         }
         finally
         {

@@ -430,6 +430,217 @@ public class BuiltInArtLoaderTests
         }
     }
 
+    // Idle artwork is released: every test below runs on a fake monotonic clock, and frames are
+    // marked by hand as Plugin.DrawUi marks them.
+
+    private static readonly TimeSpan Idle = BuiltInArtLoader<FakeTexture>.IdleTimeout;
+    private static readonly TimeSpan Sweep = BuiltInArtLoader<FakeTexture>.SweepInterval;
+
+    [Fact]
+    public void ALoadedArtwork_NotAskedForTwoMinutes_IsReleased_EveryLevelOnce_AndUnloadReleasesNothingAgain()
+    {
+        var clock = new FakeClock();
+        var textures = Levels(512, 256, 128);
+        var loader = new BuiltInArtLoader<FakeTexture>((art, _) => Task.FromResult(textures), clock.Read);
+        WaitForLevel(loader, Frame, 10f);
+
+        clock.Now = Idle - TimeSpan.FromTicks(1);
+        RunFrame(loader);
+        Assert.All(textures.Levels, t => Assert.Equal(0, t.DisposeCount));
+
+        // Idle now, but the last sweep was a tick ago: nothing is looked at until the next one is due.
+        clock.Now = Idle;
+        RunFrame(loader);
+        Assert.All(textures.Levels, t => Assert.Equal(0, t.DisposeCount));
+
+        clock.Now = Idle - TimeSpan.FromTicks(1) + Sweep;
+        RunFrame(loader);
+        Assert.All(textures.Levels, t => Assert.Equal(1, t.DisposeCount));
+
+        clock.Now += Idle + Sweep;
+        RunFrame(loader);
+        loader.Dispose();
+        Assert.All(textures.Levels, t => Assert.Equal(1, t.DisposeCount));
+        Assert.Equal(1, loader.LoadsStarted);
+    }
+
+    [Fact]
+    public void AnArtworkAskedForInTheCurrentFrame_IsKept_HoweverLongTheFrameTook()
+    {
+        var clock = new FakeClock();
+        var textures = Levels(64, 32);
+        using var loader = new BuiltInArtLoader<FakeTexture>((art, _) => Task.FromResult(textures), clock.Read);
+        WaitForLevel(loader, Frame, 10f);
+
+        loader.BeginFrame();
+        Assert.NotNull(loader.GetLevelOrNull(Frame, 10f));
+        clock.Now = Idle * 5;
+        loader.EndFrame();
+        Assert.All(textures.Levels, t => Assert.Equal(0, t.DisposeCount));
+
+        // The next frame doesn't ask for it, and its request was long ago.
+        clock.Now += Sweep;
+        RunFrame(loader);
+        Assert.All(textures.Levels, t => Assert.Equal(1, t.DisposeCount));
+    }
+
+    [Fact]
+    public void AnArtworkAnyWindowStillDraws_IsKept_AfterAnotherWindowStops()
+    {
+        var clock = new FakeClock();
+        var textures = Levels(64, 32);
+        using var loader = new BuiltInArtLoader<FakeTexture>((art, _) => Task.FromResult(textures), clock.Read);
+        WaitForLevel(loader, Frame, 10f);
+        var editorMisses = new List<BuiltInArtAsset>();
+        var viewerMisses = new List<BuiltInArtAsset>();
+
+        // A frame every sweep for ten minutes: the editor draws the artwork for the first minute
+        // only, the viewer throughout, each in its own miss scope.
+        for (clock.Now = Sweep; clock.Now <= Idle * 5; clock.Now += Sweep)
+        {
+            loader.BeginFrame();
+            loader.BeginMisses(editorMisses);
+            if (clock.Now < TimeSpan.FromMinutes(1))
+            {
+                Assert.NotNull(loader.GetLevelOrNull(Frame, 10f));
+            }
+
+            loader.EndMisses();
+            loader.BeginMisses(viewerMisses);
+            Assert.NotNull(loader.GetLevelOrNull(Frame, 300f));
+            loader.EndMisses();
+            loader.EndFrame();
+        }
+
+        Assert.All(textures.Levels, t => Assert.Equal(0, t.DisposeCount));
+        Assert.Equal(1, loader.LoadsStarted);
+        Assert.Empty(editorMisses);
+        Assert.Empty(viewerMisses);
+    }
+
+    [Fact]
+    public async Task AReleasedArtwork_LoadsAgain_FromItsLocalCopy_TakingItsTurn()
+    {
+        var clock = new FakeClock();
+        var source = new FakeSource();
+        var gated = new GatedLoads(blocking: false);
+        var loader = new BuiltInArtLoader<FakeTexture>(source, gated.Load, clock.Read);
+        var arts = DistinctArt(3);
+        var misses = new List<BuiltInArtAsset>();
+        loader.BeginMisses(misses);
+
+        Request(loader, arts[0]);
+        gated.Open(arts[0]);
+        var first = WaitForLevel(loader, arts[0], 10f);
+        clock.Now = Idle;
+        RunFrame(loader);
+        Assert.Equal(2, gated.Made.Count);
+        Assert.All(gated.Made, t => Assert.Equal(1, t.DisposeCount));
+
+        // Both turns taken: the reload waits for one, like any load.
+        Request(loader, arts[1]);
+        Request(loader, arts[2]);
+        await Task.WhenAll(gated.Entered(arts[1]), gated.Entered(arts[2])).WaitAsync(Bound);
+        Request(loader, arts[0]);
+        Assert.True(SpinWait.SpinUntil(() => loader.LoadsWaiting == 1, Bound));
+        Assert.Equal(3, gated.Calls);
+
+        gated.Open(arts[1]);
+        gated.Open(arts[2]);
+        var again = WaitForLevel(loader, arts[0], 10f);
+        Assert.NotSame(first, again);
+        Assert.Equal(0, again.DisposeCount);
+        Assert.Equal(4, gated.Calls);
+        Assert.Equal(4, loader.LoadsStarted);
+        Assert.Empty(misses); // its copy is still on this PC: nothing to download
+
+        loader.Dispose();
+        await loader.ReleasesAfterDispose.WaitAsync(Bound);
+        Assert.Equal(8, gated.Made.Count);
+        Assert.All(gated.Made, t => Assert.Equal(1, t.DisposeCount));
+    }
+
+    [Fact]
+    public async Task ALoadStillRunning_SurvivesEverySweep_AndIsReleasedOnceItFinishesIdle()
+    {
+        var clock = new FakeClock();
+        var gated = new GatedLoads(blocking: false);
+        var loader = new BuiltInArtLoader<FakeTexture>(gated.Load, clock.Read);
+        Request(loader, Frame);
+        await gated.Entered(Frame).WaitAsync(Bound);
+
+        for (var sweep = 0; sweep < 60; sweep++)
+        {
+            clock.Now += Sweep;
+            RunFrame(loader);
+        }
+
+        // Released by a sweep after it finishes (never lost, so never left undisposed), and once.
+        gated.Open(Frame);
+        Assert.True(SpinWait.SpinUntil(() => gated.Made.Count == 2, Bound));
+        Assert.True(SpinWait.SpinUntil(
+            () =>
+            {
+                clock.Now += Sweep;
+                RunFrame(loader);
+                return gated.Made.All(t => t.DisposeCount == 1);
+            },
+            Bound));
+
+        loader.Dispose();
+        await loader.ReleasesAfterDispose.WaitAsync(Bound);
+        Assert.All(gated.Made, t => Assert.Equal(1, t.DisposeCount));
+        Assert.Equal(1, gated.Calls);
+        Assert.Equal(1, loader.LoadsStarted);
+    }
+
+    [Fact]
+    public void AFailedLoad_IsNotRetriedBySweeps_OnlyOnceTheSourceChanges()
+    {
+        var clock = new FakeClock();
+        var source = new FakeSource();
+        var calls = 0;
+        using var loader = new BuiltInArtLoader<FakeTexture>(source, (art, _) =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                // Its copy was damaged, and removed: the artwork is downloadable again.
+                source.State = ArtState.NotDownloaded;
+                throw new InvalidDataException("damaged");
+            }
+
+            return Task.FromResult(Levels(64));
+        }, clock.Read);
+        var misses = new List<BuiltInArtAsset>();
+
+        Request(loader, Frame);
+        loader.BeginMisses(misses);
+        Assert.True(SpinWait.SpinUntil(() => loader.GetLevelOrNull(Frame, 10f) is null && misses.Count == 1, Bound));
+        loader.EndMisses();
+
+        // Readable again but the generation unchanged: still not retried, however many sweeps pass.
+        source.State = ArtState.Cached;
+        for (var sweep = 0; sweep < 60; sweep++)
+        {
+            clock.Now += Sweep;
+            RunFrame(loader);
+        }
+
+        Assert.Null(loader.GetLevelOrNull(Frame, 10f));
+        Assert.Equal(1, loader.LoadsStarted);
+
+        source.Generation++;
+        Assert.Equal(64, WaitForLevel(loader, Frame, 10f).LongSide);
+        Assert.Equal(2, loader.LoadsStarted);
+        Assert.Equal(2, Volatile.Read(ref calls));
+    }
+
+    private static void RunFrame(BuiltInArtLoader<FakeTexture> loader)
+    {
+        loader.BeginFrame();
+        loader.EndFrame();
+    }
+
     private static BuiltInArtAsset[] DistinctArt(int count) => BuiltInArtCatalog.All.DistinctBy(a => a.Id, StringComparer.Ordinal).Take(count).ToArray();
 
     private static void Request(BuiltInArtLoader<FakeTexture> loader, BuiltInArtAsset art) => Assert.Null(loader.GetLevelOrNull(art, 10f));
@@ -545,6 +756,37 @@ public class BuiltInArtLoaderTests
         private TaskCompletionSource Entry(BuiltInArtAsset art) => entered.GetOrAdd(art.Id, _ => new(TaskCreationOptions.RunContinuationsAsynchronously));
 
         private TaskCompletionSource<bool> Gate(BuiltInArtAsset art) => gates.GetOrAdd(art.Id, _ => new(TaskCreationOptions.RunContinuationsAsynchronously));
+    }
+
+    /// <summary>Monotonic time the test moves by hand; read only on the test's own thread.</summary>
+    private sealed class FakeClock
+    {
+        public TimeSpan Now { get; set; }
+
+        public TimeSpan Read() => Now;
+    }
+
+    /// <summary>A source whose state and generation the test sets; the loads given here never read it.</summary>
+    private sealed class FakeSource : IArtSource
+    {
+        private volatile ArtState state = ArtState.Cached;
+        private int generation;
+
+        public ArtState State
+        {
+            get => state;
+            set => state = value;
+        }
+
+        public int Generation
+        {
+            get => Volatile.Read(ref generation);
+            set => Volatile.Write(ref generation, value);
+        }
+
+        public ArtStatus Status(BuiltInArtAsset art) => new(State);
+
+        public byte[] ReadVerified(BuiltInArtAsset art) => throw new NotSupportedException();
     }
 
     private sealed class FakeTexture(int longSide) : IDisposable
