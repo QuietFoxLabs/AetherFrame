@@ -96,7 +96,7 @@
       "aetherframe.personas": {
         "type": "Project",
         "dependencies": {
-          "AetherFrame.Protocol": "[0.1.6, )"
+          "AetherFrame.Protocol": "[0.1.9, )"
         }
       },
       "aetherframe.protocol": {

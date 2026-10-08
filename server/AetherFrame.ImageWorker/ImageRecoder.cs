@@ -24,9 +24,9 @@ public enum JobFormat : byte
 /// process's heap limit bounds them), and the encoding is fixed: 8-bit RGBA non-interlaced PNG, or
 /// baseline 4:2:0 JPEG, with no metadata block, no rotation and no colour profile applied.
 /// <para>
-/// I2's "strict segment integrity" is ImageSharp 4's <c>SegmentIntegrityHandling</c>. In 3.1.12 a PNG
-/// is decoded with <c>PngCrcChunkHandling.IgnoreNone</c>, so a CRC error in any chunk refuses it;
-/// its JPEG decoder has no such switch (recorded in the register).
+/// I2's "strict segment integrity" is <c>SegmentIntegrityHandling.Strict</c>, set in the decoder
+/// options that both codecs share. A PNG with a CRC error in any chunk is refused (recorded in the
+/// register).
 /// </para>
 /// </summary>
 public static class ImageRecoder
@@ -44,6 +44,7 @@ public static class ImageRecoder
         Configuration = Codecs,
         MaxFrames = 1,
         SkipMetadata = true,
+        SegmentIntegrityHandling = SegmentIntegrityHandling.Strict,
     };
 
     /// <summary>
@@ -62,9 +63,7 @@ public static class ImageRecoder
                 return null;
             }
 
-            using var image = format == JobFormat.Png
-                ? PngDecoder.Instance.Decode<Rgba32>(new PngDecoderOptions { GeneralOptions = Options, PngCrcChunkHandling = PngCrcChunkHandling.IgnoreNone }, new MemoryStream(input, writable: false))
-                : Image.Load<Rgba32>(Options, input);
+            using var image = Image.Load<Rgba32>(Options, input);
             if (image.Width != width || image.Height != height)
             {
                 return null;
@@ -93,7 +92,7 @@ public static class ImageRecoder
                 image.Save(output, new JpegEncoder
                 {
                     Quality = JpegQuality,
-                    ColorType = JpegEncodingColor.YCbCrRatio420,
+                    ColorType = JpegColorType.YCbCrRatio420,
                     Interleaved = true,
                     SkipMetadata = true,
                 });

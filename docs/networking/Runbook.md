@@ -168,6 +168,8 @@ Commands are run on the server as `aetherframe-deploy`, in `/opt/aetherframe`.
   - It has no network, a read-only file system, 512 MB of memory, and 64 processes at most.
   - It runs as its own user in the server's group, so it can reach the server's socket and nothing else.
   - It refuses to run if it finds a network.
+  - It decodes with SixLabors.ImageSharp. The move from 3.1.12 to 4.1.2 is approved but not yet merged or deployed (October 8, 2026). Trusted CI build steps use the existing `SIXLABORS_LICENSE_KEY` repository secret. A local build sets `SixLaborsLicenseFile` to an external `sixlabors.lic` file. Never commit the licence or use diagnostic/binary build logs with a licence key.
+  - A local Docker build uses `docker build --secret id=sixlabors_license,src=/path/to/sixlabors.lic -f deploy/worker.Dockerfile .`. GitHub builds use the same BuildKit mount with `env=SIXLABORS_LICENSE_KEY`. Only the publish step reads the mount; it is not copied into the runtime image.
   - If it keeps failing, publishes with images get "try again later", and publishes without images still work. The health check reports it, and its alert opens an issue ([Health alerts](#health-alerts)).
 
 

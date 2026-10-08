@@ -84,6 +84,8 @@ jobs:
       run: dotnet restore AetherFrame.slnx --locked-mode
 
     - name: Build
+      env:
+        SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
       run: dotnet build AetherFrame.slnx --configuration Release --no-restore
 
     - name: Test

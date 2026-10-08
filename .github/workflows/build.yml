@@ -38,6 +38,8 @@ jobs:
         "DALAMUD_HOME=$dalamud" >> $env:GITHUB_ENV
 
     - name: Build
+      env:
+        SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
       run: dotnet build AetherFrame.slnx --configuration Release
 
     # Names the plugin assembly so the embedded artwork is checked in the DLL that ships, not only
@@ -159,9 +161,11 @@ jobs:
       uses: actions/checkout@v5
 
     - name: Build the images
+      env:
+        SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
       run: |
         docker build -f deploy/server.Dockerfile -t aetherframe-server:ci .
-        docker build -f deploy/worker.Dockerfile -t aetherframe-worker:ci .
+        docker build --secret id=sixlabors_license,env=SIXLABORS_LICENSE_KEY -f deploy/worker.Dockerfile -t aetherframe-worker:ci .
 
     - name: Start the deployment
       working-directory: deploy

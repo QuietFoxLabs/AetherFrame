@@ -218,7 +218,6 @@ Decision I2's worker, `server/AetherFrame.ImageWorker`, decodes each image a pub
   - for a JPEG, the encoder's fixed bytes, compared exactly: SOI, its JFIF header (no thumbnail), a baseline frame of the declared size with its 4:2:0 components, its Huffman and quantization tables, and its scan header. Then entropy-coded data with no marker in it, and EOI.
 
   A compromised worker therefore can't hand viewers tables, thumbnails or segments of its own. Every read in the check is bounded, and hostile output is refused, never thrown on.
-- **PNG checksums.** A PNG is decoded with every chunk's CRC checked, which is ImageSharp 3's form of I2's "strict segment integrity". Its JPEG decoder has no such switch.
-- **ImageSharp 3.1.12**, pinned by the lock file: the 3.x line's last release. The Six Labors Split License grants its Apache 2.0 terms to software under an open source licence, and AetherFrame is AGPL-3.0.
-  - Six Labors' advisories of August and September 2026 are fixed only in 4.1.x. None reaches this worker's configuration, as the register records for each.
-  - ImageSharp 4 checks a signed licence key at build time, which needs an account with Six Labors, and so the owner. The move to 4.x waits for the owner's decision in the Owner inbox.
+- **Segment integrity.** The decoder options for PNG and JPEG set `SegmentIntegrityHandling.Strict`. PNG chunks with an invalid CRC are refused; the server's bounded container checks and the worker's isolation still apply.
+- **ImageSharp 4.1.2**, pinned by the lock file, replaces 3.1.12 and fixes the reported dependency advisories. The licence is checked at build time, supplied through `SixLaborsLicenseFile` locally or `SIXLABORS_LICENSE_KEY` in trusted CI. Docker builds use a BuildKit secret mount; the licence is not copied into the runtime image.
+  - This upgrade is proposed and locally built as of October 8, 2026. It is not yet merged or deployed; the live server's version is recorded in the Runbook and deployment evidence.
