@@ -649,7 +649,7 @@ internal static class Images
         using var image = new Image<Rgba32>(width, height, new Rgba32(10, 200, 30, 128));
         if (withMetadata)
         {
-            image.Metadata.GetPngMetadata().TextData.Add(new SixLabors.ImageSharp.Formats.Png.Chunks.PngTextData("Comment", "secret-metadata", "", ""));
+            image.Metadata.GetFormatMetadata(PngFormat.Instance).TextData.Add(new SixLabors.ImageSharp.Formats.Png.Chunks.PngTextData("Comment", "secret-metadata", "", ""));
         }
 
         using var output = new MemoryStream();
@@ -676,7 +676,7 @@ internal static class Images
         image.Save(output, new JpegEncoder
         {
             Quality = 80,
-            ColorType = grey ? JpegEncodingColor.Luminance : JpegEncodingColor.YCbCrRatio420,
+            ColorType = grey ? JpegColorType.Luminance : JpegColorType.YCbCrRatio420,
             SkipMetadata = !withMetadata,
         });
         return output.ToArray();
